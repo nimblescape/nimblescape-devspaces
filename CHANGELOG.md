@@ -3,6 +3,10 @@
 Each section lists the changes of one released version. The release workflow
 takes the section of a version as the notes of its GitHub release.
 
+## 0.1.6
+
+Maintenance release: the workflow "Release" created this version commit; the extension behaves as in 0.1.5.
+
 ## 0.1.5
 
 Maintenance release: a manual start of the workflow "Release" sets the
