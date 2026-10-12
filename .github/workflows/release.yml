@@ -6,22 +6,27 @@
 # the version as input. The version job checks the version, sets it in
 # package.json and package-lock.json, adds its section to CHANGELOG.md from the
 # notes of the start when the file has none, and pushes the commit "Release
-# <version>" to main. A push with the token of a workflow starts no other
-# workflow, so the CI job calls the workflow ci.yml for that commit; the VSIX
-# that this job tests and builds is the VSIX of the release, so the release
-# neither repeats the tests nor builds the package again. The tag job creates
-# the tag v<version> on the commit and the GitHub release of the tag, with the
-# section of the version as its notes and the VSIX as its file. A release that
-# exists keeps its notes and receives only a missing VSIX. The publish job
-# downloads the VSIX of the GitHub release, signs in to Microsoft Entra ID with
-# the official azure/login action and publishes the VSIX with vsce, the
-# official Marketplace tool. The sign-in exchanges the OpenID Connect token of
-# the job through the federated credential of the publishing app registration,
-# so no long-lived credential is stored. The publish job fails until the
-# one-time setup of CONTRIBUTING.md is complete. A re-run then publishes the
-# version. A re-run keeps the VSIX that the release already holds, and the
+# <version>" to the temporary branch release/run-<run ID>, not to main. A push
+# with the token of a workflow starts no other workflow, so the CI job calls
+# the workflow ci.yml for that commit; the VSIX that this job tests and builds
+# is the VSIX of the release, so the release neither repeats the tests nor
+# builds the package again. Only when CI passes, the release job moves main to
+# the commit, as a fast-forward that fails when main changed during the run,
+# deletes the temporary branch, creates the tag v<version> on the commit and
+# the GitHub release of the tag, with the section of the version as its notes
+# and the VSIX as its file. A failed CI job so changes neither main nor a tag,
+# and the version stays free. A release that exists keeps its notes and
+# receives only a missing VSIX. The publish job downloads the VSIX of the
+# GitHub release, signs in to Microsoft Entra ID with the official azure/login
+# action and publishes the VSIX with vsce, the official Marketplace tool. The
+# sign-in exchanges the OpenID Connect token of the job through the federated
+# credential of the publishing app registration, so no long-lived credential
+# is stored. A re-run keeps the VSIX that the release already holds, and the
 # Marketplace skips a version that it already holds, so no version is
-# published twice.
+# published twice. A dry run, also from another branch than main, runs the
+# version job and CI only and then deletes its temporary branch, so it tests a
+# release, and a change of this workflow, without a change of main, a tag, a
+# release or the Marketplace.
 
 name: Release
 run-name: Release ${{ inputs.version }}
@@ -37,6 +42,11 @@ on:
         description: The notes of the version, used only when CHANGELOG.md has no section for it
         required: false
         type: string
+      dry_run:
+        description: Dry run, test only; changes neither main, a tag, a release nor the Marketplace
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   # Every job reads the repository; the jobs below add their own scopes.
@@ -53,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # Pushes the version commit to main.
+      # Pushes the version commit to a temporary branch and deletes the branches of earlier runs.
       contents: write
     outputs:
       version: ${{ steps.check.outputs.version }}
@@ -63,15 +73,17 @@ jobs:
       vsix: ${{ steps.check.outputs.vsix }}
       # The commit of the release: the version commit, or the head of main when main holds the version already.
       sha: ${{ steps.commit.outputs.sha }}
+      # The temporary branch of the version commit; empty when the run made no commit.
+      branch: ${{ steps.commit.outputs.branch }}
     steps:
       - name: Check the branch
-        if: github.ref != 'refs/heads/main'
+        if: github.ref != 'refs/heads/main' && !inputs.dry_run
         run: |
-          echo "::error::Start the release from the branch main, not from $GITHUB_REF_NAME."
+          echo "::error::Start the release from the branch main, not from $GITHUB_REF_NAME, or start a dry run."
           exit 1
 
       # The job pushes the version commit with the token of the job.
-      - name: Check out main
+      - name: Check out the source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check the version
@@ -159,8 +171,18 @@ jobs:
             exit 1
           fi
 
-      # The push fails when main changed during the run; the run then changes nothing.
-      - name: Commit and push the version
+      # One release runs at a time, so a branch release/run-* of another run
+      # belongs to an earlier run that failed; this run replaces it.
+      - name: Delete the branches of earlier runs
+        run: |
+          git ls-remote --heads origin 'refs/heads/release/run-*' | while read -r _ ref; do
+            if [ "$ref" != "refs/heads/release/run-$GITHUB_RUN_ID" ]; then
+              git push --quiet origin --delete "$ref"
+            fi
+          done
+
+      # main receives the commit only after CI passed, so the commit goes to a temporary branch.
+      - name: Commit the version to a temporary branch
         id: commit
         env:
           VERSION: ${{ steps.check.outputs.version }}
@@ -169,7 +191,9 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit --quiet --all --message "Release $VERSION"
-            git push origin HEAD:refs/heads/main
+            branch="release/run-$GITHUB_RUN_ID"
+            git push --quiet --force origin "HEAD:refs/heads/$branch"
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -188,14 +212,39 @@ jobs:
       ref: ${{ needs.version.outputs.sha }}
 
   github-release:
-    name: Tag and GitHub release
+    name: Main, tag and GitHub release
     needs: [version, ci]
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # Creating the tag, the release and uploading its file needs write access.
+      # Moving main, creating the tag, the release and uploading its file needs write access.
       contents: write
     steps:
+      # The commit passed CI, so main moves to it. The compare status tells
+      # whether the commit is ahead of main (a fast-forward), already on main
+      # (identical or behind), or beside a change of main during the run
+      # (diverged), which stops the release before the tag.
+      - name: Move main to the commit of the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ needs.version.outputs.sha }}
+          BRANCH: ${{ needs.version.outputs.branch }}
+        run: |
+          status=$(gh api "repos/$GH_REPO/compare/main...$SHA" --jq .status)
+          case "$status" in
+            ahead)
+              gh api --method PATCH "repos/$GH_REPO/git/refs/heads/main" -f sha="$SHA" -F force=false > /dev/null ;;
+            identical | behind) ;;
+            *)
+              echo "::error::main changed during the release; start the release again."
+              exit 1 ;;
+          esac
+          if [ -n "$BRANCH" ] && gh api "repos/$GH_REPO/git/ref/heads/$BRANCH" > /dev/null 2>&1; then
+            gh api --method DELETE "repos/$GH_REPO/git/refs/heads/$BRANCH"
+          fi
+
       - name: Download the VSIX of the CI job
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -252,6 +301,23 @@ jobs:
           else
             gh release create "$TAG" "$VSIX" --title "$TAG" --notes-file notes.md --verify-tag
           fi
+
+  dry-run:
+    name: Dry run, delete the temporary branch
+    needs: [version, ci]
+    if: ${{ inputs.dry_run && needs.version.outputs.branch != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Deletes the temporary branch of the version commit.
+      contents: write
+    steps:
+      - name: Delete the temporary branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ needs.version.outputs.branch }}
+        run: gh api --method DELETE "repos/$GH_REPO/git/refs/heads/$BRANCH"
 
   publish:
     name: Publish to the Visual Studio Marketplace

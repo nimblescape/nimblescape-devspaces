@@ -20,7 +20,7 @@ the extension. The [README](README.md) describes the use in short, the
 | `package-lock.json` | The locked development tools. npm writes this file, and nobody edits it by hand. |
 | `.node-version` | The Node release of the release workflow and of `npm run package`. `actions/setup-node` in the workflows and local Node version managers read it. |
 | `.github/workflows/ci.yml` | Tests and packages every push to `main`, every pull request and the commit of every release, and runs the integration tests against Docker. |
-| `.github/workflows/release.yml` | Releases a version on a manual start: commits the version, tests and packages it with `ci.yml`, creates its tag and GitHub release and publishes it to the Marketplace. The section [Release](#release) explains it. |
+| `.github/workflows/release.yml` | Releases a version on a manual start: commits the version to a temporary branch, tests and packages it with `ci.yml`, and only then moves `main` to it, creates its tag and GitHub release and publishes it to the Marketplace. A dry run tests without a change. The section [Release](#release) explains it. |
 | `.github/workflows/marketplace-identity.yml` | Prints the Marketplace member ID of the publishing identity, to check the setup of the repository. |
 | `.github/dependabot.yml` | Proposes weekly updates of the development tools and of the pinned actions. |
 | `.vscodeignore` | Lists the files of the package: the bundles in `dist/`, `resources/`, `package.json`, `README.md`, `CHANGELOG.md` and `LICENSE`. |
@@ -90,21 +90,33 @@ GitHub release and its Marketplace version in one run. To release a version,
 follow these steps:
 
 1. Optional: add a section `## <version>` to `CHANGELOG.md` on `main`.
-2. In the tab "Actions", choose the workflow "Release", then "Run workflow" on the branch `main`. Enter the version, for example `0.1.6`. When `CHANGELOG.md` has no section for the version, enter its notes too: they become the section. The GitHub website starts a workflow also in the browser of a phone.
+2. In the tab "Actions", choose the workflow "Release", then "Run workflow" on the branch `main`. Enter the version, for example `0.1.7`. When `CHANGELOG.md` has no section for the version, enter its notes too: they become the section. The GitHub website starts a workflow also in the browser of a phone.
 
 The run has four jobs:
 
-1. "Version commit" checks that the run starts from `main`, that the version has the form `<major>.<minor>.<patch>`, that it is not lower than the version in `package.json` and that its tag does not exist. It sets the version in `package.json` and `package-lock.json`, adds the section of the notes to `CHANGELOG.md` when the file has none, commits the change as "Release `<version>`" and pushes it to `main`. When `main` holds the version and its section already, it commits nothing. When `main` changed during the run, the push fails and the run changes nothing. The job pushes with the token of the workflow, so a rule of `main` that blocks direct pushes stops it.
+1. "Version commit" checks that the run starts from `main`, that the version has the form `<major>.<minor>.<patch>`, that it is not lower than the version in `package.json` and that its tag does not exist. It sets the version in `package.json` and `package-lock.json`, adds the section of the notes to `CHANGELOG.md` when the file has none, commits the change as "Release `<version>`" and pushes it to the temporary branch `release/run-<run ID>`, not to `main`. When `main` holds the version and its section already, it commits nothing. It also deletes the temporary branches of earlier runs that failed.
 2. "CI" runs the workflow `ci.yml` for the commit of the version, because a push with the token of a workflow starts no other workflow. The VSIX that this job tests and builds is the VSIX of the release, so the release repeats no test and no build.
-3. "Tag and GitHub release" creates the tag `v<version>` on the commit and the release of the tag with the GitHub CLI `gh`. The section of the version in `CHANGELOG.md` becomes the notes, and the VSIX becomes the file of the release. A release that exists keeps its notes and receives the VSIX only when it holds none.
+3. "Main, tag and GitHub release" runs only when CI passed. It moves `main` to the commit of the version as a fast-forward and deletes the temporary branch. When `main` changed during the run, it stops before the tag. Then it creates the tag `v<version>` on the commit and the release of the tag with the GitHub CLI `gh`. The section of the version in `CHANGELOG.md` becomes the notes, and the VSIX becomes the file of the release. A release that exists keeps its notes and receives the VSIX only when it holds none.
 4. "Publish to the Visual Studio Marketplace" downloads the VSIX of the GitHub release, signs in to Microsoft Entra ID with the official [`azure/login`](https://github.com/Azure/login) action and publishes the VSIX with `vsce publish --azure-credential`.
+
+`main` receives the version commit only after CI passed. When CI fails,
+`main`, the tags, the releases and the Marketplace stay unchanged, and the
+version stays free: fix the cause on `main` and start the release of the same
+version again. The jobs move and push with the token of the workflow, so a
+rule of `main` that blocks direct pushes stops the release.
+
+A dry run tests a release without a change: choose "Dry run" when you start
+the workflow. The run makes the version commit on its temporary branch, runs
+CI for it and deletes the branch; it changes neither `main`, a tag, a release
+nor the Marketplace. A dry run may start from another branch than `main`, so
+it also tests a change of `release.yml` on that branch before the change
+reaches `main`.
 
 When a job fails, remove the cause and choose "Re-run failed jobs" on the
 run. A re-run keeps the tag and the VSIX that the GitHub release already
 holds, and the Marketplace skips a version that it already holds, so a re-run
-never publishes a version twice. When the tests fail, fix the code on `main`
-and start a new run with the same version: `main` holds the version already,
-so the run tests and releases the fix.
+never publishes a version twice. A new run deletes the temporary branch of a
+failed run, so a failed run can no longer be re-run after a new run started.
 
 The workflows `release.yml` and `marketplace-identity.yml` and this section
 are the same in every extension repository of nimblescape. A change to them
