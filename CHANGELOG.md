@@ -3,6 +3,11 @@
 Each section lists the changes of one released version. The release workflow
 takes the section of a version as the notes of its GitHub release.
 
+## 0.1.5
+
+Maintenance release: the version follows the tag v0.1.4, which released
+nothing; the extension behaves as in 0.1.3.
+
 ## 0.1.3
 
 Maintenance release: the release publishes the package that CI tested and
