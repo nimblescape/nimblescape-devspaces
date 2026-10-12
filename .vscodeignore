@@ -1,0 +1,9 @@
+**
+!dist/extension.js
+!dist/groupsPreviewWorker.js
+!dist/helperChannel.js
+!resources/**
+!package.json
+!README.md
+!CHANGELOG.md
+!LICENSE

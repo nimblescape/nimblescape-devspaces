@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: MIT
+// © 2026 Hannes Stauss (scalarion@nimblescape.com)
+// Licensed under the MIT License. See LICENSE in the repository root for details.
+
+// The devspace of the window at its activation, and the restore of a lost registry around it. No `vscode` import
+// here, so it is unit-tested.
+import type { BootstrapDocker } from '../core/docker/bootstrapDocker';
+import type { HelperPrebuildOutcome } from '../core/helper/helperPrebuild';
+import type { DevspaceOperations } from '../core/pipeline/devspaceOperations';
+import type { Logger } from '../core/ports';
+import { errorMessage } from '../core/errors';
+import type { DevspaceRegistry } from '../core/storage/registry';
+import type { Devspace } from '../core/types';
+
+/** The longest wait of the activation for the restore of a lost registry. */
+export const WINDOW_RESTORE_TIMEOUT_MS = 30_000;
+
+/**
+ * The registry entry of the container that this window is attached to. When the registry lost its content (the file is
+ * missing, not valid, or has invalid entries), it is restored from the volume labels first, so that the open pipeline
+ * of role A can run for a restored window; this needs a running Docker, which is not started for it. Never throws.
+ */
+export async function findWindowDevspace(
+  containerName: string,
+  deps: {
+    registry: Pick<DevspaceRegistry, 'findByContainerName'>;
+    needsRestore: () => Promise<boolean>;
+    docker: Pick<BootstrapDocker, 'isInstalled'>;
+    service: Pick<DevspaceOperations, 'reconcileInWorker'>;
+    logger: Logger;
+  },
+): Promise<Devspace | undefined> {
+  const { registry, needsRestore, docker, service, logger } = deps;
+  try {
+    const devspace = await registry.findByContainerName(containerName);
+    if (devspace || !(await needsRestore())) return devspace;
+    // reconcileInWorker checks the Docker target first (never an endpoint that is neither local nor SSH), then whether
+    // Docker runs; the worker of the Docker host restores, in the background (passive).
+    if (!docker.isInstalled()) return undefined;
+    // The activation waits at most WINDOW_RESTORE_TIMEOUT_MS for it; the restore in the background of the activation,
+    // and the one after the build of the helper image, adopt the window later (reconcileIfRegistryLost with `adopt`).
+    try {
+      await service.reconcileInWorker({ passive: true, signal: AbortSignal.timeout(WINDOW_RESTORE_TIMEOUT_MS) });
+    } catch (error) {
+      logger.warn(`The devspaces could not be restored from the volumes while this window started: ${errorMessage(error)}`);
+    }
+    // The registry is read again whatever the restore answered: it may have added the entry before its time limit
+    // ended, or another window restored it first (nothing added here).
+    return await registry.findByContainerName(containerName);
+  } catch (error) {
+    logger.error('The devspace of this window could not be found.', error);
+    return undefined;
+  }
+}
+
+/**
+ * The restore at activation is passive (it never builds the helper image), so a lost registry is restored again once
+ * the background preparation of the helper image ended with an image (`restore` adopts a restored window), also when
+ * the image was there already or is not due (a passive restore may have found no image, or no worker ready in time);
+ * `restore` makes the worker ready in full.
+ */
+export async function restoreAfterPrebuild(outcome: HelperPrebuildOutcome, restore: () => Promise<void>): Promise<void> {
+  if (outcome === 'built' || outcome === 'present' || outcome === 'notDue') await restore();
+}

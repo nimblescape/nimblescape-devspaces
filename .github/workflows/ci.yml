@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: MIT
+# © 2026 Hannes Stauss (scalarion@nimblescape.com)
+# Licensed under the MIT License. See LICENSE in the repository root for details.
+
+# Test the extension and build its package for every push to main and every
+# pull request, on the pinned Node.js 24 release (.node-version); VS Code 1.125
+# (engines.vscode) and later run extensions on Node.js 24 too. The job "test"
+# installs the locked development tools, checks the types, runs the unit tests,
+# and packages the VSIX with vsce. The job "docker" runs the integration tests
+# against the Docker Engine of the runner. The VSIX stays a workflow artifact for
+# inspection. This workflow publishes nothing: the release workflow publishes a
+# tagged version.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  # Checkout needs repository reads; the checks get no write scope.
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node release
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Install the locked development tools without install scripts
+        run: npm ci --ignore-scripts
+
+      - name: Check the types
+        run: npm run typecheck
+
+      - name: Run the unit tests
+        run: npm test
+
+      - name: Build the VSIX package
+        run: npm run package
+
+      - name: Keep the VSIX package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vsix
+          path: '*.vsix'
+          if-no-files-found: error
+
+  docker:
+    # Docker Engine is preinstalled on the runner. The tests build the helper image and run the Dev Container CLI of
+    # the pinned version (devDependency @devcontainers/cli) against it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node release
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Install the locked development tools
+        run: npm ci
+
+      - name: Run the integration tests against Docker
+        run: npm run test:docker

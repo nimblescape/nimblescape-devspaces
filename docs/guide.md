@@ -1,0 +1,281 @@
+# Devspaces user guide
+
+The complete guide to Devspaces. The short overview is the [README](../README.md); how Devspaces works inside is in [architecture.md](architecture.md), and the security model in [security.md](security.md).
+
+**Contents:** [Requirements](#requirements) · [Install](#install) · [First steps](#first-steps) · [The sidebar](#the-sidebar) · [Commands](#commands) · [Settings](#settings) · [Updates](#updates) · [Stop on close](#stop-on-close) · [Remote Docker host](#remote-docker-host) · [Shared Docker engines](#shared-docker-engines) · [Installing Docker](#installing-docker) · [Security](#security) · [Known limits](#known-limits) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
+
+## Requirements
+
+- Visual Studio Code 1.125 or later, the build of Microsoft. The Dev Containers extension is licensed for this build only.
+- Docker: Docker Desktop on macOS, Windows (with WSL 2), or Linux, or Docker Engine on Linux. Without Docker, Devspaces offers to install it (see [Installing Docker](#installing-docker)). Docker can also run on another computer that you reach over SSH (see [Remote Docker host](#remote-docker-host)).
+- A GitHub account.
+- The Dev Containers extension (`ms-vscode-remote.remote-containers`). VS Code installs it together with Devspaces.
+
+## Install
+
+Install **Devspaces** from the Visual Studio Marketplace: search for "Devspaces" in the Extensions view of VS Code, or run:
+
+```sh
+code --install-extension nimblescape.nimblescape-devspaces
+```
+
+VS Code installs the Dev Containers extension with it. To install a `.vsix` file instead, run **Extensions: Install from VSIX…** or `code --install-extension nimblescape-devspaces-<version>.vsix`; to create the file yourself, see [Build from source](#build-from-source).
+
+## First steps
+
+1. Select the **Devspaces** icon in the activity bar. If Docker is not installed, the view shows the steps to set it up (see [Installing Docker](#installing-docker)).
+2. Select **Sign in with GitHub**. The list shows your repositories that have a Dev Container configuration, grouped by owner. The first load can take a moment with many repositories; the view shows the repositories as they arrive, and later updates read only the repositories that changed.
+3. Select **Start** on a repository, or double-click it. The first start creates the devspace: it clones the repository, builds the image, and creates the container, which can take several minutes. Later starts take seconds.
+4. The window connects to the container. You work in the repository folder under `/workspaces/<name>`.
+
+The first start of a repository that belongs neither to you nor to one of your organizations asks for a confirmation, because it runs code from that repository.
+
+To go to another devspace, use **Devspaces: Switch Devspace…** (`Ctrl+Alt+E`, on macOS `Cmd+Alt+E`) or select the Devspaces item in the status bar.
+
+## The sidebar
+
+The first row names the Docker engine that the view shows: **Local Docker**, or **Remote Docker host: <host>**. Select it to choose another engine. Below it, the repositories are grouped by owner.
+
+The title bar has **Select Organizations…** (limits the list and the scan to the organizations and accounts that you select), **Show Only Devspaces** (lists only the repositories that have a devspace, in any state; **Show All Repositories** lists all again), **Search**, **Refresh**, **Expand All** (opens every owner and group), and VS Code's **Collapse All**. Its **…** menu has **Edit Repository Groups…** and **Update All Images Now**.
+
+### What a row shows
+
+A row shows the repository name, the branch that is checked out in the devspace, the configuration in brackets when the repository has several, and the state of its devspace. Uncommitted changes and unpushed commits show as numbers, for example `Stopped · 3 unpushed`. The tooltip shows more, for example the time of the last use.
+
+| State | Meaning |
+|---|---|
+| `Connected` | This window is connected to the devspace. |
+| `Connected · other window` | Another VS Code window is connected to it. **Start** brings that window to the front. |
+| `Running` | The container runs, but no window is connected, for example during the waiting time after a close, or while an agent works in it. |
+| `Stopped` | The container is stopped. **Start** starts it. |
+| `Updating` | Devspaces creates, updates, rebuilds, or deletes the devspace. |
+| `No container` | The container was removed outside of Devspaces. **Start** creates it again from the image of the devspace. |
+| `Files missing` | The volume with the repository is missing. **Start** offers **Clone again** or **Delete devspace**. |
+| `State unknown (…)` | Devspaces could not read the states on that Docker engine, for example while it prepares the engine (`devspace not ready`) or when a remote engine does not answer (`devspace cannot be reached`). The actions stay available. |
+
+A repository without a devspace shows no state; **Start** creates its devspace on the default branch.
+
+More markers in a row:
+
+- `· kept`: the devspace keeps running when no window uses it (see [Stop on close](#stop-on-close)).
+- `· containers running`: the dev container is not running, but another container of the devspace is, for example a database of Docker Compose. **Stop** stops it.
+- `not on GitHub`: GitHub no longer lists the repository, for example after you lost access. The devspace stays until you delete it.
+- `host access unrestricted`: the host access checks are off for this repository (see [Security](#security)).
+
+### Actions of a row
+
+| Action | Effect |
+|---|---|
+| **Start** (or a double-click) | Starts the devspace and connects the current window. Creates the devspace on the first start. If another window is connected to it, that window comes to the front: a devspace is never open in two windows. |
+| **Start in New Window** | The same, but a new window connects, and the current window keeps its devspace. With the setting `devspace.openInNewWindow` on, the menu offers **Start in Current Window** instead. |
+| **Stop** | Stops the container at once. Your files stay. If a window is connected, the connection closes first. The Session Monitor on the Docker engine is told first, so the devspace stops even when you quit VS Code right after the click. A notification shows the progress until `owner/name stopped.` |
+| **Delete** | Removes the containers, the images, and the volume with the repository, after you confirm it. The confirmation shows uncommitted changes, unpushed commits, and stashes as far as Devspaces recorded them, and offers **Open devspace**. Additional volumes of the configuration, for example of a database, are removed only when you tick them. |
+| **Keep Running When Closed** | The devspace keeps running when no window uses it, for example for a server or an agent. Only **Stop** or **Delete** stops it. **Stop When Closed** switches back. The choice is stored with the devspace. |
+| **Close and Keep Running** | Only in a window that is connected to the devspace: closes the window, and the container keeps running this time. The next window that connects to it ends this. |
+| **Select Configuration…** | Only for repositories with several configurations: changes the configuration and creates the container again. |
+| **Rebuild** | Builds the image again and creates the container again. The volume with the repository stays. |
+| **Show on GitHub** | Opens the repository in the browser. |
+| **Turn Off Host Access Checks…** / **Turn On Host Access Checks** | Switches the host access checks of this repository (see [Security](#security)). |
+
+The actions after **Delete** are in the context menu of a row and in its **⋯** button.
+
+### Status bar and switcher
+
+The status bar shows the devspace of the window (`owner/name · branch`), **Open devspace…** in a window without one, `Updating owner/name…` while an operation runs, or **Reconnect owner/name** when the connection was lost. Select it to open the switcher, the progress details, or to reconnect.
+
+**Switch Devspace…** lists your recent devspaces with their state and, under **Open repository…**, every repository of the list. The selected devspace opens in the current window. **Switch Devspace in New Window…** opens it in a new window. With `devspace.openInNewWindow` on, the two commands swap their roles.
+
+## Commands
+
+All commands are in the category **Devspaces** of the Command Palette. A command that acts on one devspace asks which one when you run it from the Command Palette.
+
+| Command | What it does |
+|---|---|
+| Start, Start in New Window, Start in Current Window | Start a devspace (see [Actions of a row](#actions-of-a-row)). |
+| Stop, Delete, Rebuild, Select Configuration…, Show on GitHub | The actions of a row. |
+| Keep Running When Closed, Stop When Closed | Whether a devspace keeps running when no window uses it. |
+| Close and Keep Running | Closes this window; its devspace keeps running this time. Only in a connected window. |
+| Switch Devspace… (`Ctrl+Alt+E` / `Cmd+Alt+E`), Switch Devspace in New Window…, Switch Devspace in Current Window… | The switcher. |
+| Refresh, Search | Update or search the repository list. |
+| Expand All | Opens every owner and every group of the view. |
+| Select Organizations… | Limits the list to some organizations and accounts. Select none to see all again. |
+| Show Only Devspaces, Show All Repositories | Lists only the repositories that have a devspace, or all again (the setting `showOnlyDevspaces`). |
+| Edit Repository Groups… | Opens the editor of the setting `devspace.repositoryGroups`. |
+| Sign in with GitHub | Signs in with the GitHub account of VS Code. |
+| Show Log | Opens the log of Devspaces. |
+| Use a Remote Docker Host…, Use the Local Docker | Choose the Docker engine (see [Remote Docker host](#remote-docker-host)). |
+| Ask Again Before Changing the Docker Host | Brings back the questions that you answered with "Don't Ask Again". |
+| Update All Images Now | Runs the background work of the Session Monitor on the current Docker engine at once (see [Updates](#updates)). |
+
+The buttons of the Docker setup (**Install WSL 2**, **Install Docker**, **Start Docker**) and the host access switches appear only where they apply.
+
+## Settings
+
+All settings have the prefix `devspace.`. Settings marked *user only* count only in your user settings: a workspace or folder setting, which a repository could bring along, cannot change them.
+
+| Setting | Default | Description |
+|---|---|---|
+| `reopenLastOnStartup` | `true` | When VS Code starts with an empty window, open the devspace that you used last, unless you stopped it with **Stop**. |
+| `openInNewWindow` | `false` | *User only.* On: **Start** and **Switch Devspace…** open a devspace in a new window, and the current window keeps its devspace (an empty window is used directly). The context menu always offers the other choice. |
+| `stopOnClose` | `true` | *User only.* Stop a devspace 5 minutes after its last window closes; the 5 minutes are enough for a window reload. Off: every devspace keeps running until you stop it, and its row shows `· kept`. To keep only some devspaces running, use **Keep Running When Closed** on them. |
+| `stopAfterMinutes` | `10` | *User only.* Minutes without any sign from a window before the Session Monitor stops the container anyway (5 to 1440). This covers a window that cannot say goodbye: the computer sleeps or goes offline, or VS Code crashes. Devspaces that keep running when closed are never stopped. |
+| `updateImagesOnConnect` | `true` | At each start, check whether the base image or the Features of the devspace have a newer version, and update the devspace if so (your files stay). Off: the devspace keeps its image until you choose **Rebuild**. |
+| `updateContainer` | `notify` | *User only.* What a start does when a newer image is available for the existing container (see [Updates](#updates)). `notify`: says that the container is updated now, with **Continue** or **Cancel**. `ask`: asks, with **Update Now** or **Later**. |
+| `cacheUpdateSchedule` | `7 6 * * *` | *User only.* When the Session Monitor on each Docker engine does its background work (see [Updates](#updates)). A cron expression of five fields (minute, hour, day of month, month, day of week) in your time zone, or the minutes between two runs (5 to 1440). Examples: `7 6 * * *` daily at 06:07, `7 6 * * 1-5` on weekdays at 06:07, `7 */6 * * *` every six hours, `60` every hour. An invalid value means the default. |
+| `stopLocalMonitorWhenIdle` | `true` | *User only.* On the local Docker engine, end the Session Monitor when no devspace has run for 5 minutes; the next start starts it again. Off: it keeps running, so its background work also runs while no devspace runs. On a remote engine it always keeps running. |
+| `respectShutdownActionNone` | `false` | *User only.* Keep a devspace running after its window closes when its `devcontainer.json` says `"shutdownAction": "none"`. Off: that line is ignored, and `stopOnClose` applies. |
+| `owners` | `[]` | Organizations or accounts whose repositories the sidebar lists. Empty: all repositories that you can access. **Select Organizations…** changes it. |
+| `includeArchived` | `false` | List archived repositories. |
+| `includeForks` | `true` | List forked repositories. |
+| `showOnlyDevspaces` | `false` | List only the repositories that have a devspace, whatever its state. **Show Only Devspaces** and **Show All Repositories** in the title bar switch it. |
+| `refreshIntervalMinutes` | `60` | Minutes between the background updates of the repository list from GitHub. |
+| `hostAccessChecksOff` | `[]` | *User only.* Repositories (`owner/name`) whose host access checks are off. Only for repositories that you fully trust (see [Security](#security)). **Turn Off Host Access Checks…** in the context menu of a repository changes it. A change applies when the container is created next, for example with **Rebuild**. |
+| `repositoryGroups` | `[]` | *User only.* Regular expressions that filter and group the repositories of each owner by name (see below). |
+
+**Repository groups.** Each entry of `devspace.repositoryGroups` is a regular expression (JavaScript syntax) for the repository name without the owner, or an object with `pattern`, an optional `name`, and optional `flags` (`i`, `u`, `s`). In an owner where at least one repository matches, the view shows only the matching repositories and those with a devspace. Each capturing group becomes a level of the tree, and the last one is the label of the row; the first matching entry wins, and an entry with a `name` gets its own node. For example, `^(\d{4}-[^-]+-[^-]+)-([^-]+-[^-]+)-(.+)$` shows `2026-web-1a-module-html-css` as `2026-web-1a` › `module-html` › `css`. Avoid nested repetitions such as `(a+)+`: they can make VS Code stop responding, and the view names the setting when grouping is slow.
+
+**Devspaces: Edit Repository Groups…** opens an editor for this setting, because the Settings editor of VS Code can only open `settings.json` for it. It shows a preview of the tree for the repositories that the view has loaded, tests a repository name, and marks an expression that takes longer than one second as too slow; such an expression cannot be saved. **Save** replaces only this one value in your user `settings.json`. If the value changed in `settings.json` while the editor was open, the editor asks first: **Load settings.json**, **Save Mine**, or **Cancel**.
+
+## Updates
+
+Devspaces keeps your devspaces current in two places: in the background on each Docker engine, and at each start.
+
+### The background run
+
+A small container on each Docker engine, the **Session Monitor** (`devspace-session-monitor`), does the background work at the times of `devspace.cacheUpdateSchedule` (by default daily at 06:07 in your time zone). A time that was missed, for example while the engine was off, runs once when the monitor runs again. Each run:
+
+1. **Pulls the newer versions of the images that the devspaces on that engine use**, for example `node:20` or `mcr.microsoft.com/devcontainers/base:ubuntu`, and removes the older versions of those images that nothing uses any more. It pulls without a sign-in, so private images are not updated in the background; an image pinned by a digest never changes.
+2. **Downloads the newest VS Code server** into a store that all dev containers of the engine share, and links it into the running dev containers, so that a window that VS Code restores after its own update finds its server.
+3. **Downloads the newest releases of the VS Code extensions** that your devspaces used in the last 14 days, so that a start installs them without a download.
+4. **Cleans up** that store at most once a day.
+5. **Prepares the next image of each devspace** whose base image or Features changed: it builds the new image in the background, so that the update at the next start takes seconds. It prepares one devspace at a time, the most recently used first, and stops a prepare after 30 minutes. It uses no token and no credentials, so devspaces with private images or Features, and repositories whose host access checks are off, are not prepared.
+
+On the local Docker, the monitor runs only while devspaces run, unless you turn off `devspace.stopLocalMonitorWhenIdle`. On a remote engine it always runs.
+
+**Devspaces: Update All Images Now** (Command Palette, or the **…** menu of the view) runs the same work at once on the current Docker engine, for example after a new image was pushed. The run starts within a minute, and the command does not wait for it: the message says "The Session Monitor on <engine> updates the images now."
+
+### The update at a start
+
+At each start, Devspaces checks whether the images and Features of the devspace have newer versions. It uses the registry answers of the last background run when they are recent, and asks the registries itself otherwise. Without internet access, it skips the check and starts the devspace with its current image.
+
+When a newer image is available and the devspace has a container, running or stopped, Devspaces says so before it changes anything. The update creates the container again from the new image: your files in the workspace stay, but programs and files that you added outside the workspace, for example in the home folder, are gone. With the default `devspace.updateContainer` = `notify`, the dialog says, for example:
+
+> A newer image is available for owner/name. To use it, the running container is stopped and created again from the new image. Your files in the workspace are kept; programs and files that you added outside the workspace are not. Choose Continue to update now, or Cancel to leave the devspace closed.
+
+- **Continue** updates the container. **Cancel** ends the start: nothing changes, and the window does not connect.
+- With `ask`, the buttons are **Update Now** and **Later**. **Later** opens the current container without the update; the next start asks again.
+
+A first start, a missing image, **Rebuild**, and **Select Configuration…** never ask.
+
+After **Continue** or **Update Now**, Devspaces uses the image that the background run prepared when it fits. While the background run still prepares it, the progress shows "Preparing the newer image (3 min)…" and the start waits for it; cancel the progress to stop waiting. Otherwise Devspaces pulls and builds the new image. In every case the new image passes all checks again before the container is created.
+
+If the build of a newer image fails, or the new image needs access to your computer that the checks refuse, the devspace starts with its current container, and a message says so.
+
+## Stop on close
+
+When you close the last window of a devspace, switch to another devspace, or quit VS Code, the Session Monitor on its Docker engine stops the container 5 minutes later. A window that connects again within that time keeps it running. If the window cannot say goodbye (the computer sleeps or goes offline, or VS Code crashes), the monitor stops the container after `devspace.stopAfterMinutes` (default 10 minutes) without a sign from any window.
+
+A devspace keeps running when no window uses it in these cases, and its row shows `· kept`:
+
+- **Keep Running When Closed** is on for it. Only **Stop** or **Delete** stops it.
+- You closed its window with **Close and Keep Running**. The next window that connects to it ends this.
+- `devspace.stopOnClose` is off.
+- `devspace.respectShutdownActionNone` is on, and its configuration says `"shutdownAction": "none"`.
+
+Work that runs in a container after its window closed, for example a long build in a terminal, ends when the container stops.
+
+## Remote Docker host
+
+Your devspaces can run on Docker on another computer, for example a build server or a stronger machine, reached over SSH. VS Code, Devspaces, and your GitHub sign-in stay on your computer; the containers, volumes, and images are on the other computer. The remote engine is the current [Docker context](https://docs.docker.com/engine/manage-resources/contexts/), so Docker, Docker Compose, the Dev Containers extension, and Devspaces all follow it. Devspaces never sets `DOCKER_HOST` and writes no setting of the Dev Containers extension.
+
+### Set up
+
+1. On the other computer, install Docker Engine and let your SSH user use it: add the user to the group `docker`, or use rootless Docker. On your computer, the Docker CLI is needed (Docker Desktop brings it).
+2. Make sure that SSH to the host works in a terminal **without any question**: your key is loaded in the SSH agent (`ssh-add`) or named with `IdentityFile`, and you have accepted the host key once (`ssh <alias>`, or `ssh -p <port> <user>@<host>`). Devspaces never asks for a password and never accepts a host key for you.
+3. Run **Devspaces: Use a Remote Docker Host…**, or select the first row of the view. The list shows the hosts of your SSH config (`~/.ssh/config`, on Windows `%USERPROFILE%\.ssh\config`, with its `Include` files). **Enter an SSH address…** takes `user@host` or `user@host:port` (an IPv6 address in brackets).
+4. Devspaces tests the connection and then asks: "All Docker tools on this computer will use <host> until you switch back." After your confirmation, it makes the Docker context of that host current, named after the host as in your SSH config. It creates the context the first time and never changes it afterwards.
+5. **Devspaces: Use the Local Docker** switches back to the context that was current before, if that points to the local Docker, or else to `default`.
+
+Each question before a change of the Docker host has a second button "…, Don't Ask Again". **Devspaces: Ask Again Before Changing the Docker Host** brings the questions back.
+
+### What to know
+
+- The view, the switcher, the status bar, and every command show and act only on the devspaces of the current Docker engine. Each devspace belongs to the engine where it was created, and a repository gets its own devspace on each engine. Two names of the same computer (an SSH alias and `user@address`) count as two hosts.
+- The context changes for every Docker tool of your user on this computer, also in terminals. If `DOCKER_HOST` or `DOCKER_CONTEXT` is set for VS Code, the context has no effect, and the commands say so.
+- Docker Desktop may make its own context current again when it starts or updates. When a window of a devspace on another host opens again, for example from **Open Recent**, Devspaces asks "Use <host> again?" and switches back after the same test.
+- A Docker context that points to another computer without SSH (for example `tcp://10.0.0.5:2375`) is not supported: no operation runs there, and the view says so.
+- When the host cannot be reached, the message names the reason: the computer does not answer, the login failed, the host key is unknown, or Docker does not run there. Devspaces never starts or installs Docker on a remote host.
+- Published ports are bound to `127.0.0.1` of the other computer. Reach them through the port forwarding of VS Code (the Ports view, `forwardPorts`). `host.docker.internal` exists only with Docker Desktop.
+- Rootless Docker on the other computer works. Its limits: no published ports below 1024, Docker-in-Docker needs set-up there, and resource limits need cgroup v2.
+- **Use SSH connection sharing.** Devspaces keeps one SSH connection per window and engine for its work, but the Docker CLI on your computer opens a new SSH connection for each of its own calls. SSH servers limit new connections (`MaxStartups`, and in OpenSSH 9.8 and later `PerSourcePenalties`), and a dropped connection fails with a message that the SSH server closed it before the login. Connection sharing avoids this and is much faster:
+
+  ```
+  Host build-box
+    ControlMaster auto
+    ControlPath ~/.ssh/cm-%C
+    ControlPersist 10m
+  ```
+
+  Connection sharing needs Unix sockets and does not work with the OpenSSH client of Windows. There, raise `MaxStartups` in `/etc/ssh/sshd_config` of the other computer (for example `MaxStartups 30:30:100`) if connections drop.
+
+## Shared Docker engines
+
+Several people, each with their own computer, can use the same remote Docker engine. Each devspace belongs to the GitHub account that created it, and the Session Monitor on the engine decides by the newest sign of any computer: closing a window on one computer never stops a devspace that a window on another computer still uses.
+
+**A shared engine is for a group that trusts each other.** Everyone who can use Docker on that engine (root and the members of the group `docker` there) can reach every container and every volume on it, including the GitHub token in the memory of another person's running devspace. Devspaces separates accounts against mistakes, not against the other users of the engine. For people who must not see each other's work, give each person an engine of their own, for example a virtual machine.
+
+## Installing Docker
+
+When Docker is not installed, the view shows the steps to set it up instead of the repositories, each with its button:
+
+1. On Windows: **Install WSL 2** (`wsl --install`; restart the computer afterwards). Once WSL 2 is ready, the view shows "✓ WSL 2 is installed."
+2. **Install Docker**:
+   - macOS: with Homebrew, `brew install --cask docker-desktop`. If the terminal shows "Operation not permitted" from `xattr`, allow VS Code in System Settings › Privacy & Security › App Management and install again. Without Homebrew, `Docker.dmg` is downloaded from Docker and opens; drag Docker to Applications.
+   - Windows: with winget, `winget install --exact --id Docker.DockerDesktop`; without winget, `Docker Desktop Installer.exe` is downloaded from Docker and starts.
+   - Linux (Ubuntu, Debian, Fedora, RHEL, CentOS): Docker Engine from the package repository of Docker, and your user joins the group `docker` (sign in again afterwards). On other distributions, the installation guide of Docker opens.
+3. Docker starts by itself when a devspace needs it. Right after the installation, a notification also offers **Start Docker**. On Linux, **Start Docker** runs `sudo systemctl enable --now docker` in a terminal.
+
+Nothing runs without your confirmation: a dialog first lists the exact commands, or the download address and the file. Commands run visibly in a terminal of VS Code, where you enter your password if one is needed. Downloads come only from Docker over HTTPS, and the installers are signed by Docker. If Docker is installed already, nothing is installed. The installation works only in a local window. Docker Desktop is free for personal use, education, non-commercial open source projects, and small businesses; larger companies need a paid subscription.
+
+## Security
+
+**A repository that you open is code that you run.** Its Dockerfile, its Features, its lifecycle commands, and the extensions in its container run with the rights of the container: they can use the network, attack the kernel that all containers share, use the channels that VS Code keeps open to your computer (for example the SSH agent and the clipboard), and use the GitHub token of the devspace. Open only repositories that you trust.
+
+What Devspaces does to limit the harm:
+
+- Each devspace runs in containers of its own, with the repository in a Docker volume. Devspaces mounts no file or folder of your computer into the container.
+- **Host access checks**, on for every repository, refuse configurations that ask for access to your computer: bind mounts (also of the Docker socket), privileged mode, extra capabilities, devices and GPUs, the namespaces of the computer, ports on all network addresses, and the volumes of other programs. Published ports are bound to `127.0.0.1`. For a repository that you fully trust, **Turn Off Host Access Checks…** lifts these refusals after a warning; the row then shows `host access unrestricted`.
+- Some things are refused whatever the switch says, for example the volumes and containers of other devspaces and the folder of the token.
+- The GitHub token is never in an environment variable, on a command line, or in a log. It is kept only in the memory of the running dev container, at `/run/devspace`, and is gone when the container stops.
+- Git and the GitHub CLI in the container use only the configuration of the devspace and the token of the account that owns it. Devspaces switches off the copy of your Git configuration, the forwarding of your Git and Docker credentials, and the sign-in of the GitHub CLI by the Dev Containers extension for its containers.
+
+The checks are a guard rail against mistakes and copied templates, not a sandbox. The full security model, the complete lists, the known limits, and the steps to harden your computer are in [security.md](security.md).
+
+**Privacy.** Devspaces uses the GitHub sign-in of VS Code and stores no token in its settings or files. Its stored lists hold metadata only, for example repository names, branch names, image names, and the GitHub account of each devspace. It collects no telemetry.
+
+## Known limits
+
+- The first start of a repository needs internet access, to download the repository and the images.
+- The repository is in a Docker volume, not in a folder of your computer. Other programs on your computer cannot open its files directly, and configurations that mount files of the repository from your computer (`${localWorkspaceFolder}`) do not work.
+- Only the volume with the repository, and additional named volumes of the configuration (`mounts`), survive an update or a rebuild. Files in other folders of the container, for example the home folder, are lost. When Devspaces itself needs to create a container again, the progress says so. When a container is damaged so that it cannot start (for example its `/etc/passwd` lacks the user), **Start** asks whether to create it again and names what is lost.
+- Values of `${localEnv:…}` variables of your computer are not passed to the devspace.
+- Each GitHub account has its own devspace of a repository, with its own clone. A configuration with a fixed volume name works for one account only; use `${devcontainerId}` in the name to give each devspace its own volume.
+- Docker Compose configurations start the dev container together with the other services, for example a database. The same checks apply to every service. A service that mounts files of the repository (for example `./init.sql`) gets them from the volume of the devspace (Docker Engine 26 or newer). Remote `include` and `extends` of compose files do not work.
+- With **Select Organizations…**, GitHub is asked only about the selected owners. Your devspaces of other owners stay in the list, but Devspaces does not check whether their repositories are still on GitHub.
+- Git in the container older than version 2.32 reads the configuration of the devspace only through `~/.gitconfig`. When the image brings a `~/.gitconfig` with content, Git older than 2.31 gets no credential for github.com. Git older than 2.9 may use the credentials of your computer; Devspaces warns about it.
+- On Linux with Docker Engine, Devspaces cannot start the Docker service itself, because that needs administrator rights. **Start Docker** runs the command in a terminal; in a remote window, the message names the command instead.
+
+## Troubleshooting
+
+- **The log.** **Devspaces: Show Log** opens the complete log of Devspaces, including the output of the clone, the build, and the lifecycle commands. A progress notification has **Show details** for the same log.
+- **The Session Monitor.** Its log shows each stop, each background run, and each prepare: `docker logs devspace-session-monitor` on the engine, or from your computer `docker --context <context> logs devspace-session-monitor`. Docker keeps at most 2 × 1 MB of it.
+- **A devspace stops too early or keeps running.** Check its row for `· kept`, and the settings `stopOnClose`, `stopAfterMinutes`, and `respectShutdownActionNone`. If the window warns that its heartbeats failed, the Session Monitor may stop the devspace after `stopAfterMinutes`.
+- **`State unknown`.** Devspaces could not read the engine. On a remote host, check that `ssh <host>` works without a question and that Docker runs there. After the images of an engine were removed, Devspaces prepares the engine again in the background; the status bar shows "Devspaces: preparing <host>…".
+
+## Build from source
+
+The commands to build, test, and package Devspaces, and the release, are in [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+How Devspaces works inside is described in [architecture.md](architecture.md).
+
+© 2026 Hannes Stauss (scalarion@nimblescape.com) · [MIT License](../LICENSE).
