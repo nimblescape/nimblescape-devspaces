@@ -176,7 +176,7 @@ describe('the helper channel with the real Docker engine', () => {
     // started, younger than 10 minutes, is kept (an open that runs now), and the value says how many it removed (others
     // of this engine older than 10 minutes may go, as at every open). With the label of every helper container that the
     // sweep prunes (the channels carry it, channelRunArgs), so that only its age keeps it.
-    const young = `devspace-channel-young-${run.runId}`;
+    const young = `devspace-worker-young-${run.runId}`;
     cli.ok(['create', '--name', young, '--label', `${LABEL_HELPER_RUN}=true`, '--label', `${LABEL_HELPER_CHANNEL}=${channelLabelValue(script)}`, ...runLabelArgs, helperTag, 'true']);
     try {
       const swept = parseSweepValue(await timings.measure('sweep through the channel', () => sweepThrough(channel)));
@@ -204,7 +204,7 @@ describe('the helper channel with the real Docker engine', () => {
 
   // The end after the silence.
   it('ends after the silence while the connection stays open', async () => {
-    const containerName = `devspace-channel-test-${run.runId}`;
+    const containerName = `devspace-worker-test-${run.runId}`;
     // The state volume (a volume of the test).
     const args = channelRunArgs({
       tag: helperTag,

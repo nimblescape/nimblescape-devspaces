@@ -261,7 +261,7 @@ describe('the protocol of the helper channel', () => {
 describe('the helper containers that the sweep removes when they are stopped', () => {
   it('the channels and the batch helpers carry the label of the sweep (any value); the batch helpers also their session label', () => {
     // The volume of the shared VS Code server store is required.
-    const run = channelRunArgs({ tag: 't', socketPath: '/var/run/docker.sock', stateVolume: 'devspace-session-monitor', vscodeVolume: 'devspace-vscode', containerName: 'devspace-channel-x', label: 'l', scriptHash: 'h' });
+    const run = channelRunArgs({ tag: 't', socketPath: '/var/run/docker.sock', stateVolume: 'devspace-session-monitor', vscodeVolume: 'devspace-vscode', containerName: 'devspace-worker-x', label: 'l', scriptHash: 'h' });
     const labels = run.flatMap((arg, index) => (run[index - 1] === '--label' ? [arg] : []));
     expect(labels).toContain(`${LABEL_HELPER_RUN}=true`);
     expect(labels).toContain(`${LABEL_HELPER_CHANNEL}=l`);

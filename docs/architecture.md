@@ -13,7 +13,7 @@ flowchart LR
     DC["Dev Containers extension"]
   end
   subgraph ENG["Docker engine (local or over SSH)"]
-    W["Worker<br/>devspace-channel-…"]
+    W["Worker<br/>devspace-worker-…"]
     B["Batch helper<br/>devspace-batch-…"]
     SM["Session Monitor<br/>devspace-session-monitor"]
     DEV["Dev container"]
@@ -59,10 +59,10 @@ Its parts:
 
 ### The worker and the helper channel
 
-The worker is a container per window and Docker engine, started by the extension with the Docker CLI over the engine's Docker context:
+The worker is a container per window and Docker engine, `devspace-worker-<12 hex>`. The helper channel is its connection to the extension: the standard input and output of the `docker run` with which the extension starts it, with the Docker CLI over the engine's Docker context:
 
 ```text
-docker run --rm -i --pull never --name devspace-channel-<12 hex>
+docker run --rm -i --pull never --name devspace-worker-<12 hex>
   --label nimblescape.devspace.helper-run=true --label nimblescape.devspace.helper-channel=<protocol>-<hash>
   --network bridge --log-driver none --cap-drop ALL --security-opt no-new-privileges
   --mount type=bind,source=<engine socket>,target=/var/run/docker.sock
@@ -239,7 +239,7 @@ VS Code restores the windows of the last session; a restored window that was con
 
 - **Devspace ID**: a random UUID, which appears only in labels. Its *pair* `<adjective>-<scientist>` comes from the SHA-256 of the ID (`src/core/namePairs.ts`); an ID whose pair is in use on the engine is not taken.
 - **Resource name**: `devspace-<owner>-<repo>-<adjective>-<scientist>`, lower case, at most 63 characters. It names the workspace volume, the dev container, the repository of the devspace's images (`:<build number>`, `:prepared`, `:prepared-<service>`), and the Docker Compose project (and so the names that Compose derives from it).
-- **Own objects of Devspaces**: the helper image `devspace-helper:<12 hex>` with its second tag `devspace-monitor:<12 hex>`, the worker containers `devspace-channel-<12 hex>`, the batch helpers `devspace-batch-<session>`, the container and volume `devspace-session-monitor`, and the volumes `devspace-vscode` and `devspace-helper-cache`.
+- **Own objects of Devspaces**: the helper image `devspace-helper:<12 hex>` with its second tag `devspace-monitor:<12 hex>`, the worker containers `devspace-worker-<12 hex>`, the batch helpers `devspace-batch-<session>`, the container and volume `devspace-session-monitor`, and the volumes `devspace-vscode` and `devspace-helper-cache`.
 - **Docker context of a remote host**: the SSH alias or host name, with `-<adjective>-<scientist>` of the host only when that name is taken by another context.
 - **Container host name**: the repository name in lower case, so that the shell prompt shows it.
 

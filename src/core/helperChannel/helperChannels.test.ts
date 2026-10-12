@@ -348,12 +348,12 @@ describe('channelRunArgs and openHelperChannel', () => {
       socketPath: '/run/user/1000/docker.sock',
       stateVolume: 'devspace-session-monitor',
       vscodeVolume: 'devspace-vscode',
-      containerName: 'devspace-channel-1',
+      containerName: 'devspace-worker-1',
       label: '1-x',
       scriptHash: hash,
     });
     expect(args).toEqual([
-      'run', '--rm', '-i', '--pull', 'never', '--name', 'devspace-channel-1',
+      'run', '--rm', '-i', '--pull', 'never', '--name', 'devspace-worker-1',
       '--label', 'nimblescape.devspace.helper-run=true',
       '--label', `${LABEL_HELPER_CHANNEL}=1-x`,
       // No log of the channel on the host; outbound network on the default bridge.
@@ -423,7 +423,7 @@ describe('channelRunArgs and openHelperChannel', () => {
     );
     expect(started?.context).toBe(REMOTE.context);
     expect(started?.args).toContain('devspace-helper:abc');
-    expect(started?.args[started.args.indexOf('--name') + 1]).toMatch(/^devspace-channel-[0-9a-f]{12}$/);
+    expect(started?.args[started.args.indexOf('--name') + 1]).toMatch(/^devspace-worker-[0-9a-f]{12}$/);
     expect(channel.isOpen).toBe(true);
     expect(written[0]).toBe(`${JSON.stringify('SCRIPT')}\n`);
     // Pipe loading: the loader gets the hash of that script, never the script.

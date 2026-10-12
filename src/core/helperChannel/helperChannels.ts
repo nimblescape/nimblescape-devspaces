@@ -172,7 +172,7 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
   const [script, tag, socketPath] = await Promise.all([deps.script(), deps.helperTag(), deps.socketPath(target)]);
   const name = engineName(target);
   const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
-    const containerName = `devspace-channel-${crypto.randomBytes(6).toString('hex')}`;
+    const containerName = `devspace-worker-${crypto.randomBytes(6).toString('hex')}`;
     const args = channelRunArgs({ tag, socketPath, stateVolume: deps.stateVolume, vscodeVolume: deps.vscodeVolume, containerName, label: channelLabelValue(script), scriptHash: bundleHash(script), network });
     const process = await runWithDockerTarget(target, async () => deps.start(args));
     if (process === undefined) throw new HelperChannelError('open', 'The Docker CLI cannot be started.');
