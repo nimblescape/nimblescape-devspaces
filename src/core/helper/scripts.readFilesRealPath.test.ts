@@ -6,7 +6,7 @@
 // scripts.readFiles.test.ts, and scripts.readFilesChecks.test.ts do not catch: the real path of the opened descriptor,
 // its stat, the fallback without /proc/self/fd, open errors, closed descriptors, and O_NOCTTY.
 
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -41,6 +41,30 @@ function runScript(command: string[], options: { preload?: string; env?: NodeJS.
   const result = spawnSync(file, rest, { encoding: 'utf8', timeout: 10_000, env: { ...process.env, ...options.env } });
   expect(result.error).toBeUndefined();
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+/** A pseudo-terminal that a python3 process holds open: the path of its terminal side, and its close. */
+async function pseudoTerminal(): Promise<{ path: string; close: () => void }> {
+  const holder = spawn('python3', ['-c', 'import os, sys\nmaster, terminal = os.openpty()\nprint(os.ttyname(terminal), flush=True)\nsys.stdin.read()'], {
+    stdio: ['pipe', 'pipe', 'inherit'],
+  });
+  const close = (): void => {
+    holder.stdin.end();
+    holder.kill();
+  };
+  const line = await new Promise<string>((resolve, reject) => {
+    let out = '';
+    holder.stdout.on('data', (chunk: Buffer) => {
+      out += chunk.toString();
+      if (out.includes('\n')) resolve(out.trim());
+    });
+    holder.on('error', reject);
+    holder.on('exit', () => reject(new Error('python3 ended before it opened a pseudo-terminal')));
+  }).catch((error: unknown) => {
+    close();
+    throw error;
+  });
+  return { path: line, close };
 }
 
 const BUILD_CONFIG = '{ "build": { "dockerfile": "Dockerfile" } }';
@@ -258,15 +282,20 @@ fs.openSync = function (file, ...rest) {
   return fd;
 };
 `;
-  it.skipIf(!isRoot || !isLinux || !has('setsid', ['--version']))('never takes a terminal device of the repository for its controlling terminal', (context) => {
+  it.skipIf(!isRoot || !isLinux || !has('setsid', ['--version']) || !has('unshare', ['--version']) || !has('python3', ['--version']))('never takes a terminal device of the repository for its controlling terminal', async (context) => {
     const { root, repo } = repository();
     fs.mkdirSync(path.join(repo, 'a'));
-    fs.rmSync(path.join(repo, 'b', 'Dockerfile'));
-    // Skipped, not failed, where mknod is refused (root without CAP_MKNOD).
-    for (const file of ['a/devcontainer.json', 'b/Dockerfile']) {
-      if (spawnSync('mknod', [path.join(repo, file), 'c', '4', '1'], { timeout: 10_000 }).status !== 0) context.skip();
-    }
-    const prefix = ['setsid', '-w'];
+    // The terminal device: the terminal side of a pseudo-terminal, which every Linux has (a virtual console such as
+    // /dev/tty1 is missing on many machines, CI runners too). python3 opens the pair with os.openpty, which unlocks
+    // the terminal side, and holds it open until the test ends; Node has no call for that. A bind mount in a mount
+    // namespace of the script puts the terminal at the files of the repository: a node of mknod would name the
+    // terminal of another devpts instance in a container.
+    const terminal = await pseudoTerminal();
+    context.onTestFinished(terminal.close);
+    const files = ['a/devcontainer.json', 'b/Dockerfile'].map((file) => path.join(repo, file));
+    for (const file of files) fs.writeFileSync(file, '');
+    // Where the mounts are refused, the script does not run and the probe below skips the test.
+    const prefix = ['unshare', '-m', 'sh', '-c', 'mount --bind "$1" "$2" && mount --bind "$1" "$3" && shift 3 && exec setsid -w "$@"', 'sh', terminal.path, ...files];
     // Whether the setup holds here: an open without O_NOCTTY makes the terminal the controlling terminal of the script.
     const probe = runScript(['node', '-e', "const fs = require('fs'); try { fs.openSync(process.argv[1], fs.constants.O_RDONLY | fs.constants.O_NONBLOCK); } catch { process.exit(); } const stat = fs.readFileSync('/proc/self/stat', 'utf8'); process.stdout.write(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[4]);", path.join(repo, 'b', 'Dockerfile')], { prefix });
     if (probe.stdout === '' || probe.stdout === '0') context.skip();
