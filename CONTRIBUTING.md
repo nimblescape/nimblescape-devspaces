@@ -94,7 +94,7 @@ in `package.json`. To release a version, follow these steps:
 
 The tag starts the workflow "Release". It runs three jobs:
 
-1. "Release build" tests the tagged source and builds the VSIX with vsce. It stops when the tag differs from the manifest version or when `CHANGELOG.md` has no section for the version.
+1. "Release build" waits for the CI run of the tagged commit and takes the VSIX that this run tested and built, so the release repeats no test and no build. It stops when the tag differs from the manifest version, when `CHANGELOG.md` has no section for the version, or when the CI run fails. Tag a commit of `main`, whose push starts that run.
 2. "GitHub release" creates the release of the tag with the GitHub CLI `gh`. The section of the version in `CHANGELOG.md` becomes the notes, and the VSIX becomes the file of the release. A release that exists, for example one created on the GitHub website, keeps its notes and receives the VSIX only when it holds none.
 3. "Publish to the Visual Studio Marketplace" downloads the VSIX of the GitHub release, signs in to Microsoft Entra ID with the official [`azure/login`](https://github.com/Azure/login) action and publishes the VSIX with `vsce publish --azure-credential`.
 
