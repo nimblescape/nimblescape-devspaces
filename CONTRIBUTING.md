@@ -77,7 +77,10 @@ Every extension of the publisher `nimblescape` uses one name,
 The prefix keeps the name apart from the names of other publishers, because
 the Marketplace accepts a `name` only once. The Marketplace cannot rename an
 extension ID: another `name` publishes a new extension, and the old one stays
-with its installations.
+with its installations. An extension that is no longer wanted is unpublished
+(More Actions, Unpublish, which can be undone), never removed: the Marketplace
+keeps the `name` of a removed extension reserved for good, also for its own
+publisher.
 
 ## Release
 
