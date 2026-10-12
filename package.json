@@ -2,7 +2,7 @@
   "name": "nimblescape-devspaces",
   "displayName": "nimblescape Devspaces",
   "description": "Open your GitHub repositories in local dev containers with one action.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "nimblescape",
   "license": "MIT",
   "author": {
