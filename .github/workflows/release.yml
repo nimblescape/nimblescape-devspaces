@@ -223,12 +223,14 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           SHA: ${{ needs.version.outputs.sha }}
         run: |
-          existing=$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" --jq .object.sha 2> /dev/null || true)
-          if [ -z "$existing" ]; then
+          # gh writes the body of an error response, for example 404, to the output, so the exit status decides.
+          if existing=$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" --jq .object.sha 2> /dev/null); then
+            if [ "$existing" != "$SHA" ]; then
+              echo "::error::The tag $TAG names $existing, not the commit $SHA of the release."
+              exit 1
+            fi
+          else
             gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA" > /dev/null
-          elif [ "$existing" != "$SHA" ]; then
-            echo "::error::The tag $TAG names $existing, not the commit $SHA of the release."
-            exit 1
           fi
 
       # The GitHub CLI of the runner creates the release as a draft, uploads
