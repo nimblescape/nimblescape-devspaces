@@ -3,6 +3,10 @@
 Each section lists the changes of one released version. The release workflow
 takes the section of a version as the notes of its GitHub release.
 
+## 0.1.7
+
+Maintenance release: the version commit reaches main only after CI passed, and a dry run tests a release without a change; the extension behaves as in 0.1.6.
+
 ## 0.1.6
 
 Maintenance release: the workflow "Release" created this version commit; the extension behaves as in 0.1.5.
