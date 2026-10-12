@@ -8,3 +8,4 @@ dist/
 *.vsix
 coverage/
 .DS_Store
+test-results/

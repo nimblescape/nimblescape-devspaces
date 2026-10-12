@@ -19,7 +19,7 @@ the extension. The [README](README.md) describes the use in short, the
 | `package.json` | The extension manifest. The section [Manifest](#manifest) explains it. |
 | `package-lock.json` | The locked development tools. npm writes this file, and nobody edits it by hand. |
 | `.node-version` | The Node release of the release workflow and of `npm run package`. `actions/setup-node` in the workflows and local Node version managers read it. |
-| `.github/workflows/ci.yml` | Tests and packages every push to `main`, every pull request and the commit of every release, and runs the integration tests against Docker. |
+| `.github/workflows/ci.yml` | Tests and packages every push to `main`, every pull request and the commit of every release, runs the unit tests a second time as root, fails when a unit test ran in neither run, and runs the integration tests against Docker. |
 | `.github/workflows/release.yml` | Releases a version on a manual start: commits the version to a temporary branch, tests and packages it with `ci.yml`, and only then moves `main` to it, creates its tag and GitHub release and publishes it to the Marketplace. A dry run tests without a change. The section [Release](#release) explains it. |
 | `.github/workflows/marketplace-identity.yml` | Prints the Marketplace member ID of the publishing identity, to check the setup of the repository. |
 | `.github/dependabot.yml` | Proposes weekly updates of the development tools and of the pinned actions. |
@@ -37,7 +37,7 @@ later (`engines.vscode`) for the extension.
 | --- | --- |
 | `npm ci` | Installs the locked development tools. |
 | `npm run typecheck` | Checks the types with `tsc`. |
-| `npm test` | Runs the unit tests with vitest, without VS Code and without Docker. |
+| `npm test` | Runs the unit tests with vitest, without VS Code and without Docker. The tests of the helper scripts that run as root in the helper container (`chown` to other users, `mknod`, `mount --bind`) need root and skip themselves for another user, and a few tests need a user without root; `sudo npm test` on Linux runs the tests as root. |
 | `npm run test:docker` | Runs the integration tests against the running Docker engine. |
 | `npm run build` | Bundles `dist/extension.js`, `dist/groupsPreviewWorker.js` and `dist/helperChannel.js`. |
 | `npm run package` | Builds `nimblescape-devspaces-<version>.vsix` with vsce. vsce also validates the manifest and the README. |
