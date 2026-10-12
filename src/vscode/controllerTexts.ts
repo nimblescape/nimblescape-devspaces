@@ -27,17 +27,17 @@ export const ControllerTexts = {
   // Close and Keep Running.
   closeAndKeepRunningNotConnected: 'This window is not connected to a devspace.',
   // "Update All Images Now" (`engine`: describeDockerHost).
-  requestingImageUpdate: (engine: string) => `Asking the Session Monitor on ${engine} to update the images…`,
-  imagesUpdatingNow: (engine: string) => `The Session Monitor on ${engine} updates the images now.`,
-  // On every engine; for the local Docker (host '') the Session Monitor there is named.
+  requestingImageUpdate: (engine: string) => `Asking the Monitor on ${engine} to update the images…`,
+  imagesUpdatingNow: (engine: string) => `The Monitor on ${engine} updates the images now.`,
+  // On every engine; for the local Docker (host '') the Monitor there is named.
   closeAndKeepRunningUnreachable: (host: string, minutes: number) =>
-    `${host === '' ? 'The Session Monitor of the local Docker' : `The Docker host ${host}`} cannot be reached. The container would stop after ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} without contact. The window stays open.`,
+    `${host === '' ? 'The Monitor of the local Docker' : `The Docker host ${host}`} cannot be reached. The container would stop after ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} without contact. The window stays open.`,
   /**
-   * Keep Running When Closed or Stop When Closed was stored, but the Session Monitor of the engine could not be told at
+   * Keep Running When Closed or Stop When Closed was stored, but the Monitor of the engine could not be told at
    * once (the windows that use the devspace tell it at their next heartbeat).
    */
   keepRunningNotSent: (repository: string) =>
-    `The Session Monitor on the Docker engine of ${repository} could not be told about this choice yet (see the Devspaces output). While no window uses ${repository}, it follows its earlier choice.`,
+    `The Monitor on the Docker engine of ${repository} could not be told about this choice yet (see the Devspaces output). While no window uses ${repository}, it follows its earlier choice.`,
   // Stop, Rebuild, and Delete of a devspace that another window uses: that window closes its connection first.
   otherWindowClosesConnection: (repository: string) =>
     `${repository} is open in another window. That window closes its connection first.`,

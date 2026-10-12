@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The rules of the Session Monitor's background run that the extension, the worker and the monitor share: the setting
+// The rules of the Monitor's background run that the extension, the worker and the monitor share: the setting
 // devspace.cacheUpdateSchedule (a cron schedule of five fields or an interval in minutes), when a run is due, and
 // whether the monitor of an engine runs permanently (its restart policy). The default is daily at 06:07 in the
 // computer's time zone. Pure functions; no I/O, no `vscode`.
@@ -59,7 +59,7 @@ export function normalizeCacheSchedule(value: unknown): string {
 }
 
 /**
- * Whether the Session Monitor of an engine runs permanently: on a remote engine (`ssh://`, classifyDockerEndpoint)
+ * Whether the Monitor of an engine runs permanently: on a remote engine (`ssh://`, classifyDockerEndpoint)
  * always; on a local engine only when the setting devspace.stopLocalMonitorWhenIdle is false (its default is true: the
  * local monitor ends after 5 minutes without a running devspace).
  */

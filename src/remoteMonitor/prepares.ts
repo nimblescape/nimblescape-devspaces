@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Session Monitor triggers the prepare: the part of the background run (background.ts) that prepares the next
+// The Monitor triggers the prepare: the part of the background run (background.ts) that prepares the next
 // devspace image of each devspace of the engine (the worker operation `prepare`), so that the first open of the
 // morning swaps to it instead of building.
 // - Which: every devspace of the engine, by its workspace volume (the labels and the name that the worker's prepare
@@ -298,7 +298,7 @@ export function childPrepareWorker(deps: ChildWorkerDeps): PrepareWorker {
  */
 export function storedPrepareWorker(hash: string | undefined, stateDir: string, now: () => number, extra: Partial<ChildWorkerDeps> = {}): () => PrepareWorker | { reason: string } {
   return () => {
-    if (hash === undefined) return { reason: 'the Session Monitor was created without the hash of a worker script' };
+    if (hash === undefined) return { reason: 'the Monitor was created without the hash of a worker script' };
     if (!isWorkerScriptHash(hash)) return { reason: 'the hash of its worker script is invalid' };
     removeOtherWorkerScripts(stateDir, hash, now());
     const found = readWorkerScript(stateDir, hash);

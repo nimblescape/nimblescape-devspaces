@@ -2902,7 +2902,7 @@ describe('open: existing devspace', () => {
         expect(h.logger.warnings.join('\n')).toContain(`The window ${WINDOW_B} (process ${PID_B}) last wrote its status at`);
       });
 
-      it('risk 2: a file older than the Session Monitor\'s limit (60 s plus the waiting time), or of a process that is gone, does not count', async () => {
+      it('risk 2: a file older than the Monitor\'s limit (60 s plus the waiting time), or of a process that is gone, does not count', async () => {
         h = recreate({ windowStatuses: async () => [statusOfB(91_000), { ...statusOfB(75_000), windowId: 'window-c', pid: 6161 }] });
         h.alivePids.add(PID_B);
         await seedDevspace(h, { container: 'running', containerLabels: outdated });
@@ -3087,7 +3087,7 @@ describe('open: existing devspace', () => {
     it('a container that was stopped during the failing build does not open as it is', async () => {
       await seedDevspace(h, { record: { images: { [BASE_IMAGE]: DIGEST_OLD } }, container: 'running' });
       const container = h.docker.containersOf(ENV_ID)[0];
-      // For example stopped by the user, or by the Session Monitor, while the build ran: the same ID, not running.
+      // For example stopped by the user, or by the Monitor, while the build ran: the same ID, not running.
       h.helper.onBuild = () => {
         container.state = 'stopped';
         container.rawState = 'exited';
@@ -4251,7 +4251,7 @@ describe('reconcileFromVolumes', () => {
     const name = resourceName(REPO, OTHER_ID);
     h.docker.volumes.set(name, { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id });
     h.docker.volumes.set('api-node_modules', additionalVolumeLabels(OTHER_ID, ACCOUNT));
-    const foreign = ['vscode', 'vsc-remote-containers', `api-${'0f'.repeat(16)}`, 'devspace-helper-cache', 'devspace-session-monitor', resourceName('acme/web', '12345678-0000-4000-8000-000000000012')];
+    const foreign = ['vscode', 'vsc-remote-containers', `api-${'0f'.repeat(16)}`, 'devspace-helper-cache', 'devspace-monitor', resourceName('acme/web', '12345678-0000-4000-8000-000000000012')];
     const container = h.docker.addContainer({ devspaceId: OTHER_ID, name, state: 'stopped', image: devspaceImageName(REPO, OTHER_ID, 1) });
     h.docker.containers.set(container.id, { ...container, volumes: [name, ...foreign, 'api-node_modules'] });
     expect(await h.service.reconcileFromVolumes()).toBe(1);

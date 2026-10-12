@@ -39,7 +39,7 @@ function running(extra: Partial<RemoteMonitorState> = {}, now = T0): RemoteMonit
   return { lastTickAt: now - REMOTE_TICK_MS, ...extra };
 }
 
-describe('decide of the remote Session Monitor', () => {
+describe('decide of the remote Monitor', () => {
   it('keeps a devspace whose last heartbeat is younger than its limit', () => {
     const decision = decide({ now: T0, containers: [container(A)], records: [record(A, T0 - 9 * MINUTE)], state: running() });
     expect(decision.stop).toEqual([]);

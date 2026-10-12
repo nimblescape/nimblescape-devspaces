@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The commands of the Session Monitor container of the worker's engine (`monitor.js` in `devspace-session-monitor`),
+// The commands of the Monitor container of the worker's engine (`monitor.js` in `devspace-monitor`),
 // over the Engine API (`exec`); every remote action is a worker operation: the heartbeat, its image settings and image
 // list (on the input of the command), and Delete's `forget`. Pure over the port; no `vscode`. Each command is an entry
 // of the registry of the container scripts (monitorHeartbeat, monitorForget, monitorSettings, monitorImages in
@@ -13,10 +13,10 @@ import { REMOTE_MONITOR_CONTAINER, isUnderRecordsLock, monitorExecFailure, type 
 import { runScript, scriptCommand, type ContainerScript } from './containerScripts';
 import { isMissing, isNotRunning, type DockerEngine } from './dockerEngine';
 
-/** The time limit of a command in the Session Monitor container (as REMOTE_MONITOR_EXEC_TIMEOUT_MS of the extension). */
+/** The time limit of a command in the Monitor container (as REMOTE_MONITOR_EXEC_TIMEOUT_MS of the extension). */
 export const MONITOR_EXEC_TIMEOUT_MS = 20_000;
 
-/** The entries of the registry that run in the Session Monitor container. */
+/** The entries of the registry that run in the Monitor container. */
 export type MonitorScript = Extract<ContainerScript, 'monitorHeartbeat' | 'monitorForget' | 'monitorSettings' | 'monitorImages' | 'monitorRunNow'>;
 
 /**

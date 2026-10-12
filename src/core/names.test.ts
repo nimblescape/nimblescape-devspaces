@@ -194,7 +194,9 @@ describe('EXTENSION_LABEL_KEYS', () => {
       'host-access',
       // The ID label of a devspace.
       'id',
-      // The nonce label of each create of the remote Session Monitor, by which a failed create removes only its own
+      // The label of the Monitor container: the hash of its script, image, and mode.
+      'monitor',
+      // The nonce label of each create of the remote Monitor, by which a failed create removes only its own
       // container.
       'monitor-create',
       'owner-id',
@@ -202,7 +204,6 @@ describe('EXTENSION_LABEL_KEYS', () => {
       'prepared',
       'repository',
       'service-data',
-      'session-monitor',
       'volume',
     ]);
   });

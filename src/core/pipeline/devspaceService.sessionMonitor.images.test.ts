@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The open gives `images` of the Session Monitor the signal of its run (the one its ensure gets), so a cancel of the
+// The open gives `images` of the Monitor the signal of its run (the one its ensure gets), so a cancel of the
 // open also ends the sending of the image list.
 import { afterEach, describe, expect, it } from 'vitest';
 import type { DevspaceSessionMonitor } from './devspacePorts';
@@ -15,7 +15,7 @@ afterEach(() => {
   h = undefined;
 });
 
-describe('the Session Monitor in the open pipeline: images', () => {
+describe('the Monitor in the open pipeline: images', () => {
   it('gets the signal of the run, as the ensure does', async () => {
     const ensureSignals: (AbortSignal | undefined)[] = [];
     const imageSignals: (AbortSignal | undefined)[] = [];

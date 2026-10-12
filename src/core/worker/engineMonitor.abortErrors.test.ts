@@ -24,14 +24,14 @@ describe('engineMonitor: an AbortError without a cancel, an exec without an exit
       expect(await with_({ systemTime: aborted }).daemonTime(signal)).toEqual({ reason: 'The operation was aborted.' });
       await expect(with_({ removeContainer: aborted }).remove(ID, signal)).rejects.toThrow('docker rm failed: The operation was aborted.');
       await expect(with_({ start: aborted }).start(ID, signal)).rejects.toThrow('docker start failed: The operation was aborted.');
-      expect(await with_({ exec: aborted }).storedScript('devspace-session-monitor', signal)).toBe('unknown');
+      expect(await with_({ exec: aborted }).storedScript('devspace-monitor', signal)).toBe('unknown');
       expect(await with_({ containerIds: aborted }).idsWithLabel('a=b', signal)).toBeUndefined();
     }
   });
 
   it('an exec whose exit code cannot be read is no hash, whatever it printed', async () => {
     const engine = with_({ exec: async () => ({ exitCode: null, stdout: HASH_LINE, stderr: '', timedOut: false }) });
-    expect(await engine.storedScript('devspace-session-monitor')).toBe('unknown');
-    expect(await with_({ exec: async () => ({ exitCode: 0, stdout: HASH_LINE, stderr: '', timedOut: false }) }).storedScript('devspace-session-monitor')).toEqual({ hash: HASH_LINE });
+    expect(await engine.storedScript('devspace-monitor')).toBe('unknown');
+    expect(await with_({ exec: async () => ({ exitCode: 0, stdout: HASH_LINE, stderr: '', timedOut: false }) }).storedScript('devspace-monitor')).toEqual({ hash: HASH_LINE });
   });
 });

@@ -28,7 +28,7 @@ import { PIPE_LOADER } from '../loader/pipeLoader';
 import { LABEL_CHANNEL_STEP, LABEL_HELPER_RUN, WORKSPACES_ROOT } from '../names';
 import type { DevspaceStates, StateDevspace } from '../pipeline/refreshStates';
 import { isStorageId } from '../storage/paths';
-import { LABEL_SESSION_MONITOR, isSourceId, parseHeartbeatInput, MAX_IMAGE_REFERENCES, parseImageReference, parseMonitorSettings, parseReferenceDigests, type HeartbeatInput, type MonitorSettings } from '../remoteMonitor/protocol';
+import { LABEL_MONITOR, isSourceId, parseHeartbeatInput, MAX_IMAGE_REFERENCES, parseImageReference, parseMonitorSettings, parseReferenceDigests, type HeartbeatInput, type MonitorSettings } from '../remoteMonitor/protocol';
 import type { ContainerState, GitSummary } from '../types';
 import { isGitSummary } from '../git/gitSummary';
 import { isUserErrorCode, type UserErrorCode } from '../errors';
@@ -589,7 +589,7 @@ export function channelLabelValue(script: string): string {
 export const OP_PROBE = 'probe';
 /**
  * `sweep` removes the stopped helper containers of the engine (LABEL_HELPER_RUN), the channels and the batch helpers of
- * the worker alike, never the Session Monitor: the prune of the port of the engine (`POST /containers/prune` with
+ * the worker alike, never the Monitor: the prune of the port of the engine (`POST /containers/prune` with
  * SWEEP_FILTERS), only of containers older than SWEEP_MIN_AGE (so never one of an open that runs now); running
  * containers are never touched. A channel container that was created but never started (a connection that broke between
  * the create and the start of `docker run -i --rm`) never ends and is never removed otherwise. A batch helper has
@@ -603,12 +603,12 @@ export const SWEEP_MIN_AGE = '10m';
 /**
  * The filters of the prune of the sweep (a prune removes stopped containers only): created more than SWEEP_MIN_AGE ago
  * (by the clock of the engine); the label LABEL_HELPER_RUN with any value, which every helper container carries (the
- * channels, the batch helpers); and never the label LABEL_SESSION_MONITOR (`label!`): the Session Monitor carries no
+ * channels, the batch helpers); and never the label LABEL_MONITOR (`label!`): the Monitor carries no
  * LABEL_HELPER_RUN, and this guard keeps it out also if it ever did.
  */
 export const SWEEP_FILTERS: Readonly<Record<'label' | 'label!' | 'until', readonly string[]>> = {
   label: [LABEL_HELPER_RUN],
-  'label!': [LABEL_SESSION_MONITOR],
+  'label!': [LABEL_MONITOR],
   until: [SWEEP_MIN_AGE],
 };
 
@@ -837,13 +837,13 @@ export function parseRefreshValue(value: unknown, params: RefreshParams): Devspa
 // ---- The devspace lock ----
 
 // The lock of one devspace on the Docker host (docs/architecture.md "Locks"): the worker opens lockFilePath (in the
-// volume of the Session Monitor, mounted into every worker; O_NOFOLLOW, folder 0700, file 0600) and runs `flock -w
+// volume of the Monitor, mounted into every worker; O_NOFOLLOW, folder 0700, file 0600) and runs `flock -w
 // <waitSeconds> -E LOCK_BUSY_EXIT <fd>` on the inherited file descriptor (src/helperChannel/lock.ts). The kernel frees
 // the lock when the worker ends, whatever the way. The lock files are never deleted; a lock that stayed held elsewhere
 // fails with the code LOCK_BUSY_CODE. The flows of the worker take the lock themselves; the extension holds no lock
 // through the channel.
 
-/** The mount point of the volume of the Session Monitor in the worker (as REMOTE_MONITOR_STATE_DIR in the monitor). */
+/** The mount point of the volume of the Monitor in the worker (as REMOTE_MONITOR_STATE_DIR in the monitor). */
 export const LOCK_STATE_DIR = '/state';
 /** The folder of the lock files in that volume. */
 export const LOCK_FOLDER = 'locks';
@@ -909,7 +909,7 @@ export function flockArgs(waitSeconds: number, fd: number): string[] {
 }
 
 /**
- * The arguments of `flock` for an automatic stop of the Session Monitor container: no wait (`-n`); a lock held by an
+ * The arguments of `flock` for an automatic stop of the Monitor container: no wait (`-n`); a lock held by an
  * operation exits with LOCK_BUSY_EXIT, and the monitor tries again at a later tick.
  */
 export function flockNoWaitArgs(fd: number): string[] {
@@ -1039,7 +1039,7 @@ export function parseStopValue(value: unknown): StopValue | undefined {
  * `prepare`, the headless prepare of the next devspace image of a devspace of the worker's engine
  * (DevspaceService.prepare): the build of `<resource>:prepared` for the update that the open will find, which the
  * open then takes in place of a build. It needs nothing from a computer: no request to the extension, no secret, no
- * setting, no registry login (FLOW_REQUESTS has none for it), so the Session Monitor can run it without VS Code.
+ * setting, no registry login (FLOW_REQUESTS has none for it), so the Monitor can run it without VS Code.
  * Parameters PrepareParams, value PrepareValue.
  */
 export const OP_PREPARE = 'prepare';
@@ -1172,7 +1172,7 @@ export function parseListConfigurationsValue(value: unknown): ListConfigurations
  * `delete`, the Delete of a devspace in the worker (DevspaceService.delete, as the worker's own service runs
  * it): the busy mark through `record markBusy`/`clearBusy`, the removal under the lock that the worker takes itself,
  * the entry through `record remove`, the session files of the devspace, and the heartbeat record of `monitorSource`
- * in the Session Monitor of the engine, which the worker forgets itself. Parameters DeleteParams; value DeleteValue; no
+ * in the Monitor of the engine, which the worker forgets itself. Parameters DeleteParams; value DeleteValue; no
  * secret.
  */
 export const OP_DELETE = 'delete';
@@ -1185,7 +1185,7 @@ export interface DeleteParams {
   owner: { windowId: string; pid: number };
   /** The additional volumes that the user confirmed for removal. */
   additionalVolumesToRemove: string[];
-  /** The id of this computer in the Session Monitor (its heartbeat records; isSourceId). */
+  /** The id of this computer in the Monitor (its heartbeat records; isSourceId). */
   monitorSource: string;
 }
 
@@ -1359,7 +1359,7 @@ export function parseReconcileValue(value: unknown): ReconcileValue | undefined 
 }
 
 /**
- * Every remote action is a worker operation: `heartbeat`, one heartbeat of this computer to the Session Monitor
+ * Every remote action is a worker operation: `heartbeat`, one heartbeat of this computer to the Monitor
  * container of the worker's engine (`monitor.js heartbeat` under the lock of the records, the entry monitorHeartbeat of
  * the registry of the container scripts), over the Engine API. The window decides what it sends (its devspaces,
  * their keep flags, the limit); the worker sends it. No request to the extension, no secret. Parameters
@@ -1424,7 +1424,7 @@ export function parseRecordGitStateValue(value: unknown): RecordGitStateValue | 
 }
 
 /**
- * `monitorEnsure`, the ensure of the Session Monitor container of the worker's engine
+ * `monitorEnsure`, the ensure of the Monitor container of the worker's engine
  * (RemoteSessionMonitor.ensureOrThrow over the Engine API), with the worker's own helper image (its tag and ID) and
  * socket, and the script of its bundle. `images`: the image maintenance of this computer (the setting
  * cacheUpdateSchedule, in its time zone) and whether the monitor runs permanently (MonitorSettings). A failure fails
@@ -1456,7 +1456,7 @@ export function parseMonitorEnsureValue(value: unknown): MonitorEnsureValue | un
 }
 
 /**
- * `monitorRunNow`, the command "Update All Images Now": the ensure of the Session Monitor container of the worker's
+ * `monitorRunNow`, the command "Update All Images Now": the ensure of the Monitor container of the worker's
  * engine (as `monitorEnsure`, with the same parameters, so the monitor of this version runs), then its request to run
  * its background run at once (`monitor.js run-now`): the images in use, the VS Code server and the extensions; the
  * monitor runs it at its next check (within a minute), or after the run that runs. It does not wait for the run. A
@@ -1479,7 +1479,7 @@ export function parseMonitorRunNowValue(value: unknown): MonitorRunNowValue | un
  * or DevspaceService.openDevspace of an existing devspace, `devspaceId`), under the lock that the worker
  * takes itself. Its records go to the extension as the specific requests of the open; its questions are `question`
  * requests; the token is asked (`secret token`), the registry logins too (`secret registry`). It makes sure that the
- * Session Monitor of its engine runs, with the image maintenance of this computer (`images`) and the image references
+ * Monitor of its engine runs, with the image maintenance of this computer (`images`) and the image references
  * in use of this computer (`references`). It answers with what the window needs to connect: the extension connects it
  * after the lock is released. Parameters OpenParams; value OpenValue.
  */
@@ -1501,17 +1501,17 @@ export interface OpenParams {
   dockerHost: string;
   /** The window that sends the operation (DevspaceServiceDeps.owner). */
   owner: { windowId: string; pid: number };
-  /** The id of this computer in the Session Monitor, for the first heartbeat of the open (isSourceId). */
+  /** The id of this computer in the Monitor, for the first heartbeat of the open (isSourceId). */
   monitorSource: string;
   settings: OpenSettings;
   /**
-   * The image maintenance of this computer, for the ensure of the Session Monitor: with the schedule of its background
+   * The image maintenance of this computer, for the ensure of the Monitor: with the schedule of its background
    * run and its mode (MonitorSettings).
    */
   images: MonitorSettings;
   /**
    * The image references in use on the engine of the open (imageReferencesInUse: those of the build records of this
-   * computer's devspaces there), for the Session Monitor, which keeps them up to date; at most MAX_IMAGE_REFERENCES,
+   * computer's devspaces there), for the Monitor, which keeps them up to date; at most MAX_IMAGE_REFERENCES,
    * each valid (parseImageReference). Missing: none are given (the monitor keeps what this computer sent before).
    */
   references?: string[];
@@ -1543,7 +1543,7 @@ export interface OpenParams {
    * The user's `dev.containers.defaultExtensions` (read by the extension, defaultExtensionsOf: the valid entries
    * `publisher.name` or `publisher.name@x.y.z`, the ID in lower case, each ID once, at most MAX_LISTED_EXTENSIONS),
    * only with `vscodeServer` (the official VS Code). The worker records them with the configuration's extensions for
-   * the Session Monitor's downloads and seeds the cached `.vsix` files.
+   * the Monitor's downloads and seeds the cached `.vsix` files.
    */
   defaultExtensions?: string[];
 }

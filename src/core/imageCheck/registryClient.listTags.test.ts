@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The tag lists of the Session Monitor's image maintenance are read by the worker's registry client
+// The tag lists of the Monitor's image maintenance are read by the worker's registry client
 // (RegistryClient.listTags): the challenge and the token, all pages of the RFC 5988 Link on the same registry only, at
 // most MAX_TAG_PAGES pages of MAX_TAG_LIST_BYTES each, and the redirect rules of the client (HTTPS only; no credential
 // to another host than the registry and its token service).

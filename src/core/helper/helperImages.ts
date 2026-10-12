@@ -4,7 +4,7 @@
 
 // The helper image on the engine of an operation, apart from the steps of the workspace helper (workspaceHelper.ts),
 // which run in the worker on the worker's own image. The extension prepares it for the bootstrap (the image of the
-// worker and of the Session Monitor): it is checked, and built when its tag is missing. The maintenance of
+// worker and of the Monitor): it is checked, and built when its tag is missing. The maintenance of
 // ensureImageUse (the rebuild that a check of its base image asked for, the weekly check, the removal of old helper
 // images) runs in the extension's preparation of the worker for an operation `open` (HelperMaintenance) and in the
 // background prebuild (prebuildImage). No `vscode`.

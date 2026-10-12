@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Session Monitor keeps every image tag in use up to date (anonymous pulls; `latest` as any other tag; never a
+// The Monitor keeps every image tag in use up to date (anonymous pulls; `latest` as any other tag; never a
 // reference pinned by a digest), and of the repositories that it manages (those of the references in use) it keeps (a)
 // the image that each tag in use points to, (b) every image that a container uses, (c) an image that another image is
 // built on, and removes every other one; never an image of another repository. The registry, asked anonymously, decides
@@ -128,7 +128,7 @@ async function pass(
   return stored;
 }
 
-describe('the images in use of the Session Monitor', () => {
+describe('the images in use of the Monitor', () => {
   it('pulls every tag in use anonymously: `latest` as any other tag, a name without a tag as latest, never one pinned by a digest', async () => {
     const { engine, calls, pullOptions } = engineOf([]);
     const asked = registry();
@@ -535,7 +535,7 @@ describe('the images in use of the Session Monitor', () => {
   });
 });
 
-describe("the Session Monitor's registry answers", () => {
+describe("the Monitor's registry answers", () => {
   it('keeps the digest of each tag in use that the registry confirmed, with the time of the pass', async () => {
     const { engine } = engineOf([]);
     const asked = registry({ tags: { 'library/node:20': DIGEST } });

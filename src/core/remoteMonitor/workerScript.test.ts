@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The worker's script in the volume of the Session Monitor: stored by the worker under its hash (and its hash given to
+// The worker's script in the volume of the Monitor: stored by the worker under its hash (and its hash given to
 // the monitor that the ensure creates), read by the monitor only as a plain file with that hash, and the scripts of
 // other versions removed after a day.
 import * as fs from 'fs';
@@ -77,7 +77,7 @@ describe('the worker script in the volume', () => {
   });
 });
 
-describe('the ensure of the Session Monitor with the worker script', () => {
+describe('the ensure of the Monitor with the worker script', () => {
   const OWN = { image: { tag: 'devspace-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` }, socket: '/var/run/docker.sock' };
   const IMAGES = { schedule: '7 6 * * *', timeZone: 'UTC' };
 
@@ -116,6 +116,6 @@ describe('the ensure of the Session Monitor with the worker script', () => {
     };
     await ensureWorkerMonitor(engine(specs), OWN, logger, () => 'the monitor', IMAGES, new AbortController().signal, { read, stateDir });
     expect(specs[0].env[MONITOR_WORKER_HASH_ENV]).toBeUndefined();
-    expect(warnings).toEqual(['The worker script cannot be read, so the Session Monitor prepares no devspace image: ENOENT']);
+    expect(warnings).toEqual(['The worker script cannot be read, so the Monitor prepares no devspace image: ENOENT']);
   });
 });

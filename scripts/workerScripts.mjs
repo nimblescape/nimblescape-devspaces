@@ -4,7 +4,7 @@
 
 // The scripts that the worker's bundle (dist/helperChannel.js) carries as text, each a module whose default export is the
 // minified bundle of its entry:
-// - `devspace:monitor-script` (the worker is the deputy): the script of the Session Monitor
+// - `devspace:monitor-script` (the worker is the deputy): the script of the Monitor
 //   (src/remoteMonitor/main.ts), as the loader of the monitor gets it on its input; the worker creates the monitor
 //   container itself.
 // - `devspace:analysis-script`: the thread of the host access analysis

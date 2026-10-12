@@ -53,7 +53,7 @@ interface Setup {
   volumeLabels?: Record<string, string> | null;
   /** The removal of the workspace volume fails. */
   volumeRemoveFails?: boolean;
-  /** The Session Monitor command fails with this error. */
+  /** The Monitor command fails with this error. */
   forgetFails?: Error;
 }
 

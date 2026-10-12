@@ -3,11 +3,11 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // Session Coordinator: the window side of the stop-on-close mechanism. It writes the window status file at activation
-// and every 15 seconds (and then drives the window's heartbeats to the Session Monitor container of each engine),
+// and every 15 seconds (and then drives the window's heartbeats to the Monitor container of each engine),
 // removes the pending connection file of the connected devspace, and writes `closing` plus the reopen record in
 // deactivate().
 //
-// The Session Monitor runs only as a container on each engine; there is no local Session Monitor process. The window
+// The Monitor runs only as a container on each engine; there is no local Monitor process. The window
 // also does:
 //   - when the window leaves its devspace (setDevspace to another one or none, a second start) and when it closes
 //     (deactivate), the short release of the devspace it leaves (src/core/session/windowRelease.ts, which records
@@ -57,7 +57,7 @@ export interface SessionCoordinatorDeps {
   /** The interval of cleanUpStorage after the one at activation. Default: STORAGE_SWEEP_INTERVAL_MS. */
   cleanupMs?: number;
   /**
-   * The heartbeats of this window to the Session Monitor container of each engine
+   * The heartbeats of this window to the Monitor container of each engine
    * (src/core/session/windowHeartbeats.ts), driven by this tick after each status write. Not awaited (a heartbeat over
    * SSH, or the repair of a missing monitor, must not hold the status file back); it skips a tick while one runs.
    */

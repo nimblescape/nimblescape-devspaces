@@ -14,14 +14,14 @@ import { dockerEngine } from './engineClient';
 
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
 const SPEC: MonitorRunSpec = {
-  name: 'devspace-session-monitor',
+  name: 'devspace-monitor',
   image: 'devspace-monitor:0123456789ab',
   imageId: 'sha256:' + 'b'.repeat(64),
-  labels: { 'nimblescape.devspace.session-monitor': 'label', 'nimblescape.devspace.monitor-create': 'nonce' },
+  labels: { 'nimblescape.devspace.monitor': 'label', 'nimblescape.devspace.monitor-create': 'nonce' },
   restartPolicy: 'on-failure',
   network: 'none',
   log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
-  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-session-monitor', volumeTarget: '/state' },
+  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-monitor', volumeTarget: '/state' },
   env: { DEVSPACE_IMAGE_TZ: 'UTC' },
   command: ['node', '-e', 'loader', '/opt/devspace/monitor.js', 'hash', 'startMonitor'],
 };

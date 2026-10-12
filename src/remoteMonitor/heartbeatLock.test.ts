@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The heartbeats of the remote Session Monitor run under the kernel lock `flock`. These tests run that command line
+// The heartbeats of the remote Monitor run under the kernel lock `flock`. These tests run that command line
 // with real processes: `flock` and `timeout` as in the helper image, and the monitor script built with esbuild (its
 // state folder passed by a small entry instead of /state). The command lines are those of the entries monitorHeartbeat
 // and monitorForget of the registry of the container scripts (scriptCommand).

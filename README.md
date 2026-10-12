@@ -7,7 +7,7 @@ Devspaces lists the GitHub repositories that you can access and that contain a D
 ## Features
 
 - **One click to code.** Devspaces clones the repository into a Docker volume, builds the image, creates the container, and connects the window. Git on your computer is not needed.
-- **Fast starts.** A small container on each Docker engine, the Session Monitor, keeps images, the VS Code server, and your extensions up to date in the background, and prepares newer images before you need them.
+- **Fast starts.** A small container on each Docker engine, the Monitor, keeps images, the VS Code server, and your extensions up to date in the background, and prepares newer images before you need them.
 - **Safe updates.** When a newer image is available, Devspaces tells you before it updates the container. Your files in the workspace are kept.
 - **Stops by itself.** A devspace stops a few minutes after its last window closes, unless you keep it running.
 - **Back where you left off.** When VS Code starts, it opens the devspace that you used last.

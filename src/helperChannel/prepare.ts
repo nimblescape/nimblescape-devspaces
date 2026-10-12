@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The headless prepare in the worker, the entry point of the operation `prepare` (flowOperations.ts, prepareOperation),
-// which the Session Monitor's trigger sends to this worker's script that it runs in its own container
+// which the Monitor's trigger sends to this worker's script that it runs in its own container
 // (src/remoteMonitor/prepares.ts: one prepare at a time per engine, the most recently used devspace first, with the
 // ID of the devspace). It needs nothing of a computer: the pipeline runs on the deps of a prepare
 // (headlessServiceDeps: the engine of the worker, its own helper image, the devspaces from the labels of the
@@ -43,7 +43,7 @@ export interface RunPrepareDeps {
   limitMs?: number;
   /** For the tests (default PREPARE_STOP_POLL_MS). */
   stopPollMs?: number;
-  /** The folder of the Session Monitor's registry answers (default LOCK_STATE_DIR; for the tests). */
+  /** The folder of the Monitor's registry answers (default LOCK_STATE_DIR; for the tests). */
   registryAnswersDir?: string;
 }
 

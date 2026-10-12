@@ -12,7 +12,7 @@
 // when the user ticks them); the label nimblescape.devspace.host-access=unrestricted on every container, and ports as
 // the model writes them, while the host access checks are off for the repository. The operations are the flows of the
 // worker, as the window sends them (workerWindow.ts); Delete asks its questions through the requests of its check
-// (deleteCheckInWorker), as the window does. The opens make sure of the real Session Monitor.
+// (deleteCheckInWorker), as the window does. The opens make sure of the real Monitor.
 import * as fs from 'fs';
 import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -98,7 +98,7 @@ describe('open pipeline for a Docker Compose configuration', () => {
   // The window of the shared harness; its operations run in the worker.
   const window = workerWindow({ run, env, cli, log }, docker, { name: 'compose', windowId: 'docker-test-compose', ui, settings: { updateImagesOnConnect: true } });
   const { registry, service, settings } = window;
-  // The opens make sure of the real Session Monitor; a monitor of the user is never touched.
+  // The opens make sure of the real Monitor; a monitor of the user is never touched.
   const skipped = monitorOfUser({ run });
 
   /**
@@ -236,7 +236,7 @@ ${extra}volumes:
 
   beforeAll(async () => {
     if (skipped) {
-      log.info('The engine has a Session Monitor before the tests; the Compose opens through a real worker are skipped.');
+      log.info('The engine has a Monitor before the tests; the Compose opens through a real worker are skipped.');
       return;
     }
     // The helper image through the harness.

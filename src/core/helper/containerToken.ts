@@ -7,7 +7,7 @@
 // configuration adds (TOKEN_TMPFS). They are written as root (an exec with standard input) after each start of an open
 // (the container runs then), with the token on standard input only: never on a command line, in a variable of the
 // container, or in a log. They are gone when the container stops; a start without a window of the extension (the
-// Session Monitor, `docker start`) leaves the folder empty until the next open. The token is the secret input of the
+// Monitor, `docker start`) leaves the folder empty until the next open. The token is the secret input of the
 // call: the worker writes it (EngineDocker.exec, the token as the secret of the operation); the extension has no
 // `docker exec` at all. The scripts are the entries `tokenWrite` and `tokenRemove` of the script registry
 // (src/core/worker/containerScripts.ts), which builds their commands and gives `tokenWrite` the token as the secret of

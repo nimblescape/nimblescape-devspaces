@@ -49,8 +49,8 @@ describe('the callers of the rule', () => {
   // As above for the check of the stored script: `unknown` (no evidence), not `none`; "restarting" is evidence
   // (engineMonitor.test.ts).
   it('the stored script: a 404 "No such exec instance" is unknown, not none', async () => {
-    expect(await engineMonitor(failingExec(new EngineError(`No such exec instance: ${ID}`, 404))).storedScript('devspace-session-monitor')).toBe('unknown');
-    expect(await engineMonitor(failingExec(new EngineError('No such container: devspace-session-monitor', 404))).storedScript('devspace-session-monitor')).toBe('none');
+    expect(await engineMonitor(failingExec(new EngineError(`No such exec instance: ${ID}`, 404))).storedScript('devspace-monitor')).toBe('unknown');
+    expect(await engineMonitor(failingExec(new EngineError('No such container: devspace-monitor', 404))).storedScript('devspace-monitor')).toBe('none');
   });
 
   // Delete's forget treats any 404 as `missing`, so that the race of a monitor container that went away between the
@@ -65,6 +65,6 @@ describe('the callers of the rule', () => {
     expect(lines).toEqual([]);
     // A paused monitor (409, not "is not running") is still a failure that Delete logs.
     await workerSessionMonitor(failingExec(new EngineError(`Container ${ID} is paused, unpause the container before exec`, 409)), '0'.repeat(32), logger).forget('env');
-    expect(lines).toEqual([`The heartbeat record of env could not be removed from the Session Monitor: Container ${ID} is paused, unpause the container before exec`]);
+    expect(lines).toEqual([`The heartbeat record of env could not be removed from the Monitor: Container ${ID} is paused, unpause the container before exec`]);
   });
 });

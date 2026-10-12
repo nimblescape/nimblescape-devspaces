@@ -5,11 +5,11 @@
 // Names and labels (docs/architecture.md "Naming").
 import * as crypto from 'crypto';
 import { namePair, trailingPair } from './namePairs';
-import { LABEL_MONITOR_CREATE, LABEL_SESSION_MONITOR } from './remoteMonitor/protocol';
+import { LABEL_MONITOR_CREATE, LABEL_MONITOR } from './remoteMonitor/protocol';
 
 /**
  * Labels of the helper channel. Here, not in src/core/helperChannel/protocol.ts, so that the script of the remote
- * Session Monitor, which imports names.ts, does not bundle the protocol of the channel (its script has to fit on the
+ * Monitor, which imports names.ts, does not bundle the protocol of the channel (its script has to fit on the
  * command line of `docker run`).
  */
 /** Label of the container of a channel (its value: channelLabelValue). */
@@ -64,7 +64,7 @@ export const LABEL_SERVICE_DATA = 'nimblescape.devspace.service-data';
 export const SERVICE_DATA = 'true';
 /**
  * Container label of the containers of a Compose devspace other than the dev container: the name of their service.
- * They carry nimblescape.devspace.id too, so Stop, the Session Monitor, and Delete find them; the lookup of
+ * They carry nimblescape.devspace.id too, so Stop, the Monitor, and Delete find them; the lookup of
  * the dev container skips them.
  */
 export const LABEL_COMPOSE_SERVICE = 'nimblescape.devspace.compose-service';
@@ -182,7 +182,7 @@ export const EXTENSION_LABEL_KEYS: ReadonlySet<string> = new Set([
   LABEL_BUILD_ID,
   LABEL_BUILD_RECORD,
   LABEL_PREPARED,
-  LABEL_SESSION_MONITOR,
+  LABEL_MONITOR,
   LABEL_MONITOR_CREATE,
   LABEL_HELPER_CHANNEL,
   LABEL_CHANNEL_STEP,

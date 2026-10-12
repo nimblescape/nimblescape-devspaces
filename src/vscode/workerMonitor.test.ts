@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The calls of this window to the Session Monitor of an engine, as operations of the worker of that engine
+// The calls of this window to the Monitor of an engine, as operations of the worker of that engine
 // (workerMonitor), and the flow with its own target (extensionFlow).
 import { describe, expect, it, vi } from 'vitest';
 import type { DockerTarget } from '../core/docker/dockerHost';
@@ -32,7 +32,7 @@ function monitorWith(answer: (op: string) => unknown) {
   return { monitor: workerMonitor({ flow, owner: () => ({ windowId: 'window-1', pid: 7 }), logger }), calls, lines };
 }
 
-describe('the calls of a window to the Session Monitor, as operations of the worker', () => {
+describe('the calls of a window to the Monitor, as operations of the worker', () => {
   it('a heartbeat goes to the worker of its engine, with the signal; its answer is checked', async () => {
     const signal = new AbortController().signal;
     const { monitor, calls } = monitorWith(() => ({ ok: false, missing: true, detail: 'gone' }));

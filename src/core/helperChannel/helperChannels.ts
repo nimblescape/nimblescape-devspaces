@@ -105,7 +105,7 @@ export function channelRunArgs(p: {
     'no-new-privileges',
     '--mount',
     `type=bind,source=${p.socketPath},target=${HELPER_DOCKER_SOCKET}`,
-    // The volume of the Session Monitor, for the lock files of the devspaces (lock.ts of the worker).
+    // The volume of the Monitor, for the lock files of the devspaces (lock.ts of the worker).
     '--mount',
     `type=volume,source=${p.stateVolume},target=${LOCK_STATE_DIR}`,
     // The VS Code caches are worker operations: the shared VS Code server store of the engine, read-write (only the
@@ -135,7 +135,7 @@ export interface ChannelOpenDeps {
   /** The source of the socket mount on the host of the engine (rootless aware). */
   socketPath(target: DockerTarget): Promise<string>;
   /**
-   * The volume with the lock files of the devspaces: the volume of the Session Monitor (REMOTE_MONITOR_VOLUME), the
+   * The volume with the lock files of the devspaces: the volume of the Monitor (REMOTE_MONITOR_VOLUME), the
    * same for every engine, local and remote (the Docker tests: a volume of their own).
    */
   stateVolume: string;
@@ -222,7 +222,7 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
   // logged; the channel is open already). Its value is checked (parseSweepValue) and the number of removed containers
   // logged. Always sent; the worker is this extension's own bundle (its hash checked by the loader, its protocol at
   // `hello`), which knows `sweep`. It removes every stopped helper container older than 10 minutes, the channels and
-  // the batch helpers of the worker, never the Session Monitor (SWEEP_FILTERS).
+  // the batch helpers of the worker, never the Monitor (SWEEP_FILTERS).
   void channel.operation(OP_SWEEP, parseSweepParams({}), { timeoutMs: CHANNEL_PROBE_TIMEOUT_MS }).then(
     (value) => {
       const swept = parseSweepValue(value);

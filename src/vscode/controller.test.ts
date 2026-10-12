@@ -1181,10 +1181,10 @@ describe('Stop', () => {
   });
 });
 
-// Keep Running When Closed per devspace, stored in the registry. The Session Monitor never stops a kept devspace;
-// only the user's Stop or Delete does. Every manual Stop first tells the Session Monitor of the engine "stop now"
+// Keep Running When Closed per devspace, stored in the registry. The Monitor never stops a kept devspace;
+// only the user's Stop or Delete does. Every manual Stop first tells the Monitor of the engine "stop now"
 // (sendStop), so the engine stops the devspace even when VS Code quits before the window's own stop reaches Docker.
-describe('Stop through the Session Monitor', () => {
+describe('Stop through the Monitor', () => {
   function withMonitor(answer: { ok: true } | { ok: false; detail: string } = { ok: true }) {
     const order: string[] = [];
     const sendStop = vi.fn(async (id: string) => {
@@ -1313,7 +1313,7 @@ describe('Keep Running When Closed and Stop When Closed', () => {
     expect(await h.registry.list()).toEqual([]);
   });
 
-  // The Session Monitor of the engine (here the local Docker) learns the choice at once.
+  // The Monitor of the engine (here the local Docker) learns the choice at once.
   it('sends a heartbeat for the devspace after the switch was stored, on the local Docker too', async () => {
     const flags: Array<boolean | undefined> = [];
     const sendHeartbeat = vi.fn(async (id: string) => {
@@ -1329,8 +1329,8 @@ describe('Keep Running When Closed and Stop When Closed', () => {
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(ControllerTexts.keptRunning('acme/api'));
   });
 
-  it('keeps the switch and warns when the Session Monitor cannot be told', async () => {
-    const sendHeartbeat = vi.fn(async () => ({ ok: false as const, detail: 'No such container: devspace-session-monitor' }));
+  it('keeps the switch and warns when the Monitor cannot be told', async () => {
+    const sendHeartbeat = vi.fn(async () => ({ ok: false as const, detail: 'No such container: devspace-monitor' }));
     recreateHarness({ sessionMonitor: { sendHeartbeat, sendStop: vi.fn(async () => ({ ok: true as const })) } });
     await h.registry.add(devspace());
     await run('keepRunning', row('acme/api', devspace()));
@@ -3245,7 +3245,7 @@ describe('Accounts', () => {
     await settle(() => h.connection.closeRemoteConnection.mock.calls.length > 0, 'the close of the connection');
     expect(h.coordinator.setDevspace).toHaveBeenLastCalledWith(null);
     expect(warningMessages()).toContain(Messages.otherAccountConnection('acme/api'));
-    // The window has no devspace anymore: the Session Monitor stops the container after the waiting time.
+    // The window has no devspace anymore: the Monitor stops the container after the waiting time.
     await run('stop');
     expect(h.service.stop).not.toHaveBeenCalled();
   });
@@ -3457,7 +3457,7 @@ describe('Accounts', () => {
     await start;
     expect(h.connection.open).not.toHaveBeenCalled();
     expect(h.coordinator.writePending).not.toHaveBeenCalled();
-    // Without the pending connection file, the Session Monitor stops the container after the waiting time.
+    // Without the pending connection file, the Monitor stops the container after the waiting time.
     expect(await h.sessionFiles.readPendings()).toEqual([]);
     expect(warningMessages()).toEqual([Messages.otherAccount('acme/api')]);
   });
@@ -4567,7 +4567,7 @@ describe('Close and Keep Running', () => {
   let sendHeartbeat: ReturnType<typeof vi.fn<(devspaceId: string) => Promise<{ ok: true } | { ok: false; detail: string }>>>;
   const order: string[] = [];
 
-  /** The harness with a Session Monitor on every engine; `target` is the current Docker target. */
+  /** The harness with a Monitor on every engine; `target` is the current Docker target. */
   function monitorHarness(target: DockerTarget, options: { leaveCheckMs?: number } = {}): void {
     current = target;
     order.length = 0;
@@ -4607,7 +4607,7 @@ describe('Close and Keep Running', () => {
     expect(await h.registry.get(ENV_ID)).not.toHaveProperty('keepRunningOnce');
   });
 
-  // On the local Docker too, one heartbeat with the keep flag goes to the Session Monitor of the engine first.
+  // On the local Docker too, one heartbeat with the keep flag goes to the Monitor of the engine first.
   it('local devspace: sends one heartbeat with the keep flag first, then closes the window', async () => {
     monitorHarness(LOCAL_TARGET);
     const env = devspace();
@@ -4665,9 +4665,9 @@ describe('Close and Keep Running', () => {
   });
 
   // The same rules on the local Docker.
-  it('local devspace: when the Session Monitor cannot be reached, clears the flag, says so, and the window stays open', async () => {
+  it('local devspace: when the Monitor cannot be reached, clears the flag, says so, and the window stays open', async () => {
     monitorHarness(LOCAL_TARGET);
-    sendHeartbeat.mockResolvedValue({ ok: false, detail: 'The Session Monitor could not be started again: image not found' });
+    sendHeartbeat.mockResolvedValue({ ok: false, detail: 'The Monitor could not be started again: image not found' });
     const env = devspace();
     await h.registry.add(env);
     await connectHere(env);
@@ -4675,7 +4675,7 @@ describe('Close and Keep Running', () => {
     expect(await h.registry.get(ENV_ID)).not.toHaveProperty('keepRunningOnce');
     expect(h.connection.closeWindow).not.toHaveBeenCalled();
     expect(fakeVscode.window.showErrorMessage).toHaveBeenCalledWith(
-      'The Session Monitor of the local Docker cannot be reached. The container would stop after 10 minutes without contact. The window stays open.',
+      'The Monitor of the local Docker cannot be reached. The container would stop after 10 minutes without contact. The window stays open.',
     );
   });
 
@@ -4692,7 +4692,7 @@ describe('Close and Keep Running', () => {
     expect(await h.registry.get(ENV_ID)).not.toHaveProperty('keepRunningOnce');
   });
 
-  it('refuses without a Session Monitor in this window, and clears the flag', async () => {
+  it('refuses without a Monitor in this window, and clears the flag', async () => {
     const env = devspace();
     await h.registry.add(env);
     await connectHere(env);
@@ -4703,7 +4703,7 @@ describe('Close and Keep Running', () => {
 
   // closeWindow resolves when the close starts, not after the dialog about unsaved files.
   it('keeps the flag when the window stays open (Cancel in the dialog about unsaved files), until the next connect', async () => {
-    // With the Session Monitor of the local Docker (every engine needs its heartbeat).
+    // With the Monitor of the local Docker (every engine needs its heartbeat).
     monitorHarness(LOCAL_TARGET, { leaveCheckMs: 10 });
     const env = devspace();
     await h.registry.add(env);
@@ -4866,7 +4866,7 @@ describe('Double-click on a repository row', () => {
   });
 });
 
-// The recorded state may be older than the last use of the devspace (its release was lost, or the Session Monitor
+// The recorded state may be older than the last use of the devspace (its release was lost, or the Monitor
 // stopped it by the long limit); Delete's confirmation says that later changes are not known. Only a message: nothing
 // more runs for it.
 describe('Delete: a recorded state older than the last use', () => {

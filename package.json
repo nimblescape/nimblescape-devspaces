@@ -667,7 +667,7 @@
           "default": 10,
           "minimum": 5,
           "maximum": 1440,
-          "markdownDescription": "Minutes without any sign from a window before the Session Monitor stops the container anyway.\n\nCovers the cases where the window cannot say goodbye: this computer sleeps or goes offline, or VS Code crashes. Devspaces that keep running when closed are never stopped."
+          "markdownDescription": "Minutes without any sign from a window before the Monitor stops the container anyway.\n\nCovers the cases where the window cannot say goodbye: this computer sleeps or goes offline, or VS Code crashes. Devspaces that keep running when closed are never stopped."
         },
         "devspace.cacheUpdateSchedule": {
           "type": "string",
@@ -681,13 +681,13 @@
             "7 */6 * * *",
             "60"
           ],
-          "markdownDescription": "When the Session Monitor on each Docker engine does its background work:\n\n- updates the images that your devspaces use\n- downloads the newest VS Code server and the extensions your devspaces use into the engine's shared store, so opens need no downloads\n- cleans up that store (at most once a day)\n\nValue: a cron expression in your time zone (minute hour day month weekday), or minutes between runs (5 to 1440). Invalid: the default. A time that was missed (engine off, computer asleep) runs once when the monitor runs again. **Devspaces: Update All Images Now** runs it at once.\n\nExamples: `7 6 * * *` daily at 06:07 (default) · `7 6 * * 1-5` weekdays at 06:07 · `7 */6 * * *` every six hours · `60` hourly"
+          "markdownDescription": "When the Monitor on each Docker engine does its background work:\n\n- updates the images that your devspaces use\n- downloads the newest VS Code server and the extensions your devspaces use into the engine's shared store, so opens need no downloads\n- cleans up that store (at most once a day)\n\nValue: a cron expression in your time zone (minute hour day month weekday), or minutes between runs (5 to 1440). Invalid: the default. A time that was missed (engine off, computer asleep) runs once when the monitor runs again. **Devspaces: Update All Images Now** runs it at once.\n\nExamples: `7 6 * * *` daily at 06:07 (default) · `7 6 * * 1-5` weekdays at 06:07 · `7 */6 * * *` every six hours · `60` hourly"
         },
         "devspace.stopLocalMonitorWhenIdle": {
           "type": "boolean",
           "scope": "application",
           "default": true,
-          "markdownDescription": "On the **local** Docker engine, end the Session Monitor container when no devspace has run for 5 minutes (the next open starts it again).\n\nTurn it off to keep it running, so its background work (**Cache Update Schedule**) also runs while no devspace runs. On a remote engine it always keeps running."
+          "markdownDescription": "On the **local** Docker engine, end the Monitor container when no devspace has run for 5 minutes (the next open starts it again).\n\nTurn it off to keep it running, so its background work (**Cache Update Schedule**) also runs while no devspace runs. On a remote engine it always keeps running."
         },
         "devspace.updateImagesOnConnect": {
           "type": "boolean",

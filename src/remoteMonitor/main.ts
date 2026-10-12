@@ -2,12 +2,12 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Entry point of the Session Monitor of a Docker engine (on every engine, local and remote). Bundled into the worker's
+// Entry point of the Monitor of a Docker engine (on every engine, local and remote). Bundled into the worker's
 // script as the module `devspace:monitor-script` (scripts/workerScripts.mjs), which the worker gives the monitor
-// container that it creates. The container devspace-session-monitor (image: the worker's own helper image by its
+// container that it creates. The container devspace-monitor (image: the worker's own helper image by its
 // monitor tag, of which the monitor runs only Node.js, `flock` (the lock of the records, and the devspace lock of an
 // automatic stop: stopLock.ts over src/core/helperChannel/lockFile.ts) and `timeout` (the run limit under the lock of
-// the records); the Docker socket of its engine at /var/run/docker.sock; the volume devspace-session-monitor at /state)
+// the records); the Docker socket of its engine at /var/run/docker.sock; the volume devspace-monitor at /state)
 // runs the pipe loader (src/core/loader/pipeLoader.ts): at the first start it gets the script over its standard input,
 // stores it at /opt/devspace/monitor.js and calls startMonitor (`run`); after a restart it starts the stored file
 // again. The workers run the other subcommands in it as `node /opt/devspace/monitor.js …` (an exec over the Engine API
@@ -39,7 +39,7 @@
 // the temporary folders that its cleanup names (background.ts); and the prepared images of devspaces without a
 // volume, and the worker scripts of other versions in its volume (prepares.ts). Its background run prepares the next
 // devspace image of each devspace of the engine by the worker's own script, run as a child process in its
-// container (prepares.ts). The log goes to stdout (`docker logs devspace-session-monitor`), one line per event.
+// container (prepares.ts). The log goes to stdout (`docker logs devspace-monitor`), one line per event.
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1213,7 +1213,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
           // the first idle tick after the run's end. A request of "Update All Images Now" that came after the last
           // check runs first.
           if (schedule.busy || (await schedule.runIfRequested())) {
-            if (!waitLogged) log('No devspace container runs, but a background run is running; the Session Monitor exits after its end.');
+            if (!waitLogged) log('No devspace container runs, but a background run is running; the Monitor exits after its end.');
             waitLogged = true;
             await sleep(tickMs);
             continue;
@@ -1223,7 +1223,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
           // tick waits for that run as above.
           if (schedule.busy) continue;
           // The text names the fresh heartbeats too.
-          log(`No devspace container ran and no heartbeat was fresh for ${Math.round(idleExitMs / 1000)} s, and it does not run permanently; the Session Monitor exits. The next open starts it again.`);
+          log(`No devspace container ran and no heartbeat was fresh for ${Math.round(idleExitMs / 1000)} s, and it does not run permanently; the Monitor exits. The next open starts it again.`);
           return 0;
         }
         waitLogged = false;

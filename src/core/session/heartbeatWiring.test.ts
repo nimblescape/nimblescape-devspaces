@@ -316,7 +316,7 @@ describe('heartbeatWiring: waits, target and failures', () => {
     await settle();
     expect(called).toBe(1);
     expect(await settledYet(repairing)).toBe(false);
-    const failure = new Error('the Session Monitor container did not start');
+    const failure = new Error('the Monitor container did not start');
     monitor.reject(failure);
     await expect(repairing).rejects.toBe(failure);
     // And a monitor that starts: the repair ends only then.

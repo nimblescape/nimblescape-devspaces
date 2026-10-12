@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Session Monitor's registry answers, fresh for the time between two runs of its schedule plus 5 minutes, without a
+// The Monitor's registry answers, fresh for the time between two runs of its schedule plus 5 minutes, without a
 // cap; read strictly.
 import { describe, expect, it } from 'vitest';
 import {
@@ -25,7 +25,7 @@ const MIN = 60_000;
 // 2026-10-11 06:07 in Europe/Vienna (UTC+2).
 const RUN = Date.parse('2026-10-11T04:07:00.000Z');
 
-describe('the registry answers of the Session Monitor', () => {
+describe('the registry answers of the Monitor', () => {
   it('a reference is looked up under the key that the monitor writes (`latest` without a tag, docker.io short names)', () => {
     expect(registryReferenceKey('node:20')).toBe(registryReferenceKey('docker.io/library/node:20'));
     expect(registryReferenceKey('redis')).toBe(registryReferenceKey('redis:latest'));

@@ -111,14 +111,14 @@ export function isAnonymousVolumeName(name: string): boolean {
 
 /**
  * What a volume belongs to by its name alone, `undefined` for any other name: the workspace helper, the shared VS Code
- * server store, the Session Monitor on a remote Docker host (its heartbeat records: a mount could forge or delete
+ * server store, the Monitor on a remote Docker host (its heartbeat records: a mount could forge or delete
  * them), another devspace (named like a workspace volume), another container (an anonymous volume; older Docker
  * versions do not label it), or the Dev Containers extension (DEV_CONTAINERS_VOLUMES). Only for the host access policy:
  * whether a volume is a devspace's own is decided by its labels (isOwnVolume).
  */
 export function foreignVolumeName(name: string): string | undefined {
   if (name === HELPER_CACHE_VOLUME) return 'the workspace helper';
-  if (name === REMOTE_MONITOR_VOLUME) return 'the Session Monitor';
+  if (name === REMOTE_MONITOR_VOLUME) return 'the Monitor';
   // The shared VS Code server store (only the override configuration mounts it, read-only).
   if (name === VSCODE_STORE_VOLUME) return 'the shared VS Code server store';
   if (isDevspaceResourceName(name)) return 'another devspace';
@@ -199,7 +199,7 @@ function mayMountDevspaceVolume(labels: Readonly<Record<string, string>>, volume
 export function volumeNameProblems(name: string, volumes: VolumeContext): Problem[] {
   if (name === '' || name === volumes.own) return [];
   // Account separation: the volumes of other devspaces, the cache volume of the workspace helper, which all
-  // devspaces share, and the volume of the Session Monitor on a remote host (its heartbeat records decide the stop of
+  // devspaces share, and the volume of the Monitor on a remote host (its heartbeat records decide the stop of
   // every devspace there) stay refused with the host access checks off. The volumes of other programs (another
   // container, the Dev Containers extension, Docker Compose) are access to the computer.
   if (volumes.foreign.has(name)) return [guarded(`volume ${name} of another devspace`)];

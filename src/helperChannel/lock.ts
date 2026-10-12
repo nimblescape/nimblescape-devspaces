@@ -7,7 +7,7 @@
 // open; `flock` takes the kernel lock on that open file, which it inherits as its file descriptor 3, and exits; the
 // lock then stays with the file of the worker until it is let go (the file is closed) or the worker ends (the kernel
 // frees it). A lock is never taken over or forced, and the lock files are never deleted. The open of the lock file and
-// the start of `flock` are in src/core/helperChannel/lockFile.ts, which the Session Monitor container uses for its
+// the start of `flock` are in src/core/helperChannel/lockFile.ts, which the Monitor container uses for its
 // stops too. No lock is held for the extension.
 import * as fs from 'fs';
 import { LOCK_BUSY_CODE, LOCK_STATE_DIR } from '../core/helperChannel/protocol';
@@ -16,7 +16,7 @@ import { OperationError } from './server';
 import { PREPARE_FILES, type PrepareFiles } from './prepareFiles';
 
 export interface LockDeps {
-  /** The mount point of the volume of the Session Monitor. */
+  /** The mount point of the volume of the Monitor. */
   stateDir: string;
   /** Opens (creates) the lock file; returns its file descriptor. Throws when it is not a plain file of its own. */
   openLockFile(stateDir: string, devspaceId: string): number;

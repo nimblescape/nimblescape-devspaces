@@ -55,7 +55,7 @@ interface Setup {
   volumeLabels?: Record<string, string> | null;
   /** The removal of the workspace volume fails. */
   volumeRemoveFails?: boolean;
-  /** The Session Monitor command fails with this error. */
+  /** The Monitor command fails with this error. */
   forgetFails?: Error;
   /** An additional volume of the devspace, its own by its labels. */
   additional?: string;
@@ -163,7 +163,7 @@ describe('delete in the worker', () => {
     // Every request is one that Delete may send.
     expect(new Set(calls(asks))).toEqual(new Set(['record get', 'local account', 'record markBusy', 'record remove', 'record sessionFile']));
     // Under the lock: the dev container stopped and removed, the volume removed; then the record of the computer forgotten
-    // in the Session Monitor of the engine.
+    // in the Monitor of the engine.
     expect(events[0]).toBe('progress delete');
     expect(events).toContain(`lock ${ID}`);
     expect(events.at(-1)).toBe('unlock');
@@ -226,8 +226,8 @@ describe('delete in the worker', () => {
     expect(calls(asks)).toContain('record read');
   });
 
-  it('a Session Monitor that cannot forget does not fail the Delete', async () => {
-    expect(await run({ forgetFails: new EngineError('No such container: devspace-session-monitor', 404) }).result).toEqual({ deleted: true });
+  it('a Monitor that cannot forget does not fail the Delete', async () => {
+    expect(await run({ forgetFails: new EngineError('No such container: devspace-monitor', 404) }).result).toEqual({ deleted: true });
     expect(await run({ forgetFails: new Error('the socket closed') }).result).toEqual({ deleted: true });
   });
 

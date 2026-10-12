@@ -171,7 +171,7 @@ describe('SessionCoordinator', () => {
     }
   });
 
-  // No monitor.json and no local Session Monitor process.
+  // No monitor.json and no local Monitor process.
   it('start writes the active status file and removes the pending file; it writes no monitor.json and starts nothing', async () => {
     await h.sessionFiles.writePending(ID_A, 'window-0');
     await h.coordinator.start(ID_A);
@@ -244,7 +244,7 @@ describe('SessionCoordinator', () => {
     expect(await h.sessionFiles.readPendings()).toEqual([]);
   });
 
-  // The window's tick drives its heartbeats to the Session Monitor container (not awaited).
+  // The window's tick drives its heartbeats to the Monitor container (not awaited).
   it('drives the window heartbeats at each periodic update, and not after dispose', async () => {
     let ticks = 0;
     let release: () => void = () => {};

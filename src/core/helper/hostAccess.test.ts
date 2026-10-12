@@ -244,7 +244,7 @@ describe('host access policy: runArgs', () => {
     ['kernel settings of the namespaces of the container', ['--sysctl', 'net.ipv4.ip_unprivileged_port_start=0', '--sysctl=kernel.shmmax=1000000'], []],
     ['the stop of the container', ['--stop-signal', 'SIGINT', '--stop-timeout', String(MAX_STOP_TIMEOUT_SECONDS), '--stop-timeout=0'], []],
     [
-      'a stop that can take longer than the Session Monitor waits',
+      'a stop that can take longer than the Monitor waits',
       ['--stop-timeout', String(MAX_STOP_TIMEOUT_SECONDS + 1), '--stop-timeout=-1', '--stop-timeout', '0x10'],
       [`--stop-timeout=${MAX_STOP_TIMEOUT_SECONDS + 1}`, '--stop-timeout=-1', '--stop-timeout=0x10'],
     ],

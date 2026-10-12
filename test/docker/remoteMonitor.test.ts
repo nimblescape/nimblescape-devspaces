@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Session Monitor container of a remote Docker host, against the real Docker engine of the runner (the same code
+// The Monitor container of a remote Docker host, against the real Docker engine of the runner (the same code
 // path as on a remote host: RemoteSessionMonitor.ensure with the workspace helper image and the socket of the engine).
 // The script is bundled from src/remoteMonitor/main.ts as the worker's bundle carries it (the module
 // `devspace:monitor-script` of scripts/workerScripts.mjs). The container, its volume, and the test containers have
@@ -32,7 +32,7 @@ import { LABEL_DEVSPACE_ID } from '../../src/core/names';
 import { NodeProcessRunner } from '../../src/core/process';
 import { LOADER_EXIT_CODE, PIPE_LOADER, bundleHash } from '../../src/core/loader/pipeLoader';
 import {
-  LABEL_SESSION_MONITOR,
+  LABEL_MONITOR,
   REMOTE_MONITOR_READY_TEXT,
   REMOTE_MONITOR_SCRIPT_PATH,
   heartbeatFileName,
@@ -88,8 +88,8 @@ async function bundleScript(): Promise<string> {
  * (engineMonitor).
  */
 function attachedRunArgs(spec: MonitorRunSpec): string[] {
-  const { [LABEL_SESSION_MONITOR]: label, ...others } = spec.labels;
-  const args = ['run', '-i', '--sig-proxy=false', '--pull', 'never', '--name', spec.name, '--label', `${LABEL_SESSION_MONITOR}=${label}`];
+  const { [LABEL_MONITOR]: label, ...others } = spec.labels;
+  const args = ['run', '-i', '--sig-proxy=false', '--pull', 'never', '--name', spec.name, '--label', `${LABEL_MONITOR}=${label}`];
   for (const [key, value] of Object.entries(others)) args.push('--label', `${key}=${value}`);
   args.push('--restart', spec.restartPolicy);
   if (spec.network === 'none') args.push('--network', 'none');
@@ -110,7 +110,7 @@ async function waitUntil(condition: () => boolean, what: string, timeoutMs = 90_
   }
 }
 
-describe('the Session Monitor container of a remote Docker host', () => {
+describe('the Monitor container of a remote Docker host', () => {
   const { run, env, cli, log } = dockerTestContext('remoteMonitor');
   const docker = new BootstrapDocker(new NodeProcessRunner(), run.dockerPath, env, log);
   const containerName = `devspace-test-monitor-${run.runId}`;
@@ -184,7 +184,7 @@ describe('the Session Monitor container of a remote Docker host', () => {
   });
 
   afterAll(() => {
-    timings.print('Timings of the remote Session Monitor:');
+    timings.print('Timings of the remote Monitor:');
     log.output(`docker logs ${containerName}:\n${cli.run(['logs', containerName]).out}\n`);
     removeRunObjects(cli, run.runId);
     // The volume of the records was created by `docker run -v` without the label of the run.
@@ -203,7 +203,7 @@ describe('the Session Monitor container of a remote Docker host', () => {
     };
     expect(details.State.Running).toBe(true);
     expect(details.Config.Image).toBe(helperTag);
-    expect(details.Config.Labels[LABEL_SESSION_MONITOR]).toMatch(/^[0-9a-f]{12}$/);
+    expect(details.Config.Labels[LABEL_MONITOR]).toMatch(/^[0-9a-f]{12}$/);
     expect(details.Config.Labels[LABEL_DEVSPACE_ID]).toBeUndefined();
     // The monitor always has the default network (its background run reaches the update service of VS Code; it
     // publishes no port).
@@ -583,7 +583,7 @@ describe('the Session Monitor container of a remote Docker host', () => {
 // operations (the same lock file in the same volume); a monitor killed while it holds the lock leaves none behind (the
 // kernel frees it); the monitor exits with 0 when it is idle and stays exited under its restart policy, until ensure
 // starts it again.
-describe('the Session Monitor container: the devspace lock of its stops and its exit when idle', () => {
+describe('the Monitor container: the devspace lock of its stops and its exit when idle', () => {
   const { run, env, cli, log } = dockerTestContext('remoteMonitor');
   const docker = new BootstrapDocker(new NodeProcessRunner(), run.dockerPath, env, log);
   const containerName = `devspace-test-monitor-lock-${run.runId}`;
@@ -637,7 +637,7 @@ describe('the Session Monitor container: the devspace lock of its stops and its 
   });
 
   afterAll(async () => {
-    timings.print('Timings of the devspace lock and the idle exit of the Session Monitor:');
+    timings.print('Timings of the devspace lock and the idle exit of the Monitor:');
     log.output(`docker logs ${containerName}:\n${cli.run(['logs', containerName]).out}\n`);
     // No worker is started (the holders of the lock are containers of this run).
     removeRunObjects(cli, run.runId);
@@ -724,7 +724,7 @@ describe('the Session Monitor container: the devspace lock of its stops and its 
     // Well past its idle time (3 s): still running.
     await new Promise((resolve) => setTimeout(resolve, 10_000));
     expect(running(containerName)).toBe(true);
-    expect(logs()).not.toContain('the Session Monitor exits');
+    expect(logs()).not.toContain('the Monitor exits');
     // A window that sees this engine as local keeps it.
     const idle = new RemoteSessionMonitor({ ...options, imageMaintenance: () => ({ schedule: '17', timeZone: 'UTC', permanent: false }) });
     expect(await idle.ensure(helperTag, socket)).toBe('running');
@@ -747,7 +747,7 @@ describe('the Session Monitor container: the devspace lock of its stops and its 
     expect(exited.State.Status).toBe('exited');
     expect(exited.State.ExitCode).toBe(0);
     // The text names the mode.
-    expect(logs()).toContain('it does not run permanently; the Session Monitor exits.');
+    expect(logs()).toContain('it does not run permanently; the Monitor exits.');
     // The restart policy leaves it exited.
     await new Promise((resolve) => setTimeout(resolve, 5_000));
     expect(running(containerName)).toBe(false);

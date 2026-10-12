@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The registry answers of the Session Monitor. Each background pass of the monitor asks the registry, anonymously, for
+// The registry answers of the Monitor. Each background pass of the monitor asks the registry, anonymously, for
 // the digest of each image tag in use and stores the answers in its volume (REGISTRY_ANSWERS_FILE, with the schedule
 // that it runs with). The open (DevspaceService.checkImages) takes the digest of a reference from there while that
 // answer is fresh: younger than the time between two runs of the monitor's schedule plus REGISTRY_ANSWER_SLACK_MS,
@@ -16,7 +16,7 @@ import { parseCacheSchedule } from './cacheSettings';
 import { isTimeZone, nextCronTime } from './cron';
 import { parseImageReference, type ImageReferenceParts } from './protocol';
 
-/** The file of the registry answers in the volume of the Session Monitor (LOCK_STATE_DIR in the worker). */
+/** The file of the registry answers in the volume of the Monitor (LOCK_STATE_DIR in the worker). */
 export const REGISTRY_ANSWERS_FILE = 'registry-digests.json';
 /**
  * An answer is fresh for the time between two runs of the monitor's schedule plus this slack (a run that starts a

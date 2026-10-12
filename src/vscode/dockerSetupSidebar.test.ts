@@ -19,8 +19,8 @@ vi.mock('../core/docker/dockerCli', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/docker/dockerCli')>();
   return { ...actual, findDockerCli: foundDockerCli };
 });
-// The extension starts no local Session Monitor process; the activation test records every process that the activation
-// starts, to show that none is a Session Monitor.
+// The extension starts no local Monitor process; the activation test records every process that the activation
+// starts, to show that none is a Monitor.
 const spawned = vi.hoisted(() => [] as string[][]);
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>();
@@ -120,7 +120,7 @@ describe('no message at activation when Docker is missing', () => {
       expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
       expect(fakeVscode.window.showErrorMessage).not.toHaveBeenCalled();
       expect(messageCalls()).toBe(0);
-      // No local Session Monitor: no process of it, and none of its files in the storage folder.
+      // No local Monitor: no process of it, and none of its files in the storage folder.
       expect(spawned.filter((call) => call.some((part) => part.includes('sessionMonitor')))).toEqual([]);
       for (const name of ['monitor.json', 'monitor.lock', 'monitor.version', 'monitor.exit', 'monitor.log']) {
         expect(fs.existsSync(path.join(storage, name))).toBe(false);

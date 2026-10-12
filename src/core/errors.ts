@@ -76,7 +76,7 @@ export function isBatchHelperUnavailable(error: unknown): error is BatchHelperUn
 }
 
 /**
- * The Session Monitor container of the engine could not be ensured at an open (Messages.sessionMonitorUnavailable). The
+ * The Monitor container of the engine could not be ensured at an open (Messages.sessionMonitorUnavailable). The
  * open is refused; no rule that opens a devspace as it is applies.
  */
 export function isSessionMonitorFailed(error: unknown): error is UserFacingError {

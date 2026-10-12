@@ -5,7 +5,7 @@
 // The wiring of the helper image for the heartbeats of a window: the preparation of the heartbeats
 // (HeartbeatPreparation, disposed with the window), the end of its waits when a build of the helper image succeeded
 // (HelperImages' onImageBuilt: the wait of the engine of the operation that built it, every wait when that engine is
-// not known), the preparation of a worker (HelperChannels' `prepare`) and the repair of a Session Monitor container,
+// not known), the preparation of a worker (HelperChannels' `prepare`) and the repair of a Monitor container,
 // both through heartbeatHelperImage. extension.ts uses it; here so the wiring is tested. No `vscode`.
 import type { DockerTarget } from '../docker/dockerHost';
 import type { HelperMaintenance } from '../helper/helperImages';
@@ -22,7 +22,7 @@ export interface HeartbeatWiringDeps extends Omit<HeartbeatHelperImageDeps, 'pre
 }
 
 /**
- * Starts the Session Monitor container of `target` again: the operation `monitorEnsure` of the worker of `target`,
+ * Starts the Monitor container of `target` again: the operation `monitorEnsure` of the worker of `target`,
  * which runs from the helper image (its preparation, below, gives it).
  */
 export type EnsureMonitor = (target: DockerTarget, signal: AbortSignal) => Promise<void>;
@@ -38,7 +38,7 @@ export interface HeartbeatWiring {
    */
   prepareWorker(target: DockerTarget, signal: AbortSignal | undefined, maintenance?: HelperMaintenance): Promise<void>;
   /**
-   * The repair of the Session Monitor container of a heartbeat: in the scope of a heartbeat, `ensureMonitor` on
+   * The repair of the Monitor container of a heartbeat: in the scope of a heartbeat, `ensureMonitor` on
    * `target` (the worker's operation; its preparation is the helper image through the preparation and its wait, as for
    * every operation of a heartbeat).
    */

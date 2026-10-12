@@ -131,7 +131,7 @@ describeUnix('the helper channel script in a Node.js process', () => {
     const result = await esbuild.build({
       // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
       define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) },
-      // The script of the Session Monitor in the worker, as esbuild.mjs bundles it, and the Engine API on the socket of
+      // The script of the Monitor in the worker, as esbuild.mjs bundles it, and the Engine API on the socket of
       // the fake engine.
       plugins: [workerScriptsPlugin(path.resolve(__dirname, '..', '..'), { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) }), engineSocketPlugin(socketPath)],
       entryPoints: [path.resolve(__dirname, 'main.ts')],

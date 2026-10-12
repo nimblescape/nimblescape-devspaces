@@ -10,7 +10,7 @@
 // interface, the GitHub session, and (for the offline scenarios) the network are fakes. Every scenario runs through the
 // flows of a real worker, as the extension sends them: the operations of a window (DevspaceOperations,
 // workerWindow.ts) send the open, Stop, the listing, the check of Delete, Delete, and the rebuild of the registry to
-// the worker, whose own pipeline runs them. The opens make sure of the real Session Monitor of the engine: the file is
+// the worker, whose own pipeline runs them. The opens make sure of the real Monitor of the engine: the file is
 // skipped when the engine had one before the tests, and removes the one that it made.
 import * as http from 'http';
 import type { AddressInfo } from 'net';
@@ -128,7 +128,7 @@ function logSeconds(logged: string, pattern: RegExp): number {
   return Number(seconds);
 }
 
-// The opens through a real worker make sure of the Session Monitor of the engine; a monitor of the user (or of another
+// The opens through a real worker make sure of the Monitor of the engine; a monitor of the user (or of another
 // run) is never touched, so the file is skipped then (its hooks do not run either).
 const engineHadMonitor = monitorOfUser({ run: inject('dockerTest') });
 
@@ -330,7 +330,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     const leftovers = [...new Set((await Promise.all(windows.map((one) => one.dispose()))).flat())];
     restoreBaseImageTag();
     removeRunObjects(cli, run.runId);
-    // The Session Monitor that the opens made sure of, its state volume and its tag.
+    // The Monitor that the opens made sure of, its state volume and its tag.
     removeTestMonitor(context);
     expect(leftovers).toEqual([]);
     expect(cli.container(containerName)).toBeUndefined();

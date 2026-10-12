@@ -6,7 +6,7 @@
 // its own image, so its WorkspaceHelper builds, checks, maintains and records no helper image; HelperImages and what it
 // runs (helperImage.ts) are the extension's. Checked on the modules that esbuild bundles into dist/helperChannel.js
 // (its metafile), built with the options of esbuild.mjs (workerBundleOptions of scripts/workerScripts.mjs), and on the
-// inputs of the scripts that the bundle carries as text (the Session Monitor and the thread of the host access
+// inputs of the scripts that the bundle carries as text (the Monitor and the thread of the host access
 // analysis), whose own builds never reach that metafile.
 import * as fs from 'fs';
 import * as path from 'path';
@@ -49,7 +49,7 @@ describe("the worker's bundle: no code of the helper image of the extension", ()
     expect(inputs.filter((input) => HELPER_IMAGE_MODULES.includes(input))).toEqual([]);
   });
 
-  // The scripts are separate builds of the plugin; an import of HelperImages in the script of the Session Monitor would
+  // The scripts are separate builds of the plugin; an import of HelperImages in the script of the Monitor would
   // put the code into dist/helperChannel.js while the check above passes.
   it('holds no module of the helper image of the extension in the scripts that it carries', () => {
     expect([...scriptInputs.keys()].sort()).toEqual(Object.keys(WORKER_SCRIPT_ENTRIES).sort());

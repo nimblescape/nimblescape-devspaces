@@ -109,7 +109,7 @@ export interface VscodeStoreDeps {
   /** The longest time without data of a download (the tests); default DOWNLOAD_STALL_MS. */
   stallMs?: number;
   /**
-   * The fetch of the Session Monitor's background run (its log lines name the run, not an open and the fallback of the
+   * The fetch of the Monitor's background run (its log lines name the run, not an open and the fallback of the
    * Dev Containers extension).
    */
   background?: boolean;
@@ -125,7 +125,7 @@ export function serverVersionName(server: VscodeServerRef, platform: VscodePlatf
 
 /**
  * Makes sure that the store has the server of `server` for `platform`; the one function of the store, for the open and
- * the Session Monitor. The check costs nothing, so the open downloads a missing server itself, safe against other
+ * the Monitor. The check costs nothing, so the open downloads a missing server itself, safe against other
  * windows that open the same version at the same time. Present already (isServerReady): ready at once, no lock, no
  * network. Otherwise, under the lock of this server version (storeLock; every worker and the monitor of the engine;
  * bounded wait), it checks again (another window or the monitor may have finished it: ready, nothing downloaded),
@@ -183,7 +183,7 @@ async function ensureServerWithin(
         : error instanceof Error
           ? error.message
           : String(error);
-    // The background run of the Session Monitor names no fallback (it fetches ahead of any open).
+    // The background run of the Monitor names no fallback (it fetches ahead of any open).
     const fallback = deps.background === true ? '' : '; the Dev Containers extension installs it in the container';
     deps.logger.warn(`The VS Code server ${name} for ${platform} could not be fetched into the shared store (${why})${fallback}.`);
     return false;
@@ -238,7 +238,7 @@ export function serverUseMarker(root: string, version: string): string {
 /**
  * A cheap marker of use: the open that needs a server version (ensureEngineServer, the worker of the open, before its
  * link) sets the modification time of its marker (`<store>/used/<version>`, an empty file, created when missing) to
- * now; nothing else does: the Session Monitor's own fetch and link never count as a use. The marker decides whether the
+ * now; nothing else does: the Monitor's own fetch and link never count as a use. The marker decides whether the
  * monitor keeps the newest Insiders server present (an insider version used by an open within 14 days) and which
  * versions its cleanup may remove (not used by an open for 14 days). The file is opened without following a link, in a
  * `used` folder that is no link; the dev containers mount the store read-only, so only the workers set it. Best effort:
@@ -582,7 +582,7 @@ export function serverLockFile(root: string, name: string): string {
 /**
  * The lock of one server version in the store (serverLockFile), taken as the devspace lock is taken (lockFile.ts:
  * the lock file opened without following a link, `flock` on its descriptor with a bounded wait), so it holds across the
- * workers of all windows and the Session Monitor of the engine; resolves with its release. Rejects when the lock stayed
+ * workers of all windows and the Monitor of the engine; resolves with its release. Rejects when the lock stayed
  * held for the whole wait, when `flock` fails, or when `signal` aborts (flock is ended then). `lockFile` names the lock
  * file of another entry of the store (the lock of one extension file, extensionLockFile).
  */
@@ -630,7 +630,7 @@ export type StoreLockAttempt = { kind: 'locked'; release(): void } | { kind: 'bu
 
 /**
  * The lock of one server version in the store (serverLockFile), taken without a wait (`flock -n`), for the cleanup of
- * the Session Monitor: `busy` while a download of that version (an open, another window, the monitor) holds it, so the
+ * the Monitor: `busy` while a download of that version (an open, another window, the monitor) holds it, so the
  * cleanup never touches a version that is being fetched. Never rejects; the lock file stays (lock files are never
  * removed). `lockFile` as for storeLock.
  */

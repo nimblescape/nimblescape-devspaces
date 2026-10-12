@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// What the Session Monitor's background run uses of the store: the released commits of the update service (the host
+// What the Monitor's background run uses of the store: the released commits of the update service (the host
 // fixed, the answer capped and strictly parsed), the version of a temporary folder, the lock of a version without a
 // wait (`flock -n`), and the marker of the last use of a version by an open (a file of its own in `used/`, which only
 // the open sets).

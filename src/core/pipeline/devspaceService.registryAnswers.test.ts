@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The open takes the digest of an image reference from the Session Monitor's registry answer while it is fresh, and
+// The open takes the digest of an image reference from the Monitor's registry answer while it is fresh, and
 // asks the registry itself only for the other references (Features, private or unanswered images, old answers) and for
 // a rebuild. A running container is checked at every open.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -29,13 +29,13 @@ afterEach(() => {
 
 const open = (extra: { forceRebuild?: boolean } = {}) => h.service.openDevspace(ENV_ID, { progress: h.progress, ...extra });
 
-describe("the Session Monitor's registry answers at the open", () => {
+describe("the Monitor's registry answers at the open", () => {
   it('a fresh answer: the registry is asked only for the Features', async () => {
     await seedDevspace(h, { container: 'running', record: { images: { [BASE_IMAGE]: DIGEST_NEW } } });
     answers = answer(DIGEST_NEW, T0 - 10 * MIN);
     await open();
     expect(h.checker.calls).toEqual([{ images: [], features: [FEATURE] }]);
-    expect(h.logger.infos.some((line) => line.startsWith("The Session Monitor's registry check of "))).toBe(true);
+    expect(h.logger.infos.some((line) => line.startsWith("The Monitor's registry check of "))).toBe(true);
     expect(h.helper.builds).toEqual([]);
   });
 

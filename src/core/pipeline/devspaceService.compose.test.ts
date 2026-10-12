@@ -641,9 +641,9 @@ describe('first open of a Docker Compose configuration', () => {
   });
 });
 
-// The Session Monitor again after `up` of Docker Compose started the dev container, as in runUp: once per run, after
+// The Monitor again after `up` of Docker Compose started the dev container, as in runUp: once per run, after
 // `up` and before the lifecycle commands.
-describe('the Session Monitor again after `up` of Docker Compose', () => {
+describe('the Monitor again after `up` of Docker Compose', () => {
   // The port takes no helper tag or image (the worker's monitor runs its own).
   interface Ensure {
     signal: AbortSignal | undefined;
@@ -651,7 +651,7 @@ describe('the Session Monitor again after `up` of Docker Compose', () => {
     userCommands: number;
   }
 
-  /** A harness with a Session Monitor on the local Docker; `fail` decides the outcome of the ensure with that index. */
+  /** A harness with a Monitor on the local Docker; `fail` decides the outcome of the ensure with that index. */
   function withSessionMonitor(fail: (index: number) => Promise<void> = async () => undefined): Ensure[] {
     h.cleanup();
     const ensures: Ensure[] = [];
@@ -738,7 +738,7 @@ describe('the Session Monitor again after `up` of Docker Compose', () => {
     await seedCompose();
     await h.service.openDevspace(ENV_ID, options());
     expect(h.helper.userCommandRuns).toHaveLength(1);
-    expect(h.ui.warnings).toContainEqual(expect.stringContaining(`The Session Monitor on the local Docker could not be started after the container of ${REPO}`));
+    expect(h.ui.warnings).toContainEqual(expect.stringContaining(`The Monitor on the local Docker could not be started after the container of ${REPO}`));
   });
 });
 

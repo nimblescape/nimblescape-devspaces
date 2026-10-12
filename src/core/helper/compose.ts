@@ -593,7 +593,7 @@ function rewriteModel(
     if (!isRecord(service)) throw notChecked(`service ${name}`);
     const isDev = name === p.devService;
     const at = `service ${name}: `;
-    // Labels: every container of the project carries the devspace ID (Stop, the Session Monitor, Delete).
+    // Labels: every container of the project carries the devspace ID (Stop, the Monitor, Delete).
     const labels = labelMap(service.labels);
     labels[LABEL_DEVSPACE_ID] = p.devspaceId;
     if (isDev) labels[LABEL_CONTAINER_VERSION] = String(CONTAINER_VERSION);
@@ -667,7 +667,7 @@ function rewriteModel(
     }
     service.pull_policy = pullPolicy;
     // `always`/`unless-stopped` (the templates set it on the database) would start the container together with Docker,
-    // outside the Session Monitor: rewritten to `no`, not refused (it gives no access). `on-failure[:n]` too: Docker
+    // outside the Monitor: rewritten to `no`, not refused (it gives no access). `on-failure[:n]` too: Docker
     // starts such a container again when the Docker daemon starts.
     if (service.restart !== undefined && service.restart !== null && String(service.restart) !== 'no') {
       rewrites.push({ item: `${at}restart ${String(service.restart)}`, reason: 'Devspaces starts the containers itself (no)' });
@@ -694,14 +694,14 @@ function rewriteModel(
         delete policy.max_attempts;
       }
     }
-    // A stop_grace_period over MAX_STOP_TIMEOUT_SECONDS is capped, not refused: the Session Monitor ends each Docker
+    // A stop_grace_period over MAX_STOP_TIMEOUT_SECONDS is capped, not refused: the Monitor ends each Docker
     // call after 30 s, also `docker stop`.
     const grace = service.stop_grace_period;
     if (grace !== undefined && grace !== null) {
       const seconds = durationSeconds(grace);
       if (seconds !== undefined && seconds > MAX_STOP_TIMEOUT_SECONDS) {
         const capped = `${MAX_STOP_TIMEOUT_SECONDS}s`;
-        rewrites.push({ item: `${at}stop_grace_period ${String(grace)}`, reason: `the Session Monitor stops a container within 30 s (${capped})` });
+        rewrites.push({ item: `${at}stop_grace_period ${String(grace)}`, reason: `the Monitor stops a container within 30 s (${capped})` });
         service.stop_grace_period = capped;
       }
     }

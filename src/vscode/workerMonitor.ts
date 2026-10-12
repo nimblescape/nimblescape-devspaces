@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The calls of this window to the Session Monitor of an engine, as operations of the worker of that engine (every
+// The calls of this window to the Monitor of an engine, as operations of the worker of that engine (every
 // remote action is a worker operation): the heartbeats (`heartbeat`), the check that the container of a devspace
 // exists there (`windowState`), the Git state of a release (`recordGitState`), the ensure of the monitor
 // (`monitorEnsure`), and "Update All Images Now" (`monitorRunNow`). The image settings and list come with the operation
@@ -72,7 +72,7 @@ export function workerMonitor(deps: WorkerMonitorDeps) {
     },
 
     /**
-     * Makes sure that the Session Monitor container of `target` runs (the operation `monitorEnsure`), with the image
+     * Makes sure that the Monitor container of `target` runs (the operation `monitorEnsure`), with the image
      * maintenance of this computer (with the schedule of the background run and the mode of the monitor). Rejects with
      * the cause when it cannot.
      */
@@ -80,11 +80,11 @@ export function workerMonitor(deps: WorkerMonitorDeps) {
       const params = parseMonitorEnsureParams({ images });
       if (params === undefined) throw new Error('The image maintenance of this computer cannot be sent to the worker.');
       const value = parseMonitorEnsureValue(await flow(OP_MONITOR_ENSURE, params, { target, timeoutMs: MONITOR_ENSURE_FLOW_TIMEOUT_MS, ...(signal ? { signal } : {}) }));
-      if (value === undefined) throw new Error('The worker answered the ensure of the Session Monitor with an invalid value.');
+      if (value === undefined) throw new Error('The worker answered the ensure of the Monitor with an invalid value.');
     },
 
     /**
-     * "Update All Images Now": the Session Monitor of `target` made sure (with the image maintenance of this computer,
+     * "Update All Images Now": the Monitor of `target` made sure (with the image maintenance of this computer,
      * as monitorEnsure), then asked to run its background run at once (the operation `monitorRunNow`). Resolves when
      * the monitor took the request, not when the run ends; rejects with the cause when it cannot.
      */

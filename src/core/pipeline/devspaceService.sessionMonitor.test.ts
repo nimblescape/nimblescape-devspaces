@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Session Monitor container from the side of the pipeline (ensured right after the helper image, before the
+// The Monitor container from the side of the pipeline (ensured right after the helper image, before the
 // container is created or started; the record of this computer removed at Delete), and the flag of Close and Keep
 // Running (cleared when a window connects, and by Stop). On every engine, local and remote, and an open is refused when
 // the monitor cannot be ensured.
@@ -88,7 +88,7 @@ function engineOf(target: Pick<DockerTarget, 'kind' | 'host'>): string {
 const REMOTE = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box' } as const;
 const LOCAL = { kind: 'local', host: '', endpoint: 'unix:///var/run/docker.sock' } as const;
 
-describe('the Session Monitor in the open pipeline', () => {
+describe('the Monitor in the open pipeline', () => {
   it('a first open on a remote host ensures it once, after the helper image and before up', async () => {
     const { h, calls } = setup(REMOTE);
     const result = await h.service.open(TARGET, { progress: h.progress });
@@ -146,7 +146,7 @@ describe('the Session Monitor in the open pipeline', () => {
   });
 
   it.each<[string, () => Promise<{ ok: true } | { ok: false; detail: string }>]>([
-    ['fails', async () => ({ ok: false, detail: 'No such container: devspace-session-monitor' })],
+    ['fails', async () => ({ ok: false, detail: 'No such container: devspace-monitor' })],
     ['throws', async () => Promise.reject(new Error('Docker Desktop is not installed.'))],
   ])('a first heartbeat that %s is a warning, and the open goes on', async (_name, heartbeat) => {
     const { h } = setup(REMOTE, { heartbeat });
@@ -186,8 +186,8 @@ describe('the Session Monitor in the open pipeline', () => {
       (failure: unknown) => failure as { code?: string; message?: string; detail?: string },
     );
     expect(error?.code).toBe('sessionMonitorFailed');
-    expect(error?.message).toContain('the Session Monitor on the Docker engine could not be started (ssh: connect to host build-box: timed out)');
-    expect(h.logger.warnings.some((line) => line.includes('The Session Monitor on build-box could not be started'))).toBe(true);
+    expect(error?.message).toContain('the Monitor on the Docker engine could not be started (ssh: connect to host build-box: timed out)');
+    expect(h.logger.warnings.some((line) => line.includes('The Monitor on build-box could not be started'))).toBe(true);
     expect(h.helper.calls.some((call) => call.startsWith('up '))).toBe(false);
   });
 
@@ -196,7 +196,7 @@ describe('the Session Monitor in the open pipeline', () => {
     const { h } = setup(LOCAL, { ensure: async () => Promise.reject(new Error('docker run failed: image not found')) });
     await seedDevspace(h, { container: 'running' });
     await expect(h.service.openDevspace(ENV_ID, { progress: h.progress })).rejects.toMatchObject({ code: 'sessionMonitorFailed' });
-    expect(h.logger.warnings.some((line) => line.includes('The Session Monitor on the local Docker could not be started'))).toBe(true);
+    expect(h.logger.warnings.some((line) => line.includes('The Monitor on the local Docker could not be started'))).toBe(true);
   });
 
   it('a cancellation during it cancels the open', async () => {
@@ -256,7 +256,7 @@ describe('the Session Monitor in the open pipeline', () => {
 // The monitor may have exited when idle during the clone and the build; the open ensures it again right after `up`
 // created or started the container, before the lifecycle commands, once per run. A failure there does not refuse the
 // open (the container runs already): it is logged, and the user is warned.
-describe('the Session Monitor again after the container started', () => {
+describe('the Monitor again after the container started', () => {
   it('ensures it again after `up` and before the lifecycle commands, with the same image and the signal of the open', async () => {
     const { h, calls } = setup(REMOTE);
     await seedDevspace(h, { container: 'stopped', extra: { dockerHost: 'build-box' } });
@@ -294,8 +294,8 @@ describe('the Session Monitor again after the container started', () => {
     const result = await h.service.openDevspace(ENV_ID, { progress: h.progress });
     expect(result.devspace.id).toBe(ENV_ID);
     expect(h.helper.userCommandRuns).toHaveLength(1);
-    expect(h.logger.warnings.some((line) => line.includes(`The Session Monitor on build-box could not be started again after the container of ${REPO} started`))).toBe(true);
-    expect(h.ui.warnings).toContainEqual(expect.stringContaining('The Session Monitor on the Docker host build-box could not be started after the container of'));
+    expect(h.logger.warnings.some((line) => line.includes(`The Monitor on build-box could not be started again after the container of ${REPO} started`))).toBe(true);
+    expect(h.ui.warnings).toContainEqual(expect.stringContaining('The Monitor on the Docker host build-box could not be started after the container of'));
     expect(h.ui.warnings).toContainEqual(expect.stringContaining('(ssh: connect to host build-box: timed out)'));
   });
 
@@ -340,7 +340,7 @@ describe('the Session Monitor again after the container started', () => {
 });
 
 // The failure paths of the second ensure of runUp.
-describe('the Session Monitor again after the container started: failure paths', () => {
+describe('the Monitor again after the container started: failure paths', () => {
   /** True once the helper ran `up`. */
   const afterUp = (helper: Harness['helper']) => helper.calls.some((call) => call.startsWith('up '));
   const UNSUPPORTED = { kind: 'unsupported', host: 'tcp://x', endpoint: 'tcp://x' } as const;
@@ -395,9 +395,9 @@ describe('the Session Monitor again after the container started: failure paths',
     const { h } = setup(LOCAL, { ensure: async (index) => (index === 1 ? Promise.reject(new Error('docker run failed')) : undefined) });
     await seedDevspace(h, { container: 'stopped' });
     await h.service.openDevspace(ENV_ID, { progress: h.progress });
-    expect(h.ui.warnings).toContainEqual(expect.stringContaining(`The Session Monitor on the local Docker could not be started after the container of ${REPO}`));
+    expect(h.ui.warnings).toContainEqual(expect.stringContaining(`The Monitor on the local Docker could not be started after the container of ${REPO}`));
     expect(h.ui.warnings.some((line) => line.includes('Docker host '))).toBe(false);
-    expect(h.logger.warnings.some((line) => line.includes(`The Session Monitor on the local Docker could not be started again after the container of ${REPO}`))).toBe(true);
+    expect(h.logger.warnings.some((line) => line.includes(`The Monitor on the local Docker could not be started again after the container of ${REPO}`))).toBe(true);
   });
 
   it('a target that cannot be read after `up` is a warning, and the open goes on (code note)', async () => {
@@ -415,9 +415,9 @@ describe('the Session Monitor again after the container started: failure paths',
     expect(thrown).toBe(true);
     expect(calls.filter((call) => call.startsWith('ensure'))).toHaveLength(1);
     expect(h.helper.userCommandRuns).toHaveLength(1);
-    expect(h.ui.warnings).toContainEqual(expect.stringContaining('The Session Monitor on the Docker engine could not be started after the container of'));
+    expect(h.ui.warnings).toContainEqual(expect.stringContaining('The Monitor on the Docker engine could not be started after the container of'));
     expect(h.ui.warnings).toContainEqual(expect.stringContaining('(docker context inspect failed)'));
-    expect(h.logger.warnings.some((line) => line.includes('The Session Monitor on the Docker engine could not be started again'))).toBe(true);
+    expect(h.logger.warnings.some((line) => line.includes('The Monitor on the Docker engine could not be started again'))).toBe(true);
   });
 });
 
@@ -453,8 +453,8 @@ describe('Delete and the record of this computer', () => {
     await seedDevspace(h, { container: 'stopped', extra: { dockerHost: 'build-box' } });
     await h.service.delete(ENV_ID, { progress: h.progress, additionalVolumesToRemove: [] });
     expect(await h.registry.get(ENV_ID)).toBeUndefined();
-    // The text names the Session Monitor of any engine.
-    expect(h.logger.warnings.some((line) => line.includes('remove the heartbeat record from the Session Monitor'))).toBe(true);
+    // The text names the Monitor of any engine.
+    expect(h.logger.warnings.some((line) => line.includes('remove the heartbeat record from the Monitor'))).toBe(true);
   });
 
   it('removes the record of this computer on the local Docker too', async () => {
@@ -467,7 +467,7 @@ describe('Delete and the record of this computer', () => {
 });
 
 // The image maintenance of the monitor in the open pipeline, on every engine.
-describe('the image list for the Session Monitor in the open pipeline', () => {
+describe('the image list for the Monitor in the open pipeline', () => {
   function withImages(target: Pick<DockerTarget, 'kind' | 'host' | 'endpoint'>, images: (host: string) => Promise<void>) {
     const calls: string[] = [];
     const sessionMonitor: DevspaceSessionMonitor = {
@@ -509,6 +509,6 @@ describe('the image list for the Session Monitor in the open pipeline', () => {
     await h.service.openDevspace(ENV_ID, { progress: h.progress });
     expect(calls).toContain('heartbeat build-box');
     // The line names the image settings and the images in use.
-    expect(h.logger.warnings).toContain('The image settings and the images in use for the Session Monitor on build-box could not be sent: GitHub answered HTTP 403');
+    expect(h.logger.warnings).toContain('The image settings and the images in use for the Monitor on build-box could not be sent: GitHub answered HTTP 403');
   });
 });

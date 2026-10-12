@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The worker's script in the volume of the Session Monitor (the Session Monitor triggers the prepare), so that the
+// The worker's script in the volume of the Monitor (the Monitor triggers the prepare), so that the
 // monitor runs the headless prepare (the worker operation `prepare`) with the worker of the same extension version,
 // without a computer. The worker that ensures the monitor stores its own script (storeWorkerScript) at
 // `<volume>/worker-scripts/<sha256>.js` and gives the monitor container that it creates the hash in
@@ -19,7 +19,7 @@ import { MAX_BUNDLE_LINE_LENGTH, bundleHash } from '../loader/pipeLoader';
 
 /** The variable of the monitor container with the sha256 of the worker script that its prepares run (64 hex digits). */
 export const MONITOR_WORKER_HASH_ENV = 'DEVSPACE_WORKER_HASH';
-/** The folder of the worker scripts in the volume of the Session Monitor (0700). */
+/** The folder of the worker scripts in the volume of the Monitor (0700). */
 export const WORKER_SCRIPT_FOLDER = 'worker-scripts';
 /** The largest worker script that is stored or read (the pipe loader takes no longer line either). */
 export const MAX_WORKER_SCRIPT_BYTES = MAX_BUNDLE_LINE_LENGTH;

@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Session Monitor triggers the prepare. The part of its background run on a fake engine and a fake worker: which
+// The Monitor triggers the prepare. The part of its background run on a fake engine and a fake worker: which
 // devspaces, in which order, one at a time, one line each; the stale prepared images; and the worker itself as a
 // child process (its command, its environment, the script from the volume, the operation `prepare` over the helper
 // channel to a ChannelServer in this process, without any secret).
@@ -329,7 +329,7 @@ describe('the worker of the prepares', () => {
   });
 
   it('has no worker without the hash, without its script, or with a script that does not match it', () => {
-    expect(storedPrepareWorker(undefined, stateDir, Date.now)()).toEqual({ reason: 'the Session Monitor was created without the hash of a worker script' });
+    expect(storedPrepareWorker(undefined, stateDir, Date.now)()).toEqual({ reason: 'the Monitor was created without the hash of a worker script' });
     const hash = bundleHash('the worker');
     expect(storedPrepareWorker(hash, stateDir, Date.now)()).toEqual({ reason: `the worker script ${hash.slice(0, 12)} is not in the volume (the next open stores it)` });
     storeWorkerScript(stateDir, 'the worker');

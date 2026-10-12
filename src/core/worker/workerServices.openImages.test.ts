@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Mutation probes: the image settings and list of an open reach the Session Monitor of the worker's services
+// Mutation probes: the image settings and list of an open reach the Monitor of the worker's services
 // (workerServiceDeps passes monitorImages on; without it there are none).
 import { describe, expect, it, vi } from 'vitest';
 import { silentLogger } from '../ports';
@@ -26,7 +26,7 @@ const deps = (overrides: Partial<WorkerServicesDeps>) =>
   });
 
 describe("the images of an open in the worker's services", () => {
-  it('the monitorImages of the operation are the Session Monitor\'s images, with the signal of the pipeline', async () => {
+  it('the monitorImages of the operation are the Monitor\'s images, with the signal of the pipeline', async () => {
     const monitorImages = vi.fn(async (_signal: AbortSignal | undefined) => {});
     const signal = new AbortController().signal;
     await deps({ monitorImages }).sessionMonitor!.images(signal);

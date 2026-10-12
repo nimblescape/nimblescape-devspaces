@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The commands of the Session Monitor as the worker sends them over the Engine API (monitorFlow): the commands, the
+// The commands of the Monitor as the worker sends them over the Engine API (monitorFlow): the commands, the
 // time limit, the failure details and the missing monitor. The commands are the entries of the registry
 // (scriptCommand).
 import { describe, expect, it } from 'vitest';
@@ -26,7 +26,7 @@ function engineWith(answer: () => Promise<EngineExecResult>) {
   return { engine, calls };
 }
 
-describe('the commands of the Session Monitor in the worker', () => {
+describe('the commands of the Monitor in the worker', () => {
   it('sends a heartbeat to the monitor container under the lock of the records, within its time limit and the signal', async () => {
     const { engine, calls } = engineWith(async () => result(0));
     const controller = new AbortController();
@@ -40,7 +40,7 @@ describe('the commands of the Session Monitor in the worker', () => {
 
   it('tells a missing or stopped monitor from another failure, and names the busy lock, a kill and the time limit', async () => {
     const answer = async (thrown: unknown) => sendHeartbeat(engineWith(() => Promise.reject(thrown)).engine, HEARTBEAT);
-    expect(await answer(new EngineError('No such container: devspace-session-monitor', 404))).toMatchObject({ ok: false, missing: true });
+    expect(await answer(new EngineError('No such container: devspace-monitor', 404))).toMatchObject({ ok: false, missing: true });
     expect(await answer(new EngineError('Container 1234 is not running', 409))).toMatchObject({ ok: false, missing: true });
     expect(await answer(new EngineError('Container 1234 is paused', 409))).toMatchObject({ ok: false, missing: false });
     expect(await answer(new Error('connect ENOENT'))).toEqual({ ok: false, missing: false, detail: 'connect ENOENT' });

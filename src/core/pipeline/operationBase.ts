@@ -119,7 +119,7 @@ export const OPEN_FLOW_TIMEOUT_MS = 4 * 60 * 60_000;
 export const TOKEN_REMOVE_FLOW_TIMEOUT_MS = 60_000;
 
 /**
- * The longest ensure of the Session Monitor in the worker: its looks and waits (a name conflict, a container that
+ * The longest ensure of the Monitor in the worker: its looks and waits (a name conflict, a container that
  * another window creates: 25.5 s at most), the create and the wait for its ready line (60 s), each call of the engine
  * bounded by 60 s.
  */

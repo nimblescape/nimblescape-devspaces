@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The registry checks of the Session Monitor's image maintenance go through the proxy of the daemon of its engine, as
+// The registry checks of the Monitor's image maintenance go through the proxy of the daemon of its engine, as
 // the worker's image checks and the monitor's VS Code downloads, never around that proxy. A local registry with TLS (a
 // test certificate for `registry.test`, which only the proxy resolves) behind a local proxy (CONNECT); nothing leaves
 // 127.0.0.1. The test certificate is added to the trusted ones of each `tls.connect` (vi.mock, as
@@ -45,7 +45,7 @@ vi.mock('tls', async (importOriginal) => {
   return { ...original, default: { ...original, connect }, connect };
 });
 
-describe("the Session Monitor's registry checks through the proxy of the daemon", () => {
+describe("the Monitor's registry checks through the proxy of the daemon", () => {
   const closers: (() => Promise<void>)[] = [];
   afterEach(async () => {
     for (const close of closers.splice(0)) await close();

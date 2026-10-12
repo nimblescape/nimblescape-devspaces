@@ -241,7 +241,7 @@ export function dockerEngine(
     inspect,
     containerIds,
     images: async (filters, signal) => {
-      // Within the bound of a list (the Session Monitor lists every image).
+      // Within the bound of a list (the Monitor lists every image).
       const value = await list(`/images/json?${filtersQuery(filters)}`, signal, MAX_ENGINE_LIST_ANSWER_CHARACTERS);
       if (!Array.isArray(value)) throw new EngineError('The engine answered the list of the images with an invalid value.', 200);
       const images: EngineImage[] = [];
@@ -622,7 +622,7 @@ async function execInContainer(
 
 /**
  * What `docker run -i` sets in a create for an open, attached input (no terminal), shared by the attached create of the
- * Session Monitor and the attached run of the batch helper.
+ * Monitor and the attached run of the batch helper.
  */
 const ATTACHED_INPUT = { AttachStdin: true, AttachStdout: true, AttachStderr: true, OpenStdin: true, StdinOnce: true, Tty: false } as const;
 
@@ -838,7 +838,7 @@ const ATTACHED_STDERR_TAIL_LENGTH = 4_000;
 const NAME_CONFLICT = /\bConflict\. The container name\b.*\bis already in use\b/;
 
 /**
- * The attached create of the Session Monitor over the API, for its pipe loading (DockerEngine.createAttached): the
+ * The attached create of the Monitor over the API, for its pipe loading (DockerEngine.createAttached): the
  * create with an open input (OpenStdin, StdinOnce, as `docker run -i`), the attach (stdin, stdout, stderr), the start,
  * the input line, then the wait for `readyText` on the output (its end kept across frames), the end of the output (the
  * container ended), the time limit, or the cancel. The input is closed and the connection ended in every case; the

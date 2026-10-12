@@ -9,7 +9,7 @@
 // busy marks are specific requests to the extension; so are the registry writes of the open (hostOpenRecords); the
 // liveness of the processes of the computer, the GitHub profile and the window's lifecycle memory are asked of the
 // extension. The open runs here (the operation `open`), with the analysis thread, the image check, the settings and the
-// Session Monitor that its operation gives; without them, they fail closed. The records have no write by a function at
+// Monitor that its operation gives; without them, they fail closed. The records have no write by a function at
 // all (DevspaceStore). The variables of the computer (`${localEnv:…}`) are never passed (localEnv.ts). Pure over its
 // deps; no `vscode`.
 import * as fs from 'fs';
@@ -47,7 +47,7 @@ import { parseExtensionEntry, seedSelection, type ExtensionRef } from '../vscode
 
 /**
  * What a part of the pipeline throws when its operation did not give the worker what it needs (fail closed): only the
- * operation `open` gives the settings and the ensure of the Session Monitor.
+ * operation `open` gives the settings and the ensure of the Monitor.
  */
 function notGiven(what: string): Error {
   return new Error(`The operation gives the worker no ${what}.`);
@@ -135,7 +135,7 @@ export function hostOpenRecords(host: HostSide): OpenRecords {
 }
 
 /**
- * The Session Monitor of the worker's engine, as Delete uses it: `forget` removes the heartbeat record of `source` (the
+ * The Monitor of the worker's engine, as Delete uses it: `forget` removes the heartbeat record of `source` (the
  * computer that sent the operation) for the devspace (monitorFlow.forgetRecord). Best effort: a monitor container
  * that does not exist or does not run has no record that matters; any other failure is logged. The heartbeats of the
  * windows are their own operation (`heartbeat`). The open's ensure (`ensure`, given by the operation with its image
@@ -163,21 +163,21 @@ export function workerSessionMonitor(
     // The worker's own helper image runs the monitor (the operation knows it); the port names no tag or image of the
     // pipeline's run.
     ensure: async (signal) => {
-      if (open.ensure === undefined) throw notGiven('ensure of the Session Monitor (with its image maintenance)');
+      if (open.ensure === undefined) throw notGiven('ensure of the Monitor (with its image maintenance)');
       await open.ensure(signal);
     },
     heartbeat: async (devspaceId, keepRunning, seq) => {
-      if (source === undefined) return { ok: false, detail: 'The operation names no computer for the Session Monitor.' };
+      if (source === undefined) return { ok: false, detail: 'The operation names no computer for the Monitor.' };
       // A computer ID that the monitor script would refuse is named as such.
-      if (!isSourceId(source)) return { ok: false, detail: 'The computer of the operation has no valid ID for the Session Monitor.' };
+      if (!isSourceId(source)) return { ok: false, detail: 'The computer of the operation has no valid ID for the Monitor.' };
       if (open.limitSeconds === undefined) return { ok: false, detail: 'The operation has no settings for the time limit of the heartbeat.' };
       const result = await sendHeartbeat(engine, { source, limitSeconds: open.limitSeconds(), devspaces: [{ id: devspaceId, keepRunning, seq }] });
       return result.ok ? { ok: true } : { ok: false, detail: result.detail };
     },
     forget: async (devspaceId) => {
-      if (source === undefined) throw new Error('The operation names no computer for the Session Monitor.');
+      if (source === undefined) throw new Error('The operation names no computer for the Monitor.');
       const result = await forgetRecord(engine, source, devspaceId);
-      if (!result.ok && !result.missing) log.warn(`The heartbeat record of ${devspaceId} could not be removed from the Session Monitor: ${result.detail}`);
+      if (!result.ok && !result.missing) log.warn(`The heartbeat record of ${devspaceId} could not be removed from the Monitor: ${result.detail}`);
     },
   };
 }
@@ -338,15 +338,15 @@ export interface WorkerServicesDeps {
   prepareLock?: PrepareLock;
   /** The settings of the pipeline of an open (openSettingsOf of its parameters); a read without them fails closed. */
   settings?: ExtensionSettings;
-  /** The id of the computer that sent the operation in the Session Monitor (Delete's `forget`). */
+  /** The id of the computer that sent the operation in the Monitor (Delete's `forget`). */
   monitorSource?: string;
   /**
-   * The ensure of the Session Monitor of the worker's engine for the open (ensureWorkerMonitor, with the image
+   * The ensure of the Monitor of the worker's engine for the open (ensureWorkerMonitor, with the image
    * maintenance of the operation); without it, the ensure fails closed.
    */
   monitorEnsure?: (signal: AbortSignal | undefined) => Promise<unknown>;
   /**
-   * Gives the Session Monitor of the worker's engine the image settings and the image references in use of the open,
+   * Gives the Monitor of the worker's engine the image settings and the image references in use of the open,
    * after its ensure (best effort; never throws, except an AbortError).
    */
   monitorImages?: (signal: AbortSignal | undefined) => Promise<void>;
@@ -367,7 +367,7 @@ export interface WorkerServicesDeps {
    * extensions in the shared extension cache of the store.
    */
   defaultExtensions?: string[];
-  /** The folder of the Session Monitor's registry answers (default LOCK_STATE_DIR; for the tests). */
+  /** The folder of the Monitor's registry answers (default LOCK_STATE_DIR; for the tests). */
   registryAnswersDir?: string;
 }
 
@@ -390,7 +390,7 @@ export function workerExtensionCache(
 }
 
 /**
- * The registry answers of the Session Monitor, in its volume at `stateDir` (LOCK_STATE_DIR in the worker): a regular
+ * The registry answers of the Monitor, in its volume at `stateDir` (LOCK_STATE_DIR in the worker): a regular
  * file (no link) of at most MAX_REGISTRY_ANSWERS_CHARACTERS bytes, read strictly (parseRegistryAnswers). `undefined`
  * when there is none, or it is larger, not a regular file, or not valid: the open then checks the registry itself.
  * Never throws.
@@ -438,7 +438,7 @@ export interface HeadlessServicesDeps {
   logger: Logger;
   ownHelper: OwnHelper;
   analyzer: ConfigurationAnalyzer;
-  /** The folder of the Session Monitor's registry answers (default LOCK_STATE_DIR; for the tests). */
+  /** The folder of the Monitor's registry answers (default LOCK_STATE_DIR; for the tests). */
   registryAnswersDir?: string;
 }
 
@@ -509,10 +509,10 @@ export function anonymousImageChecker(deps: Pick<HeadlessServicesDeps, 'engine' 
  * The deps of DevspaceService for a headless prepare (DevspaceService.prepare): no request to a computer at all.
  * The engine of the worker without any secret or login (EngineDocker: anonymous pulls), the worker's own helper image,
  * the devspaces from the volumes of the engine (engineDevspaceStore), the settings of a prepare (the host access
- * checks on), the anonymous image check, the registry answers of the Session Monitor. Everything else of a computer
+ * checks on), the anonymous image check, the registry answers of the Monitor. Everything else of a computer
  * (the records and busy marks, the session files, the token and the account, the questions, the windows) throws when it
  * is used (notGiven), and so does the devspace lock: a prepare holds its prepare lock only (PrepareRun.takeLock). No
- * Session Monitor is ensured.
+ * Monitor is ensured.
  */
 export function headlessServiceDeps(deps: HeadlessServicesDeps): DevspaceServiceDeps & { helper: WorkspaceHelper; docker: EngineDocker } {
   const docker = new EngineDocker(deps.engine, deps.logger);
@@ -656,7 +656,7 @@ export function workerServiceDeps(deps: WorkerServicesDeps): DevspaceServiceDeps
     // The image update check in the worker, over its own HTTPS (through the proxy of the daemon) with the login of each
     // registry asked when it is needed and forgotten after its use.
     imageChecker: workerImageChecker(deps, logins),
-    // The registry answers of the Session Monitor of the worker's engine.
+    // The registry answers of the Monitor of the worker's engine.
     registryAnswers: () => readRegistryAnswers(deps.registryAnswersDir),
     // The remembered check results of the configurations, which the extension keeps; the worker only asks for the one
     // of its devspace and offers a new one.

@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The part "extensions" of the Session Monitor's background run with a store in a temporary folder, a fake Marketplace
+// The part "extensions" of the Monitor's background run with a store in a temporary folder, a fake Marketplace
 // and fake downloads: the union of the lists recorded in the last 14 days, one query for the entries without a pin and
 // one for the pinned ones, the compatibility with the newest stable server of the store, the downloads of what is new,
 // each failure on its own and retried after a day; and its share of the daily cleanup (the choice, the lock without a

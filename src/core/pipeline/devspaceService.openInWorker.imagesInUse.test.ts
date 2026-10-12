@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The open carries the image references in use on its engine (those of the build records of all devspaces of this
-// computer there) for the Session Monitor, which keeps them up to date.
+// computer there) for the Monitor, which keeps them up to date.
 import { describe, expect, it, vi } from 'vitest';
 import { MAX_IMAGE_REFERENCES } from '../remoteMonitor/protocol';
 import type { DevspaceOperationsDeps, OperationFlow } from './devspaceOperations';
@@ -59,11 +59,11 @@ describe('the image references in use of an open', () => {
     });
     await h.operations.openDevspaceInWorker(ENV_ID, { progress: h.progress });
     expect(failed).toBe(1);
-    expect(h.logger.warnings).toContain('The images in use could not be read for the Session Monitor: the registry is locked');
+    expect(h.logger.warnings).toContain('The images in use could not be read for the Monitor: the registry is locked');
     expect(sent[0]).not.toHaveProperty('references');
   });
 
-  // The injection point that the Docker tests use (no reference, so the Session Monitor of their engine manages none of
+  // The injection point that the Docker tests use (no reference, so the Monitor of their engine manages none of
   // its images), and one that gives its own.
   it('takes the references of imageReferencesInUse when it is given', async () => {
     const none = harness({ imageReferencesInUse: async () => undefined });

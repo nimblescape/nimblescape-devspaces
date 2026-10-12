@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The attached create of the Session Monitor (DockerEngine.createAttached) and the clock of the daemon (systemTime)
+// The attached create of the Monitor (DockerEngine.createAttached) and the clock of the daemon (systemTime)
 // over the Engine API, against an HTTP server on a Unix socket that answers as the engine (JSON for the requests, a
 // hijacked connection with framed output for the attach).
 import * as fs from 'fs';
@@ -29,16 +29,16 @@ function frame(stream: 1 | 2, text: string): Buffer {
   return Buffer.concat([header, data]);
 }
 
-const READY = 'Session Monitor started';
+const READY = 'Monitor started';
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
 const SPEC: MonitorRunSpec = {
-  name: 'devspace-session-monitor',
+  name: 'devspace-monitor',
   image: 'sha256:' + 'a'.repeat(64),
-  labels: { 'nimblescape.devspace.session-monitor': 'label', 'nimblescape.devspace.monitor-create': 'nonce' },
+  labels: { 'nimblescape.devspace.monitor': 'label', 'nimblescape.devspace.monitor-create': 'nonce' },
   restartPolicy: 'on-failure',
   network: 'none',
   log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
-  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-session-monitor', volumeTarget: '/state' },
+  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-monitor', volumeTarget: '/state' },
   env: { DEVSPACE_IMAGE_TZ: 'UTC' },
   command: ['node', '-e', 'loader', '/opt/devspace/monitor.js', 'hash', 'startMonitor'],
 };
@@ -113,7 +113,7 @@ describe('the attached create and the clock of the daemon over the Engine API', 
       `POST /containers/${ID}/attach`,
       `POST /containers/${ID}/start`,
     ]);
-    expect(calls[0].url).toBe('/containers/create?name=devspace-session-monitor');
+    expect(calls[0].url).toBe('/containers/create?name=devspace-monitor');
     expect(calls[1].url).toBe(`/containers/${ID}/attach?stream=1&stdin=1&stdout=1&stderr=1`);
     expect(JSON.parse(calls[0].body)).toEqual({
       Image: SPEC.image,
@@ -132,7 +132,7 @@ describe('the attached create and the clock of the daemon over the Engine API', 
         CapDrop: ['ALL'],
         SecurityOpt: ['no-new-privileges'],
         LogConfig: { Type: 'json-file', Config: { 'max-size': '1m', 'max-file': '2' } },
-        Binds: ['/var/run/docker.sock:/var/run/docker.sock', 'devspace-session-monitor:/state'],
+        Binds: ['/var/run/docker.sock:/var/run/docker.sock', 'devspace-monitor:/state'],
       },
     });
     expect(input()).toBe('"the script"\n');
@@ -162,14 +162,14 @@ describe('the attached create and the clock of the daemon over the Engine API', 
     await engine.createAttached(spec, { input: 'x\n', readyText: READY, timeoutMs: 5_000 });
     const host = JSON.parse(calls[0].body).HostConfig;
     expect(host.RestartPolicy).toEqual({ Name: 'unless-stopped' });
-    expect(host.Binds).toEqual(['/var/run/docker.sock:/var/run/docker.sock', 'devspace-session-monitor:/state']);
+    expect(host.Binds).toEqual(['/var/run/docker.sock:/var/run/docker.sock', 'devspace-monitor:/state']);
     expect(host.Mounts).toEqual([{ Type: 'volume', Source: 'devspace-vscode', Target: '/vscode', ReadOnly: false, VolumeOptions: { NoCopy: true } }]);
     expect(host.CapDrop).toEqual(['ALL']);
     expect(host.PortBindings).toBeUndefined();
   });
 
   it('a name in use is a conflict; another refusal of the create is not; nothing is attached then', async () => {
-    const conflict = await serve(() => ({ status: 409, json: { message: 'Conflict. The container name "/devspace-session-monitor" is already in use by container "abc". You have to remove (or rename) that container to be able to reuse that name.' } }));
+    const conflict = await serve(() => ({ status: 409, json: { message: 'Conflict. The container name "/devspace-monitor" is already in use by container "abc". You have to remove (or rename) that container to be able to reuse that name.' } }));
     expect(await conflict.engine.createAttached(SPEC, { input: 'x\n', readyText: READY, timeoutMs: 5_000 })).toMatchObject({ kind: 'exited', conflict: true });
     expect(conflict.calls).toHaveLength(1);
     const missing = await serve(() => ({ status: 404, json: { message: 'No such image: sha256:aaa' } }));

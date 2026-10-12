@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
-// Mutation probes: the open's Session Monitor in the worker: the time limit of the first heartbeat is the clamped one
+// Mutation probes: the open's Monitor in the worker: the time limit of the first heartbeat is the clamped one
 // of the settings (stopAfterSeconds), and without the settings the heartbeat is answered as not sent (it does not
 // reject) also when the operation names the computer.
 import { describe, expect, it } from 'vitest';

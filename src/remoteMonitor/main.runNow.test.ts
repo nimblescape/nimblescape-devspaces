@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Session Monitor side of "Update All Images Now" (`monitor.js run-now` writes RUN_NOW_FILE; the next check of the
+// The Monitor side of "Update All Images Now" (`monitor.js run-now` writes RUN_NOW_FILE; the next check of the
 // schedule takes it and runs the background run at once, once; a request that comes during a run waits for the check
 // after it; a request that cannot be taken runs nothing), and the default schedule daily at 06:07 with its catch-up: a
 // time that the monitor missed (it was down, the engine off, the computer asleep) runs once at the next check, never

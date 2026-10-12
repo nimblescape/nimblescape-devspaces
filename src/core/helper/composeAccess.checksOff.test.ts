@@ -121,7 +121,7 @@ const TABLE: Array<[string, ComposeAccessInput, string, HostAccessClass]> = [
   ['a volume of another devspace by its labels', input(() => undefined, { volumeLabels: { [`${PROJECT}_pgdata`]: { 'nimblescape.devspace.id': 'other' } } }), `volume ${PROJECT}_pgdata of another devspace`, 'protected'],
   ['a volume of a devspace of another account', input(() => undefined, { foreignVolumes: [`${PROJECT}_pgdata`] }), `volume ${PROJECT}_pgdata of another devspace`, 'protected'],
   ['the cache volume of the workspace helper', input((m) => (m.volumes = { pgdata: { name: 'devspace-helper-cache' } })), 'volume devspace-helper-cache of the workspace helper', 'protected'],
-  ['the volume of the remote Session Monitor', input((m) => (m.volumes = { pgdata: { name: 'devspace-session-monitor' } })), 'volume devspace-session-monitor of the Session Monitor', 'protected'],
+  ['the volume of the remote Monitor', input((m) => (m.volumes = { pgdata: { name: 'devspace-monitor' } })), 'volume devspace-monitor of the Monitor', 'protected'],
   ['a network of another devspace', input((m) => (m.networks = { other: { name: `${OTHER}_default`, external: true } })), `network ${OTHER}_default of another devspace`, 'protected'],
   ['network_mode of another devspace', input(service('db', { network_mode: `${OTHER}_default` })), `service db: network ${OTHER}_default of another devspace`, 'protected'],
   // The workspace volume does not hold the GitHub token (it is in the memory of the dev container).

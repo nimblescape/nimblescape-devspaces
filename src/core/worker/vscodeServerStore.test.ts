@@ -191,7 +191,7 @@ describe('ensureServer', () => {
     ]);
   });
 
-  it('ensureServer takes the platform (the Session Monitor calls it): arm64 into its own folder', async () => {
+  it('ensureServer takes the platform (the Monitor calls it): arm64 into its own folder', async () => {
     const h = harness();
     const arm = serverFolder(h.root, SERVER, 'linux-arm64');
     expect(await ensureServer(h.deps, SERVER, 'linux-arm64', signal())).toBe(true);

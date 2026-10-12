@@ -157,7 +157,7 @@ export async function currentHelperImageTag(dockerfilePath: string): Promise<str
  * meanwhile. Always the current tag (there is no previous helper image).
  */
 export interface HelperImageUse {
-  /** The helper tag: the key of helper.json, the label of the remote Session Monitor, and the name in log lines. */
+  /** The helper tag: the key of helper.json, the label of the remote Monitor, and the name in log lines. */
   tag: string;
   /**
    * The ID of the image that the ensure checked: the image that this ensure built (found by its build label) or found
@@ -762,7 +762,7 @@ async function cleanUpIfDue(m: Maintenance, currentId: string): Promise<void> {
     for (const tag of image.tags.filter(isMonitorImageTag)) {
       const helperTag = `devspace-helper:${tag.slice('devspace-monitor:'.length)}`;
       if (image.tags.includes(helperTag)) continue;
-      m.logger.info(`The tag ${tag} of the Session Monitor is no longer on its workspace helper image. It is removed.`);
+      m.logger.info(`The tag ${tag} of the Monitor is no longer on its workspace helper image. It is removed.`);
       await removeHelperImage(m, image, tag, currentId);
     }
   }

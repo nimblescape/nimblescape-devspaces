@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
-// Mutation probes of the loop of the Session Monitor over the Engine API (src/remoteMonitor/main.ts): the failure of
+// Mutation probes of the loop of the Monitor over the Engine API (src/remoteMonitor/main.ts): the failure of
 // the list under the lock of a devspace, the log of a failed stop once per series, and the records of a volume
 // without the folder of the records. The comment of each test names the mutant that fails it.
 import * as fs from 'fs';
@@ -70,7 +70,7 @@ function loopOf(engine: LoopEngine): { loop: RemoteMonitorLoop; lines: string[];
   return { loop, lines, at };
 }
 
-describe('the loop of the Session Monitor over the Engine API', () => {
+describe('the loop of the Monitor over the Engine API', () => {
   // Fails on a mutant where the failure of the list under the lock names the 60 s of a stop: the list of the containers
   // of a devspace under its lock that does not answer within its time limit names that limit, the 30 s of a list.
   it('names the time limit of the list when the list under the lock does not answer', async () => {

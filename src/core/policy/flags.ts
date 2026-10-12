@@ -51,7 +51,7 @@ function checkGuarded(check: (value: string) => string[]): FlagRule {
 
 const REMOVED_NAME = 'the container gets the name of the devspace';
 const REMOVED_RESTART =
-  'Devspaces starts and stops the container itself; Docker would start the container again when Docker starts, outside the Session Monitor';
+  'Devspaces starts and stops the container itself; Docker would start the container again when Docker starts, outside the Monitor';
 const REMOVED_LIFE_CYCLE = 'Devspaces stops, starts, and recreates the container; --rm would delete it at each stop';
 const REMOVED_TERMINAL = 'the container runs without a terminal; -i with -t would make its start fail';
 const REMOVED_DETACH = 'the Dev Container CLI stays attached to the container; -d would make its start fail';
@@ -154,11 +154,11 @@ export const RUN_FLAGS: Readonly<Record<string, FlagRule>> = {
   '--no-healthcheck': allowFlag,
   // The signal that `docker stop` sends to the container.
   '--stop-signal': allowValue,
-  // Only up to MAX_STOP_TIMEOUT_SECONDS, so that a stop of the Session Monitor ends in time (stopTimeoutProblems).
+  // Only up to MAX_STOP_TIMEOUT_SECONDS, so that a stop of the Monitor ends in time (stopTimeoutProblems).
   '--stop-timeout': { kind: 'check', check: stopTimeoutProblems },
   // Only `no` and `on-failure`: the others start the container together with Docker (restartProblems). Removed before
   // `up` too, with a log line: Docker would start a container with `on-failure` again when the Docker daemon starts,
-  // outside the Session Monitor.
+  // outside the Monitor.
   '--restart': { kind: 'remove', value: true, reason: REMOVED_RESTART, check: restartProblems },
   // Only drivers that keep the log in files of the container, or no log (logDriverProblems). Stays refused with the
   // checks off, like the other options of the log.
@@ -287,7 +287,7 @@ export function portProblems(spec: string): string[] {
  * `--label`: no reserved key (isReservedLabel, compared without case and surrounding spaces), except the exact labels
  * that the override configuration adds itself (OWN_LABELS). In `docker run`, the runArgs come after the id label of the
  * Dev Container CLI (`nimblescape.devspace.id`), and the last label of a key wins: the extension and the
- * Session Monitor would no longer find the container, or take it for another devspace. Other `devspace.…` keys are
+ * Monitor would no longer find the container, or take it for another devspace. Other `devspace.…` keys are
  * allowed.
  */
 function labelProblems(value: string): Problem[] {
@@ -337,7 +337,7 @@ function stopTimeoutProblems(value: string): Problem[] {
 
 /**
  * `--restart`: `no` and `on-failure[:<count>]`. `always` and `unless-stopped` would start the container together with
- * Docker, without a window and outside the Session Monitor.
+ * Docker, without a window and outside the Monitor.
  */
 function restartProblems(value: string): Problem[] {
   return RESTART_POLICY.test(value) ? [] : [unsupported(`--restart=${value}`)];

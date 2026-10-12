@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The one flock acquisition (acquireFlock) of the devspace lock of the worker (takeDevspaceLock), the stop lock
-// of the Session Monitor (stopLocker) and the locks of the shared VS Code store (storeLock, storeTryLock). The first
+// of the Monitor (stopLocker) and the locks of the shared VS Code store (storeLock, storeTryLock). The first
 // part pins how each caller maps every outcome to its own errors, texts and flock arguments; the second part pins
 // acquireFlock itself. A fake `flock` throughout; the store locks open their lock files in a temporary folder.
 import * as fs from 'fs';
@@ -108,7 +108,7 @@ describe('each caller keeps its errors', () => {
     });
   });
 
-  describe('stopLocker (the Session Monitor)', () => {
+  describe('stopLocker (the Monitor)', () => {
     function deps(behaviour: Behaviour, events: string[], openFails = false): StopLockDeps {
       return {
         stateDir: '/state',

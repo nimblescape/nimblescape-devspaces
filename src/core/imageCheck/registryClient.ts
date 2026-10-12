@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // Digest requests to image registries, as defined by the OCI Distribution Specification, with the token authentication
-// of the Docker registry API. Also the tag lists of the image maintenance of the Session Monitor (listTags), so that
+// of the Docker registry API. Also the tag lists of the image maintenance of the Monitor (listTags), so that
 // the monitor reads them over the transport of its caller (the proxy of the daemon) with the same challenge, token and
 // redirect handling as the worker's image check.
 import * as crypto from 'crypto';

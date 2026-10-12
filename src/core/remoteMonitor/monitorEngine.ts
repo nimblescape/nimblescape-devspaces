@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// What the ensure of the Session Monitor container (RemoteSessionMonitor) asks of its Docker engine, as a port of its
+// What the ensure of the Monitor container (RemoteSessionMonitor) asks of its Docker engine, as a port of its
 // own. The worker implements it over the Engine API (src/core/worker/engineMonitor.ts); every remote action is a worker
 // operation. Pure types and the shared readings of the engine's answers; no I/O, no `vscode`. The spec and the outcome
 // of the attached create are types of the port DockerEngine (dockerEngine.ts), which this port uses; the generic port
@@ -11,7 +11,7 @@ import type { MonitorCreated, MonitorRunSpec } from '../worker/dockerEngine';
 
 /**
  * The state of the monitor container: missing, or its status (`created`, `running`, `paused`, `restarting`, `removing`,
- * `exited`, `dead`), the exit code of its last run, its label (LABEL_SESSION_MONITOR), how often Docker restarted it by
+ * `exited`, `dead`), the exit code of its last run, its label (LABEL_MONITOR), how often Docker restarted it by
  * its restart policy since its last start by a client (`RestartCount`; 0 when it cannot be read), its ID (64 hex digits;
  * undefined when it cannot be read), and when the daemon created it (milliseconds since the epoch on the clock of the
  * daemon; undefined when it cannot be read).

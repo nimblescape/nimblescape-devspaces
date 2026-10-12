@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// What the worker's services of an open take from its operation: the image settings and list of the Session Monitor
+// What the worker's services of an open take from its operation: the image settings and list of the Monitor
 // (`images`, given by the operation; without it, none), and the answer "lifecycle unknown" of the window's memory.
 import { describe, expect, it, vi } from 'vitest';
 import { LIFECYCLE_UNKNOWN } from '../pipeline/lifecycleMemory';
@@ -14,7 +14,7 @@ import { workerSessionMonitor } from './workerServices';
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
 
 describe("the worker's services of an open", () => {
-  it("the Session Monitor's images: those of the operation, with the signal of the pipeline; none without them", async () => {
+  it("the Monitor's images: those of the operation, with the signal of the pipeline; none without them", async () => {
     const images = vi.fn(async (_signal: AbortSignal | undefined) => {});
     const monitor = workerSessionMonitor(unusedEngine(), undefined, silentLogger, { images });
     const signal = new AbortController().signal;

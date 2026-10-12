@@ -233,7 +233,7 @@ async function activateExtension(
   // (the helper image, then the open), and is refused when that fails. Its socket mount is the one of the workspace
   // helper on that engine.
   const channelScriptPath = context.asAbsolutePath(path.join('dist', 'helperChannel.js'));
-  // The source of the socket mount on the host of an engine, for the worker and the Session Monitor container: the
+  // The source of the socket mount on the host of an engine, for the worker and the Monitor container: the
   // recorded socket of a rootless remote engine, else /var/run/docker.sock there; on the local Docker the socket of its
   // endpoint.
   const engineSocket = async (target: Pick<DockerTarget, 'kind' | 'host' | 'endpoint'>): Promise<string> =>
@@ -309,7 +309,7 @@ async function activateExtension(
           script: workerScript,
           helperTag: async () => helperImageTag(await fs.promises.readFile(helperDockerfile, 'utf8')),
           socketPath: engineSocket,
-          // The lock files of the devspaces, in the volume of the Session Monitor of the engine.
+          // The lock files of the devspaces, in the volume of the Monitor of the engine.
           stateVolume: REMOTE_MONITOR_VOLUME,
           // The shared VS Code server store of the engine, which the worker mounts read-write.
           vscodeVolume: VSCODE_STORE_VOLUME,
@@ -328,7 +328,7 @@ async function activateExtension(
     }),
   );
   // The heartbeats, the check of a container and the Git state of a release, as operations of the worker of the engine
-  // (workerFlow is set below, before the first call). Also the ensure of the Session Monitor container (on every
+  // (workerFlow is set below, before the first call). Also the ensure of the Monitor container (on every
   // engine), with the settings of this computer for its background run (cacheUpdateSchedule, in its time zone); the
   // worker holds the script of the monitor and runs from the helper image.
   const monitorCalls = workerMonitor({
@@ -336,7 +336,7 @@ async function activateExtension(
     owner: () => ({ windowId: windowCoordinator?.windowId ?? '', pid: process.pid }),
     logger,
   });
-  // The open carries the settings of this computer for the Session Monitor of its engine (no image prefixes and no
+  // The open carries the settings of this computer for the Monitor of its engine (no image prefixes and no
   // image list): the schedule of the monitor's whole background run (cacheUpdateSchedule), and its mode for an engine
   // that is remote (`ssh://`, classifyDockerEndpoint) or local (monitorRunsPermanently with stopLocalMonitorWhenIdle).
   // In monitorSettings.ts, tested by its behaviour.
@@ -348,7 +348,7 @@ async function activateExtension(
   const connection = new ConnectionAdapter(logger);
   // The source of the heartbeats (computer.id); created by the first reader.
   const computerId = (): string => readOrCreateComputerId(paths.computerId);
-  // The heartbeats of this window to the Session Monitor container of the engine of each devspace it uses, through
+  // The heartbeats of this window to the Monitor container of the engine of each devspace it uses, through
   // this window's worker of that engine (its operation `heartbeat`; the worker is made ready first); a missing monitor
   // is started again as the open starts it. `signal` aborts at the deadline of the heartbeat's attempt; it ends only
   // the wait for the helper image, whose build runs with the long signal of the preparation. The same wait after a
@@ -429,7 +429,7 @@ async function activateExtension(
             await heartbeatPreparation.scope(() => monitorCalls.recordGitState(target, devspace, signal));
           },
           send: (id, limitSeconds, signal) => windowHeartbeats.release(id, limitSeconds, signal),
-          // A Stop that this window handed off (its pending operation `stop`) goes to the Session Monitor instead of
+          // A Stop that this window handed off (its pending operation `stop`) goes to the Monitor instead of
           // the release.
           stop: {
             handedOff: async (devspace) => isHandedOffStop(await sessionFiles.readOperation(devspace.id), sessionCoordinator.windowId),
@@ -450,7 +450,7 @@ async function activateExtension(
   context.subscriptions.push(sessionCoordinator);
   // The flows that run in the worker of the current engine (the worker is the deputy of this computer), with the
   // HostSide of this computer answering their requests; one for the service (also the token removal of the controller)
-  // and the calls to the Session Monitor. The containers that this window remembers, for its pipeline and its worker.
+  // and the calls to the Monitor. The containers that this window remembers, for its pipeline and its worker.
   const lifecycleMemory = windowLifecycleMemory();
   const workerFlow = extensionFlow(
     channels,
@@ -502,14 +502,14 @@ async function activateExtension(
     logger,
     clock: systemClock,
     owner: { windowId: sessionCoordinator.windowId, pid: process.pid },
-    // The id of this computer in the Session Monitor, for the `forget` of Delete in the worker.
+    // The id of this computer in the Monitor, for the `forget` of Delete in the worker.
     monitorSource: computerId,
     settings: getSettings,
     windowStatuses: () => sessionFiles.readWindowStatuses(),
     // New devspaces record the Docker host; only its devspaces are used. An endpoint that is neither local nor
     // SSH is refused by every operation and never read.
     dockerTarget: () => targets.current(),
-    // The settings that an open carries for the Session Monitor of its engine (the worker makes sure that the monitor
+    // The settings that an open carries for the Monitor of its engine (the worker makes sure that the monitor
     // runs, and sends its first heartbeat). The Docker host of the open is empty for the local Docker and names the SSH
     // host otherwise. The image references in use come with it from the registry
     // (DevspaceOperations.referencesInUse); there is no image list.
@@ -635,7 +635,7 @@ async function activateExtension(
         if (view.visible) await sidebar.refreshStates();
       },
     }),
-    // Close and Keep Running tells the Session Monitor at once, on every engine, and Keep Running When Closed and Stop
+    // Close and Keep Running tells the Monitor at once, on every engine, and Keep Running When Closed and Stop
     // When Closed too, through this window's worker of the engine.
     sessionMonitor: {
       sendHeartbeat: (devspaceId) => windowHeartbeats.sendFor(devspaceId),

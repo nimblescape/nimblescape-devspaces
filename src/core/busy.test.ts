@@ -144,7 +144,7 @@ describe('otherWindowUsesDevspace', () => {
     expect(uses([], [pending({ devspaceId: 'env-2' })])).toBeUndefined();
   });
 
-  it('shares the limits of the Session Monitor', () => {
+  it('shares the limits of the Monitor', () => {
     expect(HEARTBEAT_MAX_AGE_MS).toBe(60_000);
     expect(PENDING_MAX_AGE_MS).toBe(120_000);
   });

@@ -144,7 +144,7 @@ describe('monitor.js heartbeat', () => {
     expect(fs.readdirSync(heartbeatDir(stateDir)).filter((name) => name.startsWith('.'))).toEqual([]);
   });
 
-  // A heartbeat of the Session Monitor that read the registry before Close and Keep Running set the flag reaches the
+  // A heartbeat of the Monitor that read the registry before Close and Keep Running set the flag reaches the
   // host after the window's heartbeat. The newer choice stays.
   it('ignores an entry with a lower seq than the record of the same source: the race of Close and Keep Running', async () => {
     const monitorSnapshotAt = T0 - 3000;
@@ -203,7 +203,7 @@ describe('monitor.js heartbeat', () => {
   it("a shared engine: the keep of computer A survives the full sync of computer B", async () => {
     // A kept the devspace and went offline long ago.
     writeRecord(OTHER, A, { at: T0 - 5 * 24 * 60 * MINUTE, keepRunning: true, limitSeconds: 600, seq: 1 });
-    // B starts its Session Monitor: the full sync names the devspace clear-only.
+    // B starts its Monitor: the full sync names the devspace clear-only.
     await run(['heartbeat', JSON.stringify({ source: SOURCE, limitSeconds: 600, devspaces: [{ id: A, keepRunning: false, seq: T0, clearOnly: true }] })]);
     expect(recordFiles()).toEqual([heartbeatFileName(OTHER, A)]);
     // The remote monitor keeps it.
@@ -1255,7 +1255,7 @@ describe('monitor.js run: the exit when idle', () => {
       },
       out: (text) => {
         out += text;
-        if (text.includes('Session Monitor exits')) events.push('exit');
+        if (text.includes('Monitor exits')) events.push('exit');
       },
     });
     return { result, out: () => out, events, ticks: () => ticks, mono: () => mono };
@@ -1283,7 +1283,7 @@ describe('monitor.js run: the exit when idle', () => {
     expect(monitor.mono()).toBeGreaterThanOrEqual(10 * MINUTE + REMOTE_IDLE_EXIT_MS);
     expect(monitor.mono()).toBeLessThan(10 * MINUTE + REMOTE_IDLE_EXIT_MS + 2 * REMOTE_TICK_MS);
     // The text names the fresh heartbeats and the mode: a monitor that ends when idle does so with image updates too.
-    expect(monitor.out()).toContain('No devspace container ran and no heartbeat was fresh for 300 s, and it does not run permanently; the Session Monitor exits.');
+    expect(monitor.out()).toContain('No devspace container ran and no heartbeat was fresh for 300 s, and it does not run permanently; the Monitor exits.');
     expect(recordFiles()).toEqual([heartbeatFileName(SOURCE, A)]);
   });
 
@@ -1434,7 +1434,7 @@ describe('monitor.js run: the exit when idle', () => {
       expect(monitor.out()).not.toContain('exits');
       const idle = startRun({ env: { DEVSPACE_MONITOR_IDLE_MS: '1000' }, ps: () => listed() });
       expect(await idle.result).toBe(0);
-      expect(idle.out()).toContain('it does not run permanently; the Session Monitor exits.');
+      expect(idle.out()).toContain('it does not run permanently; the Monitor exits.');
     } finally {
       vi.useRealTimers();
     }
@@ -1470,7 +1470,7 @@ describe('monitor.js run: the exit when idle', () => {
     expect(monitor.out()).not.toContain('exits');
     finishRemoval!();
     expect(await monitor.result).toBe(0);
-    expect(monitor.out().indexOf(`Removed the old record of ${B}`)).toBeLessThan(monitor.out().indexOf('the Session Monitor exits'));
+    expect(monitor.out().indexOf(`Removed the old record of ${B}`)).toBeLessThan(monitor.out().indexOf('the Monitor exits'));
   });
 });
 

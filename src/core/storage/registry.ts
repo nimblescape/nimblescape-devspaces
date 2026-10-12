@@ -51,7 +51,7 @@ export interface RegistryOptions {
 
 const DEFAULT_LOCK_STALE_MS = 10_000;
 const DEFAULT_LOCK_TIMEOUT_MS = 15_000;
-// A mkdir every 20 ms costs little, and a waiting window or the Session Monitor gets the lock soon.
+// A mkdir every 20 ms costs little, and a waiting window or the Monitor gets the lock soon.
 const LOCK_RETRY_MS = 20;
 // On Windows, a lock folder that its last holder is still removing cannot be created again for a moment (EPERM). On
 // macOS and Linux these errors are permanent, so they are thrown after about one second instead of a lock timeout.
@@ -287,7 +287,7 @@ export class DevspaceRegistry {
   }
 
   /**
-   * Marks the devspace as busy, so the Session Monitor does not stop it. Replaces an existing mark. Throws if the
+   * Marks the devspace as busy, so the Monitor does not stop it. Replaces an existing mark. Throws if the
    * devspace does not exist, because the caller relies on the protection.
    */
   async setBusy(id: string, operation: BusyOperation, owner: { windowId: string; pid: number }): Promise<void> {

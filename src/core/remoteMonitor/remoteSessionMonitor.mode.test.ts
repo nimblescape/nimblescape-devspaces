@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The container of the Session Monitor by its mode: a permanent monitor (a remote engine, or a local one with
+// The container of the Monitor by its mode: a permanent monitor (a remote engine, or a local one with
 // stopLocalMonitorWhenIdle off) has the restart policy `unless-stopped` and its part of the label, one that ends when
 // idle `on-failure`; both have the default network and the shared VS Code server store of the worker. A change of the
 // mode replaces the container, except that an ensure of a monitor that ends when idle takes a running permanent one of
@@ -64,7 +64,7 @@ function monitorOf(engine: MonitorEngine, permanent: boolean | undefined, store?
   });
 }
 
-describe('the container of the Session Monitor by its mode', () => {
+describe('the container of the Monitor by its mode', () => {
   it('a permanent monitor: unless-stopped, its variable, its label part; one that ends when idle: on-failure, neither', () => {
     const { engine } = fakeEngine([{ exists: false }]);
     const permanent = monitorOf(engine, true).runSpec(TAG, SOCKET, PERMANENT, SCRIPT, { ...IMAGES, permanent: true });
@@ -92,10 +92,10 @@ describe('the container of the Session Monitor by its mode', () => {
   it('mounts the store of the worker read-write at /vscode and names it; without one, no store', () => {
     const { engine } = fakeEngine([{ exists: false }]);
     const spec = monitorOf(engine, false, 'devspace-test-vscode').runSpec(TAG, SOCKET, IDLE, SCRIPT, IMAGES);
-    expect(spec.mounts).toEqual({ socket: SOCKET, volume: 'devspace-session-monitor', volumeTarget: '/state', store: { volume: 'devspace-test-vscode', target: '/vscode' } });
+    expect(spec.mounts).toEqual({ socket: SOCKET, volume: 'devspace-monitor', volumeTarget: '/state', store: { volume: 'devspace-test-vscode', target: '/vscode' } });
     expect(spec.env.DEVSPACE_VSCODE_STORE).toBe('devspace-test-vscode');
     const without = monitorOf(engine, false).runSpec(TAG, SOCKET, IDLE, SCRIPT, IMAGES);
-    expect(without.mounts).toEqual({ socket: SOCKET, volume: 'devspace-session-monitor', volumeTarget: '/state' });
+    expect(without.mounts).toEqual({ socket: SOCKET, volume: 'devspace-monitor', volumeTarget: '/state' });
     expect(without.env).not.toHaveProperty('DEVSPACE_VSCODE_STORE');
   });
 
@@ -106,7 +106,7 @@ describe('the container of the Session Monitor by its mode', () => {
     ] as const) {
       const { engine, specs } = fakeEngine([{ exists: false }]);
       expect(await monitorOf(engine, permanent).ensureOrThrow(TAG, SOCKET)).toBe('created');
-      expect(specs[0].labels['nimblescape.devspace.session-monitor']).toBe(label);
+      expect(specs[0].labels['nimblescape.devspace.monitor']).toBe(label);
       expect(specs[0].restartPolicy).toBe(permanent ? 'unless-stopped' : 'on-failure');
     }
   });
@@ -152,7 +152,7 @@ describe('the change of the mode at the next ensure', () => {
   });
 
   it('a name conflict of the create: a running permanent monitor of another window counts as current for one that ends when idle', async () => {
-    const conflict: MonitorCreated = { kind: 'exited', detail: 'Conflict. The container name "/devspace-session-monitor" is already in use', conflict: true };
+    const conflict: MonitorCreated = { kind: 'exited', detail: 'Conflict. The container name "/devspace-monitor" is already in use', conflict: true };
     const { engine, calls } = fakeEngine([{ exists: false }, running(REMOTE)], [conflict]);
     expect(await monitorOf(engine, false).ensureOrThrow(TAG, SOCKET)).toBe('running');
     expect(calls).toEqual(['inspect', 'create', 'inspect']);
@@ -173,7 +173,7 @@ describe('why a monitor is permanent', () => {
     ] as const) {
       const { engine, specs } = fakeEngine([{ exists: false }]);
       expect(await monitorOf(engine, true, undefined, remote).ensureOrThrow(TAG, SOCKET)).toBe('created');
-      expect(specs[0].labels['nimblescape.devspace.session-monitor']).toBe(label);
+      expect(specs[0].labels['nimblescape.devspace.monitor']).toBe(label);
       expect(specs[0].restartPolicy).toBe('unless-stopped');
     }
   });
@@ -183,7 +183,7 @@ describe('why a monitor is permanent', () => {
     expect(await monitorOf(engine, false).ensureOrThrow(TAG, SOCKET)).toBe('created');
     expect(calls).toEqual(['inspect', `remove ${ID}`, 'create']);
     expect(specs[0].restartPolicy).toBe('on-failure');
-    expect(specs[0].labels['nimblescape.devspace.session-monitor']).toBe(IDLE);
+    expect(specs[0].labels['nimblescape.devspace.monitor']).toBe(IDLE);
   });
 
   it('a remote ensure keeps a running `permanent-local` monitor; a local one with the setting off keeps a running `permanent-remote` one', async () => {
@@ -200,7 +200,7 @@ describe('why a monitor is permanent', () => {
       const { engine, calls, specs } = fakeEngine([found]);
       expect(await monitorOf(engine, true, undefined, true).ensureOrThrow(TAG, SOCKET)).toBe('created');
       expect(calls).toEqual(['inspect', `remove ${ID}`, 'create']);
-      expect(specs[0].labels['nimblescape.devspace.session-monitor']).toBe(REMOTE);
+      expect(specs[0].labels['nimblescape.devspace.monitor']).toBe(REMOTE);
     }
   });
 });
@@ -218,7 +218,7 @@ describe('the store in the label of the monitor', () => {
   it('an ensure with the store replaces a running monitor created without it (and the other way round); the same one stays', async () => {
     const without = fakeEngine([running(REMOTE)]);
     expect(await monitorOf(without.engine, true, 'devspace-vscode', true).ensureOrThrow(TAG, SOCKET)).toBe('created');
-    expect(without.specs[0].labels['nimblescape.devspace.session-monitor']).toBe(WITH_STORE);
+    expect(without.specs[0].labels['nimblescape.devspace.monitor']).toBe(WITH_STORE);
     expect(without.specs[0].mounts.store).toEqual({ volume: 'devspace-vscode', target: '/vscode' });
     const withStore = fakeEngine([running(WITH_STORE)]);
     expect(await monitorOf(withStore.engine, true, undefined, true).ensureOrThrow(TAG, SOCKET)).toBe('created');

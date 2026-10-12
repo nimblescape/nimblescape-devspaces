@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The pure session helpers that the window needs (its heartbeats to the Session Monitor container of each engine, Close
+// The pure session helpers that the window needs (its heartbeats to the Monitor container of each engine, Close
 // and Keep Running, the checks of other windows). No `vscode`, no I/O but `process.kill(pid, 0)`.
 import { DEFAULT_REMOTE_STOP_AFTER_SECONDS, clampLimitSeconds } from '../remoteMonitor/protocol';
 
@@ -24,7 +24,7 @@ export function isProcessAlive(pid: number): boolean {
 }
 
 /**
- * The time limit of the heartbeats to the Session Monitor container, in seconds, from the setting stopAfterMinutes (on
+ * The time limit of the heartbeats to the Monitor container, in seconds, from the setting stopAfterMinutes (on
  * every engine). Clamped to one minute..one day as the protocol allows (the setting itself is 5..1440 minutes); a
  * missing or invalid value gives 10 minutes.
  */
@@ -49,7 +49,7 @@ export interface KeepSettings {
 
 /**
  * The keep-running flag of a heartbeat for a devspace. True when it is never stopped when closed (Keep Running When
- * Closed, Close and Keep Running, stopOnClose off, a respected `"shutdownAction": "none"`), so the Session Monitor
+ * Closed, Close and Keep Running, stopOnClose off, a respected `"shutdownAction": "none"`), so the Monitor
  * container does not stop it either when this computer goes offline.
  */
 export function keptWhenClosed(devspace: KeepFlags, settings: KeepSettings): boolean {

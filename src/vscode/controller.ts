@@ -141,7 +141,7 @@ export interface ControllerDeps {
   /** "Use a Remote Docker Host…", "Use the Local Docker", and the switch back of a restored window. */
   remoteDocker?: Pick<RemoteDockerCommands, 'useRemoteHost' | 'useLocalDocker' | 'chooseDockerHost' | 'askAgain' | 'offerSwitchBack'>;
   /**
-   * One heartbeat with the current keep-running flag of a devspace to the Session Monitor container of its engine
+   * One heartbeat with the current keep-running flag of a devspace to the Monitor container of its engine
    * (Close and Keep Running, Keep Running When Closed, Stop When Closed), on every engine, through this window's worker
    * (WindowHeartbeats.sendFor; its `seq` is the time before it reads the flags, so it is later than the change in the
    * registry). Without it, Close and Keep Running refuses.
@@ -149,14 +149,14 @@ export interface ControllerDeps {
   sessionMonitor?: {
     sendHeartbeat(devspaceId: string): Promise<{ ok: true } | { ok: false; detail: string }>;
     /**
-     * The stopNow heartbeat of a manual Stop to the Session Monitor of the devspace's engine
+     * The stopNow heartbeat of a manual Stop to the Monitor of the devspace's engine
      * (WindowHeartbeats.sendStop, within its short bound), so the engine stops the devspace itself whatever happens
      * to VS Code. Never throws.
      */
     sendStop(devspaceId: string): Promise<{ ok: true } | { ok: false; detail: string }>;
   };
   /**
-   * "Update All Images Now": the Session Monitor of the engine `target` made sure and asked for its background run at
+   * "Update All Images Now": the Monitor of the engine `target` made sure and asked for its background run at
    * once (workerMonitor's monitorRunNow, with the monitor settings of this computer). Resolves when the monitor took
    * the request. Without it, the command does nothing.
    */
@@ -698,7 +698,7 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Keep Running When Closed (`keep`) and Stop When Closed: writes the switch `keepRunning` of the devspace into the
-   * registry (under its lock) and renders the sidebar. The Session Monitor never stops a kept devspace; Stop and
+   * registry (under its lock) and renders the sidebar. The Monitor never stops a kept devspace; Stop and
    * Delete still do, and Stop keeps the switch. Nothing is started or stopped here: a kept devspace whose container
    * is stopped stays stopped, and one that is not kept any more stops after the waiting time once no window uses it.
    */
@@ -718,12 +718,12 @@ export class Controller implements vscode.Disposable {
     }
     this.logger.info(keep ? `${repository} keeps running when no window uses it.` : `${repository} stops when no window uses it.`);
     await this.renderQuietly();
-    // The Session Monitor of the engine learns the choice at once, on every engine (it keeps or stops the container
+    // The Monitor of the engine learns the choice at once, on every engine (it keeps or stops the container
     // when no window sends heartbeats). The choice stays stored when it fails; a window that uses the devspace tells
     // it at its next heartbeat.
     const sent = (await this.deps.sessionMonitor?.sendHeartbeat(devspace.id)) ?? { ok: true as const };
     if (!sent.ok) {
-      this.logger.warn(`The Session Monitor could not be told that ${repository} ${keep ? 'keeps running' : 'stops'} when closed: ${sent.detail}`);
+      this.logger.warn(`The Monitor could not be told that ${repository} ${keep ? 'keeps running' : 'stops'} when closed: ${sent.detail}`);
       this.warn(ControllerTexts.keepRunningNotSent(repository));
       return;
     }
@@ -735,7 +735,7 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Close and Keep Running: closes this window, and the container of its devspace keeps running this time. It sets
-   * `keepRunningOnce` in the registry (under its lock), which the Session Monitor treats like Keep Running When Closed
+   * `keepRunningOnce` in the registry (under its lock), which the Monitor treats like Keep Running When Closed
    * until a window connects again, or Stop or Delete. One heartbeat with the keep-running flag goes to the Session
    * Monitor container of its engine first (on every engine), so that it keeps the container also when this computer
    * goes offline; when it fails, the flag is cleared again, an error says so, and the window stays open. The flag stays
@@ -767,10 +767,10 @@ export class Controller implements vscode.Disposable {
     }
     const sent = (await this.deps.sessionMonitor?.sendHeartbeat(devspace.id)) ?? {
       ok: false as const,
-      detail: 'The Session Monitor is not available in this window.',
+      detail: 'The Monitor is not available in this window.',
     };
     if (!sent.ok) {
-      this.logger.warn(`Close and Keep Running: the heartbeat to the Session Monitor on ${host === '' ? 'the local Docker' : host} failed: ${sent.detail}`);
+      this.logger.warn(`Close and Keep Running: the heartbeat to the Monitor on ${host === '' ? 'the local Docker' : host} failed: ${sent.detail}`);
       await this.clearKeepRunningOnce(devspace.id);
       const minutes = Math.round(stopAfterSeconds(this.deps.settings().stopAfterMinutes) / 60);
       vscode.window
@@ -966,7 +966,7 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * "Update All Images Now": the Session Monitor of the Docker engine of this operation (the sidebar's) is made sure
+   * "Update All Images Now": the Monitor of the Docker engine of this operation (the sidebar's) is made sure
    * and asked for its background run at once (the images in use, the VS Code server and the extensions), with a
    * progress until it took the request; then a message. The run itself is not waited for (it can take long); the
    * monitor never runs two at once. A failure is shown by the command (registerCommands).
@@ -978,7 +978,7 @@ export class Controller implements vscode.Disposable {
     const target: DockerTarget = this.deps.dockerTargets ? await this.deps.dockerTargets.current() : { kind: 'local', host: '', endpoint: '' };
     const engine = describeDockerHost(target.host);
     await runWithProgress({ title: ControllerTexts.requestingImageUpdate(engine), task: (_progress, signal) => update(target, signal) });
-    this.logger.info(`The Session Monitor on ${engine} took the request of "Update All Images Now".`);
+    this.logger.info(`The Monitor on ${engine} took the request of "Update All Images Now".`);
     this.inform(ControllerTexts.imagesUpdatingNow(engine));
   }
 
@@ -1348,7 +1348,7 @@ export class Controller implements vscode.Disposable {
     if (!isAvailableTo(entry, account)) {
       const repository = this.displayName({ repository: result.devspace.repository });
       this.logger.info(`${repository} is not connected: the GitHub account changed while it opened.`);
-      // No window connects: the Session Monitor container stops it when the heartbeats of the open end (their long
+      // No window connects: the Monitor container stops it when the heartbeats of the open end (their long
       // limit).
       await this.deps.sessionFiles
         .removePending(result.devspace.id)
@@ -1385,7 +1385,7 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Stops the container: every Stop runs here, one of no window and the one that a connected window hands off (its
-   * reloaded empty window). First the Session Monitor of the engine is told to stop it (stopThroughMonitor), so the
+   * reloaded empty window). First the Monitor of the engine is told to stop it (stopThroughMonitor), so the
    * Stop is not lost when VS Code quits before this stop reaches Docker; then this window's own stop with its progress
    * (usually faster), and "<owner/name> stopped." at its end. The reopen record of the devspace goes (forgetReopen).
    */
@@ -1415,10 +1415,10 @@ export class Controller implements vscode.Disposable {
       if (dockerHostOf(devspace) !== (await this.currentDockerHost())) return;
       if ((await this.otherWindowMark(devspace.id)) !== undefined) return;
       const sent = await monitor.sendStop(devspace.id);
-      if (sent.ok) this.logger.info(`The Session Monitor of the engine of ${repository} was told to stop it: it stops the devspace also if VS Code quits first.`);
-      else this.logger.warn(`The Session Monitor could not be told to stop ${repository}; this window stops it: ${sent.detail}`);
+      if (sent.ok) this.logger.info(`The Monitor of the engine of ${repository} was told to stop it: it stops the devspace also if VS Code quits first.`);
+      else this.logger.warn(`The Monitor could not be told to stop ${repository}; this window stops it: ${sent.detail}`);
     } catch (error) {
-      this.logger.warn(`The Session Monitor could not be told to stop ${repository}; this window stops it: ${errorMessage(error)}`);
+      this.logger.warn(`The Monitor could not be told to stop ${repository}; this window stops it: ${errorMessage(error)}`);
     }
   }
 
@@ -1476,7 +1476,7 @@ export class Controller implements vscode.Disposable {
           cancellable: true,
           task: async (progress, signal) => {
             // The window is not connected to this devspace, so it does not connect (the container runs until the
-            // Session Monitor stops it).
+            // Monitor stops it).
             await this.deps.service.openDevspaceInWorker(devspace.id, {
               progress,
               signal,
@@ -1534,7 +1534,7 @@ export class Controller implements vscode.Disposable {
   /**
    * Before the connection closes: another live window must not be changing the devspace (an update, rebuild, or
    * delete). Its mark would otherwise be replaced, and the reloaded window would run a second operation on the same
-   * devspace. With `operation`, sets this window's busy mark, so that the Session Monitor does not stop the
+   * devspace. With `operation`, sets this window's busy mark, so that the Monitor does not stop the
    * container before the reloaded window takes over.
    */
   private async prepareHandOff(
@@ -1883,7 +1883,7 @@ export class Controller implements vscode.Disposable {
 
   /**
    * The window leaves its devspace: no devspace in its status file (the coordinator sends its short release, and
-   * the Session Monitor container stops it after the waiting time unless it is kept), the status bar, then "Close
+   * the Monitor container stops it after the waiting time unless it is kept), the status bar, then "Close
    * Remote Connection", with `message` for the user. With `left` (a devspace that the window must not use), the
    * window does not rely on the close: VS Code lets the user keep the connection (Cancel in the dialog about unsaved
    * files). The token of the owner account leaves the container at once when the account is the reason, and
@@ -2027,7 +2027,7 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Sign-in, sign-out, or account change: a window connected to a devspace that the new account may not use closes
-   * its remote connection at once. The Session Monitor container stops it after the waiting time (the release of the
+   * its remote connection at once. The Monitor container stops it after the waiting time (the release of the
    * window). A window that has left such a devspace but kept its connection reloads when the owner account signs in
    * again.
    */

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
-// Mutation probes of src/remoteMonitor/engine.ts: the socket of the engine of the Session Monitor container and the
+// Mutation probes of src/remoteMonitor/engine.ts: the socket of the engine of the Monitor container and the
 // reason of a failed call in the log. The comment of each test names the mutants that fail it.
 import { describe, expect, it, vi } from 'vitest';
 import { HELPER_DOCKER_SOCKET } from '../core/names';
@@ -19,7 +19,7 @@ vi.mock('../helperChannel/engineApi', async (original) => {
   };
 });
 
-describe('the engine of the Session Monitor', () => {
+describe('the engine of the Monitor', () => {
   // Fails on the API on another socket and on the hijacked connection of an exec on another socket: the monitor talks
   // to the engine of its container at /var/run/docker.sock only. An argument left out takes the default socket of the
   // port, which is the same one (so `engineApi()` without the argument is equivalent and passes here).

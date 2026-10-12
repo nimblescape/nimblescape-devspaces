@@ -61,7 +61,7 @@ export class StoragePaths {
   readonly helperState: string;
   /** Remote Docker hosts: the context before the switch, and the rootless sockets (RemoteDockerState). */
   readonly remoteDocker: string;
-  /** The random id of this installation for the heartbeats to the Session Monitor on a remote host. */
+  /** The random id of this installation for the heartbeats to the Monitor on a remote host. */
   readonly computerId: string;
   /** The remembered check results of the configurations, `<devspace-id>.json` (configChecks.ts). */
   readonly configChecksDir: string;

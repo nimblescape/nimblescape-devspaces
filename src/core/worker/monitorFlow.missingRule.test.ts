@@ -19,14 +19,14 @@ function failingExec(error: unknown): DockerEngine {
   return { ...unusedEngine(), exec: async () => Promise.reject(error) };
 }
 
-describe('the rule of `missing` per command of the Session Monitor', () => {
+describe('the rule of `missing` per command of the Monitor', () => {
   it("Delete's forget: a 409 \"is restarting\" is a failed removal that Delete logs, not a missing monitor", async () => {
     const error = new EngineError(`Container ${ID} is restarting, wait until the container is running`, 409);
     expect(await forgetRecord(failingExec(error), SOURCE, 'env')).toEqual({ ok: false, missing: false, detail: error.message });
     const lines: string[] = [];
     const logger = { ...silentLogger, warn: (text: string) => lines.push(text) } as Logger;
     await workerSessionMonitor(failingExec(error), SOURCE, logger).forget('env');
-    expect(lines).toEqual([`The heartbeat record of env could not be removed from the Session Monitor: ${error.message}`]);
+    expect(lines).toEqual([`The heartbeat record of env could not be removed from the Monitor: ${error.message}`]);
   });
 
   it('the image settings and the image list keep the one rule: a 404 "No such exec instance" is a failure, not a missing monitor', async () => {

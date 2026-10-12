@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The part "extensions" of the Session Monitor's background run (BackgroundRun of background.ts, after the part of the
+// The part "extensions" of the Monitor's background run (BackgroundRun of background.ts, after the part of the
 // server) and its share of the daily cleanup of the store. The part takes the union of the extension lists that the
 // opens recorded in the last 14 days, asks the Marketplace (one query for the newest versions of the entries without a
 // pin; queries of at most MARKETPLACE_ALL_VERSIONS_CHUNK IDs for all versions of the pinned ones and of those whose

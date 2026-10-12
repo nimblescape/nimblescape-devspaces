@@ -17,6 +17,6 @@ describe('engineMonitor: the ID of an inspect and a null answer', () => {
 
   it('an inspect answer of null fails the inspect', async () => {
     const monitor = engineMonitor({ ...unusedEngine(), inspect: async () => null });
-    await expect(monitor.inspect('devspace-session-monitor')).rejects.toThrow(/^docker container inspect failed: /);
+    await expect(monitor.inspect('devspace-monitor')).rejects.toThrow(/^docker container inspect failed: /);
   });
 });

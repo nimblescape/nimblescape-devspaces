@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Mutation probes of the part "extensions" of the Session Monitor's background run and of its cleanup, with a store in
+// Mutation probes of the part "extensions" of the Monitor's background run and of its cleanup, with a store in
 // a temporary folder, a fake Marketplace and fake downloads: the time limits of the read of the architecture and of a
 // query; the size cap of an answer; an answer that is not HTTP 200; a failed first query does not end the part; only
 // ready servers of a commit name with a valid product.json count; the failures of entries no list wants any more go; a

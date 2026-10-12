@@ -2,10 +2,10 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The engine of the ensure of the Session Monitor over the port of the worker's engine (engineMonitor): how it reads
+// The engine of the ensure of the Monitor over the port of the worker's engine (engineMonitor): how it reads
 // the answers of the Engine API as the ensure needs them.
 import { describe, expect, it, vi } from 'vitest';
-import { LABEL_SESSION_MONITOR, REMOTE_MONITOR_SCRIPT_PATH } from '../remoteMonitor/protocol';
+import { LABEL_MONITOR, REMOTE_MONITOR_SCRIPT_PATH } from '../remoteMonitor/protocol';
 import { EngineError, type DockerEngine, type EngineExecResult } from './dockerEngine';
 import { unusedEngine } from './dockerEngine.testkit';
 import { engineMonitor, limited, monitorInspected } from './engineMonitor';
@@ -16,7 +16,7 @@ const INSPECT = {
   Created: '2026-10-04T12:00:00.5Z',
   RestartCount: 2,
   State: { Status: 'exited', ExitCode: 3 },
-  Config: { Labels: { [LABEL_SESSION_MONITOR]: 'label-1', other: 'x' } },
+  Config: { Labels: { [LABEL_MONITOR]: 'label-1', other: 'x' } },
 };
 const abortError = () => Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
 const result = (exitCode: number | null, stdout = '', stderr = '', timedOut = false): EngineExecResult => ({ exitCode, stdout, stderr, timedOut });
@@ -25,7 +25,7 @@ function with_(methods: Partial<DockerEngine>) {
   return engineMonitor({ ...unusedEngine(), ...methods });
 }
 
-describe('the engine of the ensure of the Session Monitor over the Engine API', () => {
+describe('the engine of the ensure of the Monitor over the Engine API', () => {
   it('reads the inspect of the container: status, exit code, label, restarts, ID and creation time; missing when the engine has none', async () => {
     expect(monitorInspected(INSPECT)).toEqual({ exists: true, status: 'exited', exitCode: 3, label: 'label-1', restartCount: 2, id: ID, createdAt: Date.parse('2026-10-04T12:00:00.500Z') });
     expect(monitorInspected(undefined)).toEqual({ exists: false });
@@ -40,8 +40,8 @@ describe('the engine of the ensure of the Session Monitor over the Engine API', 
       createdAt: undefined,
     });
     const inspect = vi.fn(async () => INSPECT as unknown);
-    expect(await with_({ inspect }).inspect('devspace-session-monitor')).toMatchObject({ exists: true, id: ID });
-    expect(inspect).toHaveBeenCalledWith('container', 'devspace-session-monitor', expect.any(AbortSignal));
+    expect(await with_({ inspect }).inspect('devspace-monitor')).toMatchObject({ exists: true, id: ID });
+    expect(inspect).toHaveBeenCalledWith('container', 'devspace-monitor', expect.any(AbortSignal));
   });
 
   it('an inspect that fails rejects with its cause; one past its time limit with "no answer in time"; a cancel passes', async () => {
@@ -81,12 +81,12 @@ describe('the engine of the ensure of the Session Monitor over the Engine API', 
 
   it('the stored script: its hash, definite evidence that there is none, or unknown', async () => {
     const exec = vi.fn(async () => result(0, `${'a'.repeat(64)}  ${REMOTE_MONITOR_SCRIPT_PATH}\n`));
-    expect(await with_({ exec }).storedScript('devspace-session-monitor')).toEqual({ hash: `${'a'.repeat(64)}  ${REMOTE_MONITOR_SCRIPT_PATH}\n` });
-    expect(exec).toHaveBeenCalledWith('devspace-session-monitor', ['sha256sum', REMOTE_MONITOR_SCRIPT_PATH], { timeoutMs: 20_000 });
+    expect(await with_({ exec }).storedScript('devspace-monitor')).toEqual({ hash: `${'a'.repeat(64)}  ${REMOTE_MONITOR_SCRIPT_PATH}\n` });
+    expect(exec).toHaveBeenCalledWith('devspace-monitor', ['sha256sum', REMOTE_MONITOR_SCRIPT_PATH], { timeoutMs: 20_000 });
     const answers: [string, EngineExecResult | Error, unknown][] = [
       ['no stored file', result(1, '', `sha256sum: ${REMOTE_MONITOR_SCRIPT_PATH}: No such file or directory\n`), 'none'],
       ['the runtime refuses an exec in a stopped container', result(126, 'OCI runtime exec failed: exec failed: cannot exec in a stopped container: unknown\r\n'), 'none'],
-      ['the container does not exist', new EngineError('No such container: devspace-session-monitor', 404), 'none'],
+      ['the container does not exist', new EngineError('No such container: devspace-monitor', 404), 'none'],
       ['the container does not run', new EngineError(`Container ${ID} is not running`, 409), 'none'],
       ['the container restarts', new EngineError(`Container ${ID} is restarting, wait until the container is running`, 409), 'none'],
       ['the container is paused', new EngineError(`Container ${ID} is paused, unpause the container before exec`, 409), 'unknown'],
@@ -96,7 +96,7 @@ describe('the engine of the ensure of the Session Monitor over the Engine API', 
     ];
     for (const [what, answer, expected] of answers) {
       const engine = with_({ exec: async () => (answer instanceof Error ? Promise.reject(answer) : answer) });
-      expect(await engine.storedScript('devspace-session-monitor'), what).toEqual(expected);
+      expect(await engine.storedScript('devspace-monitor'), what).toEqual(expected);
     }
     const controller = new AbortController();
     controller.abort();

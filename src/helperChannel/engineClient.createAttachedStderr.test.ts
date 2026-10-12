@@ -14,16 +14,16 @@ import type { MonitorRunSpec } from '../core/worker/dockerEngine';
 import { engineApi, engineHijack } from './engineApi';
 import { dockerEngine } from './engineClient';
 
-const READY = 'Session Monitor started';
+const READY = 'Monitor started';
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
 const SPEC: MonitorRunSpec = {
-  name: 'devspace-session-monitor',
+  name: 'devspace-monitor',
   image: 'sha256:' + 'a'.repeat(64),
-  labels: { 'nimblescape.devspace.session-monitor': 'label' },
+  labels: { 'nimblescape.devspace.monitor': 'label' },
   restartPolicy: 'on-failure',
   network: 'none',
   log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
-  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-session-monitor', volumeTarget: '/state' },
+  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-monitor', volumeTarget: '/state' },
   env: {},
   command: ['node'],
 };

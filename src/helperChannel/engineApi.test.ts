@@ -171,7 +171,7 @@ describe('engineApi over a Unix socket', () => {
     expect(long.body).toHaveLength(MAX_ENGINE_ANSWER_CHARACTERS);
   });
 
-  // A request may name a larger bound (the lists of every container or image of an engine, as the Session Monitor reads
+  // A request may name a larger bound (the lists of every container or image of an engine, as the Monitor reads
   // them, up to MAX_ENGINE_LIST_ANSWER_CHARACTERS, as the 16 MiB buffer of the Docker CLI); every other request keeps
   // MAX_ENGINE_ANSWER_CHARACTERS.
   it('keeps the bound of its request: a list reads past 1 MiB, and is cut at its own bound', async () => {

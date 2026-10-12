@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The open gives the Session Monitor the image references in use of its computer (`monitor.js images -` with `source`
+// The open gives the Monitor the image references in use of its computer (`monitor.js images -` with `source`
 // and `references`), without a list of repositories.
 import { describe, expect, it } from 'vitest';
 import { parseOpenParams } from '../core/helperChannel/protocol';
@@ -25,7 +25,7 @@ function engineOf(exitCode = 0) {
   return { engine, inputs };
 }
 
-describe('the image references in use of an open, to the Session Monitor', () => {
+describe('the image references in use of an open, to the Monitor', () => {
   // The references go without a list.
   it('sends the references of the computer after the settings', async () => {
     const both = engineOf();
@@ -64,7 +64,7 @@ describe('the image references in use of an open, to the Session Monitor', () =>
     const { engine, inputs } = engineOf(2);
     await giveMonitorImages(engine, { images: IMAGES, references: ['node:20'], monitorSource: SOURCE }, logger, new AbortController().signal);
     expect(inputs).toEqual([JSON.stringify(IMAGES), JSON.stringify({ source: SOURCE, references: ['node:20'] })]);
-    expect(warnings).toEqual(['The image settings could not be given to the Session Monitor: Invalid image list.', 'The image references in use could not be given to the Session Monitor: Invalid image list.']);
+    expect(warnings).toEqual(['The image settings could not be given to the Monitor: Invalid image list.', 'The image references in use could not be given to the Monitor: Invalid image list.']);
   });
 
   it('the parameters of the open take valid references only, at most MAX_IMAGE_REFERENCES', () => {

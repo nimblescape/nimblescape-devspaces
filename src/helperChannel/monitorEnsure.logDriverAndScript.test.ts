@@ -23,13 +23,13 @@ vi.mock('./flowOperations', async (original) => {
 });
 
 const SPEC: MonitorRunSpec = {
-  name: 'devspace-session-monitor',
+  name: 'devspace-monitor',
   image: 'sha256:' + 'a'.repeat(64),
   labels: {},
   restartPolicy: 'on-failure',
   network: 'none',
   log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
-  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-session-monitor', volumeTarget: '/state' },
+  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-monitor', volumeTarget: '/state' },
   env: {},
   command: ['node'],
 };

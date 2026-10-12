@@ -22,7 +22,7 @@ The first open of a repository that belongs neither to you nor to one of your or
 | Part | Where it runs | Trust |
 |---|---|---|
 | The extension | The local extension host of each VS Code window (`extensionKind: ui`) | Trusted. It holds the GitHub session, the local records, and the decisions. |
-| The worker, its batch helpers, and the Session Monitor | Containers on the Docker engine | Not trusted by the extension. The engine may be on another computer and shared with other people. |
+| The worker, its batch helpers, and the Monitor | Containers on the Docker engine | Not trusted by the extension. The engine may be on another computer and shared with other people. |
 | The Docker engine | Your computer, or a remote host | Not trusted by the extension. Everyone who can use it controls every container on it. |
 | The dev container | The Docker engine | Not trusted by the worker. It runs the code of the repository. |
 
@@ -32,9 +32,9 @@ The first open of a repository that belongs neither to you nor to one of your or
 - allows each operation only its own kinds of requests; only `open` may ask for a secret;
 - gives a secret only when the operation asks for it: the GitHub token to an open, and the login of one registry host only for the image check or pull that needs it;
 - keeps the remembered result of the host access check of a configuration in its own storage, stamped with the hash of the worker code that computed it; the worker and the engine never store it;
-- uses the Session Monitor's registry answers only to decide whether an update is due, never as an input of a security check.
+- uses the Monitor's registry answers only to decide whether an update is due, never as an input of a security check.
 
-The code that runs in the worker, the batch helpers, and the Session Monitor comes from the extension's own `.vsix` file. The container that loads it checks it against the SHA-256 hash on its command line before it runs it (see [architecture.md](architecture.md#pipe-loading)).
+The code that runs in the worker, the batch helpers, and the Monitor comes from the extension's own `.vsix` file. The container that loads it checks it against the SHA-256 hash on its command line before it runs it (see [architecture.md](architecture.md#pipe-loading)).
 
 **Worker and dev container.** The worker writes into a dev container only through the scripts of its registry, with the arguments as positional parameters and secrets only on standard input. These scripts follow no symbolic link that they did not create, and overwrite nothing that they did not write: a process in the dev container can plant links at any time. The batch helper that works on the volume of a devspace runs as root, but:
 
@@ -68,7 +68,7 @@ The checks are on for every repository by default. The user setting `devspace.ho
 - Everything of another devspace: its workspace volume, a volume that a devspace of another GitHub account uses or that its Delete kept, its named networks, and the images of the devspaces of other accounts (by image ID, not by name).
 - The processes of other containers, and their volumes through `--volumes-from` or `volumes_from`, also of the dev container for the other services of Docker Compose.
 - The folders of Devspaces as paths of the configuration (a mount, a build context, or a Dockerfile): the token folder `/run/devspace` (also as `/var/run/devspace`), the configuration folder `/workspaces/.devspace+`, and the folders of the helper with the Docker socket and the token. A mount propagation that shares `/`, `/run`, or `/var/run` with the host is refused too.
-- The cache volume of the helper and the volumes of Devspaces (`devspace-session-monitor`, `devspace-vscode`).
+- The cache volume of the helper and the volumes of Devspaces (`devspace-monitor`, `devspace-vscode`).
 - The variables that set the Git configuration (`GIT_CONFIG`, `GIT_CONFIG_*`) or that Devspaces sets (`GIT_SSH_COMMAND`, `DOCKER_CONFIG`, `GH_CONFIG_DIR`), and the token and host variables of the GitHub CLI (`GH_TOKEN`, `GITHUB_TOKEN`, `GH_ENTERPRISE_TOKEN`, `GITHUB_ENTERPRISE_TOKEN`, `GH_HOST`), in `runArgs`, `containerEnv`, and `remoteEnv`, also when a Feature or the base image sets them.
 - `initializeCommand`: it would run in the helper, which has the Docker socket.
 - Labels with the prefixes `nimblescape.devspace.` and `devcontainer.` (except `devcontainer.metadata`), and the labels of Docker Compose. Such a label could hide a container from Devspaces or make it look like another devspace.
@@ -103,7 +103,7 @@ Devspaces signs in with the GitHub authentication of VS Code, with the scopes `r
 - Devspaces writes the token at each open from a window, after the container runs and before the lifecycle commands, so that they can use Git and the GitHub CLI as the owner account. The write runs as root through `docker exec` with the token on standard input. It first checks that `/run/devspace` is exactly the tmpfs that Devspaces created, with no other mount at or below it and no propagation to the host; otherwise it writes nothing, and the open says that Git could not be prepared.
 - The token is never in the workspace volume, a kept volume, or an export. It is gone when the container stops. Like other memory, the kernel may swap it to the swap space of the host or of the Docker VM.
 - When a window leaves a devspace because you signed out or another account signed in, Devspaces removes the token from every running dev container of that devspace at once. Otherwise it stays in the running container until the container stops or the next open replaces it. A sign-out in VS Code may not make the token invalid on GitHub; to do that, revoke the access of VS Code in the GitHub settings (Applications).
-- A container that starts without an open from a window (a restart by Docker, `docker start`) has no token until the next open. The Session Monitor never writes the token.
+- A container that starts without an open from a window (a restart by Docker, `docker start`) has no token until the next open. The Monitor never writes the token.
 
 **Who can read it.** While the container runs, every process in it that runs as its user or as root can read the token, and so can everyone who can use the Docker engine (`docker exec`), on your computer or on a remote host.
 
@@ -129,8 +129,8 @@ The Dev Containers extension and the VS Code server expect their own values in t
 ## Registry access
 
 - **At an open**, the image check and the pulls run in the worker, on the Docker engine. For a registry that needs a login, the worker asks the extension for that one host's login: the credentials that Docker stored on your computer (the `docker-credential-*` helpers run on your computer), or for `ghcr.io` without such a login, the GitHub session with `read:packages`. The worker holds the login only for that check or pull, then forgets it, and asks again for the next one. It sends the login only in the header of its request to that registry, never into a file.
-- **In the background**, the Session Monitor and its prepares use no token and no credentials at all. They pull and ask registries anonymously. A private image or Feature is therefore not updated or prepared in the background; its next open checks and builds it with your credentials.
-- The worker and the Session Monitor reach the internet through the proxy of the Docker daemon (`HTTPProxy`, `HTTPSProxy`, `NoProxy` of `docker info`), never through the proxy settings of your computer or of VS Code.
+- **In the background**, the Monitor and its prepares use no token and no credentials at all. They pull and ask registries anonymously. A private image or Feature is therefore not updated or prepared in the background; its next open checks and builds it with your credentials.
+- The worker and the Monitor reach the internet through the proxy of the Docker daemon (`HTTPProxy`, `HTTPSProxy`, `NoProxy` of `docker info`), never through the proxy settings of your computer or of VS Code.
 - The image check asks for the digest of a tag with an HTTP `HEAD` request, which does not count against the pull limit of Docker Hub. An image is pulled only when its digest changed.
 
 ## Accounts
@@ -198,5 +198,5 @@ The socket that answers credential requests stays open, and a program in the con
 ## Stored data
 
 - The repository lists (one per GitHub account) and the registry of devspaces in the global storage of the extension hold metadata only: repository names, URLs, dates, volume and image names, image digests, branch names, numbers of changes, and the user ID and login of the account of each devspace.
-- The volume of the Session Monitor on each engine holds heartbeat records, locks, the image references in use, registry answers, and the extension lists of recent opens. It holds no secret, and no dev container mounts it.
+- The volume of the Monitor on each engine holds heartbeat records, locks, the image references in use, registry answers, and the extension lists of recent opens. It holds no secret, and no dev container mounts it.
 - Devspaces collects no telemetry.

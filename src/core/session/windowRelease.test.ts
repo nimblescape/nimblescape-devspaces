@@ -341,7 +341,7 @@ describe('releaseDevspace of a handed-off Stop', () => {
     const h = withStop(devspace(flags));
     expect(await releaseDevspace(h.deps, ID_A, BOUNDS)).toBe('stopSent');
     expect(h.events).toEqual([`stop ${ID_A}`, `git ${ID_A}`]);
-    expect(h.logs.some((line) => line.includes('The Stop of acme/api was sent to the Session Monitor'))).toBe(true);
+    expect(h.logs.some((line) => line.includes('The Stop of acme/api was sent to the Monitor'))).toBe(true);
   });
 
   it('also while another window of this computer shows the devspace (the Stop stops it there too)', async () => {
@@ -357,7 +357,7 @@ describe('releaseDevspace of a handed-off Stop', () => {
     h.stop.answer = async () => ({ ok: false, detail: 'Invalid heartbeat.' });
     expect(await releaseDevspace(h.deps, ID_A, BOUNDS)).toBe('released');
     expect(h.events).toEqual([`stop ${ID_A}`, `git ${ID_A}`, `release ${ID_A}`]);
-    expect(h.logs.some((line) => line.includes('could not be sent to the Session Monitor') && line.includes('Invalid heartbeat.'))).toBe(true);
+    expect(h.logs.some((line) => line.includes('could not be sent to the Monitor') && line.includes('Invalid heartbeat.'))).toBe(true);
   });
 
   it('a window without a handed-off Stop, or one that cannot tell, releases as before', async () => {

@@ -4,7 +4,7 @@
 
 // The one registry of the scripts that run in a container, and the one primitive that runs them. Every command of the
 // pipeline in a container is an entry, run by the same primitive over the exec that the caller has (DockerEngine or
-// DevspaceDocker), and no call site builds one. The commands of the Session Monitor container are entries too, and
+// DevspaceDocker), and no call site builds one. The commands of the Monitor container are entries too, and
 // only the entries that read a plain input get one.
 import * as fs from 'fs';
 import * as path from 'path';
@@ -53,7 +53,7 @@ describe('the registry of the scripts that run in a container', () => {
   it('names the scripts that the flows run, each with the text that is written and reviewed where it belongs', () => {
     // No `configOwnershipFix` (it runs only in the batch helper, whose image has GNU find for its `-execdir`; never in
     // the dev container). Every command of the pipeline in a container is an entry (branch, check, gitVersion, groupId,
-    // mountInfo, monitorScriptHash, userId). The commands of the Session Monitor are entries too (monitorForget,
+    // mountInfo, monitorScriptHash, userId). The commands of the Monitor are entries too (monitorForget,
     // monitorHeartbeat, monitorImages, monitorSettings, and monitorRunNow for "Update All Images Now"). In the dev
     // container: the link of the shared VS Code server (vscodeServerLink), the seed of the shared extension cache
     // (vscodeExtensionSeed), and the check whether the container has the server of the window (vscodeServerPresent).
@@ -200,7 +200,7 @@ describe('every command of the pipeline in a container is an entry of the regist
 /** The lock of the records as underRecordsLock of src/core/remoteMonitor/protocol.ts puts it before a command. */
 const RECORDS_LOCK = ['flock', '-w', '5', '-E', '75', '/state/.heartbeats.lock', 'timeout', '-s', 'KILL', '10'];
 
-describe('the commands of the Session Monitor are entries of the registry', () => {
+describe('the commands of the Monitor are entries of the registry', () => {
   const SOURCE = '0123456789abcdef0123456789abcdef';
   const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
   const HEARTBEAT = { source: SOURCE, limitSeconds: 600, devspaces: [{ id: ID, keepRunning: true, seq: 5 }] };
@@ -223,11 +223,11 @@ describe('the commands of the Session Monitor are entries of the registry', () =
     expect(plain.sort()).toEqual(['monitorImages', 'monitorSettings']);
     const { engine, execs } = fakeEngine();
     const signal = new AbortController().signal;
-    await runScript(engine, 'devspace-session-monitor', 'monitorSettings', [], { input: '{"prefixes":[]}', timeoutMs: 20_000, signal });
-    await runScript(engine, 'devspace-session-monitor', 'monitorImages', [], { input: '{"repositories":[]}' });
+    await runScript(engine, 'devspace-monitor', 'monitorSettings', [], { input: '{"prefixes":[]}', timeoutMs: 20_000, signal });
+    await runScript(engine, 'devspace-monitor', 'monitorImages', [], { input: '{"repositories":[]}' });
     expect(execs).toEqual([
-      { container: 'devspace-session-monitor', command: ['node', REMOTE_MONITOR_SCRIPT_PATH, 'settings', '-'], options: { input: '{"prefixes":[]}', timeoutMs: 20_000, signal } },
-      { container: 'devspace-session-monitor', command: ['node', REMOTE_MONITOR_SCRIPT_PATH, 'images', '-'], options: { input: '{"repositories":[]}' } },
+      { container: 'devspace-monitor', command: ['node', REMOTE_MONITOR_SCRIPT_PATH, 'settings', '-'], options: { input: '{"prefixes":[]}', timeoutMs: 20_000, signal } },
+      { container: 'devspace-monitor', command: ['node', REMOTE_MONITOR_SCRIPT_PATH, 'images', '-'], options: { input: '{"repositories":[]}' } },
     ]);
     for (const name of Object.keys(CONTAINER_SCRIPTS) as ContainerScript[]) {
       if (plain.includes(name)) continue;
@@ -378,13 +378,13 @@ function productSources(): string[] {
 
 /**
  * The files that may call `exec` of a port with a command: the registry's runner, and EngineDocker (the pipeline's port
- * over DockerEngine.exec, which passes the command of its caller on). The commands of the Session Monitor container are
+ * over DockerEngine.exec, which passes the command of its caller on). The commands of the Monitor container are
  * entries of the registry (monitorFlow.ts runs them with runScript), so monitorFlow.ts is no exception.
  */
 const EXEC_CALLERS: Readonly<Record<string, number>> = {
   'core/worker/containerScripts.ts': 1,
   'core/worker/engineDocker.ts': 1,
-  // `exec` as a value is found too. The Session Monitor's process hands its own execFile of its container (`deps.exec`,
+  // `exec` as a value is found too. The Monitor's process hands its own execFile of its container (`deps.exec`,
   // the removal of a record) to its loop: no exec of a container of the engine.
   'remoteMonitor/main.ts': 1,
 };

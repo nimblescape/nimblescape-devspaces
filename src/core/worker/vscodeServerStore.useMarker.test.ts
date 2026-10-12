@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // Probes (mutation testing) for the use marker of an open: the marker file is private to the worker (0600, whatever the
-// umask), as its folder used/ is (0700); and ensureServer, the fetch that the Session Monitor's background run uses,
+// umask), as its folder used/ is (0700); and ensureServer, the fetch that the Monitor's background run uses,
 // marks nothing (only the open's ensureEngineServer does; the tests of the run inject their own fetch, so they would
 // not see a mark there). The store is a temporary folder (never the home folder); nothing needs root.
 import * as fs from 'fs';

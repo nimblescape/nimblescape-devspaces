@@ -68,7 +68,7 @@ More markers in a row:
 |---|---|
 | **Start** (or a double-click) | Starts the devspace and connects the current window. Creates the devspace on the first start. If another window is connected to it, that window comes to the front: a devspace is never open in two windows. |
 | **Start in New Window** | The same, but a new window connects, and the current window keeps its devspace. With the setting `devspace.openInNewWindow` on, the menu offers **Start in Current Window** instead. |
-| **Stop** | Stops the container at once. Your files stay. If a window is connected, the connection closes first. The Session Monitor on the Docker engine is told first, so the devspace stops even when you quit VS Code right after the click. A notification shows the progress until `owner/name stopped.` |
+| **Stop** | Stops the container at once. Your files stay. If a window is connected, the connection closes first. The Monitor on the Docker engine is told first, so the devspace stops even when you quit VS Code right after the click. A notification shows the progress until `owner/name stopped.` |
 | **Delete** | Removes the containers, the images, and the volume with the repository, after you confirm it. The confirmation shows uncommitted changes, unpushed commits, and stashes as far as Devspaces recorded them, and offers **Open devspace**. Additional volumes of the configuration, for example of a database, are removed only when you tick them. |
 | **Keep Running When Closed** | The devspace keeps running when no window uses it, for example for a server or an agent. Only **Stop** or **Delete** stops it. **Stop When Closed** switches back. The choice is stored with the devspace. |
 | **Close and Keep Running** | Only in a window that is connected to the devspace: closes the window, and the container keeps running this time. The next window that connects to it ends this. |
@@ -105,7 +105,7 @@ All commands are in the category **Devspaces** of the Command Palette. A command
 | Show Log | Opens the log of Devspaces. |
 | Use a Remote Docker Host…, Use the Local Docker | Choose the Docker engine (see [Remote Docker host](#remote-docker-host)). |
 | Ask Again Before Changing the Docker Host | Brings back the questions that you answered with "Don't Ask Again". |
-| Update All Images Now | Runs the background work of the Session Monitor on the current Docker engine at once (see [Updates](#updates)). |
+| Update All Images Now | Runs the background work of the Monitor on the current Docker engine at once (see [Updates](#updates)). |
 
 The buttons of the Docker setup (**Install WSL 2**, **Install Docker**, **Start Docker**) and the host access switches appear only where they apply.
 
@@ -118,11 +118,11 @@ All settings have the prefix `devspace.`. Settings marked *user only* count only
 | `reopenLastOnStartup` | `true` | When VS Code starts with an empty window, open the devspace that you used last, unless you stopped it with **Stop**. |
 | `openInNewWindow` | `false` | *User only.* On: **Start** and **Switch Devspace…** open a devspace in a new window, and the current window keeps its devspace (an empty window is used directly). The context menu always offers the other choice. |
 | `stopOnClose` | `true` | *User only.* Stop a devspace 5 minutes after its last window closes; the 5 minutes are enough for a window reload. Off: every devspace keeps running until you stop it, and its row shows `· kept`. To keep only some devspaces running, use **Keep Running When Closed** on them. |
-| `stopAfterMinutes` | `10` | *User only.* Minutes without any sign from a window before the Session Monitor stops the container anyway (5 to 1440). This covers a window that cannot say goodbye: the computer sleeps or goes offline, or VS Code crashes. Devspaces that keep running when closed are never stopped. |
+| `stopAfterMinutes` | `10` | *User only.* Minutes without any sign from a window before the Monitor stops the container anyway (5 to 1440). This covers a window that cannot say goodbye: the computer sleeps or goes offline, or VS Code crashes. Devspaces that keep running when closed are never stopped. |
 | `updateImagesOnConnect` | `true` | At each start, check whether the base image or the Features of the devspace have a newer version, and update the devspace if so (your files stay). Off: the devspace keeps its image until you choose **Rebuild**. |
 | `updateContainer` | `notify` | *User only.* What a start does when a newer image is available for the existing container (see [Updates](#updates)). `notify`: says that the container is updated now, with **Continue** or **Cancel**. `ask`: asks, with **Update Now** or **Later**. |
-| `cacheUpdateSchedule` | `7 6 * * *` | *User only.* When the Session Monitor on each Docker engine does its background work (see [Updates](#updates)). A cron expression of five fields (minute, hour, day of month, month, day of week) in your time zone, or the minutes between two runs (5 to 1440). Examples: `7 6 * * *` daily at 06:07, `7 6 * * 1-5` on weekdays at 06:07, `7 */6 * * *` every six hours, `60` every hour. An invalid value means the default. |
-| `stopLocalMonitorWhenIdle` | `true` | *User only.* On the local Docker engine, end the Session Monitor when no devspace has run for 5 minutes; the next start starts it again. Off: it keeps running, so its background work also runs while no devspace runs. On a remote engine it always keeps running. |
+| `cacheUpdateSchedule` | `7 6 * * *` | *User only.* When the Monitor on each Docker engine does its background work (see [Updates](#updates)). A cron expression of five fields (minute, hour, day of month, month, day of week) in your time zone, or the minutes between two runs (5 to 1440). Examples: `7 6 * * *` daily at 06:07, `7 6 * * 1-5` on weekdays at 06:07, `7 */6 * * *` every six hours, `60` every hour. An invalid value means the default. |
+| `stopLocalMonitorWhenIdle` | `true` | *User only.* On the local Docker engine, end the Monitor when no devspace has run for 5 minutes; the next start starts it again. Off: it keeps running, so its background work also runs while no devspace runs. On a remote engine it always keeps running. |
 | `respectShutdownActionNone` | `false` | *User only.* Keep a devspace running after its window closes when its `devcontainer.json` says `"shutdownAction": "none"`. Off: that line is ignored, and `stopOnClose` applies. |
 | `owners` | `[]` | Organizations or accounts whose repositories the sidebar lists. Empty: all repositories that you can access. **Select Organizations…** changes it. |
 | `includeArchived` | `false` | List archived repositories. |
@@ -142,7 +142,7 @@ Devspaces keeps your devspaces current in two places: in the background on each 
 
 ### The background run
 
-A small container on each Docker engine, the **Session Monitor** (`devspace-session-monitor`), does the background work at the times of `devspace.cacheUpdateSchedule` (by default daily at 06:07 in your time zone). A time that was missed, for example while the engine was off, runs once when the monitor runs again. Each run:
+A small container on each Docker engine, the **Monitor** (`devspace-monitor`), does the background work at the times of `devspace.cacheUpdateSchedule` (by default daily at 06:07 in your time zone). A time that was missed, for example while the engine was off, runs once when the monitor runs again. Each run:
 
 1. **Pulls the newer versions of the images that the devspaces on that engine use**, for example `node:20` or `mcr.microsoft.com/devcontainers/base:ubuntu`, and removes the older versions of those images that nothing uses any more. It pulls without a sign-in, so private images are not updated in the background; an image pinned by a digest never changes.
 2. **Downloads the newest VS Code server** into a store that all dev containers of the engine share, and links it into the running dev containers, so that a window that VS Code restores after its own update finds its server.
@@ -152,7 +152,7 @@ A small container on each Docker engine, the **Session Monitor** (`devspace-sess
 
 On the local Docker, the monitor runs only while devspaces run, unless you turn off `devspace.stopLocalMonitorWhenIdle`. On a remote engine it always runs.
 
-**Devspaces: Update All Images Now** (Command Palette, or the **…** menu of the view) runs the same work at once on the current Docker engine, for example after a new image was pushed. The run starts within a minute, and the command does not wait for it: the message says "The Session Monitor on <engine> updates the images now."
+**Devspaces: Update All Images Now** (Command Palette, or the **…** menu of the view) runs the same work at once on the current Docker engine, for example after a new image was pushed. The run starts within a minute, and the command does not wait for it: the message says "The Monitor on <engine> updates the images now."
 
 ### The update at a start
 
@@ -173,7 +173,7 @@ If the build of a newer image fails, or the new image needs access to your compu
 
 ## Stop on close
 
-When you close the last window of a devspace, switch to another devspace, or quit VS Code, the Session Monitor on its Docker engine stops the container 5 minutes later. A window that connects again within that time keeps it running. If the window cannot say goodbye (the computer sleeps or goes offline, or VS Code crashes), the monitor stops the container after `devspace.stopAfterMinutes` (default 10 minutes) without a sign from any window.
+When you close the last window of a devspace, switch to another devspace, or quit VS Code, the Monitor on its Docker engine stops the container 5 minutes later. A window that connects again within that time keeps it running. If the window cannot say goodbye (the computer sleeps or goes offline, or VS Code crashes), the monitor stops the container after `devspace.stopAfterMinutes` (default 10 minutes) without a sign from any window.
 
 A devspace keeps running when no window uses it in these cases, and its row shows `· kept`:
 
@@ -220,7 +220,7 @@ Each question before a change of the Docker host has a second button "…, Don't
 
 ## Shared Docker engines
 
-Several people, each with their own computer, can use the same remote Docker engine. Each devspace belongs to the GitHub account that created it, and the Session Monitor on the engine decides by the newest sign of any computer: closing a window on one computer never stops a devspace that a window on another computer still uses.
+Several people, each with their own computer, can use the same remote Docker engine. Each devspace belongs to the GitHub account that created it, and the Monitor on the engine decides by the newest sign of any computer: closing a window on one computer never stops a devspace that a window on another computer still uses.
 
 **A shared engine is for a group that trusts each other.** Everyone who can use Docker on that engine (root and the members of the group `docker` there) can reach every container and every volume on it, including the GitHub token in the memory of another person's running devspace. Devspaces separates accounts against mistakes, not against the other users of the engine. For people who must not see each other's work, give each person an engine of their own, for example a virtual machine.
 
@@ -268,8 +268,8 @@ The checks are a guard rail against mistakes and copied templates, not a sandbox
 ## Troubleshooting
 
 - **The log.** **Devspaces: Show Log** opens the complete log of Devspaces, including the output of the clone, the build, and the lifecycle commands. A progress notification has **Show details** for the same log.
-- **The Session Monitor.** Its log shows each stop, each background run, and each prepare: `docker logs devspace-session-monitor` on the engine, or from your computer `docker --context <context> logs devspace-session-monitor`. Docker keeps at most 2 × 1 MB of it.
-- **A devspace stops too early or keeps running.** Check its row for `· kept`, and the settings `stopOnClose`, `stopAfterMinutes`, and `respectShutdownActionNone`. If the window warns that its heartbeats failed, the Session Monitor may stop the devspace after `stopAfterMinutes`.
+- **The Monitor.** Its log shows each stop, each background run, and each prepare: `docker logs devspace-monitor` on the engine, or from your computer `docker --context <context> logs devspace-monitor`. Docker keeps at most 2 × 1 MB of it.
+- **A devspace stops too early or keeps running.** Check its row for `· kept`, and the settings `stopOnClose`, `stopAfterMinutes`, and `respectShutdownActionNone`. If the window warns that its heartbeats failed, the Monitor may stop the devspace after `stopAfterMinutes`.
 - **`State unknown`.** Devspaces could not read the engine. On a remote host, check that `ssh <host>` works without a question and that Docker runs there. After the images of an engine were removed, Devspaces prepares the engine again in the background; the status bar shows "Devspaces: preparing <host>…".
 
 ## Build from source

@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The heartbeats of a window to the Session Monitor container (`devspace-session-monitor`) of the Docker engine of each
+// The heartbeats of a window to the Monitor container (`devspace-monitor`) of the Docker engine of each
 // devspace that the window uses, on every engine, local and remote. Driven by the window's tick of 15 s
 // (SessionCoordinator).
 //
@@ -288,7 +288,7 @@ export class WindowHeartbeats {
     try {
       groups = await this.collect(now);
     } catch (error) {
-      this.deps.logger.warn(`The heartbeats to the Session Monitor could not be sent: ${errorMessage(error)}`);
+      this.deps.logger.warn(`The heartbeats to the Monitor could not be sent: ${errorMessage(error)}`);
       return;
     } finally {
       this.collecting = false;
@@ -299,7 +299,7 @@ export class WindowHeartbeats {
         try {
           await this.runEngine(group, now, limitSeconds);
         } catch (error) {
-          this.deps.logger.warn(`The heartbeats to the Session Monitor on ${engineName(group.target)} could not be sent: ${errorMessage(error)}`);
+          this.deps.logger.warn(`The heartbeats to the Monitor on ${engineName(group.target)} could not be sent: ${errorMessage(error)}`);
         }
       }),
     );
@@ -316,7 +316,7 @@ export class WindowHeartbeats {
       const seq = this.clock.now();
       const devspace = (await this.deps.registry.list()).find((candidate) => candidate.id === devspaceId);
       if (devspace === undefined) return { ok: false, detail: 'The devspace is not in the registry.' };
-      if (!isRemoteDevspaceId(devspace.id)) return { ok: false, detail: 'The devspace has an ID that the Session Monitor cannot record.' };
+      if (!isRemoteDevspaceId(devspace.id)) return { ok: false, detail: 'The devspace has an ID that the Monitor cannot record.' };
       const isConnected = devspace.id === this.deps.connected();
       const target = await this.engineOf(devspace, isConnected);
       if (target === undefined) return { ok: false, detail: 'The Docker engine of the devspace cannot be reached from this window.' };
@@ -361,7 +361,7 @@ export class WindowHeartbeats {
       const seq = this.clock.now();
       const devspace = (await untilAborted(this.deps.registry.list(), signal)).find((candidate) => candidate.id === devspaceId);
       if (devspace === undefined) return { ok: false, detail: 'The devspace is not in the registry.' };
-      if (!isRemoteDevspaceId(devspace.id)) return { ok: false, detail: 'The devspace has an ID that the Session Monitor cannot record.' };
+      if (!isRemoteDevspaceId(devspace.id)) return { ok: false, detail: 'The devspace has an ID that the Monitor cannot record.' };
       const target = await untilAborted(this.engineOf(devspace, true), signal);
       if (target === undefined) return { ok: false, detail: 'The Docker engine of the devspace cannot be reached from this window.' };
       // Only on the engine where the container of the devspace is.
@@ -391,7 +391,7 @@ export class WindowHeartbeats {
   }
 
   /**
-   * The Stop of `devspaceId` for the Session Monitor of its engine: one heartbeat whose entry says `stopNow`
+   * The Stop of `devspaceId` for the Monitor of its engine: one heartbeat whose entry says `stopNow`
    * (keepRunning false, the long limit), to the engine this window uses it on (as the connected devspace when it
    * is), with the repair of `send`, within STOP_HEARTBEAT_BOUND_MS or until `signal` aborts (then a failure). While it
    * is the newest record, the monitor stops the devspace itself (rules.ts), so the Stop is not lost when VS Code
@@ -408,7 +408,7 @@ export class WindowHeartbeats {
       const seq = this.clock.now();
       const devspace = (await untilAborted(this.deps.registry.list(), bound.signal)).find((candidate) => candidate.id === devspaceId);
       if (devspace === undefined) return { ok: false, detail: 'The devspace is not in the registry.' };
-      if (!isRemoteDevspaceId(devspace.id)) return { ok: false, detail: 'The devspace has an ID that the Session Monitor cannot record.' };
+      if (!isRemoteDevspaceId(devspace.id)) return { ok: false, detail: 'The devspace has an ID that the Monitor cannot record.' };
       const isConnected = devspace.id === this.deps.connected();
       const target = await untilAborted(this.engineOf(devspace, isConnected), bound.signal);
       if (target === undefined) return { ok: false, detail: 'The Docker engine of the devspace cannot be reached from this window.' };
@@ -557,7 +557,7 @@ export class WindowHeartbeats {
       return;
     }
     if (result.ok) {
-      if (series.failures > 0) this.deps.logger.info(`The Session Monitor on ${engineName(group.target)} answers again.`);
+      if (series.failures > 0) this.deps.logger.info(`The Monitor on ${engineName(group.target)} answers again.`);
       series.failures = 0;
       series.warned = false;
       series.sent = new Map(group.entries);
@@ -574,7 +574,7 @@ export class WindowHeartbeats {
       if (known !== undefined) known.verified = false;
     }
     if (series.failures === 1) {
-      this.deps.logger.info(`A heartbeat to the Session Monitor on ${engineName(group.target)} failed; it is tried again. ${result.detail}`);
+      this.deps.logger.info(`A heartbeat to the Monitor on ${engineName(group.target)} failed; it is tried again. ${result.detail}`);
     }
     // Once per failure streak, only for the devspace this window is connected to.
     if (series.failures >= HEARTBEAT_WARN_AFTER_FAILURES && !series.warned && group.connected !== undefined) {
@@ -582,7 +582,7 @@ export class WindowHeartbeats {
       const base = series.sentAt ?? series.startedAt;
       const limitMs = (series.limitSeconds ?? limitSeconds) * 1000;
       const minutesLeft = Math.max(0, Math.floor((base + limitMs - now) / 60_000));
-      this.deps.logger.warn(`${series.failures} heartbeats in a row to the Session Monitor on ${engineName(group.target)} failed: ${result.detail}`);
+      this.deps.logger.warn(`${series.failures} heartbeats in a row to the Monitor on ${engineName(group.target)} failed: ${result.detail}`);
       this.deps.warn(Messages.heartbeatsFailing(group.connected.repository, engineName(group.target), minutesLeft));
     }
   }
@@ -680,7 +680,7 @@ export class WindowHeartbeats {
     const now = this.clock.now();
     if (series.repairNotBefore !== undefined && now < series.repairNotBefore) {
       const seconds = Math.ceil((series.repairNotBefore - now) / 1000);
-      return { ok: false, missing: true, detail: `${first.detail} The Session Monitor is started again in ${seconds} seconds at the earliest (its last start failed).` };
+      return { ok: false, missing: true, detail: `${first.detail} The Monitor is started again in ${seconds} seconds at the earliest (its last start failed).` };
     }
     // Never a monitor on an engine where no devspace of the heartbeat has its container (the connected one was
     // checked this tick; the busy ones are checked now).
@@ -688,18 +688,18 @@ export class WindowHeartbeats {
       return {
         ok: false,
         missing: true,
-        detail: `${first.detail} The Session Monitor is not started there: no devspace of this window has its container on ${engineName(target)}.`,
+        detail: `${first.detail} The Monitor is not started there: no devspace of this window has its container on ${engineName(target)}.`,
       };
     }
-    this.deps.logger.info(`The Session Monitor on ${engineName(target)} is missing; it is started again.`);
+    this.deps.logger.info(`The Monitor on ${engineName(target)} is missing; it is started again.`);
     try {
       await this.deps.repair(target, signal);
     } catch (error) {
       series.repairFailures += 1;
       const waitMs = repairBackoffMs(series.repairFailures);
       series.repairNotBefore = this.clock.now() + waitMs;
-      this.deps.logger.info(`The Session Monitor on ${engineName(target)} is started again in ${waitMs / 1000} seconds at the earliest.`);
-      return { ok: false, missing: true, detail: `${first.detail} The Session Monitor could not be started again: ${errorMessage(error)}` };
+      this.deps.logger.info(`The Monitor on ${engineName(target)} is started again in ${waitMs / 1000} seconds at the earliest.`);
+      return { ok: false, missing: true, detail: `${first.detail} The Monitor could not be started again: ${errorMessage(error)}` };
     }
     this.resetRepair(series);
     return this.deps.send(target, input, signal);

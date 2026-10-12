@@ -6,7 +6,7 @@
 // (DevspaceOperations) over extensionFlow and the extension's HostSide, with a registry and session files of its own
 // (or of another window of the same computer), to the real workers of the engine (workerLocks). Every progress step of
 // every flow is recorded (`steps`), so that a test counts the batch helpers of the worker (the step `batch`, one per
-// session) without the lock of the extension. The Session Monitor that an open makes sure of is the real one of the
+// session) without the lock of the extension. The Monitor that an open makes sure of is the real one of the
 // engine: a test file skips its opens when the engine had one before the tests (monitorOfUser), and removes the one
 // that it made (removeTestMonitor).
 import * as fs from 'fs';
@@ -45,7 +45,7 @@ export function testSettings(overrides: Partial<ExtensionSettings> = {}): Extens
     includeForks: false,
     refreshIntervalMinutes: 60,
     hostAccessChecksOff: [],
-    // The real Session Monitor of the opens never stops a container of a test for want of heartbeats while the test
+    // The real Monitor of the opens never stops a container of a test for want of heartbeats while the test
     // file runs.
     stopAfterMinutes: 1440,
     ...overrides,
@@ -172,7 +172,7 @@ export function workerWindow(context: DockerTestContext, docker: BootstrapDocker
     startDocker: options.startDocker ?? (async () => {}),
     monitorSource: () => '0123456789abcdef0123456789abcdef',
     openMonitor: () => ({ images: { schedule: '7 6 * * *', timeZone: 'UTC' } }),
-    // No image references in use, so the Session Monitor of the engine of the tests never pulls or removes an image of
+    // No image references in use, so the Monitor of the engine of the tests never pulls or removes an image of
     // it (the images of the engine stay as the baseline of globalSetup has them).
     imageReferencesInUse: async () => undefined,
     ...(options.vscodeServer !== undefined ? { vscodeServerOfWindow: async () => options.vscodeServer } : {}),
@@ -191,14 +191,14 @@ export function workerWindow(context: DockerTestContext, docker: BootstrapDocker
   };
 }
 
-/** Whether the engine had a Session Monitor before the tests (its opens are skipped then). */
+/** Whether the engine had a Monitor before the tests (its opens are skipped then). */
 export function monitorOfUser(context: Pick<DockerTestContext, 'run'>): boolean {
   const baseline = readBaseline(context.run);
   return baseline.containers.some((container) => container.name === REMOTE_MONITOR_CONTAINER) || baseline.volumes.includes(REMOTE_MONITOR_VOLUME);
 }
 
 /**
- * Before the first open of a test file whose opens make sure of the real Session Monitor, its state volume gets a
+ * Before the first open of a test file whose opens make sure of the real Monitor, its state volume gets a
  * background run that ended now (cache-run.json: the end of the last run and of the last cleanup), so the monitor runs
  * nothing within the 17 minutes of the default schedule: no download of a VS Code server, no link into the test
  * containers, no cleanup during the tests. Nothing when the engine had a monitor before the tests (it is never
@@ -211,7 +211,7 @@ export async function seedTestMonitorRun(docker: Pick<BootstrapDocker, 'run'>, c
   if (seeded.exitCode !== 0) throw new Error(`The state of the background run could not be seeded: ${seeded.stderr}`);
 }
 
-/** Removes the Session Monitor that the opens of a test file made, its state volume and its tag. */
+/** Removes the Monitor that the opens of a test file made, its state volume and its tag. */
 export function removeTestMonitor(context: Pick<DockerTestContext, 'run' | 'cli'>): void {
   if (monitorOfUser(context)) return;
   context.cli.run(['rm', '-f', REMOTE_MONITOR_CONTAINER]);

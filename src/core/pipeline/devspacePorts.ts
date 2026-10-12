@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The ports of the devspace service (devspaceService.ts), in their own module: its Docker, its part of
-// WorkspaceHelper, the Session Monitor, the extension cache and its deps. Types only.
+// WorkspaceHelper, the Monitor, the extension cache and its deps. Types only.
 import type { RegistryAnswers } from '../remoteMonitor/registryAnswers';
 import type { ConfigCheckEntry } from '../storage/configCheckEntry';
 import type { DevspaceBusyMarks } from './busyMarks';
@@ -157,7 +157,7 @@ export type DevspaceHelper = Pick<
 >;
 
 /**
- * The Session Monitor container of the Docker engine of the operation (RemoteSessionMonitor, with the socket of that
+ * The Monitor container of the Docker engine of the operation (RemoteSessionMonitor, with the socket of that
  * engine and the id of this computer), one on every engine, local and remote. The calls take no Docker target, helper
  * tag or image: the only implementation (workerSessionMonitor) is the monitor of the worker's own engine, run with the
  * worker's own helper image.
@@ -195,7 +195,7 @@ export interface DevspaceServiceDeps extends OperationBaseDeps {
   helper: DevspaceHelper;
   imageChecker: Pick<ImageChecker, 'check'>;
   /**
-   * The registry answers of the Session Monitor of the engine (in its volume, REGISTRY_ANSWERS_FILE), read strictly;
+   * The registry answers of the Monitor of the engine (in its volume, REGISTRY_ANSWERS_FILE), read strictly;
    * `undefined` when there are none or the file is not valid. Without it, the open checks every reference itself.
    */
   registryAnswers?: () => Promise<RegistryAnswers | undefined>;
@@ -223,7 +223,7 @@ export interface DevspaceServiceDeps extends OperationBaseDeps {
    */
   startDocker: DockerStarter;
   /**
-   * The Session Monitor container of the engine. The open pipeline ensures it right after the helper image (before the
+   * The Monitor container of the engine. The open pipeline ensures it right after the helper image (before the
    * container is created or started); Delete removes the record of this computer there. On every engine, local and
    * remote; an open is refused when it cannot be ensured. Without it (tests): nothing.
    */
@@ -340,7 +340,7 @@ export interface PrepareResult {
 /**
  * The shared extension cache of the store for an open with a VS Code server (the worker's: recordExtensions,
  * cachedExtensionFiles and seedSelection at VSCODE_STORE_DIR; the record and the monitor's chosen files in the volume
- * of the Session Monitor at LOCK_STATE_DIR).
+ * of the Monitor at LOCK_STATE_DIR).
  */
 export interface VscodeExtensionCache {
   /**

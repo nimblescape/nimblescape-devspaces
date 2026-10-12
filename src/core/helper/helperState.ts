@@ -75,7 +75,7 @@ export function isHelperImageTag(tag: string): boolean {
 const MONITOR_TAG = /^devspace-monitor:[0-9a-f]{12}$/;
 
 /**
- * The second tag of a helper image that the Session Monitor container runs
+ * The second tag of a helper image that the Monitor container runs
  * from, so that it shows as `devspace-monitor:<hash>` (the hash of its helper tag) instead of an image ID. Undefined for
  * a tag that is not a helper tag.
  */

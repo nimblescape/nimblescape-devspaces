@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 // The port of src/helperChannel/engineClient.ts: the time limit of the lists of every container and image
 // (DockerEngine.containerSummaries and DockerEngine.images: without the signal of the caller on the request, a list
-// that the engine does not answer would never end) and of the stop that the Session Monitor runs under the lock of a
+// that the engine does not answer would never end) and of the stop that the Monitor runs under the lock of a
 // devspace (DockerEngine.stop), and the bound of the other lists (only containerSummaries and images get the 16 MiB
 // bound).
 import { describe, expect, it } from 'vitest';
@@ -33,7 +33,7 @@ function hangingEngine(idle: EngineAnswer) {
 /** What a list without a time limit gets at once from an engine that answers: an empty list. */
 const LIST: EngineAnswer = { status: 200, body: '[]', truncated: false };
 
-describe('the time limit of the lists and the stop of the Session Monitor', () => {
+describe('the time limit of the lists and the stop of the Monitor', () => {
   // The loop gives each list LIST_TIMEOUT_MS (main.ts, tick and decideAgain); without the signal on the request a list
   // that the engine does not answer never ends, and the loop (`for (;;) await loop.tick()`) stops nothing on the whole
   // engine and never exits when idle, without a line in the log.

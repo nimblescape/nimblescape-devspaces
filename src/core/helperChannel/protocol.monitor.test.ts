@@ -17,7 +17,7 @@ const SOURCE = '0123456789abcdef0123456789abcdef';
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
 const HEARTBEAT = { source: SOURCE, limitSeconds: 600, devspaces: [{ id: ID, keepRunning: false, seq: 1 }] };
 
-describe('the operations of the Session Monitor in the worker', () => {
+describe('the operations of the Monitor in the worker', () => {
   it('heartbeat: the heartbeat as the monitor takes it, and nothing else', () => {
     expect(parseHeartbeatParams({ heartbeat: HEARTBEAT })).toEqual({ heartbeat: HEARTBEAT });
     expect(parseHeartbeatParams({ heartbeat: { ...HEARTBEAT, release: true } })).toEqual({ heartbeat: { ...HEARTBEAT, release: true } });

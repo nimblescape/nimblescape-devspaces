@@ -7,7 +7,7 @@
 // operations) with one operation of the test, OP_HOLD_BATCH, which stands in for a flow of the worker that holds the
 // batch helper of its devspace (workerBatchSession): it opens the session, runs the steps that the test names
 // through it, and holds it until the operation is cancelled when asked. The flows themselves need the lock folder of
-// the Session Monitor, their own helper image and the records of the extension, which the test of the batch helper has
+// the Monitor, their own helper image and the records of the extension, which the test of the batch helper has
 // no part in. Never bundled into the extension or the worker of dist.
 import type { BatchStepKind } from '../core/helper/batchStepKinds';
 import { batchDeps, workerBatchSession } from './batch';

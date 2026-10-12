@@ -10,7 +10,7 @@
 // with the wait of the worker (10 s): exactly one wins, the other is refused as busy after the wait and changes
 // nothing; a Delete while the question of a Start is open is refused as busy (the Start holds the lock during the
 // question). The operations are the flows of the worker, as the window sends them (workerWindow.ts); the lock is the
-// worker's own, with its own wait (DEVSPACE_LOCK_WAIT_SECONDS). The opens make sure of the real Session Monitor.
+// worker's own, with its own wait (DEVSPACE_LOCK_WAIT_SECONDS). The opens make sure of the real Monitor.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // The Docker CLI of the extension (BootstrapDocker).
 import { BootstrapDocker } from '../../src/core/docker/bootstrapDocker';
@@ -29,7 +29,7 @@ describe('the devspace lock with real workers', () => {
   const { run, env, cli, log } = context;
   const runner = new NodeProcessRunner();
   const docker = new BootstrapDocker(runner, run.dockerPath, env, log);
-  // The opens make sure of the real Session Monitor; a monitor of the user is never touched.
+  // The opens make sure of the real Monitor; a monitor of the user is never touched.
   const skipped = monitorOfUser({ run });
   const windows: WorkerWindow[] = [];
 
@@ -70,7 +70,7 @@ describe('the devspace lock with real workers', () => {
 
   beforeAll(async () => {
     if (skipped) {
-      log.info('The engine has a Session Monitor before the tests; the lock tests through real workers are skipped.');
+      log.info('The engine has a Monitor before the tests; the lock tests through real workers are skipped.');
       return;
     }
     // The helper image through the harness.

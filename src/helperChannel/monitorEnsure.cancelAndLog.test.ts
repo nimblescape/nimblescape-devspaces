@@ -43,6 +43,6 @@ describe('monitorEnsure: its cancel and its log', () => {
     const engine: DockerEngine = { ...unusedEngine(), inspect: async () => undefined, createAttached: async () => ({ kind: 'ready' }) };
     const { context, lines } = contextOf();
     await monitorEnsureOperation(() => engine, async () => OWN, () => 'script')({ images: IMAGES }, context);
-    expect(lines.some((line) => line.startsWith('The Session Monitor on the Docker host was created'))).toBe(true);
+    expect(lines.some((line) => line.startsWith('The Monitor on the Docker host was created'))).toBe(true);
   });
 });

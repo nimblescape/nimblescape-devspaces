@@ -31,7 +31,7 @@ describe('monitorImage', () => {
     const { logger, lines } = recordingLogger();
     const engine: DockerEngine = { ...unusedEngine(), tagImage: async () => Promise.reject(new Error('no such image')) };
     expect(await monitorImage(engine, OWN, logger, new AbortController().signal)).toEqual({ reference: OWN.id });
-    expect(lines).toEqual([`warn The image of the Session Monitor could not be tagged as devspace-monitor:0123456789ab; it runs from ${OWN.id}: no such image`]);
+    expect(lines).toEqual([`warn The image of the Monitor could not be tagged as devspace-monitor:0123456789ab; it runs from ${OWN.id}: no such image`]);
   });
 
   it('a tag without an answer ends at REMOTE_MONITOR_DOCKER_TIMEOUT_MS; the monitor runs from the ID', async () => {

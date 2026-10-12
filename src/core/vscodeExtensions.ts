@@ -5,7 +5,7 @@
 // The pure rules of the shared extension cache. The VS Code server installs an extension from a `.vsix` that is already
 // in `~/.vscode-server/extensionsCache/<cache name>`, and then downloads nothing. The open records the extension list
 // of its devspace (the configuration's `customizations.vscode.extensions` and the user's
-// `dev.containers.defaultExtensions`) and seeds the `.vsix` files that the store has; the Session Monitor's background
+// `dev.containers.defaultExtensions`) and seeds the `.vsix` files that the store has; the Monitor's background
 // run downloads the newest compatible releases from the Marketplace into the store and cleans it up. The store layout
 // (under the shared store, VSCODE_STORE_DIR in the worker and the monitor):
 //   <store>/extensions/<universal|linux-x64|linux-arm64>/<cache name>   one `.vsix` (readable for all)

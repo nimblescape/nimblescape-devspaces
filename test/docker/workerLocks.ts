@@ -40,7 +40,7 @@ export function workerScript(): Promise<string> {
     .build({
       // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
       define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) },
-      // The script of the Session Monitor in the worker, as esbuild.mjs bundles it.
+      // The script of the Monitor in the worker, as esbuild.mjs bundles it.
       plugins: [workerScriptsPlugin(path.resolve(__dirname, '../..'), { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) })],
       entryPoints: [path.resolve(__dirname, '../../src/helperChannel/main.ts')],
       bundle: true,
@@ -155,7 +155,7 @@ async function lockHolderArgs(context: Pick<DockerTestContext, 'run'>, stateVolu
 /**
  * The lock of a devspace held by a plain container of the helper image on the state volume of the workers, for a
  * test that needs a holder elsewhere without an operation of the worker. Taken with the code of the worker and the
- * Session Monitor (lockHolder.ts: openLockFile, then `flock` on its file descriptor), so the lock file is the one that
+ * Monitor (lockHolder.ts: openLockFile, then `flock` on its file descriptor), so the lock file is the one that
  * they make and check. Resolves once the lock is held; `release` removes the container (the kernel lets go of the lock
  * with its process).
  */

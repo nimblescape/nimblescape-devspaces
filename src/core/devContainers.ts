@@ -65,7 +65,7 @@ export function devContainersSettings(): Record<string, boolean | string> {
 /**
  * `shutdownAction` of the override configuration.
  * Assumption: this value replaces shutdownAction of the image metadata (the override configuration is the last
- * entry of the label), so the Dev Containers extension never stops an attached container; the Session Monitor alone
+ * entry of the label), so the Dev Containers extension never stops an attached container; the Monitor alone
  * stops containers on close.
  */
 export const ATTACHED_SHUTDOWN_ACTION = 'none';

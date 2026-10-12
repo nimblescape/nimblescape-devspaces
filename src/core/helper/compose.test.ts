@@ -861,7 +861,7 @@ describe('the restart and the stop of the services', () => {
     const { rewrites } = up({ ...templateModel(), services: { ...templateModel().services, db: { ...templateModel().services.db, stop_grace_period: '1m0s' } } });
     expect(rewrites).toContainEqual({
       item: 'service db: stop_grace_period 1m0s',
-      reason: 'the Session Monitor stops a container within 30 s (20s)',
+      reason: 'the Monitor stops a container within 30 s (20s)',
     });
   });
 });

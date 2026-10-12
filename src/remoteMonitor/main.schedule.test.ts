@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The one schedule of the Session Monitor's background run (CacheSchedule, the setting cacheUpdateSchedule): with an
+// The one schedule of the Monitor's background run (CacheSchedule, the setting cacheUpdateSchedule): with an
 // interval every N minutes from the end of the previous run, and at its start when the last run is older; with a cron
 // schedule at its times, and at its start when a time passed since the last run; the end of the last run kept in the
 // volume, so a restart does not run again at once. And `run`: the run at the first check after the start, the permanent
@@ -265,14 +265,14 @@ describe('the idle exit during a background run', () => {
     void result.then((code) => (exited = code));
     await vi.waitFor(() => expect(out).toContain('first check in 1 s'));
     await vi.advanceTimersByTimeAsync(1_000);
-    await vi.waitFor(() => expect(out).toContain('a background run is running; the Session Monitor exits after its end.'));
+    await vi.waitFor(() => expect(out).toContain('a background run is running; the Monitor exits after its end.'));
     expect(exited).toBeUndefined();
     expect(out).not.toContain('The background run ended.');
     expect(fs.existsSync(path.join(stateDir, CACHE_RUN_FILE))).toBe(false);
     finish();
     expect(await result).toBe(0);
     expect(out.indexOf('The background run ended.')).toBeGreaterThan(-1);
-    expect(out.indexOf('the Session Monitor exits. The next open starts it again.')).toBeGreaterThan(out.indexOf('The background run ended.'));
+    expect(out.indexOf('the Monitor exits. The next open starts it again.')).toBeGreaterThan(out.indexOf('The background run ended.'));
     expect(JSON.parse(fs.readFileSync(path.join(stateDir, CACHE_RUN_FILE), 'utf8')).lastEndAt).toBeGreaterThanOrEqual(T0);
   });
 
@@ -333,7 +333,7 @@ describe('the idle exit during a background run', () => {
     void result.then(() => (exited = true));
     await vi.waitFor(() => expect(out).toContain('first check in 1 s'));
     await vi.advanceTimersByTimeAsync(1_000);
-    await vi.waitFor(() => expect(out).toContain('the Session Monitor exits after its end.'));
+    await vi.waitFor(() => expect(out).toContain('the Monitor exits after its end.'));
     devspaceRuns = true;
     finish();
     // The end of the run is real I/O; the ticks after it may wait on timers of their own (fake here, which vi.waitFor
@@ -341,6 +341,6 @@ describe('the idle exit during a background run', () => {
     await vi.waitFor(() => expect(reachedBlock || exited).toBe(true), { timeout: 4_000 });
     expect(out).toContain('The background run ended.');
     expect(exited, out).toBe(false);
-    expect(out).not.toContain('the Session Monitor exits. The next open starts it again.');
+    expect(out).not.toContain('the Monitor exits. The next open starts it again.');
   });
 });

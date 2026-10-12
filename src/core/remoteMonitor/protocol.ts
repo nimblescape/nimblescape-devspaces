@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The protocol between the computers and the Session Monitor of a Docker engine (one on every engine): the names of its
+// The protocol between the computers and the Monitor of a Docker engine (one on every engine): the names of its
 // container, volume, and label, the heartbeat records in its volume, the subcommands of its script
 // (src/remoteMonitor/main.ts, in the worker's bundle as `devspace:monitor-script`), and the strict checks of everything
 // that script reads.
@@ -14,14 +14,14 @@ import { isTimeZone } from './cron';
 import { hasExactKeys, hasOnlyKeys, isRecord } from '../valueChecks';
 
 /**
- * The one Session Monitor container per Docker engine (never a container of a devspace: no
+ * The one Monitor container per Docker engine (never a container of a devspace: no
  * nimblescape.devspace.id).
  */
-export const REMOTE_MONITOR_CONTAINER = 'devspace-session-monitor';
+export const REMOTE_MONITOR_CONTAINER = 'devspace-monitor';
 /** The volume of its heartbeat records, mounted at REMOTE_MONITOR_STATE_DIR. */
-export const REMOTE_MONITOR_VOLUME = 'devspace-session-monitor';
+export const REMOTE_MONITOR_VOLUME = 'devspace-monitor';
 /** Label of the container: 12 hex digits of sha256 of the script, the helper tag and the loader (remoteMonitorLabelValue). */
-export const LABEL_SESSION_MONITOR = 'nimblescape.devspace.session-monitor';
+export const LABEL_MONITOR = 'nimblescape.devspace.monitor';
 /**
  * A label with a random nonce per create of the monitor container (not part of
  * remoteMonitorLabelValue). A failed create removes only the container with its own nonce (`docker ps -aq --filter
@@ -39,7 +39,7 @@ export const REMOTE_MONITOR_ENTRY = 'startMonitor';
  * The start of the log line with which `run` says that it started. The extension waits for it on the output of the
  * attached `docker run` before it lets the container go (RemoteSessionMonitor.ensure).
  */
-export const REMOTE_MONITOR_READY_TEXT = 'Session Monitor started';
+export const REMOTE_MONITOR_READY_TEXT = 'Monitor started';
 /** The mount point of REMOTE_MONITOR_VOLUME in the container. */
 export const REMOTE_MONITOR_STATE_DIR = '/state';
 /** The folder of the heartbeat records in the volume: `<source>.<devspace id>.json`. */
@@ -78,7 +78,7 @@ export function isRemoteDevspaceId(value: unknown): value is string {
 
 /**
  * One devspace of a heartbeat. `seq`: the wall clock of the sending computer, in ms, at which it read the keep flag
- * (the Session Monitor: its tick; a window: right after it changed the flag). The remote monitor does not replace a
+ * (the Monitor: its tick; a window: right after it changed the flag). The remote monitor does not replace a
  * recent record of the same source with a higher `seq` (SEQ_ORDER_WINDOW_MS), so a heartbeat that was under way while
  * the flag changed cannot undo the newer choice.
  *
@@ -316,7 +316,7 @@ export const MAX_IMAGE_REFERENCES = 200;
  */
 export const MAX_IMAGE_REFERENCE_LENGTH = 512;
 /**
- * The references in use that a computer sent count for the Session Monitor while they are at most this old (by the clock
+ * The references in use that a computer sent count for the Monitor while they are at most this old (by the clock
  * of the engine's host): the union of the computers that opened a devspace on the engine within the last 30 days.
  */
 export const IMAGES_IN_USE_MAX_AGE_MS = 30 * 24 * 60 * 60_000;
@@ -545,7 +545,7 @@ export interface ImageSettings {
 }
 
 /**
- * The settings of the Session Monitor that an open and `monitorEnsure` carry: the image settings (ImageSettings, which
+ * The settings of the Monitor that an open and `monitorEnsure` carry: the image settings (ImageSettings, which
  * the monitor gets with `settings -`), and whether it runs permanently (monitorRunsPermanently: on a remote engine, or
  * on a local one with stopLocalMonitorWhenIdle off). The mode is part of its label (monitorModeOf, monitorLabel), never
  * of `settings -`; missing means false. And why it is permanent: `remote` when the computer reaches the engine as a
@@ -643,7 +643,7 @@ export const CACHE_RUN_FILE = 'cache-run.json';
 export const RUN_NOW_FILE = 'run-now.json';
 
 /**
- * The value of LABEL_SESSION_MONITOR: 12 hex digits of sha256 of the script, the helper tag, the pipe loader (a new
+ * The value of LABEL_MONITOR: 12 hex digits of sha256 of the script, the helper tag, the pipe loader (a new
  * loader is a new version of the container, so every monitor of an older way of loading is replaced once), and the
  * `extra` parts.
  */

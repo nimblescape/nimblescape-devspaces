@@ -2,13 +2,13 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The operation `monitorEnsure` of the worker: the ensure of the Session Monitor container (RemoteSessionMonitor over
+// The operation `monitorEnsure` of the worker: the ensure of the Monitor container (RemoteSessionMonitor over
 // engineMonitor) with the worker's own helper image and socket and the script of its bundle, against a small engine in
 // memory.
 import { describe, expect, it } from 'vitest';
 import { bundleHash, encodeBundle } from '../core/loader/pipeLoader';
 import { parseMonitorEnsureParams, parseMonitorEnsureValue } from '../core/helperChannel/protocol';
-import { LABEL_MONITOR_CREATE, LABEL_SESSION_MONITOR, PERMANENT_LOCAL_LABEL_PART, PERMANENT_REMOTE_LABEL_PART, remoteMonitorLabelValue, vscodeStoreLabelPart } from '../core/remoteMonitor/protocol';
+import { LABEL_MONITOR_CREATE, LABEL_MONITOR, PERMANENT_LOCAL_LABEL_PART, PERMANENT_REMOTE_LABEL_PART, remoteMonitorLabelValue, vscodeStoreLabelPart } from '../core/remoteMonitor/protocol';
 import type { DockerEngine, MonitorCreated, MonitorRunSpec } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import type { OwnHelper } from '../core/worker/ownHelper';
@@ -57,7 +57,7 @@ function engineWith(state: { existing?: unknown; created?: MonitorCreated; tagFa
   return { engine, specs, inputs, removed, tagged };
 }
 
-describe('the ensure of the Session Monitor in the worker', () => {
+describe('the ensure of the Monitor in the worker', () => {
   it('creates a missing monitor with the worker\'s helper image, its socket and the script of its bundle', async () => {
     const { engine, specs, inputs, tagged } = engineWith({});
     const value = await monitorEnsureOperation(() => engine, async () => OWN, () => SCRIPT)({ images: IMAGES }, contextOf().context);
@@ -69,9 +69,9 @@ describe('the ensure of the Session Monitor in the worker', () => {
     expect(tagged).toEqual([`${OWN.image.id} devspace-monitor:0123456789ab`]);
     expect(spec.image).toBe('devspace-monitor:0123456789ab');
     expect(spec.imageId).toBe(OWN.image.id);
-    expect(spec.labels[LABEL_SESSION_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, []));
+    expect(spec.labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, []));
     expect(spec.labels[LABEL_MONITOR_CREATE]).toMatch(/^[0-9a-f-]{36}$/);
-    expect(spec.mounts).toEqual({ socket: OWN.socket, volume: 'devspace-session-monitor', volumeTarget: '/state' });
+    expect(spec.mounts).toEqual({ socket: OWN.socket, volume: 'devspace-monitor', volumeTarget: '/state' });
     // The monitor always has the default network (its background run reaches the update service of VS Code).
     expect(spec.network).toBe('default');
     expect(spec.command.slice(-2)).toEqual([bundleHash(SCRIPT), 'startMonitor']);
@@ -84,7 +84,7 @@ describe('the ensure of the Session Monitor in the worker', () => {
     await monitorEnsureOperation(() => engine, async () => OWN, () => SCRIPT)({ images }, contextOf().context);
     // The image maintenance is no part of the label (the monitor always has its network); the label holds the mode,
     // here one that ends when idle.
-    expect(specs[0].labels[LABEL_SESSION_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, []));
+    expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, []));
     expect(specs[0].network).toBe('default');
     // No DEVSPACE_IMAGE_PREFIXES: the monitor gets no image list of repositories.
     expect(specs[0].env).toEqual({ DEVSPACE_IMAGE_SCHEDULE: images.schedule, DEVSPACE_IMAGE_TZ: images.timeZone });
@@ -98,15 +98,15 @@ describe('the ensure of the Session Monitor in the worker', () => {
     await monitorEnsureOperation(() => engine, async () => own, () => SCRIPT)({ images: { ...IMAGES, permanent: true } }, contextOf().context);
     // The part says why it is permanent (here: no `remote`, so `permanent-local`), and the label names the store that
     // it mounts.
-    expect(specs[0].labels[LABEL_SESSION_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_LOCAL_LABEL_PART, vscodeStoreLabelPart('devspace-vscode')]));
+    expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_LOCAL_LABEL_PART, vscodeStoreLabelPart('devspace-vscode')]));
     expect(specs[0].restartPolicy).toBe('unless-stopped');
-    expect(specs[0].mounts).toEqual({ socket: OWN.socket, volume: 'devspace-session-monitor', volumeTarget: '/state', store: { volume: 'devspace-vscode', target: '/vscode' } });
+    expect(specs[0].mounts).toEqual({ socket: OWN.socket, volume: 'devspace-monitor', volumeTarget: '/state', store: { volume: 'devspace-vscode', target: '/vscode' } });
     expect(specs[0].env).toEqual({ DEVSPACE_IMAGE_SCHEDULE: IMAGES.schedule, DEVSPACE_IMAGE_TZ: IMAGES.timeZone, DEVSPACE_MONITOR_PERMANENT: '1', DEVSPACE_VSCODE_STORE: 'devspace-vscode' });
     // One that ends when idle: `on-failure`, no part, no variable of the mode.
     const idle = engineWith({});
     await monitorEnsureOperation(() => idle.engine, async () => own, () => SCRIPT)({ images: { ...IMAGES, permanent: false } }, contextOf().context);
     // The label names the store.
-    expect(idle.specs[0].labels[LABEL_SESSION_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [vscodeStoreLabelPart('devspace-vscode')]));
+    expect(idle.specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [vscodeStoreLabelPart('devspace-vscode')]));
     expect(idle.specs[0].restartPolicy).toBe('on-failure');
     expect(idle.specs[0].env).not.toHaveProperty('DEVSPACE_MONITOR_PERMANENT');
   });
@@ -115,12 +115,12 @@ describe('the ensure of the Session Monitor in the worker', () => {
   it('a permanent monitor of a remote engine: the part `permanent-remote`', async () => {
     const { engine, specs } = engineWith({});
     await monitorEnsureOperation(() => engine, async () => OWN, () => SCRIPT)({ images: { ...IMAGES, permanent: true, remote: true } }, contextOf().context);
-    expect(specs[0].labels[LABEL_SESSION_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_REMOTE_LABEL_PART]));
+    expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_REMOTE_LABEL_PART]));
     expect(specs[0].restartPolicy).toBe('unless-stopped');
   });
 
   it('keeps a running monitor of this version', async () => {
-    const existing = { Id: RUNNING_ID, State: { Status: 'running', ExitCode: 0 }, Config: { Labels: { [LABEL_SESSION_MONITOR]: remoteMonitorLabelValue(SCRIPT, OWN.image.tag, []) } }, RestartCount: 0 };
+    const existing = { Id: RUNNING_ID, State: { Status: 'running', ExitCode: 0 }, Config: { Labels: { [LABEL_MONITOR]: remoteMonitorLabelValue(SCRIPT, OWN.image.tag, []) } }, RestartCount: 0 };
     const { engine, specs } = engineWith({ existing });
     expect(await monitorEnsureOperation(() => engine, async () => OWN, () => SCRIPT)({ images: IMAGES }, contextOf().context)).toEqual({ outcome: 'running' });
     expect(specs).toEqual([]);

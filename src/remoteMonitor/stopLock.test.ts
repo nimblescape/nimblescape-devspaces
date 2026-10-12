@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The lock of an automatic stop of the Session Monitor container. First with a fake `flock` (the outcomes and the close
+// The lock of an automatic stop of the Monitor container. First with a fake `flock` (the outcomes and the close
 // of the file), then with real processes as in src/helperChannel/lock.test.ts: the same lock file as the worker, a lock
 // held by another process, the release, a symbolic link, and an invalid ID.
 import { execFileSync, spawn, type ChildProcess } from 'child_process';

@@ -16,7 +16,7 @@
 // hard kill of the worker, and after its silence when the worker hangs. This file is the one test of the end of the
 // batch helper with its worker. The session is the worker's own (workerBatchSession), held by the operation of the test
 // OP_HOLD_BATCH in a worker bundled from batchE2eWorker.testkit.ts (main.ts with that operation) in place of a flow,
-// which would need the lock folder of the Session Monitor, its own helper image and the records of the extension.
+// which would need the lock folder of the Monitor, its own helper image and the records of the extension.
 import * as fs from 'fs';
 import * as http from 'http';
 import type * as net from 'net';
@@ -257,7 +257,7 @@ describeUnix('the batch helper of the worker in Node.js processes', () => {
     const result = await esbuild.build({
       // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
       define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) },
-      // The script of the Session Monitor in the worker, as esbuild.mjs bundles it. The Engine API of this bundle on
+      // The script of the Monitor in the worker, as esbuild.mjs bundles it. The Engine API of this bundle on
       // the socket of the fake engine (only in the build of this test).
       plugins: [workerScriptsPlugin(path.resolve(__dirname, '..', '..'), { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) }), engineSocketPlugin(engine.socketPath)],
       // The worker of main.ts with the operation of the test (batchE2eWorker.testkit.ts).

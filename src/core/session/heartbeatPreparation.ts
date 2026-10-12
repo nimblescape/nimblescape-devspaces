@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The preparation (the helper image for the worker, and for the start of a missing Session Monitor container) that a
+// The preparation (the helper image for the worker, and for the start of a missing Monitor container) that a
 // heartbeat of the window starts. The deadline of a heartbeat's attempt (HEARTBEAT_ATTEMPT_DEADLINE_MS) ends only the
 // heartbeat's wait, never this shared work: it runs with its own long signal (HELPER_PREBUILD_TIMEOUT_MS, aborted when
 // the window closes), so the next attempt joins the build that runs instead of starting it again. Everything else (an

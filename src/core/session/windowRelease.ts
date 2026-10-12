@@ -5,7 +5,7 @@
 // The release of a devspace that a window leaves, when it closes or switches to another devspace. The window
 //   1. records the Git state of the devspace itself (in the running dev container as its user, the refresh that
 //      Delete uses), bounded, and goes on when that fails;
-//   2. sends the short release to the Session Monitor container of the engine: one heartbeat with the limit
+//   2. sends the short release to the Monitor container of the engine: one heartbeat with the limit
 //      RELEASE_LIMIT_SECONDS (5 minutes), marked as a release (`release: true`), so the monitor
 //      stops the devspace after that time unless a window uses it again (a reload sends its long heartbeat at once
 //      when it starts, SessionCoordinator.start).
@@ -19,7 +19,7 @@
 //
 // When the window leaves the devspace because it handed off a manual Stop of it (its pending operation `stop`), the
 // stopNow heartbeat goes instead of the release, first and whatever keeps the devspace or another window of this
-// computer shows it (Stop stops a kept devspace too); then the Git state. So the Stop reaches the Session Monitor
+// computer shows it (Stop stops a kept devspace too); then the Git state. So the Stop reaches the Monitor
 // once the connection really closes (a Cancel in the dialog about unsaved files keeps the window, and nothing is sent),
 // and the monitor stops the devspace even when VS Code quits before the reloaded window's own stop reaches Docker.
 // When it cannot be sent (an older monitor refuses it, no answer in time), the release follows. No `vscode`.
@@ -180,17 +180,17 @@ export async function releaseDevspace(deps: WindowReleaseDeps, devspaceId: strin
                 () => undefined,
                 (error: unknown) => deps.logger.info(`The last use of ${devspace.repository} could not be recorded: ${errorMessage(error)}`),
               );
-      // A handed-off Stop goes to the Session Monitor instead of the release, first; the Git state follows. A failed
+      // A handed-off Stop goes to the Monitor instead of the release, first; the Git state follows. A failed
       // one is followed by the release.
       const stop = deps.stop;
       if (stop !== undefined && (await handedOffStop(stop, devspace, deps.logger))) {
         const sent = await stop.send(devspaceId, signal);
         if (sent.ok) {
-          deps.logger.info(`The Stop of ${devspace.repository} was sent to the Session Monitor: it stops the devspace also if VS Code quits first.`);
+          deps.logger.info(`The Stop of ${devspace.repository} was sent to the Monitor: it stops the devspace also if VS Code quits first.`);
           await recordGitStateWithin(deps, devspace, Math.max(0, Math.min(bounds.gitMs, bounds.totalMs - (Date.now() - started))), signal);
           return 'stopSent';
         }
-        deps.logger.info(`The Stop of ${devspace.repository} could not be sent to the Session Monitor (the window that takes over stops it): ${sent.detail}`);
+        deps.logger.info(`The Stop of ${devspace.repository} could not be sent to the Monitor (the window that takes over stops it): ${sent.detail}`);
         if (signal.aborted) return 'failed';
       }
       const settings = deps.settings();
@@ -206,7 +206,7 @@ export async function releaseDevspace(deps: WindowReleaseDeps, devspaceId: strin
         deps.logger.info(`The release of ${devspace.repository} could not be sent (the long limit applies): ${result.detail}`);
         return 'failed';
       }
-      deps.logger.info(`Released ${devspace.repository}: the Session Monitor stops it after ${limitSeconds} seconds unless a window uses it again.`);
+      deps.logger.info(`Released ${devspace.repository}: the Monitor stops it after ${limitSeconds} seconds unless a window uses it again.`);
       return 'released';
     } catch (error) {
       deps.logger.info(`The release of the devspace could not be sent (the long limit applies): ${errorMessage(error)}`);

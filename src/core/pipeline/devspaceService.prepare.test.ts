@@ -206,7 +206,7 @@ describe('the headless prepare', () => {
       await skipped('its images are current (no update)');
     });
 
-    // The Session Monitor asks every devspace of its engine each run; nothing moved costs no batch helper, no Dev
+    // The Monitor asks every devspace of its engine each run; nothing moved costs no batch helper, no Dev
     // Container CLI and no analysis.
     it('without an update, found on the references of the record before anything is read from the volume', async () => {
       const env = await seedLabelled({ record: {} });

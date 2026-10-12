@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The command "Update All Images Now": the controller asks the Session Monitor of the Docker engine of the operation
+// The command "Update All Images Now": the controller asks the Monitor of the Docker engine of the operation
 // (the sidebar's) through the worker (`monitorRunNow`), with a progress until the monitor took the request, then the
 // message; the window's call to the worker (workerMonitor.monitorRunNow) with the monitor settings of this computer,
 // its time limit, and a strict answer; and the command and its menu in package.json.
@@ -46,7 +46,7 @@ function controllerWith(target: DockerTarget, update?: ControllerDeps['updateIma
 }
 
 describe('the command Update All Images Now', () => {
-  it('asks the Session Monitor of the engine of the operation, with a progress, then says that it updates now', async () => {
+  it('asks the Monitor of the engine of the operation, with a progress, then says that it updates now', async () => {
     const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
     const { controller, infos } = controllerWith(REMOTE, update);
     await controller.updateImagesNow();
@@ -54,18 +54,18 @@ describe('the command Update All Images Now', () => {
     expect(update.mock.calls[0][0]).toBe(REMOTE);
     expect(update.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
     expect(fakeVscode.window.withProgress).toHaveBeenCalledTimes(1);
-    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Session Monitor on build-box updates the images now.');
-    expect(infos).toContain('The Session Monitor on build-box took the request of "Update All Images Now".');
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on build-box updates the images now.');
+    expect(infos).toContain('The Monitor on build-box took the request of "Update All Images Now".');
   });
 
   it('names the local Docker for a local engine', async () => {
     const { controller } = controllerWith(LOCAL, async () => {});
     await controller.updateImagesNow();
-    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Session Monitor on the local Docker updates the images now.');
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on the local Docker updates the images now.');
   });
 
   it('a failure rejects (the command shows it) and says nothing of an update', async () => {
-    const { controller } = controllerWith(REMOTE, async () => Promise.reject(new Error('The Session Monitor did not take the request: Usage')));
+    const { controller } = controllerWith(REMOTE, async () => Promise.reject(new Error('The Monitor did not take the request: Usage')));
     await expect(controller.updateImagesNow()).rejects.toThrow('did not take the request');
     expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
   });

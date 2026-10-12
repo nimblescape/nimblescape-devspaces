@@ -306,24 +306,24 @@ export const Messages = {
   workerUnavailable: (cause: string) =>
     `The Devspaces worker on the Docker host could not be prepared (${cause}), so nothing was run. Check that Docker runs and that the workspace helper image can be built (see the Devspaces output), then try again.`,
   /**
-   * The Session Monitor container of the engine could not be started at an open, so the open was refused (the user
+   * The Monitor container of the engine could not be started at an open, so the open was refused (the user
    * error `sessionMonitorFailed`, isSessionMonitorFailed).
    */
   sessionMonitorUnavailable: (repository: string, cause: string) =>
-    `${repository} was not opened: the Session Monitor on the Docker engine could not be started (${cause}). Without it, a devspace that no window uses any more would not be stopped. Check that Docker runs (see the Devspaces output), then try again.`,
+    `${repository} was not opened: the Monitor on the Docker engine could not be started (${cause}). Without it, a devspace that no window uses any more would not be stopped. Check that Docker runs (see the Devspaces output), then try again.`,
   /**
-   * The Session Monitor of the engine could not be ensured again right after the container of an open started (it may
+   * The Monitor of the engine could not be ensured again right after the container of an open started (it may
    * have exited when idle during the clone and the build). The open goes on. `engine` is undefined when the Docker
    * target could not be read.
    */
   sessionMonitorAfterStartFailed: (repository: string, engine: string | undefined, cause: string) =>
-    `The Session Monitor on ${engine === undefined ? 'the Docker engine' : engine === 'the local Docker' ? engine : `the Docker host ${engine}`} could not be started after the container of ${repository} started (${cause}). Until it runs, the container is not stopped when no window uses it any more; a window connected to it keeps trying. Check that Docker runs (see the Devspace output).`,
+    `The Monitor on ${engine === undefined ? 'the Docker engine' : engine === 'the local Docker' ? engine : `the Docker host ${engine}`} could not be started after the container of ${repository} started (${cause}). Until it runs, the container is not stopped when no window uses it any more; a window connected to it keeps trying. Check that Docker runs (see the Devspace output).`,
   /**
-   * The heartbeats of this window to the Session Monitor of the engine of its devspace failed
+   * The heartbeats of this window to the Monitor of the engine of its devspace failed
    * HEARTBEAT_WARN_AFTER_FAILURES times in a row (once per failure streak).
    */
   heartbeatsFailing: (repository: string, engine: string, minutesLeft: number) =>
-    `Devspaces cannot reach the Session Monitor on ${engine === 'the local Docker' ? engine : `the Docker host ${engine}`}. If this goes on, it may stop the container of ${repository} ${
+    `Devspaces cannot reach the Monitor on ${engine === 'the local Docker' ? engine : `the Docker host ${engine}`}. If this goes on, it may stop the container of ${repository} ${
       minutesLeft <= 0 ? 'at any moment' : `in about ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'}`
     }. Check that Docker runs (see the Devspace output); the window keeps trying.`,
   /**

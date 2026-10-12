@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// For the Session Monitor on the Engine API: DockerEngine.containerSummaries, the list of the containers as the engine
+// For the Monitor on the Engine API: DockerEngine.containerSummaries, the list of the containers as the engine
 // gives it without an inspect of each, and the bound of the answers of the lists of every container and image, over an
 // Engine API in memory.
 import { describe, expect, it } from 'vitest';
@@ -76,7 +76,7 @@ describe('the bound of the answers of the lists', () => {
 });
 
 // The name of a container in the list is its own name, never an alias of a legacy `--link` that the engine sorts first
-// (the name goes into the log lines of the stops of the Session Monitor).
+// (the name goes into the log lines of the stops of the Monitor).
 describe('the name of a container in the list of the engine', () => {
   it('takes its own name before an alias of a legacy link, else the first one, else none', () => {
     expect(containerName(['/aaa/db', '/devspace-api-db-1'])).toBe('devspace-api-db-1');

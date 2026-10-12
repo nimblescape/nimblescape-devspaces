@@ -2,12 +2,12 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Part of the shared VS Code server and the Session Monitor's daily run: the files of the shared extension cache in the
+// Part of the shared VS Code server and the Monitor's daily run: the files of the shared extension cache in the
 // store (the layout is in vscodeExtensions.ts): the record of an open's extension list (the worker), the listing of the
 // cached `.vsix` files (the worker's seed, the monitor's cleanup), the read of the records (the monitor), and the
 // download of one `.vsix` under the lock of its file (the monitor), streamed into a temporary file and renamed into
 // place, as the VS Code server is fetched. The records, the failures and the chosen files are in the volume of the
-// Session Monitor (`stateDir`: LOCK_STATE_DIR in the worker, REMOTE_MONITOR_STATE_DIR in the monitor), which no dev
+// Monitor (`stateDir`: LOCK_STATE_DIR in the worker, REMOTE_MONITOR_STATE_DIR in the monitor), which no dev
 // container mounts. No `vscode`.
 import { randomBytes } from 'crypto';
 import * as fs from 'fs';
@@ -38,7 +38,7 @@ import { STORE_LOCK_FOLDER, downloadToFile } from './vscodeServerStore';
 
 /** The folder of the extension cache in the store. */
 export const STORE_EXTENSION_FOLDER = 'extensions';
-/** The folder of the extension lists in the volume of the Session Monitor. */
+/** The folder of the extension lists in the volume of the Monitor. */
 export const STATE_EXTENSION_FOLDER = 'extensions';
 /** The folder of the recorded lists (`<state>/extensions/wanted`). */
 export const EXTENSION_WANTED_FOLDER = 'wanted';
@@ -114,7 +114,7 @@ async function readPlainFile(file: string, maxBytes: number): Promise<string | u
  * written atomically, at most MAX_EXTENSION_RECORD_BYTES): the configuration's extensions and the user's defaults, with
  * the time of the open. `configuration` undefined (the open could not read its configuration): the recorded
  * configuration's list stays. Resolves with the list of the open (combinedExtensions); rejects with the cause (the
- * caller logs it). Under `stateDir`, the volume of the Session Monitor (folders 0700), not in the store that the dev
+ * caller logs it). Under `stateDir`, the volume of the Monitor (folders 0700), not in the store that the dev
  * containers mount.
  */
 export async function recordExtensions(

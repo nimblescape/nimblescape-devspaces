@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// withTimeLimit, the one time-limited call (EngineDocker's calls, the engine of the Session Monitor's ensure, the stops
+// withTimeLimit, the one time-limited call (EngineDocker's calls, the engine of the Monitor's ensure, the stops
 // of Stop).
 import { describe, expect, it } from 'vitest';
 import { abortError, withTimeLimit } from './ports';

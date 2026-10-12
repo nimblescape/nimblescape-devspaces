@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The operation `open` of the worker: its checks before anything runs, its refusals as values (with a fake extension
-// behind its handler), the settings of its pipeline, its progress, and its Session Monitor (the image maintenance of
+// behind its handler), the settings of its pipeline, its progress, and its Monitor (the image maintenance of
 // its parameters; the signal of the operation when the pipeline gives none).
 import { describe, expect, it, vi } from 'vitest';
 import { LOCK_UNAVAILABLE_CODE, OP_OPEN, OPEN_PROGRESS_DETAIL, type AskKind } from '../core/helperChannel/protocol';
@@ -128,7 +128,7 @@ describe('the operation open of the worker', () => {
   });
 });
 
-describe('the Session Monitor of an open', () => {
+describe('the Monitor of an open', () => {
   const ok = async () => ({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
 
   it('the ensure with the image maintenance of the parameters, and the signal of the operation when the pipeline gives none', async () => {

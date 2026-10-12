@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// extension.ts gives the Session Monitor of an engine the schedule of its background run (cacheUpdateSchedule) and its
+// extension.ts gives the Monitor of an engine the schedule of its background run (cacheUpdateSchedule) and its
 // mode: permanent on a remote engine (an open whose Docker host is not the local one, a repair of a remote target), on
 // a local one only with stopLocalMonitorWhenIdle off. The settings come from monitorSettings.ts and are tested by their
 // result; only that extension.ts calls them with the Docker host of the open and the target of the repair is read from

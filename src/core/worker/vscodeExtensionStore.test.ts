@@ -75,7 +75,7 @@ describe('the record of an open', () => {
     const folder = path.join(root, 'extensions', 'wanted');
     expect(fs.readdirSync(folder)).toEqual([`${ENV}.json`]);
     expect(JSON.parse(fs.readFileSync(path.join(folder, `${ENV}.json`), 'utf8'))).toEqual({ at: 1234, configuration: ['a.b@1.0.0'], defaults: ['c.d', 'a.b'] });
-    // The record is in the volume of the Session Monitor (here the temporary folder), whose `extensions` folder is 0700
+    // The record is in the volume of the Monitor (here the temporary folder), whose `extensions` folder is 0700
     // (no dev container reads it), not 0755.
     expect(fs.statSync(path.join(root, 'extensions')).mode & 0o777).toBe(0o700);
     expect(fs.statSync(folder).mode & 0o777).toBe(0o700);

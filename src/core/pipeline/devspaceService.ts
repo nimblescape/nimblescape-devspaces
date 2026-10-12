@@ -426,10 +426,10 @@ interface PipelineContext {
    * answer for its images): the reason of a Docker Compose start that fails says so.
    */
   configurationUnchecked?: boolean;
-  /** The Session Monitor of the engine was ensured in this run (once per run; any engine). */
+  /** The Monitor of the engine was ensured in this run (once per run; any engine). */
   sessionMonitorEnsured?: boolean;
   /**
-   * The Session Monitor was ensured again after `up` started the container of this run (ensureSessionMonitorAfterStart;
+   * The Monitor was ensured again after `up` started the container of this run (ensureSessionMonitorAfterStart;
    * once per run).
    */
   sessionMonitorEnsuredAfterStart?: boolean;
@@ -958,7 +958,7 @@ export function devspaceOfVolume(volume: VolumeInfo, now: string, dockerHost: st
 
 /**
  * The open pipeline and the devspace operations. Operations on the same repository run one after the other in this
- * window; busy marks in the registry keep other windows and the Session Monitor away while a devspace changes.
+ * window; busy marks in the registry keep other windows and the Monitor away while a devspace changes.
  */
 export class DevspaceService extends OperationBase {
   /**
@@ -1163,7 +1163,7 @@ export class DevspaceService extends OperationBase {
     const identity = this.identityOf(session);
     // Started now too (the same fetch when openFirst started it already for these options).
     const vscodeServer = this.startVscodeServer(options);
-    // The Session Monitor must not stop a running container while the pipeline runs. The file is written again while
+    // The Monitor must not stop a running container while the pipeline runs. The file is written again while
     // the pipeline runs, because it counts only for 2 minutes and not every step holds a busy mark.
     await this.deps.sessionFiles.writePending(owned.id, this.deps.owner.windowId);
     const stopRefresh = this.keepPendingFresh(owned.id);
@@ -1363,7 +1363,7 @@ export class DevspaceService extends OperationBase {
       // without a batch kind) is rethrown before that rule: Start, Rebuild and Select configuration are refused, and a
       // running, current container is not opened as it is.
       if (isBatchHelperUnavailable(error)) throw error;
-      // Without the Session Monitor nothing is opened, not even a running container as it is.
+      // Without the Monitor nothing is opened, not even a running container as it is.
       if (isSessionMonitorFailed(error)) throw error;
       if (helperFailed && (cancelled || !(await this.opensAsItIsOrFalse(ctx, container, record, false)))) throw error;
       // An analysis that could not run blames no configuration: the existing devspace starts as it is (nothing is
@@ -2337,7 +2337,7 @@ export class DevspaceService extends OperationBase {
     const input = { hasRecord: record !== undefined, imagePresent, forced, skipUpdate };
     let check: ImageCheckState = { kind: 'skipped' };
     if (shouldCheckImages({ ...input, updateImagesOnConnect: this.deps.settings().updateImagesOnConnect })) {
-      // A rebuild asks the registry itself for every reference (no answer of the Session Monitor).
+      // A rebuild asks the registry itself for every reference (no answer of the Monitor).
       check = await this.checkImages(ctx, loaded, record, imagePresent || containerExists, forced);
     }
     // An update whose new image the host access policy refused is not built again for the same digests and
@@ -2536,7 +2536,7 @@ export class DevspaceService extends OperationBase {
   }
 
   /**
-   * The image references of `images` whose answer of the Session Monitor's registry check is fresh
+   * The image references of `images` whose answer of the Monitor's registry check is fresh
    * (freshRegistryDigests: younger than the time between two runs of its schedule plus REGISTRY_ANSWER_SLACK_MS), with
    * their digests, and the others (`others`), which the open checks itself; `undefined` when no answer is used (none
    * fresh, no file, or no reference). Never throws (a failed read is no answer).
@@ -2548,8 +2548,8 @@ export class DevspaceService extends OperationBase {
     if (answers === undefined) return undefined;
     const fresh = freshRegistryDigests(answers, images, this.deps.clock.now());
     if (fresh.oldest === undefined) return undefined;
-    this.logger.info(`The Session Monitor's registry check of ${answerTimeText(fresh.oldest, answers.timeZone)} is used.`);
-    if (fresh.others.length > 0) this.logger.info(`The registry is asked for the image references without a fresh answer of the Session Monitor: ${listSome(fresh.others, 20)}.`);
+    this.logger.info(`The Monitor's registry check of ${answerTimeText(fresh.oldest, answers.timeZone)} is used.`);
+    if (fresh.others.length > 0) this.logger.info(`The registry is asked for the image references without a fresh answer of the Monitor: ${listSome(fresh.others, 20)}.`);
     return { digests: fresh.digests, others: fresh.others };
   }
 
@@ -3130,7 +3130,7 @@ export class DevspaceService extends OperationBase {
       composeContainer: container !== undefined && isComposeContainer(container.labels, composeProjectName(env.repository, env.id)),
       prepare: { record },
     };
-    // The Session Monitor asks every devspace of its engine each run, so the references of the record are checked
+    // The Monitor asks every devspace of its engine each run, so the references of the record are checked
     // first (anonymously, with the monitor's fresh registry answers), before the batch helper, the Dev Container CLI
     // and the analyses: when none of them moved, nothing is to prepare (the configuration is the record's, checked
     // below whenever one moved, so its references are the record's; a base image that moved is one of them). The full
@@ -3151,7 +3151,7 @@ export class DevspaceService extends OperationBase {
     if (loaded.configPath !== record.configPath || (compose !== undefined) !== hasComposeRecord(record) || !approved) {
       throw new PrepareSkipped('its configuration changed since its last build (only the approved configuration is prepared)');
     }
-    // Step 7 as at the open, anonymously (the registry answers of the Session Monitor where they are fresh).
+    // Step 7 as at the open, anonymously (the registry answers of the Monitor where they are fresh).
     const check = await this.checkImages(ctx, loaded, record, true);
     if (check.kind !== 'checked') throw new PrepareSkipped('the registries could not be asked');
     if (check.upToDate) throw new PrepareSkipped('its images are current (no update)');
@@ -3739,7 +3739,7 @@ export class DevspaceService extends OperationBase {
    * `up --remove-existing-container` (the CLI removes the container with `docker rm -f`, without its volumes); for
    * Docker Compose, runComposeUp first stops and removes only the dev container, after the checks
    * (PipelineContext.recreateDevContainer), so the other services keep running with their data. No volume is removed.
-   * The busy mark keeps the Session Monitor and other windows away meanwhile. No safety check of the repository: it
+   * The busy mark keeps the Monitor and other windows away meanwhile. No safety check of the repository: it
    * stays in the volume. No busy mark of Step 9 is held during the question (only the mark that requireNoOtherWindow
    * set is cleared), and after the answer, with the mark of the recreation set, the files of the other windows are read
    * (otherWindowOf, with a fresh anyContainerRuns): another window that uses the devspace, or that cannot be ruled
@@ -4643,7 +4643,7 @@ export class DevspaceService extends OperationBase {
         : { known: true, use: 'opening', text: `The window ${other.pending.windowId} is opening the devspace.` };
     }
     // For a destructive check while a container runs, a live window whose status file is not fresh any more, but not
-    // stale by the Session Monitor's rule (its waiting time, and the sleep grace), may only have missed its updates
+    // stale by the Monitor's rule (its waiting time, and the sleep grace), may only have missed its updates
     // (computer sleep): it is not known whether it is connected.
     if (check?.runs === true && !unreadable) {
       const late = otherWindowMayUseDevspace(env.id, this.deps.owner.windowId, {
@@ -5424,7 +5424,7 @@ export class DevspaceService extends OperationBase {
     const store = this.vscodeStoreVolume();
     try {
       const found = await this.deps.docker.findContainer(ctx.env.id, containerName);
-      // The one check of the mount, shared with the Session Monitor's link (mountsVscodeStore).
+      // The one check of the mount, shared with the Monitor's link (mountsVscodeStore).
       const mounted = found !== undefined && (sameContainer(found.id, container) || found.name === container) && mountsVscodeStore(found.mountTargets, store);
       if (!mounted) {
         this.logger.info(`The VS Code server ${commit} is not linked: the container of ${ctx.env.repository} does not mount the shared store (it was created before; a rebuild adds it).`);
@@ -5515,7 +5515,7 @@ export class DevspaceService extends OperationBase {
       const platform = ctx.vscodeServer !== undefined && ctx.vscodeServer.settled ? await ctx.vscodeServer.ready : undefined;
       const files = await cache.seedFiles(list, platform);
       if (files.length === 0) {
-        this.logger.info(`The shared extension cache has none of the ${list.length} extension(s) of ${ctx.env.repository} yet; the Session Monitor downloads them in the background.`);
+        this.logger.info(`The shared extension cache has none of the ${list.length} extension(s) of ${ctx.env.repository} yet; the Monitor downloads them in the background.`);
         return;
       }
       const result = await runScript(this.deps.docker, container, 'vscodeExtensionSeed', [vscode.server.quality, platform ?? 'none', ...files], {
@@ -6238,10 +6238,10 @@ export class DevspaceService extends OperationBase {
         removed = true;
       });
       await this.removeDevspaceFiles(env.id);
-      // The heartbeat record of this computer in the Session Monitor of the engine (best effort), on every engine,
-      // local and remote: the worker's Session Monitor.
+      // The heartbeat record of this computer in the Monitor of the engine (best effort), on every engine,
+      // local and remote: the worker's Monitor.
       const sessionMonitor = this.deps.sessionMonitor;
-      if (sessionMonitor) await this.quietly('remove the heartbeat record from the Session Monitor', () => sessionMonitor.forget(env.id));
+      if (sessionMonitor) await this.quietly('remove the heartbeat record from the Monitor', () => sessionMonitor.forget(env.id));
       this.logger.info(`The devspace of ${env.repository} was deleted.`);
     } finally {
       if (!removed) await this.clearOwnMark(env.id);
@@ -6462,7 +6462,7 @@ export class DevspaceService extends OperationBase {
     // image fails only on a cancel. A helperFailed (only a test's helper throws one here) marks the run where the
     // calling step catches it (loadConfiguration), else ends it.
     const image = await this.deps.helper.ownImageUse(ctx.signal);
-    // The Session Monitor first; when it cannot be ensured, the open is refused, and the helper image is not taken for
+    // The Monitor first; when it cannot be ensured, the open is refused, and the helper image is not taken for
     // resolved, so no later step of this run goes on without the monitor.
     await this.ensureSessionMonitor(ctx);
     // Pinned by the ID of its image, for the current tag too.
@@ -6470,7 +6470,7 @@ export class DevspaceService extends OperationBase {
   }
 
   /**
-   * The Session Monitor container of the engine, and the first heartbeat of this computer for the devspace, once per
+   * The Monitor container of the engine, and the first heartbeat of this computer for the devspace, once per
    * run and before the container is created or started: the monitor acts only on devspaces with a record, so this
    * keeps the stop without contact for every devspace. The keep-running flag follows keptWhenClosed. The worker's
    * monitor runs the worker's own helper image, so the helper image of the open is not passed. On every engine, local
@@ -6489,7 +6489,7 @@ export class DevspaceService extends OperationBase {
     } catch (error) {
       if (this.isCancellation(error, ctx.signal)) throw error;
       const cause = errorMessage(error);
-      this.logger.warn(`The Session Monitor on ${engine} could not be started; the open of ${ctx.env.repository} is refused: ${cause}`);
+      this.logger.warn(`The Monitor on ${engine} could not be started; the open of ${ctx.env.repository} is refused: ${cause}`);
       throw new UserFacingError('sessionMonitorFailed', Messages.sessionMonitorUnavailable(ctx.env.repository, cause), cause);
     }
     ctx.sessionMonitorEnsured = true;
@@ -6499,7 +6499,7 @@ export class DevspaceService extends OperationBase {
       await sessionMonitor.images(ctx.signal);
     } catch (error) {
       if (this.isCancellation(error, ctx.signal)) throw error;
-      this.logger.warn(`The image settings and the images in use for the Session Monitor on ${engine} could not be sent: ${errorMessage(error)}`);
+      this.logger.warn(`The image settings and the images in use for the Monitor on ${engine} could not be sent: ${errorMessage(error)}`);
     }
     this.throwIfCancelled(ctx.signal);
     // `seq` is the time at which the flags are read; the entry is read again for them.
@@ -6509,15 +6509,15 @@ export class DevspaceService extends OperationBase {
     try {
       const sent = await sessionMonitor.heartbeat(env.id, keepRunning, seq);
       if (!sent.ok) {
-        this.logger.warn(`The first heartbeat for ${env.repository} to the Session Monitor on ${engine} failed; the window tries again. ${sent.detail}`);
+        this.logger.warn(`The first heartbeat for ${env.repository} to the Monitor on ${engine} failed; the window tries again. ${sent.detail}`);
       }
     } catch (error) {
-      this.logger.warn(`The first heartbeat for ${env.repository} to the Session Monitor on ${engine} failed: ${errorMessage(error)}`);
+      this.logger.warn(`The first heartbeat for ${env.repository} to the Monitor on ${engine} failed: ${errorMessage(error)}`);
     }
   }
 
   /**
-   * The Session Monitor of the engine again, right after `up` created or started the container of this run (once per
+   * The Monitor of the engine again, right after `up` created or started the container of this run (once per
    * run, only when ensureSessionMonitor ran in it). The monitor may have exited when idle between the ensure before the
    * clone and build and this start: the window's heartbeat repair starts it again only once the container exists, and a
    * sleep, quit or crash before that would leave the container running without a monitor. A cheap check when it runs
@@ -6542,7 +6542,7 @@ export class DevspaceService extends OperationBase {
       if (this.isCancellation(error, ctx.signal)) throw error;
       const cause = errorMessage(error);
       this.logger.warn(
-        `The Session Monitor on ${engine ?? 'the Docker engine'} could not be started again after the container of ${ctx.env.repository} started; the heartbeats of the window try again: ${cause}`,
+        `The Monitor on ${engine ?? 'the Docker engine'} could not be started again after the container of ${ctx.env.repository} started; the heartbeats of the window try again: ${cause}`,
       );
       this.deps.ui.warn(Messages.sessionMonitorAfterStartFailed(ctx.env.repository, engine, cause));
     }

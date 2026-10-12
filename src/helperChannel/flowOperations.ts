@@ -342,7 +342,7 @@ export function windowStateOperation(engineOf: EngineOfOperation): OperationHand
  * `delete`, the Delete of a devspace, run by the worker's own pipeline (workerServices, DevspaceService.delete):
  * the busy mark, the entry and the session files through the requests of the operation (each for its devspace only),
  * the lock taken here, the removal over the port of the engine, and the heartbeat record of the computer that sent it
- * forgotten in the Session Monitor of the engine.
+ * forgotten in the Monitor of the engine.
  */
 export function deleteOperation(engineOf: EngineOfOperation, ownHelperOf: OwnHelperOf, openBatch: OpenWorkerBatch, lockDeps: LockDeps = LOCK_DEPS): OperationHandler {
   return checkedOperation('delete', parseDeleteParams, async (checked, context) => {
@@ -433,7 +433,7 @@ export function reconcileOperation(engineOf: EngineOfOperation, ownHelperOf: Own
 }
 
 /**
- * `heartbeat`, one heartbeat of a window to the Session Monitor container of the worker's engine
+ * `heartbeat`, one heartbeat of a window to the Monitor container of the worker's engine
  * (monitorFlow.sendHeartbeat). `missing` tells the window to start the monitor again.
  */
 export function heartbeatOperation(engineOf: EngineOfOperation): OperationHandler {
@@ -487,14 +487,14 @@ export async function monitorImage(engine: DockerEngine, own: { tag: string; id?
     await limited(REMOTE_MONITOR_DOCKER_TIMEOUT_MS, signal, (limit) => engine.tagImage(id, reference, limit));
   } catch (error) {
     if (signal.aborted) throw error;
-    logger.warn(`The image of the Session Monitor could not be tagged as ${reference}; it runs from ${own.id}: ${errorMessage(error)}`);
+    logger.warn(`The image of the Monitor could not be tagged as ${reference}; it runs from ${own.id}: ${errorMessage(error)}`);
     return { reference: own.id };
   }
   return { reference, id: own.id };
 }
 
 /**
- * The Session Monitor of the worker's engine made sure, as `monitorEnsure` does it, for that operation and for the open
+ * The Monitor of the worker's engine made sure, as `monitorEnsure` does it, for that operation and for the open
  * in the worker (WorkerServicesDeps.monitorEnsure): from the worker's own helper image (its monitor tag, monitorImage),
  * with the socket that the worker mounts, the monitor script of the worker's bundle and the image maintenance of the
  * operation. Rejects with the cause when it cannot. With the mode of the monitor (MonitorSettings.permanent), and with
@@ -526,7 +526,7 @@ export async function ensureWorkerMonitor(
 }
 
 /**
- * The worker's own script (its bundle as the loader stored it) and the volume of the Session Monitor as the worker
+ * The worker's own script (its bundle as the loader stored it) and the volume of the Monitor as the worker
  * mounts it (LOCK_STATE_DIR), where ensureWorkerMonitor stores the script for the monitor's prepares.
  */
 export interface WorkerScriptSource {
@@ -544,19 +544,19 @@ function storedWorkerHash(worker: WorkerScriptSource, logger: Logger): string | 
   try {
     script = worker.read();
   } catch (error) {
-    logger.warn(`The worker script cannot be read, so the Session Monitor prepares no devspace image: ${errorMessage(error)}`);
+    logger.warn(`The worker script cannot be read, so the Monitor prepares no devspace image: ${errorMessage(error)}`);
     return undefined;
   }
   try {
     return storeWorkerScript(worker.stateDir, script);
   } catch (error) {
-    logger.warn(`The worker script could not be stored for the prepares of the Session Monitor: ${errorMessage(error)}`);
+    logger.warn(`The worker script could not be stored for the prepares of the Monitor: ${errorMessage(error)}`);
     return bundleHash(script);
   }
 }
 
 /**
- * `monitorEnsure`, the Session Monitor container of the worker's engine made sure (RemoteSessionMonitor.ensureOrThrow
+ * `monitorEnsure`, the Monitor container of the worker's engine made sure (RemoteSessionMonitor.ensureOrThrow
  * over the Engine API, engineMonitor): with the worker's own helper image (the image the worker runs from: its tag in
  * the label, its ID as the image of the container, its monitor tag: monitorImage), the socket that the worker mounts,
  * and `script` (the monitor of the worker's bundle). A failure fails the operation with its cause.
@@ -574,7 +574,7 @@ export function monitorEnsureOperation(engineOf: EngineOfOperation, ownHelperOf:
 }
 
 /**
- * `monitorRunNow`, "Update All Images Now": the Session Monitor container of the worker's engine made sure as
+ * `monitorRunNow`, "Update All Images Now": the Monitor container of the worker's engine made sure as
  * `monitorEnsure` does (so it runs, and its script knows `run-now`), then its request for the background run at once
  * (requestBackgroundRun). A failure of either fails the operation with its cause; the run itself is not waited for.
  */
@@ -591,7 +591,7 @@ export function monitorRunNowOperation(
       const engine = engineOf(context);
       await ensure(engine, own, contextLogger(context), script, checked.images, context.signal, worker);
       const requested = await requestBackgroundRun(engine, context.signal);
-      if (!requested.ok) throw new Error(`The Session Monitor did not take the request: ${requested.detail}`);
+      if (!requested.ok) throw new Error(`The Monitor did not take the request: ${requested.detail}`);
       return { requested: true } satisfies MonitorRunNowValue;
     } catch (error) {
       throw operationFailure('monitorRunNow', error, context);
@@ -601,7 +601,7 @@ export function monitorRunNowOperation(
 
 /**
  * `prepare`, the headless prepare of the next devspace image of a devspace of the worker's engine (runPrepare):
- * no request to the extension (it has no HostSide: the Session Monitor runs it without VS Code), no secret, under the
+ * no request to the extension (it has no HostSide: the Monitor runs it without VS Code), no secret, under the
  * prepare lock only, its batch helper on the worker's own image. Its value says what it did (PrepareValue); a cancel of
  * the operation ends it as `cancelled`.
  */
@@ -655,7 +655,7 @@ export function operationProgress(context: OperationContext): ProgressReporter {
 }
 
 /**
- * The image settings of an open for the Session Monitor of the worker's engine, after its ensure (always: they hold the
+ * The image settings of an open for the Monitor of the worker's engine, after its ensure (always: they hold the
  * schedule of the background run), and the image references in use of the computer of the open (`references` of
  * `monitorSource`), when it carries them. Best effort: a failure is logged. No image list of repositories is sent. The
  * monitor is the one of this version (the ensure ran before); an older one that another computer put in its place
@@ -670,16 +670,16 @@ export async function giveMonitorImages(
   // Always: the schedule of the whole background run (the newest settings of any computer apply); without the mode,
   // which is part of the label (imageSettingsOf).
   const settings = await sendMonitorSettings(engine, { settings: imageSettingsOf(params.images) }, signal);
-  if (!settings.ok) logger.warn(`The image settings could not be given to the Session Monitor: ${settings.detail}`);
+  if (!settings.ok) logger.warn(`The image settings could not be given to the Monitor: ${settings.detail}`);
   if (params.references === undefined || !isSourceId(params.monitorSource)) return;
   // With the recorded digests of the references.
   const inUse = { source: params.monitorSource, references: params.references, ...(params.referenceDigests !== undefined ? { digests: params.referenceDigests } : {}) };
   const list = await sendMonitorSettings(engine, { inUse }, signal);
-  if (!list.ok) logger.warn(`The image references in use could not be given to the Session Monitor: ${list.detail}`);
+  if (!list.ok) logger.warn(`The image references in use could not be given to the Monitor: ${list.detail}`);
 }
 
 /**
- * The Session Monitor of an open: its ensure with the image maintenance of the parameters, then its image settings and
+ * The Monitor of an open: its ensure with the image maintenance of the parameters, then its image settings and
  * the references in use (giveMonitorImages); each with the signal of the operation when the pipeline gives none.
  */
 export function openMonitor(
@@ -701,7 +701,7 @@ export function openMonitor(
 /**
  * `open`, the open of a devspace by the worker's own pipeline (workerServices, DevspaceService.open or
  * openDevspace): the records, the questions, the token and the registry logins through the requests of the
- * operation, the lock and the batch helper (on the worker's own image) taken here, the Session Monitor of the engine
+ * operation, the lock and the batch helper (on the worker's own image) taken here, the Monitor of the engine
  * made sure with the image maintenance of the parameters (ensureWorkerMonitor, with the signal of the operation when
  * the pipeline gives none), its image settings and references given after it (giveMonitorImages), and its first
  * heartbeat with the time limit of the settings. It answers with what the window needs to connect; a refusal of the

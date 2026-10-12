@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The id of this installation (`computer.id` in the global storage folder): 128 random bits as 32 hex digits. The
-// heartbeats to the Session Monitor on a remote Docker host name their source with it, so that a shared engine tells
+// heartbeats to the Monitor on a remote Docker host name their source with it, so that a shared engine tells
 // the computers apart. It is no secret and not tied to the user. The windows read it; the first reader creates it
 // (`wx`: when two create it at once, both use the file that won).
 import * as crypto from 'crypto';

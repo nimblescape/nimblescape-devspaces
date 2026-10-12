@@ -302,7 +302,7 @@ export function refusedVariable(name: string, where: string): Problem | undefine
 // Values of flags and keys
 
 /**
- * The longest `--stop-timeout`, in seconds. The Session Monitor ends each of its Docker calls after 30 seconds
+ * The longest `--stop-timeout`, in seconds. The Monitor ends each of its Docker calls after 30 seconds
  * (MONITOR_DOCKER_TIMEOUT_MS), also `docker stop`, which waits up to the stop timeout of the container before it kills
  * the processes of the container.
  */

@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The worker's operation `monitorRunNow` ("Update All Images Now"): first the ensure of the Session Monitor with the
+// The worker's operation `monitorRunNow` ("Update All Images Now"): first the ensure of the Monitor with the
 // parameters (so the monitor of this version runs), then `monitor.js run-now` in it (the entry monitorRunNow of the
 // registry, no argument, no input); a failure of either fails the operation, and a failed ensure runs no command. It
 // asks nothing of the extension; its answer is checked strictly.
@@ -63,7 +63,7 @@ describe('the operation monitorRunNow', () => {
 
   it('a monitor that refuses the command fails the operation with its detail', async () => {
     const { operation, context } = setup(async () => result(2, '', 'Usage: monitor.js run | …'));
-    await expect(operation({ images: IMAGES }, context)).rejects.toMatchObject({ code: 'failed', message: 'The Session Monitor did not take the request: Usage: monitor.js run | …' });
+    await expect(operation({ images: IMAGES }, context)).rejects.toMatchObject({ code: 'failed', message: 'The Monitor did not take the request: Usage: monitor.js run | …' });
   });
 
   it('refuses parameters beyond the schema before it does anything', async () => {

@@ -85,7 +85,7 @@ export function probeOperation(engineOf: EngineOfOperation): OperationHandler {
 /**
  * `sweep` removes the channel containers that were created but never started (protocol.ts, OP_SWEEP): the prune of the
  * port of the engine with SWEEP_FILTERS (`POST /containers/prune`); its value is how many it removed. Every stopped
- * helper container (the channels and the batch helpers), never the Session Monitor.
+ * helper container (the channels and the batch helpers), never the Monitor.
  */
 export function sweepOperation(engineOf: EngineOfOperation): OperationHandler {
   return checkedOperation('sweep', parseSweepParams, async (_checked, context) => {
@@ -131,7 +131,7 @@ const BATCH = batchDeps(ENGINE_OF);
 const OWN_HELPER_OF: OwnHelperOf = ownHelperOfEngine(ENGINE_OF, () => os.hostname());
 
 /**
- * This worker's own script (as the loader stored it) for the Session Monitor's prepares, stored by each ensure of the
+ * This worker's own script (as the loader stored it) for the Monitor's prepares, stored by each ensure of the
  * monitor in its volume (LOCK_STATE_DIR, the same volume).
  */
 const WORKER_SCRIPT: WorkerScriptSource = { read: () => BATCH.readScript(), stateDir: LOCK_STATE_DIR };
@@ -155,15 +155,15 @@ export const OPERATIONS: Readonly<Record<string, OperationHandler>> = {
   [OP_WINDOW_STATE]: windowStateOperation(ENGINE_OF),
   // The registry rebuilt from the volumes, by the worker's own pipeline.
   [OP_RECONCILE]: reconcileOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p)),
-  // The heartbeats of the Session Monitor, and the Git state of a release (the image settings come with the open).
+  // The heartbeats of the Monitor, and the Git state of a release (the image settings come with the open).
   [OP_HEARTBEAT]: heartbeatOperation(ENGINE_OF),
   [OP_RECORD_GIT_STATE]: recordGitStateOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p)),
-  // The ensure of the Session Monitor container, with the script of the monitor in this bundle.
+  // The ensure of the Monitor container, with the script of the monitor in this bundle.
   [OP_MONITOR_ENSURE]: monitorEnsureOperation(ENGINE_OF, OWN_HELPER_OF, () => monitorScript, WORKER_SCRIPT),
   // "Update All Images Now", the same ensure, then the request of the run.
   [OP_MONITOR_RUN_NOW]: monitorRunNowOperation(ENGINE_OF, OWN_HELPER_OF, () => monitorScript, ensureWorkerMonitor, WORKER_SCRIPT),
-  // The open, by the worker's own pipeline, with the Session Monitor of this bundle.
+  // The open, by the worker's own pipeline, with the Monitor of this bundle.
   [OP_OPEN]: openOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p), () => monitorScript, LOCK_DEPS, WORKER_SCRIPT),
-  // The headless prepare of the next devspace image (the Session Monitor triggers it).
+  // The headless prepare of the next devspace image (the Monitor triggers it).
   [OP_PREPARE]: prepareOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p)),
 };

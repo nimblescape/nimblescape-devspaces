@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
-// Mutation probes of the loop of the Session Monitor on the summaries of the list of the engine
+// Mutation probes of the loop of the Monitor on the summaries of the list of the engine
 // (src/remoteMonitor/main.ts): a summary that remoteContainersOf skips (a label of a devspace whose value is no
 // devspace ID) neither hides the summaries after it (mutant: `break` in place of `continue`) nor counts as a running
 // devspace container for the idle exit (mutant: the activity of the tick read from the summaries before
@@ -116,7 +116,7 @@ function never(request: EngineRequest): Promise<EngineAnswer> {
   return new Promise<EngineAnswer>((_resolve, reject) => request.signal?.addEventListener('abort', () => reject(abortError()), { once: true }));
 }
 
-describe('the loop of the Session Monitor on the summaries of the list', () => {
+describe('the loop of the Monitor on the summaries of the list', () => {
   // Kills `break` in place of `continue`: a summary that is skipped is only that one; the summaries after it are read
   // (the engine lists the newest first, so a newer container with a label that is no devspace ID would otherwise
   // hide every older devspace container: none of them would be stopped, and the records of their devspaces would

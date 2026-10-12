@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The two small files of a prepare next to its prepare lock in the volume of the Session Monitor (the lock folder,
+// The two small files of a prepare next to its prepare lock in the volume of the Monitor (the lock folder,
 // 0700, which no dev container mounts): the stop request of a Delete (prepareStopFilePath, empty) and the hash of the
 // prepare that the time limit stopped or whose build failed (prepareStoppedFilePath). Each is a plain file of its own
 // (never through a link: O_NOFOLLOW), 0600, named by a storage ID only (isStorageId). Worker only.

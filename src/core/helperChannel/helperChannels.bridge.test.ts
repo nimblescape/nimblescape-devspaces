@@ -75,7 +75,7 @@ async function open(first: () => StartedProcess) {
       script: async () => 'SCRIPT',
       helperTag: async () => 'devspace-helper:abc',
       socketPath: async () => '/var/run/docker.sock',
-      stateVolume: 'devspace-session-monitor',
+      stateVolume: 'devspace-monitor',
       vscodeVolume: 'devspace-vscode',
     },
     REMOTE,

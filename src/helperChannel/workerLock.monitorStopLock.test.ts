@@ -2,11 +2,11 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Docker tests do not have a worker hold a lock against the Session Monitor (remoteMonitor.test.ts uses
+// The Docker tests do not have a worker hold a lock against the Monitor (remoteMonitor.test.ts uses
 // holdLockInContainer/lockIsFree), and the busy check of workerFlows.test.ts uses a `flock(1)` holder. This test
 // covers, with the real `flock` on a folder of the test, the direct interop of the two production holders: the lock of
 // the worker's own pipeline (workerDevspaceLock over takeDevspaceLock and openLockFile) against the stop lock of
-// the Session Monitor (stopLocker), both ways; and that the script of the Docker helpers (test/docker/lockHolder.ts,
+// the Monitor (stopLocker), both ways; and that the script of the Docker helpers (test/docker/lockHolder.ts,
 // bundled as holdLockInContainer and lockIsFree run it) conflicts with both, as those tests assume.
 import { execFileSync, spawn, type ChildProcess } from 'child_process';
 import * as esbuild from 'esbuild';

@@ -15,7 +15,7 @@ import { main, vscodeBackgroundDeps } from './main';
 import { REMOTE_TICK_MS } from './rules';
 
 const T0 = Date.parse('2026-10-09T10:00:00Z');
-const WAIT = 'a background run is running; the Session Monitor exits after its end.';
+const WAIT = 'a background run is running; the Monitor exits after its end.';
 
 let stateDir: string;
 

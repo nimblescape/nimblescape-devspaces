@@ -65,7 +65,7 @@ function engineOf(exec: (container: string, command: readonly string[], options?
 
 const ok = async () => ({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
 
-describe('the operations of the Session Monitor in the worker', () => {
+describe('the operations of the Monitor in the worker', () => {
   it('heartbeat: sends it to the monitor container and answers ok, or why not (missing)', async () => {
     const { engine, execs } = engineOf(ok);
     const { context, controller } = contextOf();
@@ -106,7 +106,7 @@ describe('the operations of the Session Monitor in the worker', () => {
     const logged = contextOf();
     await giveMonitorImages(failing.engine, { images: settings, references: ['node:20'], monitorSource: SOURCE }, contextLogger(logged.context), logged.context.signal);
     // The failed settings are logged too.
-    expect(logged.lines).toEqual(['The image settings could not be given to the Session Monitor: Invalid image list.', 'The image references in use could not be given to the Session Monitor: Invalid image list.']);
+    expect(logged.lines).toEqual(['The image settings could not be given to the Monitor: Invalid image list.', 'The image references in use could not be given to the Monitor: Invalid image list.']);
   });
 
   function recordGitState(setup: { container?: 'running' | 'stopped' | 'missing'; record?: Devspace | null; params?: Record<string, unknown> } = {}) {

@@ -25,7 +25,7 @@ async function bundleScript(): Promise<string> {
   const result = await esbuild.build({
     // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
     define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) },
-    // The script of the Session Monitor in the worker, as esbuild.mjs bundles it.
+    // The script of the Monitor in the worker, as esbuild.mjs bundles it.
     plugins: [workerScriptsPlugin(path.resolve(__dirname, '../..'), { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) })],
     entryPoints: [path.resolve(__dirname, '../../src/helperChannel/main.ts')],
     bundle: true,
@@ -85,7 +85,7 @@ describe('the refresh through the worker', () => {
             script: async () => script,
             helperTag: async () => helperTag,
             socketPath: async () => helperDockerSocket(env, process.platform, target.endpoint),
-            // The lock files in a volume of the test, never the one of the Session Monitor.
+            // The lock files in a volume of the test, never the one of the Monitor.
             stateVolume: testStateVolume({ run, cli }, 'workerRefresh'),
             // The shared VS Code server store, a volume of the test.
             vscodeVolume: testVscodeVolume({ run, cli }, 'workerRefresh'),

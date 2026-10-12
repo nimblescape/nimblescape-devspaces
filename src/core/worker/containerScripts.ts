@@ -9,7 +9,7 @@
 // No I/O, no `vscode`. Every command of the pipeline in a container is an entry too (the checks and reads that are a
 // program of the container itself are entries of their own kind, `command`), and runScript takes the `exec` that its
 // caller has: the worker's engine (DockerEngine) or the pipeline's Docker (DevspaceDocker, which EngineDocker serves
-// over that engine). The commands that the worker runs in the Session Monitor container (monitorFlow.ts) are entries
+// over that engine). The commands that the worker runs in the Monitor container (monitorFlow.ts) are entries
 // too; two of them read a plain standard input of their caller (`plainInput`).
 import { EXISTING_PATHS_SCRIPT, GIT_BRANCH_SCRIPT, GIT_SUMMARY_SCRIPT, OWNERSHIP_FIX_SCRIPT } from '../git/gitSummary';
 import { HOME_GIT_CONFIG_SCRIPT } from '../helper/containerGit';
@@ -83,10 +83,10 @@ export const CONTAINER_SCRIPTS = {
   userId: { command: ['id', '-u'] },
   /** The numeric ID of the primary group of the user that it gets. */
   groupId: { command: ['id', '-g'] },
-  /** The hash of the script that the Session Monitor container stored (MonitorEngine.storedScript). */
+  /** The hash of the script that the Monitor container stored (MonitorEngine.storedScript). */
   monitorScriptHash: { command: ['sha256sum', REMOTE_MONITOR_SCRIPT_PATH] },
   /**
-   * A heartbeat of a window, in the Session Monitor container (its argument: the heartbeat as one JSON argument), under
+   * A heartbeat of a window, in the Monitor container (its argument: the heartbeat as one JSON argument), under
    * the lock of the records (underRecordsLock).
    */
   monitorHeartbeat: { command: underRecordsLock(['node', REMOTE_MONITOR_SCRIPT_PATH, 'heartbeat']) },

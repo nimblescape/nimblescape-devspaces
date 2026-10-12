@@ -169,7 +169,7 @@ function fakeRegistry(tags: Record<string, string[]>, options: { unknownDigests?
   return { transport: (): HttpTransport => ({ request }), requests };
 }
 
-describe('the images of the remote Session Monitor', () => {
+describe('the images of the remote Monitor', () => {
   // The images of a repository are not ordered as versions; they are grouped by ID in the order of the list
   // (imagesById), as what stays follows the references in use.
   it('groups the images of a repository by their ID, in the order of the list', () => {

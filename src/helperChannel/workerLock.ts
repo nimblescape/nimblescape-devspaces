@@ -20,7 +20,7 @@ import { OperationError, type OperationContext } from './server';
  * (LockDeps.openPrepareLockFile; without it, the lock is always free). A probe or a wait that gets the lock lets it go
  * at once: the open never holds it. A lock that cannot be asked (its file, flock) counts as free, so the open builds as
  * without a prepare; a cancel is an AbortError. The probe can make a prepare that starts at the same moment find its
- * lock taken; that prepare tries again at a later pass of the Session Monitor.
+ * lock taken; that prepare tries again at a later pass of the Monitor.
  */
 export function workerPrepareLock(lockDeps: LockDeps, context: OperationContext): PrepareLock {
   const free = async (devspaceId: string, waitSeconds: number | undefined, signal: AbortSignal | undefined): Promise<boolean> => {

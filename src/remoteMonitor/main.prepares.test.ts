@@ -95,7 +95,7 @@ describe('the prepares of the background run of `run`', () => {
 
   it('without the hash of a worker script, one line and no prepare', async () => {
     const out = await backgroundRun({});
-    expect(out).toContain('No devspace image is prepared: the Session Monitor was created without the hash of a worker script.');
+    expect(out).toContain('No devspace image is prepared: the Monitor was created without the hash of a worker script.');
   });
 
   it('the last use of each devspace is the time of its newest heartbeat record', async () => {

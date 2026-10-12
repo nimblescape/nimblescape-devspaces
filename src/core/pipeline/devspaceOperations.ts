@@ -139,7 +139,7 @@ export interface DevspaceOperationsDeps extends OperationBaseDeps {
   workerRefresh: (devspaces: readonly StateDevspace[]) => Promise<DevspaceStates>;
   /** Runs a flow in the worker of the Docker target of the operation. */
   flow: OperationFlow;
-  /** The id of this computer in the Session Monitor (Delete's `forget`, the open's first heartbeat). */
+  /** The id of this computer in the Monitor (Delete's `forget`, the open's first heartbeat). */
   monitorSource?: () => string;
   /**
    * The image maintenance of an open: the schedule of the monitor's background run and its mode for the engine
@@ -147,9 +147,9 @@ export interface DevspaceOperationsDeps extends OperationBaseDeps {
    */
   openMonitor?: (dockerHost: string) => { images: MonitorSettings };
   /**
-   * The image references in use on the engine `dockerHost` that an open carries for its Session Monitor; undefined:
+   * The image references in use on the engine `dockerHost` that an open carries for its Monitor; undefined:
    * none. Default: those of the build records of this computer's devspaces there
-   * (DevspaceOperations.referencesInUse). The Docker tests give none, so the Session Monitor of their engine manages
+   * (DevspaceOperations.referencesInUse). The Docker tests give none, so the Monitor of their engine manages
    * no image of it.
    */
   imageReferencesInUse?: (dockerHost: string) => Promise<ImageReferencesInUse | undefined>;
@@ -237,7 +237,7 @@ export class DevspaceOperations extends OperationBase {
     this.throwIfCancelled(signal);
     const dockerHost = await this.currentDockerHost();
     const monitor = this.deps.openMonitor?.(dockerHost);
-    // The image references in use on this engine, for its Session Monitor.
+    // The image references in use on this engine, for its Monitor.
     const references = monitor === undefined ? undefined : this.deps.imageReferencesInUse !== undefined ? await this.deps.imageReferencesInUse(dockerHost) : await this.referencesInUse(dockerHost);
     const settings = this.deps.settings();
     // The server of this window's VS Code, when its build qualifies (never rejects).
@@ -321,7 +321,7 @@ export class DevspaceOperations extends OperationBase {
 
   /**
    * The image references in use on the engine `dockerHost`: of the build records of all devspaces of this computer
-   * there (any account: when in doubt, an image stays), for the Session Monitor, which keeps them up to date. Undefined
+   * there (any account: when in doubt, an image stays), for the Monitor, which keeps them up to date. Undefined
    * when the registry cannot be read (logged): then none are sent, and the monitor keeps what this computer sent
    * before.
    */
@@ -329,13 +329,13 @@ export class DevspaceOperations extends OperationBase {
     try {
       const { references, digests } = imageReferencesInUse(devspacesOfHost(await this.deps.registry.list(), dockerHost));
       if (references.length > MAX_IMAGE_REFERENCES) {
-        this.logger.warn(`The devspaces on ${dockerHost === '' ? 'the local Docker' : dockerHost} use ${references.length} images; the Session Monitor keeps the first ${MAX_IMAGE_REFERENCES} up to date.`);
+        this.logger.warn(`The devspaces on ${dockerHost === '' ? 'the local Docker' : dockerHost} use ${references.length} images; the Monitor keeps the first ${MAX_IMAGE_REFERENCES} up to date.`);
       }
       const sent = references.slice(0, MAX_IMAGE_REFERENCES);
       // With the recorded digests of the references that it sends.
       return { references: sent, digests: Object.fromEntries(Object.entries(digests).filter(([reference]) => sent.includes(reference))) };
     } catch (error) {
-      this.logger.warn(`The images in use could not be read for the Session Monitor: ${errorMessage(error)}`);
+      this.logger.warn(`The images in use could not be read for the Monitor: ${errorMessage(error)}`);
       return undefined;
     }
   }
@@ -396,7 +396,7 @@ export class DevspaceOperations extends OperationBase {
         return;
       }
       // An update, rebuild, or delete in another window replaces or removes the container: no stop in between (the busy
-      // mark applies to the Session Monitor; a Stop from a sidebar that is not up to date must respect it too).
+      // mark applies to the Monitor; a Stop from a sidebar that is not up to date must respect it too).
       const env = await this.waitForOtherOperation((await this.deps.registry.get(devspaceId)) ?? devspace, undefined);
       // The Stop runs in the worker, under the lock of the devspace that the worker takes itself; this window
       // records the Git state that it answers. The parameters are checked here, so that one the worker would refuse is

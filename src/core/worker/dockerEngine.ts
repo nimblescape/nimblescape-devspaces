@@ -200,7 +200,7 @@ export interface DockerEngine {
    * The containers with the label `label` (`<key>` or `<key>=<value>`), stopped ones included, as the list of the
    * engine gives them, with no inspect (`containers` inspects each one): an inspect takes the lock of the container,
    * which a start holds until it ends, and fails for a container whose layer is broken, while the list, as `docker ps`,
-   * reads neither. An entry without an ID is left out. The Session Monitor's loop reads its containers only so.
+   * reads neither. An entry without an ID is left out. The Monitor's loop reads its containers only so.
    */
   containerSummaries(label: string, signal?: AbortSignal): Promise<EngineContainerSummary[]>;
   /** One process in a running container (the one primitive for the scripts of containerScripts.ts). */
@@ -291,7 +291,7 @@ export interface DockerEngine {
    */
   processes(container: string, signal?: AbortSignal): Promise<string[][] | undefined>;
   /**
-   * For the Session Monitor container, loaded through a pipe: creates the container of `spec` with an open input,
+   * For the Monitor container, loaded through a pipe: creates the container of `spec` with an open input,
    * attaches to it, starts it, writes `input`, and waits for `readyText` on its output, its end, `timeoutMs`, or the
    * cancellation; then its input is closed (the container goes on alone). A create that the engine refuses is `exited`
    * (`conflict`: the name is in use); any other failure after the create request was sent is `exited`, `timeout`
@@ -333,7 +333,7 @@ export function isMissing(error: unknown): boolean {
  * True when the engine refused an exec because its container does not exist (404 "No such container") or does not run
  * (409 "is not running"); with `restarting`, also because it restarts (409 "is restarting"). Not for a paused
  * container, another 404 (for example "No such exec instance"), or another status. One rule for the token removal
- * (tokenRemoveFlow), the commands in the Session Monitor container (monitorFlow) and the check of its stored script
+ * (tokenRemoveFlow), the commands in the Monitor container (monitorFlow) and the check of its stored script
  * (engineMonitor, with `restarting`).
  */
 export function isNotRunning(error: unknown, options: { restarting?: boolean } = {}): boolean {

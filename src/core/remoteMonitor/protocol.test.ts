@@ -198,7 +198,7 @@ describe('limits and the label', () => {
   it('names where the loader stores the script, its entry, and the line of its start', () => {
     expect(REMOTE_MONITOR_SCRIPT_PATH).toBe('/opt/devspace/monitor.js');
     expect(REMOTE_MONITOR_ENTRY).toBe('startMonitor');
-    expect(REMOTE_MONITOR_READY_TEXT).toBe('Session Monitor started');
+    expect(REMOTE_MONITOR_READY_TEXT).toBe('Monitor started');
   });
 });
 

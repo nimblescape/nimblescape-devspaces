@@ -152,7 +152,7 @@ export function dockerTestContext(name: string): DockerTestContext {
 
 /**
  * A volume of its own for the lock files of the workers of a test file (ChannelOpenDeps.stateVolume), so that the
- * volume of the Session Monitor of the engine is never created or touched; with the label of the run, so that
+ * volume of the Monitor of the engine is never created or touched; with the label of the run, so that
  * removeRunObjects removes it. Created now when it is missing; returns its name.
  */
 export function testStateVolume(context: Pick<DockerTestContext, 'run' | 'cli'>, name: string): string {

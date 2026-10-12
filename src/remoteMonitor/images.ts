@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The images of the Session Monitor on a remote Docker host (only in the remote scenario): it keeps the images in use
+// The images of the Monitor on a remote Docker host (only in the remote scenario): it keeps the images in use
 // up to date and removes the images of their repositories that nothing keeps. A pass is part a of the monitor's
 // background run (background.ts), by the schedule of the setting cacheUpdateSchedule (its first check one minute after
 // the start of the monitor, REMOTE_IMAGE_FIRST_PASS_MS).

@@ -13,7 +13,7 @@
 // the SSH server logs each connection), the containers and volumes on the engine reached through SSH, the token file in
 // the tmpfs, and the Docker host recorded in the registry. The operations are the flows of the worker, as the window
 // sends them (workerWindow.ts): the worker on the remote engine is started through SSH and talks to its socket there
-// (so not every Docker call is an SSH connection). The open makes sure of the real Session Monitor.
+// (so not every Docker call is an SSH connection). The open makes sure of the real Monitor.
 import * as fs from 'fs';
 import * as http from 'http';
 import type { AddressInfo } from 'net';
@@ -190,7 +190,7 @@ describe('Docker on another computer through the Docker context', () => {
 
   /** The workers of the open through SSH (disposed by the test, and here after a failure). */
   let remoteWindow: WorkerWindow | undefined;
-  // The open makes sure of the real Session Monitor; a monitor of the user is never touched.
+  // The open makes sure of the real Monitor; a monitor of the user is never touched.
   const skipped = monitorOfUser({ run });
 
   afterAll(async () => {

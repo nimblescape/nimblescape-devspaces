@@ -4,7 +4,7 @@
 
 // Probe (mutation testing) of the wiring of the shared extension cache into the pipeline of the worker: the user's
 // default extensions of the open (WorkerServicesDeps .defaultExtensions) are the defaults that the record of the open
-// stores, in the volume of the Session Monitor at LOCK_STATE_DIR. The store functions are a fake here (vi.mock), so
+// stores, in the volume of the Monitor at LOCK_STATE_DIR. The store functions are a fake here (vi.mock), so
 // nothing is written to VSCODE_STORE_DIR or LOCK_STATE_DIR.
 import { describe, expect, it, vi } from 'vitest';
 import { VSCODE_STORE_DIR } from '../names';
@@ -49,7 +49,7 @@ describe('the shared extension cache of the pipeline in the worker, probe', () =
     await deps.vscodeServer?.extensions?.record('a1b2c3d4e5', [{ id: 'e.f' }]);
     expect(seen.records).toHaveLength(1);
     const [root, devspaceId, configuration, defaults] = seen.records[0];
-    // The record goes into the volume of the Session Monitor at LOCK_STATE_DIR (no dev container mounts it), not into
+    // The record goes into the volume of the Monitor at LOCK_STATE_DIR (no dev container mounts it), not into
     // the store at VSCODE_STORE_DIR.
     expect(root).not.toBe(VSCODE_STORE_DIR);
     expect([root, devspaceId, configuration, defaults]).toEqual([LOCK_STATE_DIR, 'a1b2c3d4e5', [{ id: 'e.f' }], [{ id: 'a.b' }, { id: 'c.d', version: '1.2.3' }]]);

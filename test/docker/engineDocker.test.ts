@@ -187,7 +187,7 @@ describe('the Docker of the pipeline over the Engine API', () => {
     expect(identity).toEqual(engineIdentity(cli.ok([...ENGINE_IDENTITY_ARGS])));
     // A label of this test alone, so that no prune here reaches another container of the run or of the user.
     const pruneLabel = `devspace-test.prune=${tag}`;
-    // A label key that `label!` names, as the sweep names the label of the Session Monitor (SWEEP_FILTERS).
+    // A label key that `label!` names, as the sweep names the label of the Monitor (SWEEP_FILTERS).
     const guardKey = `devspace-test.guard-${tag}`;
     const stopped = cli.ok(['create', '--name', `${name}-prune-stopped`, '--label', runLabel, '--label', pruneLabel, TEST_BASE_IMAGE, 'true']);
     const guarded = cli.ok(['create', '--name', `${name}-prune-guarded`, '--label', runLabel, '--label', pruneLabel, '--label', `${guardKey}=1`, TEST_BASE_IMAGE, 'true']);

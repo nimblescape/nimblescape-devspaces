@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The helper image for the heartbeats of a window, on the engine of each heartbeat: the preparation of its worker
-// (HelperChannels' `prepare`). A repair of the Session Monitor container is an operation of that worker, so it gets the
+// (HelperChannels' `prepare`). A repair of the Monitor container is an operation of that worker, so it gets the
 // image through the same preparation. Both go through HeartbeatPreparation with the engine (`target`), so a failed
 // build on that engine backs off for both, and both pass the presence check that lets a heartbeat go on within that
 // wait when the tag is present. The preparation of the worker for an operation `open` (HelperMaintenance) runs the

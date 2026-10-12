@@ -7,7 +7,7 @@
 // server of a commit that no VS Code has, so nothing is downloaded: the worker finds it present. The new dev container
 // mounts the store read-only at /opt/devspace/vscode, and the open links the server as the remote user into
 // ~/.vscode-server/bin/<commit>. The dev image is of glibc (the helper image's base, which the engine has): a container
-// of musl is never linked. Skipped where the engine had a Session Monitor before the tests. The store also holds a fake
+// of musl is never linked. Skipped where the engine had a Monitor before the tests. The store also holds a fake
 // `.vsix` of an extension that devcontainer.json names (no network: the open never downloads extensions); the open
 // records the list in the store and copies the file into ~/.vscode-server/extensionsCache of the remote user.
 import * as crypto from 'crypto';
@@ -80,7 +80,7 @@ describe('the shared VS Code server of an open through a real worker', () => {
 
   beforeAll(async () => {
     if (skipped) {
-      log.info(`The test of the shared VS Code server is skipped (a Session Monitor of the user before the tests: ${monitorOfUser}; the platform of the engine: ${platform ?? 'none'}).`);
+      log.info(`The test of the shared VS Code server is skipped (a Monitor of the user before the tests: ${monitorOfUser}; the platform of the engine: ${platform ?? 'none'}).`);
       return;
     }
     await testHelperImage(docker, log, env);

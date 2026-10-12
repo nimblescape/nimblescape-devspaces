@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The cron schedules of the Session Monitor's background run (the cron form of the setting cacheUpdateSchedule).
+// The cron schedules of the Monitor's background run (the cron form of the setting cacheUpdateSchedule).
 import { describe, expect, it } from 'vitest';
 import { isTimeZone, nextCronTime, parseCronSchedule, usableTimeZone, type CronSchedule } from './cron';
 

@@ -2,14 +2,14 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The engine of the ensure of the Session Monitor (MonitorEngine) over the port of the worker's engine (DockerEngine,
+// The engine of the ensure of the Monitor (MonitorEngine) over the port of the worker's engine (DockerEngine,
 // the Engine API); every remote action is a worker operation. Each call has a time limit
 // (REMOTE_MONITOR_DOCKER_TIMEOUT_MS, the check of the stored script REMOTE_MONITOR_EXEC_TIMEOUT_MS); a call past it
 // fails with "no answer in time", a cancel passes as an AbortError. No I/O of its own, no `vscode`.
 import { errorMessage } from '../errors';
 import { isAbortError, withTimeLimit } from '../ports';
 import { NO_STORED_SCRIPT, REMOVAL_IN_PROGRESS, parseDockerTime, type MonitorEngine, type MonitorInspected } from '../remoteMonitor/monitorEngine';
-import { LABEL_SESSION_MONITOR } from '../remoteMonitor/protocol';
+import { LABEL_MONITOR } from '../remoteMonitor/protocol';
 import { REMOTE_MONITOR_DOCKER_TIMEOUT_MS, REMOTE_MONITOR_EXEC_TIMEOUT_MS } from '../remoteMonitor/remoteSessionMonitor';
 import { runScript } from './containerScripts';
 import { EngineError, isNotRunning, type DockerEngine } from './dockerEngine';
@@ -27,7 +27,7 @@ export function monitorInspected(value: unknown): MonitorInspected {
   if (value === undefined) return { exists: false };
   const raw = value as { State?: { Status?: unknown; ExitCode?: unknown }; Config?: { Labels?: unknown }; RestartCount?: unknown; Id?: unknown; Created?: unknown };
   const labels = raw.Config?.Labels;
-  const label = typeof labels === 'object' && labels !== null ? (labels as Record<string, unknown>)[LABEL_SESSION_MONITOR] : undefined;
+  const label = typeof labels === 'object' && labels !== null ? (labels as Record<string, unknown>)[LABEL_MONITOR] : undefined;
   const { RestartCount: restartCount, Id: id } = raw;
   const exitCode = raw.State?.ExitCode;
   return {

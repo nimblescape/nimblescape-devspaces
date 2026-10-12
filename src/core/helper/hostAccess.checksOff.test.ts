@@ -152,9 +152,9 @@ const TABLE: Array<[string, HostAccessInput, string, HostAccessClass]> = [
   ['a volume with the labels of another devspace', input(mount('source=data,target=/d'), { volumeLabels: { data: { 'nimblescape.devspace.id': 'other', 'nimblescape.devspace.owner-id': '2002' } } }), 'volume data of another devspace', 'protected'],
   ['-v with the volume of another devspace', input(run('-v', `${OTHER}:/w`)), `volume ${OTHER} of another devspace`, 'protected'],
   ['the cache volume of the workspace helper', input(mount('source=devspace-helper-cache,target=/c,type=volume')), 'volume devspace-helper-cache of the workspace helper', 'protected'],
-  // The heartbeat records of the Session Monitor on a remote Docker host.
-  ['the volume of the remote Session Monitor', input(mount('source=devspace-session-monitor,target=/s,type=volume')), 'volume devspace-session-monitor of the Session Monitor', 'protected'],
-  ['-v with the volume of the remote Session Monitor', input(run('-v', 'devspace-session-monitor:/s')), 'volume devspace-session-monitor of the Session Monitor', 'protected'],
+  // The heartbeat records of the Monitor on a remote Docker host.
+  ['the volume of the remote Monitor', input(mount('source=devspace-monitor,target=/s,type=volume')), 'volume devspace-monitor of the Monitor', 'protected'],
+  ['-v with the volume of the remote Monitor', input(run('-v', 'devspace-monitor:/s')), 'volume devspace-monitor of the Monitor', 'protected'],
   ['--env-file outside the workspace volume (a file of the workspace helper)', input(run('--env-file', '/devspace-cache/x')), '--env-file=/devspace-cache/x', 'protected'],
   ['volume-label (the labels that tell the volumes of the devspaces apart)', input(mount('type=volume,source=v,target=/x,volume-label=nimblescape.devspace.id=x')), 'volume options of the mount v', 'protected'],
   ['volumeLabels in the object form', input(mount({ type: 'volume', source: 'v', target: '/x', volumeLabels: {} })), 'volume options of the mount v', 'protected'],

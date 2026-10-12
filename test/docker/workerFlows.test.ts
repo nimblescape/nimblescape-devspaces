@@ -52,7 +52,7 @@ async function bundleScript(): Promise<string> {
   const result = await esbuild.build({
     // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
     define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) },
-    // The script of the Session Monitor in the worker, as esbuild.mjs bundles it.
+    // The script of the Monitor in the worker, as esbuild.mjs bundles it.
     plugins: [workerScriptsPlugin(path.resolve(__dirname, '../..'), { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) })],
     entryPoints: [path.resolve(__dirname, '../../src/helperChannel/main.ts')],
     bundle: true,

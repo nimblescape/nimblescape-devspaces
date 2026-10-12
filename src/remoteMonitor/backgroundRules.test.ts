@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The pure rules of the Session Monitor's background run.
+// The pure rules of the Monitor's background run.
 import { describe, expect, it } from 'vitest';
 import {
   CLOCK_RESET_MS,

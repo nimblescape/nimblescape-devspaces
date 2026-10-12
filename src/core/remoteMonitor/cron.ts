@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The schedule of the background run of the Session Monitor (the cron form of the setting cacheUpdateSchedule,
+// The schedule of the background run of the Monitor (the cron form of the setting cacheUpdateSchedule,
 // cacheSettings.ts): a cron expression of five fields, minute hour day-of-month month day-of-week, in a time zone (that
 // of the computer that created the monitor). Each field: `*`, a number, a range `a-b`, a step `*/n`, `a-b/n` or `a/n`,
 // or a list of these with commas; months and weekdays also by their English three-letter names (JAN, MON); weekday 0

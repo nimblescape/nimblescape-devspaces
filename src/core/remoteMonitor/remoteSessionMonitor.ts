@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Session Monitor container on a Docker engine (one on every engine, local and remote): its ensure. It runs in the
+// The Monitor container on a Docker engine (one on every engine, local and remote): its ensure. It runs in the
 // worker of the engine, over the port MonitorEngine (the Engine API, src/core/worker/engineMonitor.ts). The windows
 // send their heartbeats through the operation `heartbeat`. No `vscode`.
 //
@@ -20,7 +20,7 @@ import type { MonitorRunSpec } from '../worker/dockerEngine';
 import type { MonitorEngine, MonitorInspected } from './monitorEngine';
 import {
   LABEL_MONITOR_CREATE,
-  LABEL_SESSION_MONITOR,
+  LABEL_MONITOR,
   REMOTE_MONITOR_CONTAINER,
   REMOTE_MONITOR_ENTRY,
   REMOTE_MONITOR_READY_TEXT,
@@ -135,7 +135,7 @@ function isRunning(status: string): boolean {
   return status === 'running' || status === 'paused';
 }
 
-/** The Session Monitor container of an engine (its ensure). */
+/** The Monitor container of an engine (its ensure). */
 export class RemoteSessionMonitor {
   readonly containerName: string;
   readonly volumeName: string;
@@ -204,7 +204,7 @@ export class RemoteSessionMonitor {
       return await this.ensureOrThrow(helperTag, socketPath, signal, helperImage, imageId);
     } catch (error) {
       if (isAbortError(error)) throw error;
-      this.options.logger.warn(`The Session Monitor on the Docker host could not be started: ${errorMessage(error)}`);
+      this.options.logger.warn(`The Monitor on the Docker host could not be started: ${errorMessage(error)}`);
       return 'failed';
     }
   }
@@ -219,7 +219,7 @@ export class RemoteSessionMonitor {
     // The memory guard of the loader, before an old monitor is removed.
     const scriptLine = encodeBundle(script);
     if (scriptLine.length - 1 > MAX_BUNDLE_LINE_LENGTH) {
-      throw new Error(`The script of the Session Monitor is too long (${scriptLine.length - 1} characters as JSON).`);
+      throw new Error(`The script of the Monitor is too long (${scriptLine.length - 1} characters as JSON).`);
     }
     const images = this.options.imageMaintenance?.();
     // The schedule and the time zone come with `settings -` (monitorSettings), so computers with other settings or
@@ -273,7 +273,7 @@ export class RemoteSessionMonitor {
       throw new Error(`docker run failed: ${created.detail}`);
     }
     if (created.kind === 'ready') {
-      logger.info(`The Session Monitor on the Docker host was created (${this.containerName}, image ${helperTag}).`);
+      logger.info(`The Monitor on the Docker host was created (${this.containerName}, image ${helperTag}).`);
       return 'created';
     }
     await this.removeBestEffort(createId);
@@ -295,20 +295,20 @@ export class RemoteSessionMonitor {
       // Still `created` after the waits. Removed only when it is certainly abandoned.
       const age = await this.ageOnDaemon(current, signal);
       if (age === undefined) {
-        throw new Error('the container of the Session Monitor has not started yet and its age cannot be read; it is kept.');
+        throw new Error('the container of the Monitor has not started yet and its age cannot be read; it is kept.');
       }
       if (age <= REMOTE_MONITOR_STALE_CREATED_MS) {
-        throw new Error(`the container of the Session Monitor was created ${Math.round(age / 1000)} seconds ago and has not started yet (another window may be starting it); it is kept.`);
+        throw new Error(`the container of the Monitor was created ${Math.round(age / 1000)} seconds ago and has not started yet (another window may be starting it); it is kept.`);
       }
       this.idOf(current);
-      logger.info(`The Session Monitor on the Docker host was created ${Math.round(age / 1000)} seconds ago and never started; it is replaced (${this.containerName}).`);
+      logger.info(`The Monitor on the Docker host was created ${Math.round(age / 1000)} seconds ago and never started; it is replaced (${this.containerName}).`);
       return 'replace';
     }
     // A running permanent monitor of the same version counts as current for an ensure that wants one that ends when
     // idle (accepted.running); anything else of another label is replaced.
     if (!labelAccepted(current, accepted)) {
       this.idOf(current);
-      logger.info(`The Session Monitor on the Docker host is of another version; it is replaced (${this.containerName}).`);
+      logger.info(`The Monitor on the Docker host is of another version; it is replaced (${this.containerName}).`);
       return 'replace';
     }
     if (isRunning(current.status)) {
@@ -323,11 +323,11 @@ export class RemoteSessionMonitor {
       if (stored === 'unknown') stored = await this.checkAgain(current, script, signal);
       if (stored === 'same') return 'running';
       if (stored === 'unknown') {
-        logger.info(`The Session Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (${this.containerName}).`);
+        logger.info(`The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (${this.containerName}).`);
         return 'running';
       }
       this.idOf(current);
-      logger.info(`The Session Monitor on the Docker host was restarted without its script; it is replaced (${this.containerName}).`);
+      logger.info(`The Monitor on the Docker host was restarted without its script; it is replaced (${this.containerName}).`);
       return 'replace';
     }
     if (current.status === 'exited' && current.exitCode !== LOADER_EXIT_CODE) {
@@ -340,19 +340,19 @@ export class RemoteSessionMonitor {
       // after it.
       if (stored === 'unknown') stored = await this.checkAgain({ ...current, restartCount: 0 }, script, signal);
       if (stored === 'same') {
-        logger.info(`The Session Monitor on the Docker host was started again (${this.containerName}).`);
+        logger.info(`The Monitor on the Docker host was started again (${this.containerName}).`);
         return 'started';
       }
       if (stored === 'unknown') {
-        logger.info(`The Session Monitor on the Docker host was started again and its stored script could not be checked; it is kept (${this.containerName}).`);
+        logger.info(`The Monitor on the Docker host was started again and its stored script could not be checked; it is kept (${this.containerName}).`);
         return 'started';
       }
-      logger.info(`The Session Monitor on the Docker host was started again without its script; it is replaced (${this.containerName}).`);
+      logger.info(`The Monitor on the Docker host was started again without its script; it is replaced (${this.containerName}).`);
       return 'replace';
     }
     this.idOf(current);
     const how = current.status === 'exited' ? `exited with ${current.exitCode}` : current.status;
-    logger.info(`The Session Monitor on the Docker host does not run (${how}); it is replaced (${this.containerName}).`);
+    logger.info(`The Monitor on the Docker host does not run (${how}); it is replaced (${this.containerName}).`);
     return 'replace';
   }
 
@@ -386,7 +386,7 @@ export class RemoteSessionMonitor {
    * the name may be that of another window by then).
    */
   private idOf(current: Inspected & { exists: true }): string {
-    if (current.id === undefined) throw new Error('the ID of the Session Monitor container cannot be read; it is kept.');
+    if (current.id === undefined) throw new Error('the ID of the Monitor container cannot be read; it is kept.');
     return current.id;
   }
 
@@ -428,7 +428,7 @@ export class RemoteSessionMonitor {
   private async ageOnDaemon(current: Inspected & { exists: true }, signal: AbortSignal | undefined): Promise<number | undefined> {
     const { logger } = this.options;
     if (current.createdAt === undefined) {
-      logger.info(`The creation time of the Session Monitor container cannot be read (${this.containerName}).`);
+      logger.info(`The creation time of the Monitor container cannot be read (${this.containerName}).`);
       return undefined;
     }
     const now = await this.options.engine.daemonTime(signal);
@@ -529,7 +529,7 @@ export class RemoteSessionMonitor {
    */
   runSpec(helperImage: string, socketPath: string, label: string, script: string, images?: ImageMaintenanceSettings, createId?: string, imageId?: string): MonitorRunSpec {
     const permanent = images?.permanent === true;
-    const labels: Record<string, string> = { [LABEL_SESSION_MONITOR]: label };
+    const labels: Record<string, string> = { [LABEL_MONITOR]: label };
     if (createId !== undefined) labels[LABEL_MONITOR_CREATE] = createId;
     for (const [key, value] of Object.entries(this.options.labels ?? {})) labels[key] = value;
     const env: Record<string, string> = { ...(this.options.containerEnv ?? {}) };

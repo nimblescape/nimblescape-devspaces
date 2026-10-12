@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The heartbeats of a window to the Session Monitor container of the engine of each devspace that it uses, on every
+// The heartbeats of a window to the Monitor container of the engine of each devspace that it uses, on every
 // engine.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { describeDockerHost, remoteContextNames, type DockerTarget } from '../docker/dockerHost';
@@ -255,7 +255,7 @@ describe('WindowHeartbeats', () => {
     h.devspaces.push(devspace(ID_A, 'acme/api'));
     h.state.connected = ID_A;
     let missing = true;
-    h.state.answer = () => (missing ? { ok: false, missing: true, detail: 'No such container: devspace-session-monitor' } : { ok: true });
+    h.state.answer = () => (missing ? { ok: false, missing: true, detail: 'No such container: devspace-monitor' } : { ok: true });
     h.state.repair = async () => {
       missing = false;
     };
@@ -311,7 +311,7 @@ describe('WindowHeartbeats', () => {
     h.devspaces.push(devspace(ID_A, 'acme/api', { dockerHost: 'build-box' }));
     h.state.connected = ID_A;
     h.settings.stopAfterMinutes = 5;
-    h.state.answer = () => ({ ok: false, missing: true, detail: 'No such container: devspace-session-monitor' });
+    h.state.answer = () => ({ ok: false, missing: true, detail: 'No such container: devspace-monitor' });
     h.state.repair = async () => {
       throw new Error('docker run failed: no space left on device');
     };
@@ -968,7 +968,7 @@ describe('WindowHeartbeats rules found by mutation: deadlines, engines and the p
     busy: { operation: 'update' as const, since: new Date(T0).toISOString(), pid: PID, windowId: WINDOW, ...extra },
   });
   const failed = (detail = 'timed out'): HeartbeatSendResult => ({ ok: false, missing: false, detail });
-  const missingMonitor: HeartbeatSendResult = { ok: false, missing: true, detail: 'No such container: devspace-session-monitor' };
+  const missingMonitor: HeartbeatSendResult = { ok: false, missing: true, detail: 'No such container: devspace-monitor' };
 
   describe('attempts, containers and engines', () => {
     it('sendFor fails at once for a call of a tick that passed its deadline, and sends nothing', async () => {
@@ -1441,7 +1441,7 @@ describe('WindowHeartbeats rules found by mutation: deadlines, engines and the p
       h.devspaces.push(devspace(ID_A, 'acme/api', busyMark()));
       await h.heartbeats.tick();
       expect(h.sent.map(entriesOf)).toEqual([[{ id: ID_A, keepRunning: false }]]);
-      expect(await h.heartbeats.sendFor('legacy-1')).toEqual({ ok: false, detail: 'The devspace has an ID that the Session Monitor cannot record.' });
+      expect(await h.heartbeats.sendFor('legacy-1')).toEqual({ ok: false, detail: 'The devspace has an ID that the Monitor cannot record.' });
       expect(h.sent).toHaveLength(1);
     });
 
@@ -2256,7 +2256,7 @@ describe('WindowHeartbeats: release paths and the registration of calls', () => 
   });
 });
 
-// The stopNow heartbeat of a manual Stop, so the Session Monitor of the engine stops the devspace itself when VS
+// The stopNow heartbeat of a manual Stop, so the Monitor of the engine stops the devspace itself when VS
 // Code quits before the window's own stop reaches Docker.
 describe('sendStop', () => {
   afterEach(() => {

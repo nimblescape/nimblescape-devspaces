@@ -86,16 +86,16 @@ describe('the idle exit during a background run keeps the ticks going', () => {
     void result.then((code) => (exited = code));
     await vi.waitFor(() => expect(out).toContain('first check in 1 s'));
     await vi.advanceTimersByTimeAsync(1_000);
-    await vi.waitFor(() => expect(out).toContain('a background run is running; the Session Monitor exits after its end.'));
+    await vi.waitFor(() => expect(out).toContain('a background run is running; the Monitor exits after its end.'));
     const before = listed;
     // An exit that waited in place of the tick (`await schedule.settled()`) would list no devspace any more.
     await vi.waitFor(() => expect(listed).toBeGreaterThanOrEqual(before + 20), { timeout: 4_000 });
     expect(exited).toBeUndefined();
-    expect(occurrences(out, 'the Session Monitor exits after its end.')).toBe(1);
+    expect(occurrences(out, 'the Monitor exits after its end.')).toBe(1);
     expect(fs.existsSync(path.join(stateDir, CACHE_RUN_FILE))).toBe(false);
     finish();
     expect(await result).toBe(0);
-    expect(out.indexOf('the Session Monitor exits. The next open starts it again.')).toBeGreaterThan(out.indexOf('The background run ended.'));
+    expect(out.indexOf('the Monitor exits. The next open starts it again.')).toBeGreaterThan(out.indexOf('The background run ended.'));
     expect(JSON.parse(fs.readFileSync(path.join(stateDir, CACHE_RUN_FILE), 'utf8')).lastEndAt).toBeGreaterThanOrEqual(T0);
   });
 });

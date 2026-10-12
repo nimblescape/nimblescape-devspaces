@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The settings of the Session Monitor of an engine that extension.ts gives to an open (by the Docker host of the open)
+// The settings of the Monitor of an engine that extension.ts gives to an open (by the Docker host of the open)
 // and to the repair of the heartbeats (by the Docker target): the schedule of its background run (cacheUpdateSchedule),
 // the time zone of this computer, and its mode: permanent on a remote engine (`remote`), on a local one only with
 // stopLocalMonitorWhenIdle off. No image patterns. Pure apart from the getters it is given; no `vscode`.

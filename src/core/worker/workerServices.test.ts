@@ -353,7 +353,7 @@ describe('the deps of the pipeline in the worker', () => {
 });
 
 // Delete's `forget` is the worker's: it forgets a record; a failure is logged, a missing container is not.
-describe("the worker's Session Monitor for Delete", () => {
+describe("the worker's Monitor for Delete", () => {
   const SOURCE = '0123456789abcdef0123456789abcdef';
   const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
 
@@ -393,10 +393,10 @@ describe("the worker's Session Monitor for Delete", () => {
     await workerSessionMonitor(engineWith(async () => Promise.reject(new EngineError('Container abc is not running', 409))).engine, SOURCE, logger).forget(ID);
     await workerSessionMonitor(engineWith(async () => Promise.reject(new EngineError('conflict', 409))).engine, SOURCE, logger).forget(ID);
     expect(lines).toEqual([
-      `warn The heartbeat record of ${ID} could not be removed from the Session Monitor: boom`,
-      `warn The heartbeat record of ${ID} could not be removed from the Session Monitor: the command was killed (its limit of 10 s, or a kill from outside)`,
-      `warn The heartbeat record of ${ID} could not be removed from the Session Monitor: docker exec did not end within ${MONITOR_EXEC_TIMEOUT_MS / 1000} seconds.`,
-      `warn The heartbeat record of ${ID} could not be removed from the Session Monitor: conflict`,
+      `warn The heartbeat record of ${ID} could not be removed from the Monitor: boom`,
+      `warn The heartbeat record of ${ID} could not be removed from the Monitor: the command was killed (its limit of 10 s, or a kill from outside)`,
+      `warn The heartbeat record of ${ID} could not be removed from the Monitor: docker exec did not end within ${MONITOR_EXEC_TIMEOUT_MS / 1000} seconds.`,
+      `warn The heartbeat record of ${ID} could not be removed from the Monitor: conflict`,
     ]);
   });
 
@@ -407,12 +407,12 @@ describe("the worker's Session Monitor for Delete", () => {
     // The heartbeats of a window are the operation `heartbeat`. The ensure fails closed without the ensure of its
     // operation (the message names what the operation did not give), and the first heartbeat is not sent without the
     // computer.
-    await expect(monitor.ensure(undefined)).rejects.toThrow('The operation gives the worker no ensure of the Session Monitor');
-    expect(await monitor.heartbeat(ID, false, 1)).toEqual({ ok: false, detail: 'The operation names no computer for the Session Monitor.' });
+    await expect(monitor.ensure(undefined)).rejects.toThrow('The operation gives the worker no ensure of the Monitor');
+    expect(await monitor.heartbeat(ID, false, 1)).toEqual({ ok: false, detail: 'The operation names no computer for the Monitor.' });
     expect(execs).toEqual([]);
   });
 
-  describe("the open's Session Monitor in the worker", () => {
+  describe("the open's Monitor in the worker", () => {
     /** The ID of the computer of the operation, as computer.id makes it. */
     const COMPUTER = 'c'.repeat(32);
     it("the first heartbeat of the open: this computer's record with the time limit, by the command of the monitor script", async () => {
@@ -434,7 +434,7 @@ describe("the worker's Session Monitor for Delete", () => {
       for (const source of ['', 'a b', '../x', 'x'.repeat(200)]) {
         expect(await workerSessionMonitor(engine, source, silentLogger, { limitSeconds: () => 900 }).heartbeat(ID, false, 1), source).toEqual({
           ok: false,
-          detail: 'The computer of the operation has no valid ID for the Session Monitor.',
+          detail: 'The computer of the operation has no valid ID for the Monitor.',
         });
       }
       expect(execs).toEqual([]);
@@ -496,7 +496,7 @@ describe("the worker's Session Monitor for Delete", () => {
       // Without them, the ensure fails closed and no heartbeat is sent.
       const bare = deps({});
       // The message names what the operation did not give.
-      await expect(bare.sessionMonitor!.ensure(undefined)).rejects.toThrow('The operation gives the worker no ensure of the Session Monitor');
+      await expect(bare.sessionMonitor!.ensure(undefined)).rejects.toThrow('The operation gives the worker no ensure of the Monitor');
       expect(await bare.sessionMonitor!.heartbeat(ID, false, 3)).toMatchObject({ ok: false });
       expect(execs).toHaveLength(1);
     });

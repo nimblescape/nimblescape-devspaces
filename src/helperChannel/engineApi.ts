@@ -16,7 +16,7 @@ import { EngineError } from '../core/worker/dockerEngine';
 export const MAX_ENGINE_ANSWER_CHARACTERS = 1024 * 1024;
 /**
  * The bound of the answer of a list that can hold every container or image of an engine
- * (DockerEngine.containerSummaries and DockerEngine.images; the Session Monitor lists them all), as the 16 MiB output
+ * (DockerEngine.containerSummaries and DockerEngine.images; the Monitor lists them all), as the 16 MiB output
  * buffer of the Docker CLI.
  */
 export const MAX_ENGINE_LIST_ANSWER_CHARACTERS = 16 * 1024 * 1024;

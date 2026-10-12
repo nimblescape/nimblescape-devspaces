@@ -66,7 +66,7 @@ export interface ComposeBuildRecord {
 
 export type BusyOperation = 'create' | 'update' | 'rebuild' | 'delete';
 
-/** Marks a devspace as busy, so the Session Monitor does not stop it. */
+/** Marks a devspace as busy, so the Monitor does not stop it. */
 export interface BusyMark {
   operation: BusyOperation;
   since: string;
@@ -149,7 +149,7 @@ export interface Devspace {
    */
   refusedUpdate?: RefusedUpdate;
   /**
-   * Keep Running When Closed: the Session Monitor never stops this devspace when no window uses it; only the user's
+   * Keep Running When Closed: the Monitor never stops this devspace when no window uses it; only the user's
    * Stop or Delete does. Missing or false: the container stops after the waiting time, as the setting stopOnClose says.
    */
   keepRunning?: boolean;
@@ -365,20 +365,20 @@ export interface ExtensionSettings {
    */
   openInNewWindow?: boolean;
   /**
-   * `stopAfterMinutes`: the time limit of the heartbeats of a window to the Session Monitor container of the engine of
+   * `stopAfterMinutes`: the time limit of the heartbeats of a window to the Monitor container of the engine of
    * its devspace, on every engine: a container stops after this many minutes without a heartbeat, unless it keeps
    * running when closed. 5 to 1440. Missing: 10.
    */
   stopAfterMinutes?: number;
   /**
-   * When the Session Monitor container of each engine runs its background run (the images in use, the newest VS Code
+   * When the Monitor container of each engine runs its background run (the images in use, the newest VS Code
    * server, the cleanup of the store at most once a day): a cron expression of five fields (minute hour day-of-month
    * month day-of-week) in the time zone of this computer, or an interval in whole minutes (at least 5), as
    * normalizeCacheSchedule gives it. Default `17` (every 17 minutes).
    */
   cacheUpdateSchedule?: string;
   /**
-   * The Session Monitor of a local engine ends after 5 minutes without a running devspace (true, the default);
+   * The Monitor of a local engine ends after 5 minutes without a running devspace (true, the default);
    * false: it runs permanently, as on a remote engine.
    */
   stopLocalMonitorWhenIdle?: boolean;

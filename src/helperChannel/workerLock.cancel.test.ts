@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// A cancel of the worker pipeline while its real `flock` waits for a lock that the Session Monitor holds ends the wait
+// A cancel of the worker pipeline while its real `flock` waits for a lock that the Monitor holds ends the wait
 // at once (startFlockProcess kill), and leaves no holder behind: the monitor takes the lock right after its release. A
 // no-op `kill` in startFlockProcess (src/core/helperChannel/lockFile.ts) passes every unit test (they use a fake flock)
 // and workerLock.monitorStopLock.test.ts; only this test fails on it.

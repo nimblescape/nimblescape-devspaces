@@ -46,7 +46,7 @@ describe('settings', () => {
       stopAfterMinutes: 10,
       // The update of an existing container is announced (notify) by default.
       updateContainer: 'notify',
-      // The schedule of the whole background run of the Session Monitor, a cron expression: daily at 06:07.
+      // The schedule of the whole background run of the Monitor, a cron expression: daily at 06:07.
       cacheUpdateSchedule: '7 6 * * *',
       // True by default: the local monitor ends when idle.
       stopLocalMonitorWhenIdle: true,

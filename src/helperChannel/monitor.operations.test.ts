@@ -99,7 +99,7 @@ describe('the monitor operations', () => {
     const { context, lines } = contextOf();
     // giveMonitorImages answers nothing.
     await giveMonitorImages(failing.engine, { images: SETTINGS }, contextLogger(context), context.signal);
-    expect(lines).toEqual([{ text: 'The image settings could not be given to the Session Monitor: Invalid settings.', level: 'warn' }]);
+    expect(lines).toEqual([{ text: 'The image settings could not be given to the Monitor: Invalid settings.', level: 'warn' }]);
   });
 
   it('recordGitState: refuses a secret before anything runs', async () => {

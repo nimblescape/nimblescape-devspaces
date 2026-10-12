@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The devspace lock of an automatic stop of the Session Monitor container. Before it stops a devspace, the
+// The devspace lock of an automatic stop of the Monitor container. Before it stops a devspace, the
 // monitor opens the same lock file as the worker (src/core/helperChannel/lockFile.ts: strict ID, O_NOFOLLOW, 0600,
 // never deleted) and runs `flock -n` on it (no wait: a lock that an operation holds is not waited for; the monitor
 // tries again at a later tick). The lock lives with the open file of the monitor; `release` closes it. When the monitor

@@ -14,7 +14,7 @@ import {
   MAX_PROBE_DETAIL_LENGTH,
 } from '../core/helperChannel/protocol';
 import { LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN } from '../core/names';
-import { LABEL_SESSION_MONITOR } from '../core/remoteMonitor/protocol';
+import { LABEL_MONITOR } from '../core/remoteMonitor/protocol';
 import { ENV_API, EXPECTED_STATES, REFRESH_DEVSPACES, fixtureContainerId, fixtureEngine } from '../core/pipeline/refreshStates.testkit';
 import { EngineError, type DockerEngine, type EngineFilters } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
@@ -124,16 +124,16 @@ describe('the sweep operation', () => {
   }
 
   // Exactly the labels and the age (no wider filter), and the number removed.
-  it('prunes only the stopped helper containers older than 10 minutes, never the Session Monitor, and answers how many it removed', async () => {
+  it('prunes only the stopped helper containers older than 10 minutes, never the Monitor, and answers how many it removed', async () => {
     const { engine, requests } = sweepEngine(async () => ['a'.repeat(64), 'b'.repeat(64)]);
     const { context: ctx, logs } = context();
     const value = await sweepOperation(() => engine)({}, ctx);
     expect(parseSweepValue(value)).toEqual({ removed: 2 });
     // Every stopped helper container (the label of the helper runs, which the channels carry too), never the Session
     // Monitor.
-    expect(requests).toEqual([{ filters: { label: [LABEL_HELPER_RUN], 'label!': [LABEL_SESSION_MONITOR], until: ['10m'] }, signal: ctx.signal }]);
+    expect(requests).toEqual([{ filters: { label: [LABEL_HELPER_RUN], 'label!': [LABEL_MONITOR], until: ['10m'] }, signal: ctx.signal }]);
     expect(LABEL_HELPER_RUN).toBe('nimblescape.devspace.helper-run');
-    expect(LABEL_SESSION_MONITOR).toBe('nimblescape.devspace.session-monitor');
+    expect(LABEL_MONITOR).toBe('nimblescape.devspace.monitor');
     expect(LABEL_HELPER_CHANNEL).toBe('nimblescape.devspace.helper-channel');
     // The log line names the helper containers.
     expect(logs).toContain('info The sweep removed 2 stopped helper container(s) older than 10 minutes.');

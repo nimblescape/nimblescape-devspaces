@@ -17,7 +17,7 @@ import { VSCODE_STORE_TARGET } from '../names';
 /**
  * The dev container mounts the shared VS Code server store `store` (the volume of the worker's store) read-only at
  * VSCODE_STORE_TARGET, the whole volume, as an open creates it (its inspect, ContainerInfo.mountTargets). One function
- * for the open (linkVscodeServer) and the Session Monitor's link into running containers.
+ * for the open (linkVscodeServer) and the Monitor's link into running containers.
  */
 export function mountsVscodeStore(mounts: readonly MountTarget[] | undefined, store: string): boolean {
   return (mounts ?? []).some(

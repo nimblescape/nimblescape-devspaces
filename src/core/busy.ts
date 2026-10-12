@@ -150,7 +150,7 @@ export function isStaleLiveWindowStatus(
 }
 
 /**
- * The sleep grace as a window sees it without the state of the Session Monitor. The status file of the own window
+ * The sleep grace as a window sees it without the state of the Monitor. The status file of the own window
  * (`own.windowId`, process `own.pid`) is written every 15 seconds; when it was not updated for SLEEP_GAP_MS, the timers
  * of this window did not run (the computer slept, or the clock was changed), so the files of the other windows may be
  * old for the same reason. False when the own file is missing.

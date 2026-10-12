@@ -5,7 +5,7 @@
 
 # Purges the Docker engine of the current Docker context: removes ALL its containers (running ones too), volumes,
 # images, unused networks and build cache, so that the next open of a devspace starts from a clean engine (a
-# fresh install: helper image, Session Monitor, shared VS Code server store, extension cache, devspaces).
+# fresh install: helper image, Monitor, shared VS Code server store, extension cache, devspaces).
 #
 # It deletes everything on that engine, not only what Devspaces created. The volumes `devspace-*` hold the
 # repositories of the devspaces: changes that are not pushed are lost. Close the VS Code windows that use the
@@ -106,7 +106,7 @@ step() {
   "$@" || failed=1
 }
 
-# Containers first (also the Session Monitor with its restart policy), so that no volume or image is still in use.
+# Containers first (also the Monitor with its restart policy), so that no volume or image is still in use.
 if [ -n "$containers" ]; then step 'Removing the containers' d rm -f $containers; fi
 remaining=$(d volume ls -q)
 if [ -n "$remaining" ]; then step 'Removing the volumes' d volume rm -f $remaining; fi

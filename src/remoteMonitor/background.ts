@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// One background run of the Session Monitor: the maintenance and the pulls of new images, the downloads of the VS Code
+// One background run of the Monitor: the maintenance and the pulls of new images, the downloads of the VS Code
 // server and of the extensions, in the background, started by its schedule (the setting cacheUpdateSchedule,
 // CacheSchedule of main.ts). Its parts run one after the other, each logged, and each failing on its own (a failure
 // never stops the monitor or the next part):
@@ -149,7 +149,7 @@ export class BackgroundRun {
     await this.part('the images', () => this.deps.images());
     const vscode = this.deps.vscode();
     if (vscode === undefined) {
-      log('The Session Monitor mounts no shared VS Code server store; the background run leaves the VS Code server out.');
+      log('The Monitor mounts no shared VS Code server store; the background run leaves the VS Code server out.');
     } else {
       let found: ServerFindings | undefined;
       await this.part('the VS Code server', async () => {

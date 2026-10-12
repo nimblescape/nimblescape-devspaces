@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The settings of the Session Monitor that an open and `monitorEnsure` carry (MonitorSettings: the image settings with
+// The settings of the Monitor that an open and `monitorEnsure` carry (MonitorSettings: the image settings with
 // the schedule of the whole background run, a cron schedule or an interval in minutes, and whether the monitor runs
 // permanently), checked strictly on both sides; `settings -` gets them without the mode. They carry no prefixes.
 import { describe, expect, it } from 'vitest';

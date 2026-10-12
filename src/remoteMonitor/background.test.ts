@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// One background run of the Session Monitor with fakes: the images (a), the newest released VS Code server through the
+// One background run of the Monitor with fakes: the images (a), the newest released VS Code server through the
 // fetch of the open (b), its link into the running dev containers that mount the store, as the remote user of each (c),
 // and the cleanup of the store at most once a day (d), each part failing on its own. The store is a temporary folder
 // (never the home folder).
@@ -193,7 +193,7 @@ function harness(options: {
 
 const linkCommand = (server: string, quality = 'stable') => scriptCommand('vscodeServerLink', [server, quality, 'linux-x64']);
 
-describe('the background run of the Session Monitor', () => {
+describe('the background run of the Monitor', () => {
   it('runs the images first; a failure there stops neither the VS Code server nor the cleanup', async () => {
     const h = harness({ images: async () => Promise.reject(new Error('registry down')), commits: { stable: [C2, C1] } });
     await h.run.run();
@@ -209,7 +209,7 @@ describe('the background run of the Session Monitor', () => {
     await h.run.run();
     expect(h.imagesCalled).toHaveLength(1);
     expect(h.requests).toEqual([]);
-    expect(h.log).toContain('The Session Monitor mounts no shared VS Code server store; the background run leaves the VS Code server out.');
+    expect(h.log).toContain('The Monitor mounts no shared VS Code server store; the background run leaves the VS Code server out.');
   });
 
   // The HTTPS of the VS Code part reads the proxy of the daemon once; a failed read must not hold every later run.

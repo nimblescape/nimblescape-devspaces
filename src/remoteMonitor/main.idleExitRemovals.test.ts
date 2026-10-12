@@ -18,8 +18,8 @@ const DAY = 24 * 60 * 60_000;
 const IDLE_MS = 60_000;
 const SOURCE = '0123456789abcdef0123456789abcdef';
 const A = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-const WAIT = 'a background run is running; the Session Monitor exits after its end.';
-const EXIT = 'the Session Monitor exits. The next open starts it again.';
+const WAIT = 'a background run is running; the Monitor exits after its end.';
+const EXIT = 'the Monitor exits. The next open starts it again.';
 
 let stateDir: string;
 

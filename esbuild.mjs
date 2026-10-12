@@ -76,7 +76,7 @@ const contexts = await Promise.all([
   }),
   // The script of the helper channel on a remote Docker host. The extension sends it over SSH as the first input line
   // of the pipe loader of the channel container (src/core/loader/pipeLoader.ts), so it is always minified (less data
-  // over SSH) and has no source map. It holds the script of the Session Monitor (the module `devspace:monitor-script`,
+  // over SSH) and has no source map. It holds the script of the Monitor (the module `devspace:monitor-script`,
   // scripts/workerScripts.mjs), which it gives the monitor container it creates, and the thread of the host access
   // analysis (the module `devspace:analysis-script`), which it starts from that text.
   // Its options (workerBundleOptions) are the ones that src/workerBundle.test.ts builds.

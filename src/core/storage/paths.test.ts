@@ -54,7 +54,7 @@ describe('StoragePaths', () => {
     expect(paths.pendingDir).toBe(path.join(root, 'pending'));
     expect(paths.operationsDir).toBe(path.join(root, 'operations'));
     expect(paths.reopen).toBe(path.join(root, 'reopen.json'));
-    // No files of a local Session Monitor (monitor.json, .lock, .version, .exit, .log).
+    // No files of a local Monitor (monitor.json, .lock, .version, .exit, .log).
     expect(Object.keys(paths).filter((key) => key.startsWith('monitor'))).toEqual([]);
     expect(paths.helperState).toBe(path.join(root, 'helper.json'));
     expect(paths.sessionFile(WINDOW_ID)).toBe(path.join(root, 'sessions', `${WINDOW_ID}.json`));

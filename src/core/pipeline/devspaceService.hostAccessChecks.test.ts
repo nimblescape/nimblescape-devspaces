@@ -178,7 +178,7 @@ describe('host access checks off for the repository', () => {
     ['a variable of container-only Git', { runArgs: ['-e', 'GIT_CONFIG_GLOBAL=/x'] }, Messages.hostAccess('variable GIT_CONFIG_GLOBAL in runArgs')],
     ['initializeCommand', { initializeCommand: 'docker ps' }, Messages.hostAccess('initializeCommand')],
     ['the cache volume of the workspace helper', { mounts: ['source=devspace-helper-cache,target=/c,type=volume'] }, Messages.hostAccess('volume devspace-helper-cache of the workspace helper')],
-    ['the volume of the remote Session Monitor', { mounts: ['source=devspace-session-monitor,target=/s,type=volume'] }, Messages.hostAccess('volume devspace-session-monitor of the Session Monitor')],
+    ['the volume of the remote Monitor', { mounts: ['source=devspace-monitor,target=/s,type=volume'] }, Messages.hostAccess('volume devspace-monitor of the Monitor')],
     // A name of another devspace is resourceName.
     ['the workspace volume of another devspace', { mounts: [`source=${resourceName('acme/web', OTHER_ID)},target=/w,type=volume`] }, Messages.hostAccess(`volume ${resourceName('acme/web', OTHER_ID)} of another devspace`)],
     ['a label of Devspaces', { runArgs: ['--label', 'nimblescape.devspace.id=x'] }, Messages.unsupportedOptions('label nimblescape.devspace.id')],

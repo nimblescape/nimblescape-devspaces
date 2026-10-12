@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Decision logic of the Session Monitor of a Docker engine: the dead-man switch for a computer that is offline, asleep,
+// Decision logic of the Monitor of a Docker engine: the dead-man switch for a computer that is offline, asleep,
 // or switched to another Docker host. Pure functions without I/O and without a clock of their own; main.ts reads the
 // containers and the heartbeat records and runs the stops.
 //
@@ -175,7 +175,7 @@ export function isRunningState(state: string): boolean {
  *   a plain record without keepRunning.
  * The gap rule: when the time since the previous tick is larger than `gapMs` (the host or the container was paused, the
  * clock was changed), and at the first tick, nothing is stopped for `graceMs`: the computers that still use their
- * devspaces send heartbeats again first (they retry every tick of their Session Monitor). Records whose devspace
+ * devspaces send heartbeats again first (they retry every tick of their Monitor). Records whose devspace
  * has no container at all (running or not) and whose `at` is more than RECORD_MAX_AGE_MS before or after now are
  * removed (`forget`), but none whose `at`, as the rules see it (clamped), is later than that of a record of its
  * devspace that stays, nor a keepRunning one with the same `at`; so are records without keepRunning older than

@@ -253,7 +253,7 @@ const SERVICE_RULES: Readonly<Record<string, KeyRule>> = {
   sysctls: allow,
   logging: loggingProblems,
   storage_opt: (value) => (isRecord(value) ? Object.keys(value).filter((key) => key !== 'size').map((key) => unsupported(`storage_opt ${key}`)) : []),
-  // `always` and `unless-stopped` would start the container together with Docker, outside the Session Monitor:
+  // `always` and `unless-stopped` would start the container together with Docker, outside the Monitor:
   // rewritten to `no` (rewriteModel in compose.ts), not refused; a restart gives no access. `on-failure[:n]` too
   // (Docker starts such a container again when the Docker daemon starts).
   restart: allow,

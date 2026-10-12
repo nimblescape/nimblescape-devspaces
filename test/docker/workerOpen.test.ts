@@ -6,7 +6,7 @@
 // and the extension's HostSide over a real registry and real session files) to a real worker, whose own pipeline builds
 // the image, runs `up` and the lifecycle commands in its batch helper, writes the token, makes sure that the Session
 // Monitor runs, and records the open through the requests of the operation. The window would connect with the answer.
-// The test makes sure of the Session Monitor of the engine (devspace-session-monitor); it is skipped where one exists
+// The test makes sure of the Monitor of the engine (devspace-monitor); it is skipped where one exists
 // before the tests (a monitor of the user is never touched), and removes the one it made.
 import * as fs from 'fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -56,7 +56,7 @@ describe('the open through a real worker', () => {
   const devspaceId = newDevspaceId();
   const volumeName = resourceName(REPOSITORY, devspaceId);
   const containerName = volumeName;
-  // A Session Monitor of the user (or of another run) is never touched: the test is skipped then.
+  // A Monitor of the user (or of another run) is never touched: the test is skipped then.
   const monitorOfUser = engineHadMonitor({ run });
 
   function execIn(user: string, script: string): { code: number | null; out: string } {
@@ -66,7 +66,7 @@ describe('the open through a real worker', () => {
 
   beforeAll(async () => {
     if (monitorOfUser) {
-      log.info(`The engine has a Session Monitor (${REMOTE_MONITOR_CONTAINER}) before the tests; the open through a real worker is skipped.`);
+      log.info(`The engine has a Monitor (${REMOTE_MONITOR_CONTAINER}) before the tests; the open through a real worker is skipped.`);
       return;
     }
     // The helper image through the harness.
@@ -97,7 +97,7 @@ describe('the open through a real worker', () => {
   afterAll(async () => {
     const leftovers = await window.dispose();
     removeRunObjects(cli, run.runId);
-    // The Session Monitor that the open made sure of, its state volume and its tag (nothing when the engine had one
+    // The Monitor that the open made sure of, its state volume and its tag (nothing when the engine had one
     // before the tests).
     removeTestMonitor({ run, cli });
     expect(leftovers).toEqual([]);
@@ -123,7 +123,7 @@ describe('the open through a real worker', () => {
     expect(cli.container(containerName)?.State.Running).toBe(true);
     expect(execIn(REMOTE_USER, `cat ${CREATED_LOG}`).out).toBe('created');
     expect(execIn('root', `cat ${GITHUB_TOKEN_FILE}`).out).not.toBe('');
-    // The Session Monitor of the engine runs (the open made sure of it).
+    // The Monitor of the engine runs (the open made sure of it).
     expect(cli.container(REMOTE_MONITOR_CONTAINER)?.State.Running).toBe(true);
     // The token never reached the log of the window unmasked.
     expect(fs.readFileSync(log.file, 'utf8')).not.toContain('dummy-token-of-the-docker-tests');

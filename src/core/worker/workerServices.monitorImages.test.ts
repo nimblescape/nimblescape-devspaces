@@ -2,14 +2,14 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// A probe of the port: `images` of the worker's Session Monitor waits for the images of the operation and passes on how
+// A probe of the port: `images` of the worker's Monitor waits for the images of the operation and passes on how
 // they ended (a cancellation reaches the pipeline as an AbortError; nothing is left to reject unhandled).
 import { describe, expect, it } from 'vitest';
 import { abortError, silentLogger } from '../ports';
 import { unusedEngine } from './dockerEngine.testkit';
 import { workerSessionMonitor } from './workerServices';
 
-describe("the worker's Session Monitor: images", () => {
+describe("the worker's Monitor: images", () => {
   it('waits for the images of the operation and passes on their rejection', async () => {
     let finish!: () => void;
     let done = false;

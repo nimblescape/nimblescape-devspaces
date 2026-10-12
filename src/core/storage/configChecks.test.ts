@@ -120,7 +120,7 @@ describe('ConfigCheckStore', () => {
   });
 });
 
-describe("the worker's read of the Session Monitor's registry answers", () => {
+describe("the worker's read of the Monitor's registry answers", () => {
   it('reads a regular file only; a link, a folder or a missing file is none', async () => {
     const file = path.join(root, REGISTRY_ANSWERS_FILE);
     expect(await readRegistryAnswers(root)).toBeUndefined();

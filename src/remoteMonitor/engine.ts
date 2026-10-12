@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The Session Monitor talks to its engine over the Engine API, through the port DockerEngine
+// The Monitor talks to its engine over the Engine API, through the port DockerEngine
 // (src/core/worker/dockerEngine.ts) as the worker builds it (src/helperChannel/engineClient.ts over engineApi.ts), on
 // the socket of the engine that its container has at HELPER_DOCKER_SOCKET. No Docker CLI. The loop (main.ts) and the
 // image maintenance (images.ts) each take a narrow part of the port, so that their tests pass a fake engine. The

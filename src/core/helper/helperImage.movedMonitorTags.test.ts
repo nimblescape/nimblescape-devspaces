@@ -75,7 +75,7 @@ describe('the cleanup of monitor tags', () => {
     expect(await s.ensure()).toBe(tag);
     expect(s.removals).toEqual([monitorOf(tag)]);
     expect(images[1].tags).toEqual(['mine:keep']);
-    expect(s.lines).toContain(`info The tag ${monitorOf(tag)} of the Session Monitor is no longer on its workspace helper image. It is removed.`);
+    expect(s.lines).toContain(`info The tag ${monitorOf(tag)} of the Monitor is no longer on its workspace helper image. It is removed.`);
   });
 
   it('leaves a monitor tag of the current image alone, without a log line', async () => {

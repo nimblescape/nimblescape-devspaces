@@ -245,7 +245,7 @@ export const FLOW_REQUESTS: Readonly<Record<string, readonly HostCall[]>> = {
   // The rebuild of the registry adds the entries of the volumes of its engine, and nothing else; it reads no record
   // (the registry adds only what it lacks).
   [OP_RECONCILE]: ['record restore'],
-  // The commands of the Session Monitor need nothing from this computer (their parameters carry them).
+  // The commands of the Monitor need nothing from this computer (their parameters carry them).
   [OP_HEARTBEAT]: [],
   // The headless prepare needs nothing from a computer at all.
   [OP_PREPARE]: [],
