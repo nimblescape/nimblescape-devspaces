@@ -19,8 +19,8 @@ the extension. The [README](README.md) describes the use in short, the
 | `package.json` | The extension manifest. The section [Manifest](#manifest) explains it. |
 | `package-lock.json` | The locked development tools. npm writes this file, and nobody edits it by hand. |
 | `.node-version` | The Node release of the release workflow and of `npm run package`. `actions/setup-node` in the workflows and local Node version managers read it. |
-| `.github/workflows/ci.yml` | Tests and packages every push to `main` and every pull request, and runs the integration tests against Docker. |
-| `.github/workflows/release.yml` | Builds a released version, creates its GitHub release and publishes it to the Marketplace. The section [Release](#release) explains it. |
+| `.github/workflows/ci.yml` | Tests and packages every push to `main`, every pull request and the commit of every release, and runs the integration tests against Docker. |
+| `.github/workflows/release.yml` | Releases a version on a manual start: commits the version, tests and packages it with `ci.yml`, creates its tag and GitHub release and publishes it to the Marketplace. The section [Release](#release) explains it. |
 | `.github/workflows/marketplace-identity.yml` | Prints the Marketplace member ID of the publishing identity, to check the setup of the repository. |
 | `.github/dependabot.yml` | Proposes weekly updates of the development tools and of the pinned actions. |
 | `.vscodeignore` | Lists the files of the package: the bundles in `dist/`, `resources/`, `package.json`, `README.md`, `CHANGELOG.md` and `LICENSE`. |
@@ -85,23 +85,26 @@ publisher.
 ## Release
 
 A released version is a tag `v<version>` whose `<version>` equals the version
-in `package.json`. To release a version, follow these steps:
+in `package.json`. The workflow "Release" creates the version, its tag, its
+GitHub release and its Marketplace version in one run. To release a version,
+follow these steps:
 
-1. Run `npm version <version> --no-git-tag-version`. The command updates `package.json` and `package-lock.json`.
-2. Add a section `## <version>` to `CHANGELOG.md`.
-3. Merge the change to `main`.
-4. Tag the merged commit and push the tag: `git tag v<version>`, then `git push origin v<version>`.
+1. Optional: add a section `## <version>` to `CHANGELOG.md` on `main`.
+2. In the tab "Actions", choose the workflow "Release", then "Run workflow" on the branch `main`. Enter the version, for example `0.1.6`. When `CHANGELOG.md` has no section for the version, enter its notes too: they become the section. The GitHub website starts a workflow also in the browser of a phone.
 
-The tag starts the workflow "Release". It runs three jobs:
+The run has four jobs:
 
-1. "Release build" waits for the CI run of the tagged commit and takes the VSIX that this run tested and built, so the release repeats no test and no build. It stops when the tag differs from the manifest version, when `CHANGELOG.md` has no section for the version, or when the CI run fails. Tag a commit of `main`, whose push starts that run.
-2. "GitHub release" creates the release of the tag with the GitHub CLI `gh`. The section of the version in `CHANGELOG.md` becomes the notes, and the VSIX becomes the file of the release. A release that exists, for example one created on the GitHub website, keeps its notes and receives the VSIX only when it holds none.
-3. "Publish to the Visual Studio Marketplace" downloads the VSIX of the GitHub release, signs in to Microsoft Entra ID with the official [`azure/login`](https://github.com/Azure/login) action and publishes the VSIX with `vsce publish --azure-credential`.
+1. "Version commit" checks that the run starts from `main`, that the version has the form `<major>.<minor>.<patch>`, that it is not lower than the version in `package.json` and that its tag does not exist. It sets the version in `package.json` and `package-lock.json`, adds the section of the notes to `CHANGELOG.md` when the file has none, commits the change as "Release `<version>`" and pushes it to `main`. When `main` holds the version and its section already, it commits nothing. When `main` changed during the run, the push fails and the run changes nothing. The job pushes with the token of the workflow, so a rule of `main` that blocks direct pushes stops it.
+2. "CI" runs the workflow `ci.yml` for the commit of the version, because a push with the token of a workflow starts no other workflow. The VSIX that this job tests and builds is the VSIX of the release, so the release repeats no test and no build.
+3. "Tag and GitHub release" creates the tag `v<version>` on the commit and the release of the tag with the GitHub CLI `gh`. The section of the version in `CHANGELOG.md` becomes the notes, and the VSIX becomes the file of the release. A release that exists keeps its notes and receives the VSIX only when it holds none.
+4. "Publish to the Visual Studio Marketplace" downloads the VSIX of the GitHub release, signs in to Microsoft Entra ID with the official [`azure/login`](https://github.com/Azure/login) action and publishes the VSIX with `vsce publish --azure-credential`.
 
 When a job fails, remove the cause and choose "Re-run failed jobs" on the
-run. A re-run keeps the VSIX that the GitHub release already holds, and the
-Marketplace skips a version that it already holds, so a re-run never
-publishes a version twice.
+run. A re-run keeps the tag and the VSIX that the GitHub release already
+holds, and the Marketplace skips a version that it already holds, so a re-run
+never publishes a version twice. When the tests fail, fix the code on `main`
+and start a new run with the same version: `main` holds the version already,
+so the run tests and releases the fix.
 
 The workflows `release.yml` and `marketplace-identity.yml` and this section
 are the same in every extension repository of nimblescape. A change to them
