@@ -795,7 +795,7 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:docker": "vitest run --config vitest.docker.config.ts",
+    "test:docker": "vitest run --config vitest.docker.config.mts",
     "vscode:prepublish": "node esbuild.mjs --production",
     "package": "vsce package --no-dependencies --no-rewrite-relative-links",
     "install-local": "node scripts/install-local.mjs"

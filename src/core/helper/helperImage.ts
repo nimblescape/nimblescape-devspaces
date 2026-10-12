@@ -24,7 +24,7 @@ import { isHelperImageTag, isMonitorImageTag, monitorImageTag, readHelperState, 
 
 /**
  * Version of `@devcontainers/cli` in the helper image. It comes from the exact devDependency in package.json:
- * esbuild.mjs (and vitest.config.ts for the tests) puts it into the code at build time (scripts/cliVersion.mjs).
+ * esbuild.mjs (and vitest.config.mts for the tests) puts it into the code at build time (scripts/cliVersion.mjs).
  * The version is part of the helper image tag, so after a version bump every user's helper is rebuilt at first use.
  */
 export const DEVCONTAINER_CLI_VERSION: string = __DEVCONTAINER_CLI_VERSION__;

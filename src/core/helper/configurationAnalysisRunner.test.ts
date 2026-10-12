@@ -216,7 +216,7 @@ describe('WorkerConfigurationAnalyzer', () => {
     expect(logger.lines).toEqual(['The host access analysis of the configuration failed (it took longer than 300 ms); the configuration is refused.']);
   });
 
-  // The test process runs with NODE_OPTIONS=--max-old-space-size (vitest.config.ts does not set it, the environment
+  // The test process runs with NODE_OPTIONS=--max-old-space-size (vitest.config.mts does not set it, the environment
   // may), where V8 ignores `resourceLimits`: the watch of the heap stops the worker.
   it('refuses a job whose worker runs out of memory', async () => {
     // 200000 bind mounts (their items alone take more than 8 MB) in a worker of 8 MB.

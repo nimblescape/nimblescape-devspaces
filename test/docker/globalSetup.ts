@@ -42,7 +42,7 @@ function contextEndpoint(dockerPath: string): string | undefined {
 }
 
 export default async function setup(project: TestProject): Promise<() => void> {
-  // Vitest sets the compile-time constants of vitest.docker.config.ts only in the test workers, not here.
+  // Vitest sets the compile-time constants of vitest.docker.config.mts only in the test workers, not here.
   Object.assign(globalThis, { __DEVCONTAINER_CLI_VERSION__: devcontainerCliVersion() });
   const { helperImageTag } = await import('../../src/core/helper/helperImage');
   const dockerPath = findDockerCli(process.env, process.platform);
