@@ -367,17 +367,19 @@ describe('workerNameStart', () => {
     }
   });
 
-  it('is <devspace>-worker- for a window of a devspace, whatever the window name', () => {
+  it('is <devspace>-worker for a window of a devspace, whatever the window name, never a name of Docker Compose', () => {
     const ID = '11111111-2222-4333-8444-555555555555';
     const devspace = resourceName('majikmate/module-html-css-2', ID);
-    expect(workerName('module-html-css-2', 1, devspace)).toBe(`${devspace}-worker-1`);
-    expect(workerName('', 2, devspace.toUpperCase())).toBe(`${devspace}-worker-2`);
+    expect(workerName('module-html-css-2', 1, devspace)).toBe(`${devspace}-worker1`);
+    expect(workerName('', 2, devspace.toUpperCase())).toBe(`${devspace}-worker2`);
     // The longest devspace name.
     const longest = resourceName(`${'o'.repeat(40)}/${'r'.repeat(40)}`, ID);
     expect(longest).toHaveLength(63);
     for (const name of [workerName('api', 1, devspace), workerName('api', 99, longest)]) {
       expect(name).toMatch(DOCKER_NAME);
       expect(isDevspaceResourceName(name)).toBe(false);
+      // Docker Compose names its containers `<project>-<service>-<number>`.
+      expect(name).not.toMatch(/-[0-9]+$/);
     }
   });
 

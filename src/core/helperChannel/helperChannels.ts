@@ -150,11 +150,11 @@ export interface ChannelOpenDeps {
    */
   windowName?(): string;
   /**
-   * The name of the devspace of the window when it is on the engine `target` (resourceName; windowDevspaceName), read
-   * with windowName: the worker of a window of a devspace on its engine is named after it (workerNameStart). Undefined
-   * for a window of no devspace and for another engine; when it fails, the worker is named after the window.
+   * The name of the devspace of the window when it is on the engine of this open (resourceName; windowDevspaceName),
+   * read with windowName: the worker of a window of a devspace on its engine is named after it (workerNameStart).
+   * Undefined for a window of no devspace and for another engine; when it fails, the worker is named after the window.
    */
-  devspaceName?(target: DockerTarget): Promise<string | undefined>;
+  devspaceName?(): Promise<string | undefined>;
 }
 
 /** Docker's refusal of `--network bridge` on a daemon without it. */
@@ -190,9 +190,9 @@ function identityText(identity: EngineIdentity): string {
 export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTarget): Promise<HelperChannel> {
   const devspaceName = async (): Promise<string | undefined> => {
     try {
-      return await deps.devspaceName?.(target);
+      return await deps.devspaceName?.();
     } catch (error) {
-      deps.logger.info(`The devspace of this window could not be found for the name of its worker (${errorMessage(error)}), so the worker is named after the window.`);
+      deps.logger.warn(`The devspace of this window could not be found for the name of its worker (${errorMessage(error)}), so the worker is named after the window.`);
       return undefined;
     }
   };
