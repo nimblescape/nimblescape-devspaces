@@ -13,7 +13,7 @@ import { runWithDockerTarget } from '../docker/dockerTargets';
 import type { DockerTarget } from '../docker/dockerHost';
 import type { HelperMaintenance } from '../helper/helperImages';
 import { bundleHash, loaderCommand } from '../loader/pipeLoader';
-import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR, WORKER_NAME_PREFIX, freeWorkerNumber, workerContainerName } from '../names';
+import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR, freeWorkerNumber, workerNameStart } from '../names';
 import { errorMessage, isUserFacingError } from '../errors';
 import { abortError, isAbortError, type Logger, type RunOptions, type RunResult, type StartedProcess } from '../ports';
 import { HelperChannel, HelperChannelError } from './helperChannel';
@@ -145,10 +145,15 @@ export interface ChannelOpenDeps {
   vscodeVolume: string;
   /**
    * The name of the window, read once for each open of a worker channel (also when the worker takes another number or
-   * starts without network) for the name of its container (workerContainerName; ConnectionAdapter.windowName). Without
+   * starts without network) for the name of its container (workerNameStart; ConnectionAdapter.windowName). Without
    * it, the worker is named as a window without a name.
    */
   windowName?(): string;
+  /**
+   * The name of the devspace of the window (resourceName; windowDevspaceName), read with windowName: a worker of a
+   * window of a devspace is named after it (workerNameStart). Undefined for a window of no devspace. Never rejects.
+   */
+  devspaceName?(): Promise<string | undefined>;
 }
 
 /** Docker's refusal of `--network bridge` on a daemon without it. */
@@ -156,7 +161,7 @@ const NO_BRIDGE = /network "?bridge"? not found/i;
 /** Docker's refusal of a container name that another container on the engine has. */
 const NAME_IN_USE = /container name "?[^"\s]*"? is already in use/i;
 /**
- * The most worker names (workerContainerName) that Docker may refuse in one open, also across the start without
+ * The most worker names (workerNameStart) that Docker may refuse in one open, also across the start without
  * network; the open fails at the last one. Enough for that many windows with the same name that start their workers on
  * one engine at the same moment.
  */
@@ -182,7 +187,7 @@ function identityText(identity: EngineIdentity): string {
  * that it answers. Throws HelperChannelError('open').
  */
 export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTarget): Promise<HelperChannel> {
-  const [script, tag, socketPath] = await Promise.all([deps.script(), deps.helperTag(), deps.socketPath(target)]);
+  const [script, tag, socketPath, devspaceName] = await Promise.all([deps.script(), deps.helperTag(), deps.socketPath(target), deps.devspaceName?.()]);
   const name = engineName(target);
   const label = channelLabelValue(script);
   const scriptHash = bundleHash(script);
@@ -192,15 +197,15 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
     if (process === undefined) throw new HelperChannelError('open', 'The Docker CLI cannot be started.');
     return HelperChannel.open(process, script, { logger: deps.logger, name });
   };
-  const windowName = deps.windowName?.() ?? '';
-  // The names of the containers of the engine that contain WORKER_NAME_PREFIX, with one call without the worker (`,`
-  // separates the names of one container); undefined when the list fails (the last list stays, and the next number is
-  // tried then).
+  const nameStart = workerNameStart(deps.windowName?.() ?? '', devspaceName);
+  // The names of the containers of the engine that contain nameStart, with one call without the worker (`,` separates
+  // the names of one container); undefined when the list fails (the last list stays, and the next number is tried
+  // then).
   const workerNames = async (): Promise<string[] | undefined> => {
     let detail: string;
     try {
       const result = await runWithDockerTarget(target, () =>
-        deps.runDirect(['ps', '--all', '--filter', `name=${WORKER_NAME_PREFIX}`, '--format', '{{.Names}}'], { timeoutMs: CHANNEL_PROBE_TIMEOUT_MS }),
+        deps.runDirect(['ps', '--all', '--filter', `name=${nameStart}`, '--format', '{{.Names}}'], { timeoutMs: CHANNEL_PROBE_TIMEOUT_MS }),
       );
       if (result.exitCode === 0) return result.stdout.split(/[\n,]/).map((line) => line.trim());
       detail = result.timedOut ? 'no answer in time' : result.stderr.trim().slice(-500) || `exit code ${result.exitCode}`;
@@ -216,13 +221,13 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
   // engine, also for the start without network.
   const inUse = new Set<number>();
   let listed: string[] = [];
-  // The worker with the lowest number from 1 that Docker did not refuse (workerContainerName). When another container
+  // The worker with the lowest number from 1 that Docker did not refuse (workerNameStart). When another container
   // on the engine has the name (a worker of another window with the same name, or the last worker of this window while
   // Docker removes it; Docker created nothing), the lowest number that no container has, from a new list of the engine
   // after each refusal.
   const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
-    for (let number = freeWorkerNumber(windowName, listed, inUse); ; ) {
-      const containerName = workerContainerName(windowName, number);
+    for (let number = freeWorkerNumber(nameStart, listed, inUse); ; ) {
+      const containerName = `${nameStart}${number}`;
       try {
         return await startNamed(network, containerName);
       } catch (error) {
@@ -232,8 +237,8 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
           throw new HelperChannelError(error.code, `${error.message} Docker refused ${inUse.size} names of the worker on ${name} because other containers have them.`);
         }
         listed = (await workerNames()) ?? listed;
-        number = freeWorkerNumber(windowName, listed, inUse);
-        deps.logger.info(`The worker name ${containerName} is in use on ${name}, so the worker starts as ${workerContainerName(windowName, number)}.`);
+        number = freeWorkerNumber(nameStart, listed, inUse);
+        deps.logger.info(`The worker name ${containerName} is in use on ${name}, so the worker starts as ${nameStart}${number}.`);
       }
     }
   };
