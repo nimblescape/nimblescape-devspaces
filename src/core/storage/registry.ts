@@ -314,13 +314,13 @@ export class DevspaceRegistry {
     const result = await mutator(file);
     file.version = REGISTRY_VERSION;
     if (JSON.stringify(file) !== before) {
-      if (parsed.state === 'invalid' || parsed.dropped > 0 || parsed.droppedRecords > 0) await this.backup(parsed);
+      if (parsed.state === 'invalid' || parsed.dropped > 0 || parsed.droppedRecords > 0 || parsed.old > 0) await this.backup(parsed);
       await retryTransient(() => writeJsonAtomic(this.paths.registry, file));
     }
     return result;
   }
 
-  /** Keeps a copy of a file whose content the next write would lose (invalid file or invalid entries). */
+  /** Keeps a copy of a file whose content the next write would lose (invalid file, invalid or old entries). */
   private async backup(parsed: ParsedRegistry): Promise<void> {
     const copy = `${this.paths.registry}.backup-${this.clock.now()}`;
     await retryTransient(() => fs.promises.copyFile(this.paths.registry, copy));
@@ -329,7 +329,9 @@ export class DevspaceRegistry {
         ? 'was not valid'
         : parsed.dropped > 0
           ? `contained ${parsed.dropped} invalid devspace entries`
-          : `contained ${parsed.droppedRecords} invalid records of kept volumes`;
+          : parsed.droppedRecords > 0
+            ? `contained ${parsed.droppedRecords} invalid records of kept volumes`
+            : `contained ${parsed.old} entries of version 0.2.1 or older`;
     this.logger.warn(`The devspace registry ${reason}. A copy was saved as ${copy}.`);
   }
 }
@@ -447,6 +449,11 @@ interface ParsedRegistry {
   dropped: number;
   /** Number of records of kept volumes left out as invalid (a list that is no list counts as one). */
   droppedRecords: number;
+  /**
+   * Number of entries of version 0.2.1 or older left out (isOldEntry). A restore cannot bring them back, so they do not
+   * count as lost content (needsRestore, isClean); the next write keeps a copy of the file first.
+   */
+  old: number;
 }
 
 /**
@@ -462,26 +469,31 @@ function emptyRegistry(): RegistryFile {
 }
 
 function parseRegistry(text: string | undefined): ParsedRegistry {
-  if (text === undefined) return { state: 'missing', file: emptyRegistry(), dropped: 0, droppedRecords: 0 };
+  if (text === undefined) return { state: 'missing', file: emptyRegistry(), dropped: 0, droppedRecords: 0, old: 0 };
   const value = parseJson(text);
-  if (!isRecord(value)) return { state: 'invalid', file: emptyRegistry(), dropped: 0, droppedRecords: 0 };
+  if (!isRecord(value)) return { state: 'invalid', file: emptyRegistry(), dropped: 0, droppedRecords: 0, old: 0 };
 
   // Every file that this extension writes has a version: a file without one is invalid.
   const version = value.version;
   if (version !== REGISTRY_VERSION) {
     if (typeof version === 'number' && Number.isFinite(version) && version > REGISTRY_VERSION) {
-      return { state: 'newer', file: emptyRegistry(), version, dropped: 0, droppedRecords: 0 };
+      return { state: 'newer', file: emptyRegistry(), version, dropped: 0, droppedRecords: 0, old: 0 };
     }
-    return { state: 'invalid', file: emptyRegistry(), dropped: 0, droppedRecords: 0 };
+    return { state: 'invalid', file: emptyRegistry(), dropped: 0, droppedRecords: 0, old: 0 };
   }
   if (value.devspaces !== undefined && !Array.isArray(value.devspaces)) {
-    return { state: 'invalid', file: emptyRegistry(), dropped: 0, droppedRecords: 0 };
+    return { state: 'invalid', file: emptyRegistry(), dropped: 0, droppedRecords: 0, old: 0 };
   }
 
   const entries: unknown[] = Array.isArray(value.devspaces) ? value.devspaces : [];
   const ids = new Set<string>();
   const devspaces: Devspace[] = [];
+  let old = 0;
   for (const entry of entries) {
+    if (isOldEntry(entry)) {
+      old++;
+      continue;
+    }
     const devspace = normalizeDevspace(entry);
     if (!devspace || ids.has(devspace.id)) continue;
     ids.add(devspace.id);
@@ -499,7 +511,7 @@ function parseRegistry(text: string | undefined): ParsedRegistry {
   // The parsed object is kept, so fields that this version does not know survive a read-modify-write.
   value.version = REGISTRY_VERSION;
   value.devspaces = devspaces;
-  return { state: 'ok', file: value as unknown as RegistryFile, dropped: entries.length - devspaces.length, droppedRecords };
+  return { state: 'ok', file: value as unknown as RegistryFile, dropped: entries.length - old - devspaces.length, droppedRecords, old };
 }
 
 type Check = (value: unknown) => boolean;
@@ -527,17 +539,21 @@ const OPTIONAL_FIELDS: ReadonlyArray<readonly [keyof Devspace, Check]> = [
   ['lifecycleIncomplete', isNonEmptyString],
 ];
 
-/**
- * The start of the names of the devspaces of version 0.2.1 and older (since then RESOURCE_NAME_PREFIX). Their volumes
- * and containers have the old names and labels, which this version does not use (docs/guide.md, "Update from version
- * 0.2.1 or older"): their entries are left out, so that a start creates a new devspace instead of one with an old name.
- */
+/** The start of the names of the devspaces of version 0.2.1 and older (since then RESOURCE_NAME_PREFIX). */
 const OLD_RESOURCE_NAME_PREFIX = 'devspace-';
 
 /**
- * Checks one entry in place. An entry without a usable ID, repository, volume name, container name, or owner is left out,
- * and so is an entry of version 0.2.1 or older (OLD_RESOURCE_NAME_PREFIX). Missing configuration path and times get
- * defaults. Invalid optional fields are removed. Unknown fields are kept.
+ * True for an entry of version 0.2.1 or older: its volume name starts with OLD_RESOURCE_NAME_PREFIX. Its volume and
+ * container have the old names and labels, which this version does not use (docs/guide.md, "Update from version 0.2.1
+ * or older"), so the entry is left out: a start creates a new devspace instead of one with an old name.
+ */
+function isOldEntry(value: unknown): boolean {
+  return isRecord(value) && isNonEmptyString(value.volumeName) && value.volumeName.toLowerCase().startsWith(OLD_RESOURCE_NAME_PREFIX);
+}
+
+/**
+ * Checks one entry in place. An entry without a usable ID, repository, volume name, container name, or owner is left out.
+ * Missing configuration path and times get defaults. Invalid optional fields are removed. Unknown fields are kept.
  */
 function normalizeDevspace(value: unknown): Devspace | undefined {
   if (!isRecord(value)) return undefined;
@@ -546,8 +562,7 @@ function normalizeDevspace(value: unknown): Devspace | undefined {
     !isRepositoryName(value.repository) ||
     !isNonEmptyString(value.volumeName) ||
     !isNonEmptyString(value.containerName) ||
-    !isOwner(value.owner) ||
-    value.volumeName.toLowerCase().startsWith(OLD_RESOURCE_NAME_PREFIX)
+    !isOwner(value.owner)
   ) {
     return undefined;
   }
