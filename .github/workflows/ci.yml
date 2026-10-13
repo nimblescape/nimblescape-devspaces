@@ -255,20 +255,6 @@ jobs:
       - name: Prepare the Docker engine and the test VS Code
         run: npm run test:vscode:attach:prepare
 
-      # Spike: the code of the Dev Containers extension around the question that it asks before an attach, and its
-      # settings.
-      - name: Show the attach question of Dev Containers
-        if: ${{ !cancelled() }}
-        run: |
-          folder=$(ls -d .vscode-test/extensions/ms-vscode-remote.remote-containers-* | head -n 1)
-          echo "$folder"
-          grep -o '.\{3000\}may execute arbitrary code.\{3000\}' "$folder"/dist/extension/extension.js | head -c 20000 || true
-          echo
-          echo "===== the messages"
-          grep -rl 'may execute arbitrary code' "$folder" || true
-          echo "===== the settings"
-          node -e 'const p=require(process.argv[1]); for (const c of [p.contributes.configuration].flat()) for (const [k,v] of Object.entries(c.properties||{})) console.log(k, "|", JSON.stringify(v.default), "|", (v.description||v.markdownDescription||"").slice(0,200))' "$PWD/$folder/package.json"
-
       - name: Run the tests in the window of a container that is no devspace
         if: ${{ !cancelled() }}
         env:

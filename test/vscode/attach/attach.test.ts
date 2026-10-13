@@ -16,7 +16,7 @@ import * as vscode from 'vscode';
 
 const EXTENSION_ID = 'nimblescape.nimblescape-devspaces';
 /** The longest wait for the connection: the open pipeline of a restored devspace creates its container first. */
-const CONNECT_WAIT_MS = 180_000;
+const CONNECT_WAIT_MS = 300_000;
 
 interface Seed {
   containerName: string;
