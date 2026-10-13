@@ -3,6 +3,12 @@
 Each section lists the changes of one released version. The release workflow
 takes the section of a version as the notes of its GitHub release.
 
+## 0.5.0
+
+**Docker names, without migration:** the image of the worker is now devspaces-worker:<hash> (was devspaces-helper:<hash>), its cache volume devspaces-worker-cache (was devspaces-helper-cache), and its labels nimblescape.devspaces.worker, nimblescape.devspaces.worker-run and nimblescape.devspaces.worker-channel (were nimblescape.devspaces.helper...). The new image is built at the first use. After the update, remove the old devspaces-helper images and the devspaces-helper-cache volume on each Docker engine by hand; the steps are in the user guide, section [Update from version 0.4.0 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-040-or-older).
+
+The worker container of a window that is not a devspace is now named devspaces-<window>-worker<number>, for example devspaces-api-worker1 (was devspaces-worker-api-1), in the same form as the worker of a devspace window, <devspace>-worker<number>.
+
 ## 0.4.0
 
 **Default image:** the new setting devspaces.defaultImage names an image that Start can use in place of the Dev Container configuration of a repository. The setting devspaces.startWithDefaultImage (on by default) decides what a plain Start uses while a default image is set; the context menu of a row and the command palette offer the other source with Start with Configuration and Start with Default Image. A devspace built from the other source is built again from the selected one: its container is created again, and the files of its workspace volume stay. When a default image is set, the sidebar, Search and the switcher also list the repositories without a Dev Container configuration; their devspaces always start from the default image.
