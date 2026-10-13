@@ -312,8 +312,8 @@ export function isDevspaceResourceName(name: string): boolean {
   return lower.startsWith(RESOURCE_NAME_PREFIX) && /^[a-z0-9-]+$/.test(lower.slice(RESOURCE_NAME_PREFIX.length)) && trailingPair(lower) !== undefined;
 }
 
-/** The start of the name of a worker container (workerContainerName). */
-export const WORKER_NAME_PREFIX = 'devspace-worker-';
+/** The start of the name of a worker container (workerContainerName): `devspace-worker-`. */
+const WORKER_NAME_PREFIX = `${RESOURCE_NAME_PREFIX}worker-`;
 
 /**
  * The longest window part of a worker name (workerContainerName): the longest name of a devspace without `devspace-`,
@@ -343,7 +343,7 @@ export function workerContainerName(windowName: string, random = crypto.randomBy
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
-    .replace(/[ßæœøłđð]/g, (letter) => PLAIN_LETTERS[letter])
+    .replace(/[^a-z0-9]/g, (letter) => PLAIN_LETTERS[letter] ?? letter)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+/, '')
     .slice(0, WORKER_WINDOW_LENGTH)
