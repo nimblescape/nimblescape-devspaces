@@ -340,7 +340,8 @@ const PLAIN_LETTERS: Readonly<Record<string, string>> = {
 
 /**
  * The window part of a worker name (workerNameStart): `windowName` (ConnectionAdapter.windowName: the name of the
- * saved workspace file of the window, else of its first folder; the repository folder in a devspace) in lower case,
+ * saved workspace file of the window, else of its first folder; the repository folder in a devspace, for its workers on
+ * other engines than the one of the devspace) in lower case,
  * letters without their accents (PLAIN_LETTERS for those that have none to remove), each run of other characters than
  * `[a-z0-9]` as one `-`, without `-` at the ends, and `window` when nothing is left. A longer name is cut to
  * WORKER_WINDOW_LENGTH characters at the end of a word (its last `-` before the cut), or within a word when the words
@@ -391,8 +392,13 @@ export function workerNameStart(windowName: string, devspaceName?: string): stri
 export function freeWorkerNumber(nameStart: string, names: readonly string[], inUse: ReadonlySet<number>): number {
   const taken = new Set(names);
   let number = 1;
-  while (inUse.has(number) || taken.has(`${nameStart}${number}`)) number++;
+  while (inUse.has(number) || taken.has(workerName(nameStart, number))) number++;
   return number;
+}
+
+/** The name of a worker container: `nameStart` (workerNameStart) and `number`. */
+export function workerName(nameStart: string, number: number): string {
+  return `${nameStart}${number}`;
 }
 
 /** Repository part of the devspace image name: resourceName. */
