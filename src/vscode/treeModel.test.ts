@@ -285,12 +285,12 @@ describe('row actions and contextValue', () => {
       return regex ? new RegExp(regex[1]).test(value) : true;
     };
     const cases: Array<[string, keyof ReturnType<typeof rowActions>]> = [
-      ['devspace.start', 'canStart'],
-      ['devspace.stop', 'canStop'],
-      ['devspace.delete', 'canDelete'],
-      ['devspace.rebuild', 'canRebuild'],
-      ['devspace.selectConfiguration', 'multiConfig'],
-      ['devspace.showOnGitHub', 'onGitHub'],
+      ['devspaces.start', 'canStart'],
+      ['devspaces.stop', 'canStop'],
+      ['devspaces.delete', 'canDelete'],
+      ['devspaces.rebuild', 'canRebuild'],
+      ['devspaces.selectConfiguration', 'multiConfig'],
+      ['devspaces.showOnGitHub', 'onGitHub'],
     ];
     const states: Array<DevspaceState | undefined> = [
       undefined,
@@ -307,14 +307,14 @@ describe('row actions and contextValue', () => {
         const actions = rowActions(state, information);
         const value = contextValue(actions);
         for (const [command, flag] of cases) {
-          const clauses = [...whenOf('view/item/context', command), ...whenOf('devspace.more', command)];
+          const clauses = [...whenOf('view/item/context', command), ...whenOf('devspaces.more', command)];
           expect(clauses.length).toBeGreaterThan(0);
           for (const when of clauses) {
             expect(matches(when, value), `${command} for ${state ?? 'no devspace'}: ${value}`).toBe(actions[flag]);
           }
         }
         // The ⋯ submenu appears on every repository row.
-        const submenu = menus['view/item/context'].find((item) => item.submenu === 'devspace.more');
+        const submenu = menus['view/item/context'].find((item) => item.submenu === 'devspaces.more');
         expect(matches(submenu?.when ?? '', value)).toBe(true);
       }
     }
@@ -797,17 +797,17 @@ describe('state texts and icons', () => {
   it('maps every state to a monitor of the extension', () => {
     // A switched-on monitor with the connection sign in this window, a switched-on monitor in another window, the
     // silhouette of a monitor when stopped (the icon font of the extension).
-    expect(stateIcon('connected')).toEqual({ id: 'devspace-monitor-connected' });
+    expect(stateIcon('connected')).toEqual({ id: 'devspaces-monitor-connected' });
     // Not colored; the filled screen tells that another window uses it.
-    expect(stateIcon('connectedOtherWindow')).toEqual({ id: 'devspace-monitor-on' });
+    expect(stateIcon('connectedOtherWindow')).toEqual({ id: 'devspaces-monitor-on' });
     // Not a switched-on monitor, which would look like a connected window: the switched-off monitor with a play sign
     // (no window uses it), a clock, a ring, and a warning sign.
-    expect(stateIcon('running')).toEqual({ id: 'devspace-monitor-running' });
-    expect(stateIcon('stopped')).toEqual({ id: 'devspace-monitor-off' });
-    expect(stateIcon('updating').id).toBe('devspace-monitor-updating');
+    expect(stateIcon('running')).toEqual({ id: 'devspaces-monitor-running' });
+    expect(stateIcon('stopped')).toEqual({ id: 'devspaces-monitor-off' });
+    expect(stateIcon('updating').id).toBe('devspaces-monitor-updating');
     // The switched-off monitor with a ring: No container.
-    expect(stateIcon('noContainer').id).toBe('devspace-monitor-no-container');
-    expect(stateIcon('filesMissing')).toEqual({ id: 'devspace-monitor-warning', color: 'list.warningForeground' });
+    expect(stateIcon('noContainer').id).toBe('devspaces-monitor-no-container');
+    expect(stateIcon('filesMissing')).toEqual({ id: 'devspaces-monitor-warning', color: 'list.warningForeground' });
   });
 
   // A Quick Pick cannot color icons, so every state needs a shape of its own there. The icons of the extension are
@@ -1452,7 +1452,7 @@ describe('Keep Running When Closed in the sidebar', () => {
     expect(api.description).toBe('main   Running · kept');
     expect(api.tooltip.split('\n')).toEqual(expect.arrayContaining(['Running · kept', TreeTexts.kept]));
     // The running monitor.
-    expect(stateIcon(api.state!)).toEqual({ id: 'devspace-monitor-running' });
+    expect(stateIcon(api.state!)).toEqual({ id: 'devspaces-monitor-running' });
     expect(flags(api.contextValue)).toContain('kept');
     expect(flags(api.contextValue)).not.toContain('canKeepRunning');
 

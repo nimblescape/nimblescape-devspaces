@@ -95,7 +95,7 @@ const BUSY_POLL_MS = 1_000;
 /**
  * Set while this window is connected to a devspace (Close and Keep Running in the Command Palette).
  */
-export const CONNECTED_CONTEXT_KEY = 'devspace.connected';
+export const CONNECTED_CONTEXT_KEY = 'devspaces.connected';
 
 /** The busy mark that a hand-off sets: a stop needs none, it does not change the container. */
 const HAND_OFF_BUSY: Record<PendingOperationKind, BusyOperation | undefined> = {
@@ -996,7 +996,7 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Turn Off Host Access Checks…: after a modal warning that names what the configuration of the repository can then
-   * use, the repository joins the user setting devspace.hostAccessChecksOff. The next open of its devspace applies
+   * use, the repository joins the user setting devspaces.hostAccessChecksOff. The next open of its devspace applies
    * it.
    */
   async turnOffHostAccessChecks(argument: CommandArgument): Promise<void> {
@@ -1021,7 +1021,7 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * Turn On Host Access Checks: the repository leaves the user setting devspace.hostAccessChecksOff (no question),
+   * Turn On Host Access Checks: the repository leaves the user setting devspaces.hostAccessChecksOff (no question),
    * under every name it has here (the name on GitHub and the name in the registry, which differ after a rename or a
    * transfer). At the next open, the checks run again, and a container that was created without them is created again
    * when the configuration passes them (containerIsCurrent).
@@ -1062,7 +1062,7 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * Writes the switch of `repositories` into the user setting devspace.hostAccessChecksOff (ConfigurationTarget.Global:
+   * Writes the switch of `repositories` into the user setting devspaces.hostAccessChecksOff (ConfigurationTarget.Global:
    * the setting has the scope `application`, so no workspace or folder can turn a check off). The other entries stay.
    */
   private async writeHostAccessChecks(repositories: readonly string[], checks: HostAccessChecks): Promise<void> {

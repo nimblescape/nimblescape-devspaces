@@ -9,15 +9,15 @@
 /** Context keys of the welcome view (package.json) and of the Docker setup. */
 export const DockerContextKeys = {
   /** No Docker CLI was found. */
-  missing: 'devspace.dockerMissing',
+  missing: 'devspaces.dockerMissing',
   /** `dockerSetupRequired`: the sidebar shows the Docker setup instead of the repositories (welcome view). */
-  setupRequired: 'devspace.dockerSetupRequired',
+  setupRequired: 'devspaces.dockerSetupRequired',
   /** A Docker CLI was found (the opposite of `missing`). */
-  installed: 'devspace.dockerInstalled',
+  installed: 'devspaces.dockerInstalled',
   /** The last `docker info` succeeded. */
-  ready: 'devspace.dockerReady',
+  ready: 'devspaces.dockerReady',
   /** Windows: `wsl --status` succeeded (the sidebar shows "✓ WSL 2 is installed." instead of its button). */
-  wslReady: 'devspace.wslReady',
+  wslReady: 'devspaces.wslReady',
 } as const;
 
 export type DockerContextKey = (typeof DockerContextKeys)[keyof typeof DockerContextKeys];

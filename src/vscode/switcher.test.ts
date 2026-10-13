@@ -80,8 +80,8 @@ describe('switcher', () => {
     expect(items.map((item) => [item.label, item.description ?? ''])).toEqual([
       ['Recent devspaces', ''],
       // The monitors of the states (the icon font of the extension).
-      ['$(devspace-monitor-connected) acme/api', 'main   Connected'],
-      ['$(devspace-monitor-off) acme/web', 'main   Stopped'],
+      ['$(devspaces-monitor-connected) acme/api', 'main   Connected'],
+      ['$(devspaces-monitor-off) acme/web', 'main   Stopped'],
       ['', ''],
       ['$(repo) Open repository…', ''],
     ]);

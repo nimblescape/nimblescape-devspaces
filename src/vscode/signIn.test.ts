@@ -62,7 +62,7 @@ describe('Sign in with GitHub replaces a token that GitHub rejected', () => {
   const refresh = vi.fn();
   const disposables: Array<{ dispose(): void }> = [];
 
-  /** The last value of the context key devspace.signedIn. */
+  /** The last value of the context key devspaces.signedIn. */
   function signedInKey(): unknown {
     const calls = fakeVscode.commands.executeCommand.mock.calls.filter((call) => call[0] === 'setContext' && call[1] === SIGNED_IN_CONTEXT_KEY);
     return calls.length === 0 ? undefined : calls[calls.length - 1][2];
@@ -151,9 +151,9 @@ describe('Sign in with GitHub replaces a token that GitHub rejected', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { commands: Array<{ command: string; title: string }>; viewsWelcome: Array<{ contents: string; when: string }> };
     };
-    expect(manifest.contributes.commands.find((command) => command.command === 'devspace.signIn')?.title).toBe('Sign in with GitHub');
-    expect(manifest.contributes.viewsWelcome.find((welcome) => welcome.when === '!devspace.signedIn')?.contents).toBe(
-      'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n[Sign in with GitHub](command:devspace.signIn)',
+    expect(manifest.contributes.commands.find((command) => command.command === 'devspaces.signIn')?.title).toBe('Sign in with GitHub');
+    expect(manifest.contributes.viewsWelcome.find((welcome) => welcome.when === '!devspaces.signedIn')?.contents).toBe(
+      'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n[Sign in with GitHub](command:devspaces.signIn)',
     );
     expect(TreeTexts.signIn).toBe('Sign in with GitHub');
     expect(TreeTexts.signInTooltip).toBe('Sign in with GitHub to see your repositories that have a Dev Container configuration.');

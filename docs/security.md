@@ -47,7 +47,7 @@ The code that runs in the worker, the batch helpers, and the Monitor comes from 
 
 Before a container is created, Devspaces checks the final configuration: `devcontainer.json` with what its Features and its base image add to it (the label `devcontainer.metadata`), and every service of Docker Compose. It checks again before `up`, on the `runArgs` as Docker gets them and on the metadata of the image that was built. A configuration that breaks a rule is refused, before anything is pulled, built, or started, with a message that names each offending setting. The volume of the devspace is kept.
 
-The checks are on for every repository by default. The user setting `devspace.hostAccessChecksOff` lists the repositories whose checks are off; only your user settings count, never a workspace or folder setting.
+The checks are on for every repository by default. The user setting `devspaces.hostAccessChecksOff` lists the repositories whose checks are off; only your user settings count, never a workspace or folder setting.
 
 ### Refused while the checks are on
 
@@ -85,7 +85,7 @@ The checks are on for every repository by default. The user setting `devspace.ho
 
 ### Turning the checks off
 
-**Turn Off Host Access Checks…** in the context menu of a repository adds it to `devspace.hostAccessChecksOff` after a warning; **Turn On Host Access Checks** removes it. With the checks off, the refusals of the first list are lifted, so the configuration, its Features, and its base image may use the files of the host, the Docker socket (which gives full control of Docker and of every other devspace, also their tokens), privileged mode, devices, and ports on all addresses. Everything in the second list stays refused. The row shows `host access unrestricted`, and the log says so at every start. A change applies when the container is created next; a container that was created without the checks is created again at the next start after they are turned on, if the configuration passes them.
+**Turn Off Host Access Checks…** in the context menu of a repository adds it to `devspaces.hostAccessChecksOff` after a warning; **Turn On Host Access Checks** removes it. With the checks off, the refusals of the first list are lifted, so the configuration, its Features, and its base image may use the files of the host, the Docker socket (which gives full control of Docker and of every other devspace, also their tokens), privileged mode, devices, and ports on all addresses. Everything in the second list stays refused. The row shows `host access unrestricted`, and the log says so at every start. A change applies when the container is created next; a container that was created without the checks is created again at the next start after they are turned on, if the configuration passes them.
 
 A repository with the checks off is never prepared in the background, and an open with the checks off never uses a prepared image.
 

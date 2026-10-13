@@ -3,13 +3,13 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The rules of the Monitor's background run that the extension, the worker and the monitor share: the setting
-// devspace.cacheUpdateSchedule (a cron schedule of five fields or an interval in minutes), when a run is due, and
+// devspaces.cacheUpdateSchedule (a cron schedule of five fields or an interval in minutes), when a run is due, and
 // whether the monitor of an engine runs permanently (its restart policy). The default is daily at 06:07 in the
 // computer's time zone. Pure functions; no I/O, no `vscode`.
 import { nextCronTime, parseCronSchedule, type CronSchedule } from './cron';
 
 /**
- * The default of devspace.cacheUpdateSchedule: daily at 06:07 in the time zone of the computer (DEVSPACE_IMAGE_TZ of
+ * The default of devspaces.cacheUpdateSchedule: daily at 06:07 in the time zone of the computer (DEVSPACE_IMAGE_TZ of
  * the monitor); a time that the monitor missed (the engine off, a computer asleep) runs once when it runs again
  * (cacheRunDue).
  */
@@ -27,7 +27,7 @@ export const MAX_CACHE_INTERVAL_MINUTES = 1440;
 export type CacheSchedule = { kind: 'interval'; minutes: number; text: string } | { kind: 'cron'; cron: CronSchedule; text: string };
 
 /**
- * The setting devspace.cacheUpdateSchedule: a whole number of minutes from MIN_CACHE_INTERVAL_MINUTES to
+ * The setting devspaces.cacheUpdateSchedule: a whole number of minutes from MIN_CACHE_INTERVAL_MINUTES to
  * MAX_CACHE_INTERVAL_MINUTES (a JSON number or its digits, leading zeros and spaces around it allowed, as the pattern
  * of package.json) is an interval, five fields that parseCronSchedule takes are a cron schedule (its text with single
  * spaces); `undefined` for anything else (fewer minutes, a fraction, other text, another type). Also a cron schedule
@@ -60,7 +60,7 @@ export function normalizeCacheSchedule(value: unknown): string {
 
 /**
  * Whether the Monitor of an engine runs permanently: on every engine, local or remote, unless the setting
- * devspace.stopMonitorWhenIdle is true (its default is false; true: the monitor ends after 5 minutes without a running
+ * devspaces.stopMonitorWhenIdle is true (its default is false; true: the monitor ends after 5 minutes without a running
  * devspace).
  */
 export function monitorRunsPermanently(stopMonitorWhenIdle: boolean | undefined): boolean {

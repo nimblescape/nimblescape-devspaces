@@ -53,7 +53,7 @@ describe('showError', () => {
     await flush();
     expect(fakeVscode.commands.executeCommand).toHaveBeenCalledTimes(1);
     // The command looks for the Docker CLI again before it shows the sidebar, so that the view shows the setup.
-    expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('devspace.dockerSetup.show');
+    expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('devspaces.dockerSetup.show');
     expect(fakeVscode.env.openExternal).not.toHaveBeenCalled();
   });
 
@@ -69,7 +69,7 @@ describe('showError', () => {
     });
     await flush();
     expect(fakeVscode.commands.executeCommand).toHaveBeenCalledTimes(1);
-    expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('devspace.dockerSetup.start');
+    expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('devspaces.dockerSetup.start');
     expect(showLog).not.toHaveBeenCalled();
   });
 
@@ -169,7 +169,7 @@ describe('showError', () => {
     showError(new UserFacingError('signInRequired', Messages.signInRequired), { logger, showLog: vi.fn() });
     expect(shown()).toEqual({ severity: 'warning', message: Messages.signInRequired, actions: ['Sign in'] });
     await flush();
-    expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('devspace.signIn');
+    expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('devspaces.signIn');
   });
 
   it('shows a refused configuration and a devspace of another account as warnings', () => {

@@ -268,7 +268,7 @@ describe('RepositoryGroupsEditor', () => {
   });
 
   // Only this one setting is written; the other settings and the comments stay.
-  it('changes only the key repositoryGroups of the section devspace, in the user settings', async () => {
+  it('changes only the key repositoryGroups of the section devspaces, in the user settings', async () => {
     const { panel } = await openEditor();
     const [example] = loaded(panel).entries;
     changeStored(['^theirs']);

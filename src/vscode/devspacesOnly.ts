@@ -11,7 +11,7 @@ import type { Logger } from '../core/ports';
 import { SETTINGS_SECTION } from './settings';
 
 /** Context key of the view title bar (package.json): the setting `showOnlyDevspaces` is on. */
-export const DEVSPACES_ONLY_CONTEXT_KEY = 'devspace.devspacesOnly';
+export const DEVSPACES_ONLY_CONTEXT_KEY = 'devspaces.devspacesOnly';
 
 /** Writes the setting `showOnlyDevspaces` to the user settings. */
 export async function setShowOnlyDevspaces(on: boolean): Promise<void> {

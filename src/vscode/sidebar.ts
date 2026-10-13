@@ -33,12 +33,12 @@ import { buildTreeModel, type DevspaceRuntime, type OwnerGroup, type StatesUnkno
 import { REPOSITORIES_VIEW_ID, type RepositoriesTreeProvider } from './treeView';
 
 /** Context key of the welcome views (package.json): a list was loaded, or the first refresh failed. */
-export const LOADED_CONTEXT_KEY = 'devspace.loaded';
+export const LOADED_CONTEXT_KEY = 'devspaces.loaded';
 /**
  * Context key of the welcome views (package.json): the last refresh failed and no list is stored, so the view is empty
  * because the list could not be loaded, not because no repository has a configuration.
  */
-export const LOAD_FAILED_CONTEXT_KEY = 'devspace.loadFailed';
+export const LOAD_FAILED_CONTEXT_KEY = 'devspaces.loadFailed';
 
 /** Duration of one render with repository groups after which the view names the setting (warnIfGroupingIsSlow). */
 export const SLOW_GROUPING_MS = 200;
@@ -607,7 +607,7 @@ export class Sidebar implements vscode.Disposable {
       .then(undefined, (error: unknown) => this.deps.logger.error('The new GitHub sign-in failed.', error));
   }
 
-  /** The sign-in state of auth.ts, which alone sets the context key `devspace.signedIn`. */
+  /** The sign-in state of auth.ts, which alone sets the context key `devspaces.signedIn`. */
   private setSignedIn(signedIn: boolean): void {
     this.signedIn = signedIn;
   }

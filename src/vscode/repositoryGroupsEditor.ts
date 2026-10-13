@@ -2,13 +2,13 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The editor of the setting `devspace.repositoryGroups`: a webview panel, because the Settings editor of VS Code cannot
+// The editor of the setting `devspaces.repositoryGroups`: a webview panel, because the Settings editor of VS Code cannot
 // edit a list of strings and objects. Thin glue: the checks, the preview, the value that Save writes, and the checks of
 // the webview messages are in repositoryGroupsEditorModel.ts (no `vscode` import, unit-tested); the regular expressions
 // of the draft run in a worker thread with a time limit (groupsPreviewRunner.ts). The webview is untrusted: every
 // message is checked, and Save checks the entries again before it writes.
 //
-// Save writes only this one setting: it reads settings.json, replaces just the value of devspace.repositoryGroups, and
+// Save writes only this one setting: it reads settings.json, replaces just the value of devspaces.repositoryGroups, and
 // leaves every other setting and comment untouched. If that one value was also changed in settings.json while the
 // editor was open, the editor shows it and asks: Load settings.json (your unsaved edits are dropped) or Save mine
 // (replaces that one value). No merging of individual entries.
@@ -43,7 +43,7 @@ import { SETTINGS_SECTION } from './settings';
 import type { TreeInput } from './treeModel';
 
 const REPOSITORY_GROUPS_KEY = 'repositoryGroups';
-const VIEW_TYPE = 'devspace.repositoryGroupsEditor';
+const VIEW_TYPE = 'devspaces.repositoryGroupsEditor';
 /** Folder of the style sheet and the script of the webview (package: resources/**). */
 const ASSETS = ['resources', 'groupsEditor'];
 
@@ -318,20 +318,20 @@ export class RepositoryGroupsEditor implements vscode.Disposable {
           // Nothing awaits between the read above and this write, so it replaces exactly the value that was checked.
           if (sameSettingValue(value, current)) {
             // settings.json already holds the draft (for example an edit that was undone): nothing is written.
-            this.deps.logger.info('The setting devspace.repositoryGroups already held the entries of the editor.');
+            this.deps.logger.info('The setting devspaces.repositoryGroups already held the entries of the editor.');
             reload = { value: current };
             status = GroupsEditorTexts.alreadySaved;
             return;
           }
           await vscode.workspace.getConfiguration(SETTINGS_SECTION).update(REPOSITORY_GROUPS_KEY, value, vscode.ConfigurationTarget.Global);
-          this.deps.logger.info(`The setting devspace.repositoryGroups was saved with ${mine.length} entries.`);
+          this.deps.logger.info(`The setting devspaces.repositoryGroups was saved with ${mine.length} entries.`);
           reload = { value };
           status = unchanged ? GroupsEditorTexts.saved : GroupsEditorTexts.savedReplaced;
           return;
         }
         if (sameSettingValue(value, current)) {
           // settings.json already holds the draft: nothing to write and nothing to ask; it is the new base.
-          this.deps.logger.info('The setting devspace.repositoryGroups already held the entries of the editor.');
+          this.deps.logger.info('The setting devspaces.repositoryGroups already held the entries of the editor.');
           reload = { value: current };
           status = GroupsEditorTexts.alreadySaved;
           return;
@@ -363,7 +363,7 @@ export class RepositoryGroupsEditor implements vscode.Disposable {
         confirmed = { theirs: current };
       }
     } catch (error) {
-      this.deps.logger.error('The setting devspace.repositoryGroups could not be saved.', error);
+      this.deps.logger.error('The setting devspaces.repositoryGroups could not be saved.', error);
       void vscode.window.showErrorMessage(`The repository groups could not be saved: ${errorMessage(error)}`);
       status = GroupsEditorTexts.saveFailed;
     } finally {

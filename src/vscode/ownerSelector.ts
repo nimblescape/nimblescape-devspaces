@@ -15,7 +15,7 @@ import { ownerChoices, ownersFiltered, OwnerTexts, selectedOwners } from './owne
 import { SETTINGS_SECTION } from './settings';
 
 /** Context key of the view title bar (package.json): the setting `owners` limits the scan (icon `$(filter-filled)`). */
-export const OWNERS_FILTERED_CONTEXT_KEY = 'devspace.ownersFiltered';
+export const OWNERS_FILTERED_CONTEXT_KEY = 'devspaces.ownersFiltered';
 
 export interface OwnerSelectorDeps {
   auth: {

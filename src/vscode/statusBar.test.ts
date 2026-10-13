@@ -24,19 +24,19 @@ describe('DevspaceStatusBar', () => {
     expect(item.alignment).toBe(fakeVscode.StatusBarAlignment.Left);
     expect(item.visible).toBe(true);
     // The switched-off monitor of the sidebar.
-    expect(item.text).toBe('$(devspace-monitor-off) Open devspace…');
-    expect(item.command).toBe('devspace.switchDevspace');
+    expect(item.text).toBe('$(devspaces-monitor-off) Open devspace…');
+    expect(item.command).toBe('devspaces.switchDevspace');
   });
 
   it('shows the connected devspace and its branch; a click opens the switcher', () => {
     const { bar, item } = create();
     bar.showConnected('acme-university/api', 'main');
     // The monitor of the sidebar with the connection sign.
-    expect(item.text).toBe('$(devspace-monitor-connected) acme-university/api · main');
-    expect(item.command).toBe('devspace.switchDevspace');
+    expect(item.text).toBe('$(devspaces-monitor-connected) acme-university/api · main');
+    expect(item.command).toBe('devspaces.switchDevspace');
     bar.showConnected('acme-university/api', undefined);
     // The monitor of the sidebar with the connection sign.
-    expect(item.text).toBe('$(devspace-monitor-connected) acme-university/api');
+    expect(item.text).toBe('$(devspaces-monitor-connected) acme-university/api');
   });
 
   // State unknown: the tooltip says it, the state shown stays.
@@ -44,9 +44,9 @@ describe('DevspaceStatusBar', () => {
     const { bar, item } = create();
     bar.showConnected('acme-university/api', 'main');
     bar.showStateUnknown(true);
-    expect(item.text).toBe('$(devspace-monitor-connected) acme-university/api · main');
+    expect(item.text).toBe('$(devspaces-monitor-connected) acme-university/api · main');
     expect(item.tooltip).toContain('could not be read');
-    expect(item.command).toBe('devspace.switchDevspace');
+    expect(item.command).toBe('devspaces.switchDevspace');
     bar.showStateUnknown(false);
     expect(item.tooltip).toBe('Connected to acme-university/api. Select to switch the devspace.');
   });
@@ -56,25 +56,25 @@ describe('DevspaceStatusBar', () => {
     bar.showConnected('acme-university/api', 'main');
     bar.showBusy('acme-university/web');
     // The monitor with the clock.
-    expect(item.text).toBe('$(devspace-monitor-updating) Updating acme-university/web…');
-    expect(item.command).toBe('devspace.showLog');
+    expect(item.text).toBe('$(devspaces-monitor-updating) Updating acme-university/web…');
+    expect(item.command).toBe('devspaces.showLog');
     bar.showConnected('acme-university/api', 'dev');
     // The monitor with the clock.
-    expect(item.text).toBe('$(devspace-monitor-updating) Updating acme-university/web…');
+    expect(item.text).toBe('$(devspaces-monitor-updating) Updating acme-university/web…');
     bar.clearBusy();
     // The monitor of the sidebar with the connection sign.
-    expect(item.text).toBe('$(devspace-monitor-connected) acme-university/api · dev');
+    expect(item.text).toBe('$(devspaces-monitor-connected) acme-university/api · dev');
   });
 
   it('offers Reconnect when the connection is lost; a click runs Start for the devspace', () => {
     const { bar, item } = create();
     bar.showConnectionLost('acme-university/api', 'env-1');
     expect(item.text).toBe('$(warning) Reconnect acme-university/api');
-    expect(item.command).toMatchObject({ command: 'devspace.start', arguments: [{ devspaceId: 'env-1' }] });
+    expect(item.command).toMatchObject({ command: 'devspaces.start', arguments: [{ devspaceId: 'env-1' }] });
     expect(item.backgroundColor?.id).toBe('statusBarItem.warningBackground');
     bar.showNotConnected();
     // The switched-off monitor of the sidebar.
-    expect(item.text).toBe('$(devspace-monitor-off) Open devspace…');
+    expect(item.text).toBe('$(devspaces-monitor-off) Open devspace…');
     expect(item.backgroundColor).toBeUndefined();
   });
 

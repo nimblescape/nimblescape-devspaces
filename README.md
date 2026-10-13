@@ -34,11 +34,11 @@ Switch between devspaces with **Devspaces: Switch Devspace…** (`Ctrl+Alt+E`, o
 
 | Setting | Default | |
 |---|---|---|
-| `devspace.stopOnClose` | `true` | Stop a devspace 5 minutes after its last window closes. |
-| `devspace.updateContainer` | `notify` | At a start with a newer image: `notify` (Continue/Cancel) or `ask` (Update Now/Later). |
-| `devspace.cacheUpdateSchedule` | `7 6 * * *` | When the background updates run: a cron expression in your time zone, or minutes. |
-| `devspace.owners` | `[]` | Organizations and accounts to list. Empty: all. |
-| `devspace.repositoryGroups` | `[]` | Regular expressions that filter and group repositories by name. |
+| `devspaces.stopOnClose` | `true` | Stop a devspace 5 minutes after its last window closes. |
+| `devspaces.updateContainer` | `notify` | At a start with a newer image: `notify` (Continue/Cancel) or `ask` (Update Now/Later). |
+| `devspaces.cacheUpdateSchedule` | `7 6 * * *` | When the background updates run: a cron expression in your time zone, or minutes. |
+| `devspaces.owners` | `[]` | Organizations and accounts to list. Empty: all. |
+| `devspaces.repositoryGroups` | `[]` | Regular expressions that filter and group repositories by name. |
 
 All commands, settings, and details are in the [user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md).
 

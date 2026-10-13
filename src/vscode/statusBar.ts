@@ -8,9 +8,9 @@ import { Actions } from '../core/messages';
 import { SHOW_LOG_COMMAND } from './progress';
 import { MonitorIcons } from './treeModel';
 
-export const STATUS_BAR_ITEM_ID = 'devspace.status';
-const SWITCH_DEVSPACE_COMMAND = 'devspace.switchDevspace';
-const START_COMMAND = 'devspace.start';
+export const STATUS_BAR_ITEM_ID = 'devspaces.status';
+const SWITCH_DEVSPACE_COMMAND = 'devspaces.switchDevspace';
+const START_COMMAND = 'devspaces.start';
 // Left side, next to the remote indicator of VS Code.
 const PRIORITY = 1000;
 
@@ -50,7 +50,7 @@ export class DevspaceStatusBar implements vscode.Disposable {
     this.item.show();
   }
 
-  /** `$(devspace-monitor-connected) owner/name · branch`; select → switcher. */
+  /** `$(devspaces-monitor-connected) owner/name · branch`; select → switcher. */
   showConnected(repository: string, branch: string | undefined): void {
     this.base = { kind: 'connected', repository, branch: branch?.trim() || undefined };
     this.render();
@@ -66,13 +66,13 @@ export class DevspaceStatusBar implements vscode.Disposable {
     this.render();
   }
 
-  /** `$(devspace-monitor-off) Open devspace…`; select → switcher. */
+  /** `$(devspaces-monitor-off) Open devspace…`; select → switcher. */
   showNotConnected(): void {
     this.base = { kind: 'notConnected' };
     this.render();
   }
 
-  /** `$(devspace-monitor-updating) Updating owner/name…`; select → log with the progress details. */
+  /** `$(devspaces-monitor-updating) Updating owner/name…`; select → log with the progress details. */
   showBusy(repository: string): void {
     this.busyRepository = repository;
     this.render();
@@ -84,7 +84,7 @@ export class DevspaceStatusBar implements vscode.Disposable {
     this.render();
   }
 
-  /** `$(warning) Reconnect owner/name`; select → `devspace.start` with `{ devspaceId }` (open pipeline). */
+  /** `$(warning) Reconnect owner/name`; select → `devspaces.start` with `{ devspaceId }` (open pipeline). */
   showConnectionLost(repository: string, devspaceId: string): void {
     this.base = { kind: 'connectionLost', repository, devspaceId };
     this.render();

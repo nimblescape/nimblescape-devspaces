@@ -67,7 +67,7 @@ More markers in a row:
 | Action | Effect |
 |---|---|
 | **Start** (or a double-click) | Starts the devspace and connects the current window. Creates the devspace on the first start. If another window is connected to it, that window comes to the front: a devspace is never open in two windows. |
-| **Start in New Window** | The same, but a new window connects, and the current window keeps its devspace. With the setting `devspace.openInNewWindow` on, the menu offers **Start in Current Window** instead. |
+| **Start in New Window** | The same, but a new window connects, and the current window keeps its devspace. With the setting `devspaces.openInNewWindow` on, the menu offers **Start in Current Window** instead. |
 | **Stop** | Stops the container at once. Your files stay. If a window is connected, the connection closes first. The Monitor on the Docker engine is told first, so the devspace stops even when you quit VS Code right after the click. A notification shows the progress until `owner/name stopped.` |
 | **Delete** | Removes the containers, the images, and the volume with the repository, after you confirm it. The confirmation shows uncommitted changes, unpushed commits, and stashes as far as Devspaces recorded them, and offers **Open devspace**. Additional volumes of the configuration, for example of a database, are removed only when you tick them. |
 | **Keep Running When Closed** | The devspace keeps running when no window uses it, for example for a server or an agent. Only **Stop** or **Delete** stops it. **Stop When Closed** switches back. The choice is stored with the devspace. |
@@ -83,7 +83,7 @@ The actions after **Delete** are in the context menu of a row and in its **⋯**
 
 The status bar shows the devspace of the window (`owner/name · branch`), **Open devspace…** in a window without one, `Updating owner/name…` while an operation runs, or **Reconnect owner/name** when the connection was lost. Select it to open the switcher, the progress details, or to reconnect.
 
-**Switch Devspace…** lists your recent devspaces with their state and, under **Open repository…**, every repository of the list. The selected devspace opens in the current window. **Switch Devspace in New Window…** opens it in a new window. With `devspace.openInNewWindow` on, the two commands swap their roles.
+**Switch Devspace…** lists your recent devspaces with their state and, under **Open repository…**, every repository of the list. The selected devspace opens in the current window. **Switch Devspace in New Window…** opens it in a new window. With `devspaces.openInNewWindow` on, the two commands swap their roles.
 
 ## Commands
 
@@ -100,7 +100,7 @@ All commands are in the category **Devspaces** of the Command Palette. A command
 | Expand All | Opens every owner and every group of the view. |
 | Select Organizations… | Limits the list to some organizations and accounts. Select none to see all again. |
 | Show Only Devspaces, Show All Repositories | Lists only the repositories that have a devspace, or all again (the setting `showOnlyDevspaces`). |
-| Edit Repository Groups… | Opens the editor of the setting `devspace.repositoryGroups`. |
+| Edit Repository Groups… | Opens the editor of the setting `devspaces.repositoryGroups`. |
 | Sign in with GitHub | Signs in with the GitHub account of VS Code. |
 | Show Log | Opens the log of Devspaces. |
 | Use a Remote Docker Host…, Use the Local Docker | Choose the Docker engine (see [Remote Docker host](#remote-docker-host)). |
@@ -111,7 +111,9 @@ The buttons of the Docker setup (**Install WSL 2**, **Install Docker**, **Start 
 
 ## Settings
 
-All settings have the prefix `devspace.`. Settings marked *user only* count only in your user settings: a workspace or folder setting, which a repository could bring along, cannot change them.
+All settings have the prefix `devspaces.`. Settings marked *user only* count only in your user settings: a workspace or folder setting, which a repository could bring along, cannot change them.
+
+Up to version 0.2.1 the prefix was `devspace.`. Settings with the old prefix are not read any more: rename them to `devspaces.…` in your `settings.json`. The command IDs changed the same way (`devspaces.start` instead of `devspace.start`), so a keybinding with an old ID must be changed too.
 
 | Setting | Default | Description |
 |---|---|---|
@@ -132,7 +134,7 @@ All settings have the prefix `devspace.`. Settings marked *user only* count only
 | `hostAccessChecksOff` | `[]` | *User only.* Repositories (`owner/name`) whose host access checks are off. Only for repositories that you fully trust (see [Security](#security)). **Turn Off Host Access Checks…** in the context menu of a repository changes it. A change applies when the container is created next, for example with **Rebuild**. |
 | `repositoryGroups` | `[]` | *User only.* Regular expressions that filter and group the repositories of each owner by name (see below). |
 
-**Repository groups.** Each entry of `devspace.repositoryGroups` is a regular expression (JavaScript syntax) for the repository name without the owner, or an object with `pattern`, an optional `name`, and optional `flags` (`i`, `u`, `s`). In an owner where at least one repository matches, the view shows only the matching repositories and those with a devspace. Each capturing group becomes a level of the tree, and the last one is the label of the row; the first matching entry wins, and an entry with a `name` gets its own node. For example, `^(\d{4}-[^-]+-[^-]+)-([^-]+-[^-]+)-(.+)$` shows `2026-web-1a-module-html-css` as `2026-web-1a` › `module-html` › `css`. Avoid nested repetitions such as `(a+)+`: they can make VS Code stop responding, and the view names the setting when grouping is slow.
+**Repository groups.** Each entry of `devspaces.repositoryGroups` is a regular expression (JavaScript syntax) for the repository name without the owner, or an object with `pattern`, an optional `name`, and optional `flags` (`i`, `u`, `s`). In an owner where at least one repository matches, the view shows only the matching repositories and those with a devspace. Each capturing group becomes a level of the tree, and the last one is the label of the row; the first matching entry wins, and an entry with a `name` gets its own node. For example, `^(\d{4}-[^-]+-[^-]+)-([^-]+-[^-]+)-(.+)$` shows `2026-web-1a-module-html-css` as `2026-web-1a` › `module-html` › `css`. Avoid nested repetitions such as `(a+)+`: they can make VS Code stop responding, and the view names the setting when grouping is slow.
 
 **Devspaces: Edit Repository Groups…** opens an editor for this setting, because the Settings editor of VS Code can only open `settings.json` for it. It shows a preview of the tree for the repositories that the view has loaded, tests a repository name, and marks an expression that takes longer than one second as too slow; such an expression cannot be saved. **Save** replaces only this one value in your user `settings.json`. If the value changed in `settings.json` while the editor was open, the editor asks first: **Load settings.json**, **Save Mine**, or **Cancel**.
 
@@ -142,7 +144,7 @@ Devspaces keeps your devspaces current in two places: in the background on each 
 
 ### The background run
 
-A small container on each Docker engine, the **Monitor** (`devspace-monitor`), does the background work at the times of `devspace.cacheUpdateSchedule` (by default daily at 06:07 in your time zone). A time that was missed, for example while the engine was off, runs once when the monitor runs again. A run that reaches no server at all, for example right after the computer wakes up and before its Wi-Fi or VPN is back, does not count as a run: the monitor tries it again after 2, 5, 10, 20 and 30 minutes, then every hour, until a run reaches the network, and a shorter schedule still runs at its own times meanwhile. A run that reached at least one server counts, also when single images or downloads failed, so one registry that is down never makes the monitor run again and again. Each run:
+A small container on each Docker engine, the **Monitor** (`devspaces-monitor`), does the background work at the times of `devspaces.cacheUpdateSchedule` (by default daily at 06:07 in your time zone). A time that was missed, for example while the engine was off, runs once when the monitor runs again. A run that reaches no server at all, for example right after the computer wakes up and before its Wi-Fi or VPN is back, does not count as a run: the monitor tries it again after 2, 5, 10, 20 and 30 minutes, then every hour, until a run reaches the network, and a shorter schedule still runs at its own times meanwhile. A run that reached at least one server counts, also when single images or downloads failed, so one registry that is down never makes the monitor run again and again. Each run:
 
 1. **Pulls the newer versions of the images that the devspaces on that engine use**, for example `node:20` or `mcr.microsoft.com/devcontainers/base:ubuntu`, and removes the older versions of those images that nothing uses any more. It pulls without a sign-in, so private images are not updated in the background; an image pinned by a digest never changes.
 2. **Downloads the newest VS Code server** into a store that all dev containers of the engine share, and links it into the running dev containers, so that a window that VS Code restores after its own update finds its server.
@@ -150,7 +152,7 @@ A small container on each Docker engine, the **Monitor** (`devspace-monitor`), d
 4. **Cleans up** that store at most once a day.
 5. **Prepares the next image of each devspace** whose base image or Features changed: it builds the new image in the background, so that the update at the next start takes seconds. It prepares one devspace at a time, the most recently used first, and stops a prepare after 30 minutes. It uses no token and no credentials, so devspaces with private images or Features, and repositories whose host access checks are off, are not prepared.
 
-The monitor keeps running on every Docker engine, local and remote, so its background work runs at the scheduled time even when no devspace runs. Turn on `devspace.stopMonitorWhenIdle` to end it 5 minutes after the last devspace stopped; a missed run then waits until the next start.
+The monitor keeps running on every Docker engine, local and remote, so its background work runs at the scheduled time even when no devspace runs. Turn on `devspaces.stopMonitorWhenIdle` to end it 5 minutes after the last devspace stopped; a missed run then waits until the next start.
 
 **Devspaces: Update All Images Now** (Command Palette, or the **…** menu of the view) runs the same work at once on the current Docker engine, for example after a new image was pushed. The run starts within a minute, and the command does not wait for it: the message says "The Monitor on <engine> updates the images now."
 
@@ -158,7 +160,7 @@ The monitor keeps running on every Docker engine, local and remote, so its backg
 
 At each start, Devspaces checks whether the images and Features of the devspace have newer versions. It uses the registry answers of the last background run when they are recent, and asks the registries itself otherwise. Without internet access, it skips the check and starts the devspace with its current image.
 
-When a newer image is available and the devspace has a container, running or stopped, Devspaces says so before it changes anything. The update creates the container again from the new image: your files in the workspace stay, but programs and files that you added outside the workspace, for example in the home folder, are gone. With the default `devspace.updateContainer` = `notify`, the dialog says, for example:
+When a newer image is available and the devspace has a container, running or stopped, Devspaces says so before it changes anything. The update creates the container again from the new image: your files in the workspace stay, but programs and files that you added outside the workspace, for example in the home folder, are gone. With the default `devspaces.updateContainer` = `notify`, the dialog says, for example:
 
 > A newer image is available for owner/name. To use it, the running container is stopped and created again from the new image. Your files in the workspace are kept; programs and files that you added outside the workspace are not. Choose Continue to update now, or Cancel to leave the devspace closed.
 
@@ -173,14 +175,14 @@ If the build of a newer image fails, or the new image needs access to your compu
 
 ## Stop on close
 
-When you close the last window of a devspace, switch to another devspace, or quit VS Code, the Monitor on its Docker engine stops the container 5 minutes later. A window that connects again within that time keeps it running. If the window cannot say goodbye (the computer sleeps or goes offline, or VS Code crashes), the monitor stops the container after `devspace.stopAfterMinutes` (default 10 minutes) without a sign from any window.
+When you close the last window of a devspace, switch to another devspace, or quit VS Code, the Monitor on its Docker engine stops the container 5 minutes later. A window that connects again within that time keeps it running. If the window cannot say goodbye (the computer sleeps or goes offline, or VS Code crashes), the monitor stops the container after `devspaces.stopAfterMinutes` (default 10 minutes) without a sign from any window.
 
 A devspace keeps running when no window uses it in these cases, and its row shows `· kept`:
 
 - **Keep Running When Closed** is on for it. Only **Stop** or **Delete** stops it.
 - You closed its window with **Close and Keep Running**. The next window that connects to it ends this.
-- `devspace.stopOnClose` is off.
-- `devspace.respectShutdownActionNone` is on, and its configuration says `"shutdownAction": "none"`.
+- `devspaces.stopOnClose` is off.
+- `devspaces.respectShutdownActionNone` is on, and its configuration says `"shutdownAction": "none"`.
 
 Work that runs in a container after its window closed, for example a long build in a terminal, ends when the container stops.
 
@@ -268,7 +270,7 @@ The checks are a guard rail against mistakes and copied templates, not a sandbox
 ## Troubleshooting
 
 - **The log.** **Devspaces: Show Log** opens the complete log of Devspaces, including the output of the clone, the build, and the lifecycle commands. A progress notification has **Show details** for the same log.
-- **The Monitor.** Its log shows each stop, each background run, and each prepare: `docker logs devspace-monitor` on the engine, or from your computer `docker --context <context> logs devspace-monitor`. Docker keeps at most 2 × 1 MB of it.
+- **The Monitor.** Its log shows each stop, each background run, and each prepare: `docker logs devspaces-monitor` on the engine, or from your computer `docker --context <context> logs devspaces-monitor`. Docker keeps at most 2 × 1 MB of it.
 - **A devspace stops too early or keeps running.** Check its row for `· kept`, and the settings `stopOnClose`, `stopAfterMinutes`, and `respectShutdownActionNone`. If the window warns that its heartbeats failed, the Monitor may stop the devspace after `stopAfterMinutes`.
 - **`State unknown`.** Devspaces could not read the engine. On a remote host, check that `ssh <host>` works without a question and that Docker runs there. After the images of an engine were removed, Devspaces prepares the engine again in the background; the status bar shows "Devspaces: preparing <host>…".
 

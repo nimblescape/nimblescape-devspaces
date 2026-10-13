@@ -154,14 +154,14 @@ const FOREIGN_TEST_LABELS = new Set(['devspace.', 'devspace.fingerprint', 'devsp
  */
 const VSCODE_IDS: ReadonlySet<string> = new Set([
   ...(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8').match(/devspace\.[A-Za-z0-9._-]*[A-Za-z0-9]/g) ?? []),
-  'devspace.status',
-  'devspace.repositoryGroupsEditor',
-  'devspace.repositories.focus',
-  'devspace.dockerInstalled',
-  'devspace.dockerMissing',
-  'devspace.dockerReady',
+  'devspaces.status',
+  'devspaces.repositoryGroupsEditor',
+  'devspaces.repositories.focus',
+  'devspaces.dockerInstalled',
+  'devspaces.dockerMissing',
+  'devspaces.dockerReady',
   // A command name that dockerSetupSidebar.test.ts checks is absent.
-  'devspace.installDocker',
+  'devspaces.installDocker',
 ]);
 
 describe('EXTENSION_LABEL_KEYS', () => {

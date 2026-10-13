@@ -200,8 +200,8 @@ describe('the filter icon of the view title bar', () => {
       [Commands.updateImagesNow, '2_maintenance@1'],
       // No icon of the Docker host; the first row of the list chooses it.
     ]);
-    expect(title[0].when).toBe(`view == devspace.repositories && !${OWNERS_FILTERED_CONTEXT_KEY}`);
-    expect(title[1].when).toBe(`view == devspace.repositories && ${OWNERS_FILTERED_CONTEXT_KEY}`);
+    expect(title[0].when).toBe(`view == devspaces.repositories && !${OWNERS_FILTERED_CONTEXT_KEY}`);
+    expect(title[1].when).toBe(`view == devspaces.repositories && ${OWNERS_FILTERED_CONTEXT_KEY}`);
     // The twin with the filled icon is not a second entry of the Command Palette.
     // (The Docker setup adds hidden commands of its own to the same list.)
     const palette = manifest.contributes.menus.commandPalette as Array<{ command: string; when: string }>;

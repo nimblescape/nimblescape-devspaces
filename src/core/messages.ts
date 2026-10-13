@@ -222,9 +222,9 @@ export const Messages = {
   /** The warning in the tooltip of a repository row whose host access checks are off. */
   hostAccessUnrestrictedTooltip:
     'Warning: the host access checks are off for this repository. Its configuration can use the files, devices, and Docker of your computer.',
-  /** Entries of the setting devspace.hostAccessChecksOff that are no repository name (`owner/name`). */
+  /** Entries of the setting devspaces.hostAccessChecksOff that are no repository name (`owner/name`). */
   hostAccessChecksOffInvalid: (entries: string) =>
-    `The setting devspace.hostAccessChecksOff has entries that are not a repository name like owner/name. They are ignored: ${entries}`,
+    `The setting devspaces.hostAccessChecksOff has entries that are not a repository name like owner/name. They are ignored: ${entries}`,
   /** Git before 2.9 does not remove the forwarding credential helper with an empty helper. */
   oldGit: (version: string) =>
     `Git ${version} in the devspace is older than version 2.9. It may use the Git credentials of your computer instead of the GitHub account of the devspace. Use an image with a newer Git.`,

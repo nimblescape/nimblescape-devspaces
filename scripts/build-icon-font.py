@@ -82,16 +82,16 @@ CLEARANCE = BADGE_RADIUS + 1
 
 # Glyph name, character (Private Use Area), contributed icon id.
 GLYPHS = [
-    ("monitorOff", 0xE001, "devspace-monitor-off"),
-    ("monitorOn", 0xE002, "devspace-monitor-on"),
-    ("monitorConnected", 0xE003, "devspace-monitor-connected"),
+    ("monitorOff", 0xE001, "devspaces-monitor-off"),
+    ("monitorOn", 0xE002, "devspaces-monitor-on"),
+    ("monitorConnected", 0xE003, "devspaces-monitor-connected"),
     # The header row of a remote Docker host, the monitor switched off with the connection sign.
-    ("monitorRemote", 0xE004, "devspace-monitor-remote"),
+    ("monitorRemote", 0xE004, "devspaces-monitor-remote"),
     # The other states of a devspace.
-    ("monitorRunning", 0xE005, "devspace-monitor-running"),
-    ("monitorUpdating", 0xE006, "devspace-monitor-updating"),
-    ("monitorNoContainer", 0xE007, "devspace-monitor-no-container"),
-    ("monitorWarning", 0xE008, "devspace-monitor-warning"),
+    ("monitorRunning", 0xE005, "devspaces-monitor-running"),
+    ("monitorUpdating", 0xE006, "devspaces-monitor-updating"),
+    ("monitorNoContainer", 0xE007, "devspaces-monitor-no-container"),
+    ("monitorWarning", 0xE008, "devspaces-monitor-warning"),
 ]
 UNITS_PER_EM = 1000
 # Seconds since 1904-01-01 (the epoch of the head table): 2026-09-28 00:00 UTC.

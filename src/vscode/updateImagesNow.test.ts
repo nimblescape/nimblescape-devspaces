@@ -81,7 +81,7 @@ describe('the command Update All Images Now', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { commands: Array<{ command: string; title: string; category: string }>; menus: Record<string, Array<{ command: string; when?: string; group?: string }>> };
     };
-    expect(Commands.updateImagesNow).toBe('devspace.updateImagesNow');
+    expect(Commands.updateImagesNow).toBe('devspaces.updateImagesNow');
     expect(manifest.contributes.commands.find((entry) => entry.command === Commands.updateImagesNow)).toEqual({
       command: Commands.updateImagesNow,
       title: 'Update All Images Now',
@@ -91,7 +91,7 @@ describe('the command Update All Images Now', () => {
     expect(manifest.contributes.menus.commandPalette.some((entry) => entry.command === Commands.updateImagesNow)).toBe(false);
     expect(manifest.contributes.menus['view/title'].find((entry) => entry.command === Commands.updateImagesNow)).toEqual({
       command: Commands.updateImagesNow,
-      when: 'view == devspace.repositories',
+      when: 'view == devspaces.repositories',
       group: '2_maintenance@1',
     });
   });

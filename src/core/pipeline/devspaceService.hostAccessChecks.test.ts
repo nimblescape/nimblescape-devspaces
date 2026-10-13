@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The host access checks can be turned off per repository (setting devspace.hostAccessChecksOff), and are on by
+// The host access checks can be turned off per repository (setting devspaces.hostAccessChecksOff), and are on by
 // default. The open pipeline with the switch off, and with the switch on again for a container that was created while
 // it was off.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

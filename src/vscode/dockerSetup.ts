@@ -54,9 +54,9 @@ import { isAbortError, systemClock, type Clock, type Logger, type ProcessRunner 
  * Command Start Docker (package.json), offered once an installation has put the CLI in place, and as the action of the
  * error "Docker is not running." (Docker Engine on Linux) in a local window.
  */
-export const DOCKER_SETUP_START_COMMAND = 'devspace.dockerSetup.start';
+export const DOCKER_SETUP_START_COMMAND = 'devspaces.dockerSetup.start';
 /** Shows the sidebar view (VS Code contributes `<view id>.focus` for each view of package.json). */
-const SHOW_SIDEBAR_COMMAND = 'devspace.repositories.focus';
+const SHOW_SIDEBAR_COMMAND = 'devspaces.repositories.focus';
 /** Name of the terminal of the installation commands. */
 export const INSTALL_TERMINAL_NAME = 'Install Docker';
 const XATTR = '/usr/bin/xattr';
@@ -260,7 +260,7 @@ export class DockerSetup implements vscode.Disposable {
   }
 
   /**
-   * Command devspace.dockerSetup.show (action Install Docker… of the error "Docker Desktop is not installed."):
+   * Command devspaces.dockerSetup.show (action Install Docker… of the error "Docker Desktop is not installed."):
    * updates the context keys from the adapter (a missing CLI may be found again; a lost CLI was reported already by
    * `reportCliLost`), then shows the sidebar view.
    */
@@ -275,7 +275,7 @@ export class DockerSetup implements vscode.Disposable {
   }
 
   /**
-   * Command devspace.dockerSetup.install (sidebar button "Install Docker"): the installation plan of this
+   * Command devspaces.dockerSetup.install (sidebar button "Install Docker"): the installation plan of this
    * computer, after a modal confirmation. Afterwards, the CLI is looked up every 5 seconds for at most 30 minutes.
    */
   async install(): Promise<void> {
@@ -304,7 +304,7 @@ export class DockerSetup implements vscode.Disposable {
   }
 
   /**
-   * Command devspace.dockerSetup.start (action Start Docker after an installation, and of the error "Docker is not
+   * Command devspaces.dockerSetup.start (action Start Docker after an installation, and of the error "Docker is not
    * running." of Docker Engine on Linux): starts Docker Desktop with the
    * documented commands and waits until it is ready. Docker Engine on Linux: `sudo systemctl enable --now docker` in the
    * terminal, after a confirmation.
@@ -341,7 +341,7 @@ export class DockerSetup implements vscode.Disposable {
     void vscode.window.showInformationMessage(DockerSetupUiTexts.dockerRunning).then(undefined, () => undefined);
   }
 
-  /** Command devspace.dockerSetup.installWsl (sidebar button "Install WSL 2", Windows): `wsl --install` in the terminal. */
+  /** Command devspaces.dockerSetup.installWsl (sidebar button "Install WSL 2", Windows): `wsl --install` in the terminal. */
   async installWsl(): Promise<void> {
     if (this.refuseInRemoteWindow()) return;
     if (this.state.wslReady) {

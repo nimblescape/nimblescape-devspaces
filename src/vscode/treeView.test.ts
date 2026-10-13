@@ -96,7 +96,7 @@ describe('RepositoriesTreeProvider', () => {
       contextValue: 'repository;canStop;canDelete;canRebuild;onGitHub;hostAccessChecked;canKeepRunning;canCloseAndKeepRunning',
     });
     // The switched-on monitor with the connection sign (the icon font of the extension).
-    expect((apiItem.iconPath as ThemeIcon).id).toBe('devspace-monitor-connected');
+    expect((apiItem.iconPath as ThemeIcon).id).toBe('devspaces-monitor-connected');
     // A repository without devspace has no state symbol.
     expect(((provider.getTreeItem(web) as unknown as TreeItem).iconPath as ThemeIcon).id).toBe('blank');
 
@@ -115,7 +115,7 @@ describe('RepositoriesTreeProvider', () => {
     expect(rest).toEqual(groups);
     const item = provider.getTreeItem(first) as unknown as TreeItem;
     expect(item).toMatchObject({ label: 'Sign in with GitHub', id: 'signIn', contextValue: 'signIn' });
-    expect(item.command).toMatchObject({ command: 'devspace.signIn' });
+    expect(item.command).toMatchObject({ command: 'devspaces.signIn' });
     expect((item.iconPath as ThemeIcon).id).toBe('account');
     expect(provider.getParent(first)).toBeUndefined();
     expect(provider.getChildren(first)).toEqual([]);
@@ -158,8 +158,8 @@ describe('RepositoriesTreeProvider', () => {
     const item = provider.getTreeItem(host) as unknown as TreeItem;
     expect(item.label).toBe('Remote Docker host: htldvmhn');
     // The monitor with the remote badge: the switched-off monitor with the connection sign.
-    expect((item.iconPath as ThemeIcon).id).toBe('devspace-monitor-remote');
-    expect(item.command).toMatchObject({ command: 'devspace.chooseDockerHost' });
+    expect((item.iconPath as ThemeIcon).id).toBe('devspaces-monitor-remote');
+    expect(item.command).toMatchObject({ command: 'devspaces.chooseDockerHost' });
     expect(item.contextValue).toBe('dockerHost');
     expect(provider.getParent(host)).toBeUndefined();
     expect(provider.getChildren(host)).toEqual([]);
@@ -183,14 +183,14 @@ describe('RepositoriesTreeProvider', () => {
     expect(localItem.label).toBe('Local Docker');
     expect(localItem.label).toBe(DockerHostRowTexts.label({ kind: 'local', host: '' }));
     // The switched-off monitor of the sidebar.
-    expect((localItem.iconPath as ThemeIcon).id).toBe('devspace-monitor-off');
-    expect(localItem.command).toMatchObject({ command: 'devspace.chooseDockerHost' });
+    expect((localItem.iconPath as ThemeIcon).id).toBe('devspaces-monitor-off');
+    expect(localItem.command).toMatchObject({ command: 'devspaces.chooseDockerHost' });
     expect(localItem.tooltip).toBe('Docker runs on this computer. Click to use a remote Docker host.');
     provider.setDockerHost({ kind: 'unsupported', host: 'tcp://192.0.2.10:2376' });
     const unsupportedItem = provider.getTreeItem(provider.getChildren()[0]) as unknown as TreeItem;
     expect(unsupportedItem.label).toBe('Docker endpoint not supported: tcp://192.0.2.10:2376');
     // The monitor with the warning sign.
-    expect((unsupportedItem.iconPath as ThemeIcon).id).toBe('devspace-monitor-warning');
+    expect((unsupportedItem.iconPath as ThemeIcon).id).toBe('devspaces-monitor-warning');
     provider.dispose();
   });
 
@@ -295,7 +295,7 @@ describe('nodes of the setting repositoryGroups', () => {
     const provider = new RepositoriesTreeProvider(silentLogger);
     const [owner] = groupedModel();
     const value = (provider.getTreeItem(owner.children[0]) as unknown as TreeItem).contextValue ?? '';
-    for (const menu of ['view/item/context', 'devspace.more']) {
+    for (const menu of ['view/item/context', 'devspaces.more']) {
       for (const { when } of manifest.contributes.menus[menu]) {
         for (const regex of (when ?? '').matchAll(/viewItem =~ \/(.+?)\//g)) expect(new RegExp(regex[1]).test(value)).toBe(false);
       }
@@ -314,12 +314,12 @@ describe('nodes of the setting repositoryGroups', () => {
     const [hint, api] = provider.getChildren(owner) as [HintRow, RepositoryRow];
     // The row itself is the argument, as for the row actions of package.json.
     expect((provider.getTreeItem(api) as unknown as TreeItem).command).toEqual({
-      command: 'devspace.rowActivated',
+      command: 'devspaces.rowActivated',
       title: 'Start',
       arguments: [api],
     });
-    expect(rowCommands(owner)).toEqual(['', 'vscode.open', 'devspace.rowActivated', 'devspace.rowActivated']);
-    expect(rowCommands(signIn)).toEqual(['devspace.signIn']);
+    expect(rowCommands(owner)).toEqual(['', 'vscode.open', 'devspaces.rowActivated', 'devspaces.rowActivated']);
+    expect(rowCommands(signIn)).toEqual(['devspaces.signIn']);
     expect((provider.getTreeItem(hint) as unknown as TreeItem).command).toMatchObject({ command: 'vscode.open' });
     provider.setModel(groupedModel());
     const [school] = provider.getChildren();
@@ -331,7 +331,7 @@ describe('nodes of the setting repositoryGroups', () => {
     expect(nodes.some((node) => node.kind === 'repository')).toBe(true);
     for (const node of nodes) {
       const command = ((provider.getTreeItem(node) as unknown as TreeItem).command as { command: string } | undefined)?.command;
-      expect(command).toBe(node.kind === 'repository' ? 'devspace.rowActivated' : undefined);
+      expect(command).toBe(node.kind === 'repository' ? 'devspaces.rowActivated' : undefined);
     }
     provider.dispose();
   });

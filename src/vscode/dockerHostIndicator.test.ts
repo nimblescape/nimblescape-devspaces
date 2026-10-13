@@ -79,8 +79,8 @@ describe('DockerHostIndicator', () => {
 
   it('the view name of package.json is "Devspaces" (the title names the Docker host)', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
-      contributes: { views: { devspace: Array<{ id: string; name: string }> } };
+      contributes: { views: { devspaces: Array<{ id: string; name: string }> } };
     };
-    expect(manifest.contributes.views.devspace[0].name).toBe('Devspaces');
+    expect(manifest.contributes.views.devspaces[0].name).toBe('Devspaces');
   });
 });

@@ -402,7 +402,7 @@ describe('Choose the Docker Host… (the choice of the first row)', () => {
       [RemoteDockerTexts.enterAddress, RemoteDockerTexts.enterAddressDetail],
       ['', undefined],
       // The switched-off monitor of the local Docker (header row).
-      [`$(devspace-monitor-off) ${RemoteDockerTexts.useLocal}`, undefined],
+      [`$(devspaces-monitor-off) ${RemoteDockerTexts.useLocal}`, undefined],
     ]);
     expect(options.title).toBe('Docker host: build-box');
   });
@@ -446,7 +446,7 @@ describe('Choose the Docker Host… (the choice of the first row)', () => {
     expect(window.showInformationMessage.mock.calls.at(-1)?.[0]).toBe(RemoteDockerTexts.alreadyHost('build-box'));
     expect(cli.current).toBe(BUILD_BOX);
     // The switched-off monitor of the local Docker (header row).
-    answer(`$(devspace-monitor-off) ${RemoteDockerTexts.useLocal}`);
+    answer(`$(devspaces-monitor-off) ${RemoteDockerTexts.useLocal}`);
     await commands.chooseDockerHost();
     expect(useLocal).toHaveBeenCalledTimes(1);
   });

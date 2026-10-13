@@ -111,7 +111,7 @@ export const CONTAINER_VERSION_LABEL = `${LABEL_CONTAINER_VERSION}=${CONTAINER_V
 export const CONTAINER_CONFIG_UNKNOWN_LABEL = `${LABEL_CONTAINER_CONFIG}=${CONTAINER_CONFIG_UNKNOWN}`;
 /**
  * Container label of a container that was created while the host access checks were off for its repository (setting
- * devspace.hostAccessChecksOff), with the value HOST_ACCESS_UNRESTRICTED. Once the checks are on again, such a
+ * devspaces.hostAccessChecksOff), with the value HOST_ACCESS_UNRESTRICTED. Once the checks are on again, such a
  * container is not current (containerIsCurrent): it is created again after the checks pass.
  */
 export const LABEL_HOST_ACCESS = 'nimblescape.devspace.host-access';

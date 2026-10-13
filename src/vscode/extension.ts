@@ -130,13 +130,13 @@ async function activateExtension(
   }
   let settings: ExtensionSettings = readSettings();
   const getSettings = (): ExtensionSettings => settings;
-  // Invalid entries of devspace.hostAccessChecksOff are ignored, with one warning (again only when they change).
+  // Invalid entries of devspaces.hostAccessChecksOff are ignored, with one warning (again only when they change).
   let invalidHostAccessEntries = warnInvalidHostAccessChecksOff(logger, '');
 
   const runner = new NodeProcessRunner();
   const dockerPath = findDockerCli(env, platform);
   logger.info(dockerPath ? `Docker CLI: ${dockerPath}` : 'The Docker CLI was not found.');
-  // Set below; the adapter reports each `docker info` to it (context key devspace.dockerReady).
+  // Set below; the adapter reports each `docker info` to it (context key devspaces.dockerReady).
   let dockerSetup: DockerSetup | undefined;
   // The worker (the helper channels), set below; its failed opens are tried again at once when the Docker engine begins
   // to answer.

@@ -35,10 +35,10 @@ function scriptWithProgress(): FakeProgressRun[] {
 describe('progressMessage', () => {
   it('shows the title, the step, the detail, and the link Show details', () => {
     expect(progressMessage('Opening acme/api…', undefined, undefined)).toBe(
-      'Opening acme/api… [Show details](command:devspace.showLog)',
+      'Opening acme/api… [Show details](command:devspaces.showLog)',
     );
     expect(progressMessage('Opening acme/api…', 'downloadingImage', Messages.newerImage)).toBe(
-      'Opening acme/api… Downloading the new image. A newer image is available. The devspace is updated. Your files are kept. [Show details](command:devspace.showLog)',
+      'Opening acme/api… Downloading the new image. A newer image is available. The devspace is updated. Your files are kept. [Show details](command:devspaces.showLog)',
     );
   });
 });
@@ -62,7 +62,7 @@ describe('runWithProgress', () => {
     expect(runs).toHaveLength(1);
     expect(runs[0].options).toEqual({ location: fakeVscode.ProgressLocation.Notification, cancellable: false });
     // The link Show details names the operation (and closes the notification, see below).
-    expect(runs[0].messages.every((message) => /\[Show details\]\(command:devspace\.showProgressDetails\?%5B\d+%5D\)$/.test(message))).toBe(true);
+    expect(runs[0].messages.every((message) => /\[Show details\]\(command:devspaces\.showProgressDetails\?%5B\d+%5D\)$/.test(message))).toBe(true);
     expect(runs[0].messages.map((message) => message.replace(/ \[Show details\]\(command:[^)]*\)$/, ''))).toEqual([
       'Opening acme/api…',
       'Opening acme/api… Checking for a newer image.',
@@ -179,7 +179,7 @@ describe('runWithProgress', () => {
       },
     });
     await Promise.resolve();
-    const link = /command:devspace\.showProgressDetails\?([^)]*)\)$/.exec(runs[0].messages.at(-1) ?? '');
+    const link = /command:devspaces\.showProgressDetails\?([^)]*)\)$/.exec(runs[0].messages.at(-1) ?? '');
     expect(link).not.toBeNull();
     const [id] = JSON.parse(decodeURIComponent(link![1])) as [number];
     // Another ID closes nothing.

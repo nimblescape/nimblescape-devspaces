@@ -3853,7 +3853,7 @@ export class DevspaceService extends OperationBase {
     const checks = hostAccessChecks(repository, this.deps.settings());
     if (checks === 'off') {
       this.logger.warn(
-        `The host access checks are off for ${repository} (setting devspace.hostAccessChecksOff): its configuration may use files, devices, and Docker of the computer. Account separation, the identity of the owner account, and the options that Devspaces does not support are still checked.`,
+        `The host access checks are off for ${repository} (setting devspaces.hostAccessChecksOff): its configuration may use files, devices, and Docker of the computer. Account separation, the identity of the owner account, and the options that Devspaces does not support are still checked.`,
       );
     }
     return checks;
