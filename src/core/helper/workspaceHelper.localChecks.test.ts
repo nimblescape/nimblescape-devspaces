@@ -17,7 +17,7 @@ import { runWithBatchScope } from './batchScope';
 import { batchStepCommand } from './batchSteps';
 import { WorkspaceHelper } from './workspaceHelper';
 
-const OWN = { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` };
+const OWN = { tag: 'devspaces-worker:own', id: `sha256:${'b'.repeat(64)}` };
 const REPO = 'acme/api';
 const BAD_REPO = 'acme/a b';
 const CONFIG = '.devcontainer/devcontainer.json';

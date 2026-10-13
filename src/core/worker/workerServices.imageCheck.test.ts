@@ -154,7 +154,7 @@ describe("the worker's image check, probes", () => {
       secretOf: () => undefined,
       forgetSecret: (name) => void events.push(`forget ${name}`),
       logger,
-      ownHelper: { image: { tag: 'devspaces-helper:abc', id: `sha256:${'c'.repeat(64)}` }, socket: '/s.sock' },
+      ownHelper: { image: { tag: 'devspaces-worker:abc', id: `sha256:${'c'.repeat(64)}` }, socket: '/s.sock' },
       dockerHost: '',
       owner: { windowId: 'w', pid: 1 },
       devspaceLock: async () => {

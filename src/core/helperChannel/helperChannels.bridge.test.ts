@@ -91,7 +91,7 @@ async function openWith(
       },
       logger: { ...silentLogger, warn: (text) => warnings.push(text), info: (text) => infos.push(text) },
       script: async () => 'SCRIPT',
-      helperTag: async () => 'devspaces-helper:abc',
+      helperTag: async () => 'devspaces-worker:abc',
       socketPath: async () => '/var/run/docker.sock',
       stateVolume: 'devspaces-monitor',
       vscodeVolume: 'devspaces-vscode',

@@ -19,7 +19,7 @@ import type { OperationContext } from './server';
 
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
 const NAME = 'devspaces-acme-api-brave-noether';
-const OWN: OwnHelper = { image: { tag: 'devspaces-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
+const OWN: OwnHelper = { image: { tag: 'devspaces-worker:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
 const DEVSPACE = {
   id: ID,
   repository: 'acme/api',

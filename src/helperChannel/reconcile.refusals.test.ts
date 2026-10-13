@@ -12,7 +12,7 @@ import { reconcileOperation } from './flowOperations';
 import { contextSecrets } from './operationContext.testkit';
 import type { OperationContext } from './server';
 
-const OWN: OwnHelper = { image: { tag: 'devspaces-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
+const OWN: OwnHelper = { image: { tag: 'devspaces-worker:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
 const PARAMS = { dockerHost: '', owner: { windowId: 'window-1', pid: 4242 } };
 
 function run(options: { secrets?: Record<string, string>; ownHelper?: (abort: () => void) => Promise<OwnHelper>; volumeNames?: (abort: () => void) => Promise<string[]> } = {}) {

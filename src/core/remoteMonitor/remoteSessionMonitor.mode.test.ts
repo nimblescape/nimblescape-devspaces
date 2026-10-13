@@ -15,7 +15,7 @@ import { LABEL_MONITOR_OWNER, PERMANENT_LABEL_PART, remoteMonitorLabelValue, vsc
 import { RemoteSessionMonitor, monitorLabel } from './remoteSessionMonitor';
 
 const SCRIPT = 'console.log("monitor")';
-const TAG = 'devspaces-helper:0123456789ab';
+const TAG = 'devspaces-worker:0123456789ab';
 const SOCKET = '/var/run/docker.sock';
 const ID = 'feed'.padEnd(64, '1');
 const IMAGES = { schedule: '17', timeZone: 'UTC' };

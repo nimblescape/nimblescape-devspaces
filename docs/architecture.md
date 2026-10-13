@@ -63,12 +63,12 @@ The worker is a container per window and Docker engine, named so that `docker ps
 
 ```text
 docker run --rm -i --pull never --name <worker name>
-  --label nimblescape.devspaces.helper-run=true --label nimblescape.devspaces.helper-channel=<protocol>-<hash>
+  --label nimblescape.devspaces.worker-run=true --label nimblescape.devspaces.worker-channel=<protocol>-<hash>
   --network bridge --log-driver none --cap-drop ALL --security-opt no-new-privileges
   --mount type=bind,source=<engine socket>,target=/var/run/docker.sock
   --mount type=volume,source=devspaces-monitor,target=/state
   --mount type=volume,source=devspaces-vscode,target=/vscode,volume-nocopy
-  devspaces-helper:<tag> node -e <pipe loader> /opt/devspace/channel.js <sha256> startChannel
+  devspaces-worker:<tag> node -e <pipe loader> /opt/devspace/channel.js <sha256> startChannel
 ```
 
 The extension and the worker talk over the standard input and output of that `docker run`, one JSON message per line (`src/core/helperChannel/protocol.ts`). Both sides check every message strictly. After `hello` (protocol version 3), the worker answers `probe` with the version and identity of its engine, and runs `sweep`, which prunes stopped helper containers older than 10 minutes.
@@ -83,7 +83,7 @@ The extension and the worker talk over the standard input and output of that `do
 
 ### The helper image
 
-All containers of Devspaces run from one image per engine, `devspaces-helper:<12 hex>`, built locally from `resources/helper/Dockerfile`: Node.js 24 on Debian, Git, the Docker CLI with Buildx and Compose, tini, `flock`, `setpriv`, the user `devspace-git`, and the Dev Container CLI of the exact version that `package.json` pins as a devDependency. The tag is a hash of the Dockerfile, the CLI version, and a generation number, so a change of any of them builds a new image.
+All containers of Devspaces run from one image per engine, `devspaces-worker:<12 hex>` (the helper image of the code; Docker shows the name of the worker), built locally from `resources/helper/Dockerfile`: Node.js 24 on Debian, Git, the Docker CLI with Buildx and Compose, tini, `flock`, `setpriv`, the user `devspace-git`, and the Dev Container CLI of the exact version that `package.json` pins as a devDependency. The tag is a hash of the Dockerfile, the CLI version, and a generation number, so a change of any of them builds a new image.
 
 The extension builds a missing image in the background after an installation or update, before an open needs it, and when a refresh finds it missing on an engine that answers ("Devspaces: preparing <host>…" in the status bar). A Start, Stop, or Delete builds it at once. While the image is missing, the rows of that engine show `State unknown`. The maintenance runs when a worker is prepared for an open, and in the background prebuild: a weekly check of the base image's digest, a rebuild with `--pull --no-cache` when the check found a newer base (only with `updateImagesOnConnect` on; a rebuild that takes longer than 15 minutes counts as failed), and a daily cleanup of helper images that no window used for 7 days. Its state is in `helper.json` (local engine) and `helper-remote-<hash>.json` (each remote engine).
 
@@ -95,7 +95,7 @@ The worker's bundle, `dist/helperChannel.js`, carries two more scripts as text: 
 
 ### The batch helper
 
-The worker starts before any devspace is chosen, and a running container cannot get a volume mounted later. So the steps that need the volume of a devspace run in **one batch helper per operation** (`devspaces-batch-<session>`), which the worker starts over the Engine API with that volume, the pinned helper image, and the helper's cache volume (`devspaces-helper-cache`). It checks first that the volume exists, so a mount never creates an empty volume without labels.
+The worker starts before any devspace is chosen, and a running container cannot get a volume mounted later. So the steps that need the volume of a devspace run in **one batch helper per operation** (`devspaces-batch-<session>`), which the worker starts over the Engine API with that volume, the pinned helper image, and the helper's cache volume (`devspaces-worker-cache`). It checks first that the volume exists, so a mount never creates an empty volume without labels.
 
 Its steps are the fixed kinds of `src/core/helper/batchSteps.ts`: `clone`, `readFiles`, `listConfigs`, `readConfiguration`, `build`, `composeModel`, `composeHash`, `createFolders`, `up`, `runUserCommands`, `gitFiles`, `ownershipFix`, and `repositoryOwnershipFix`. The worker sends a kind and its parameters; the helper checks them strictly and builds the command itself. It never runs a command line that it was sent. The clone runs as the user `devspace-git`; the steps that read the repository run as the owner of the repository folder; the steps that need Docker run as root (see [security.md](security.md#trust-boundaries)). The build and `up` run the Dev Container CLI, which uses the Docker CLI and Docker Compose of the helper.
 
@@ -232,14 +232,14 @@ VS Code restores the windows of the last session; a restored window that was con
 | Additional named volumes | Volumes that the configuration mounts; Devspaces creates them with the labels of the devspace. |
 | Volume `devspaces-monitor` (`/state`) | Heartbeat records (`heartbeats/`), locks (`locks/`), the image references in use, the registry answers, the image bookkeeping of the monitor, the schedule state (`cache-run.json`, `run-now.json`), the extension lists of the opens (`extensions/`), and the stored worker scripts (`worker-scripts/`). |
 | Volume `devspaces-vscode` | The shared VS Code servers and extension packages. |
-| Volume `devspaces-helper-cache` | The user data folder of the Dev Container CLI in the batch helper. |
+| Volume `devspaces-worker-cache` | The user data folder of the Dev Container CLI in the batch helper. |
 | Dev container | `/run/devspace` (tmpfs: `github-token`, `gh/hosts.yml`), `/opt/devspace/vscode` (the store, read-only), and `~/.vscode-server/bin/<commit>` (a link into the store). |
 
 ## Naming
 
 - **Devspace ID**: a random UUID, which appears only in labels. Its *pair* `<adjective>-<scientist>` comes from the SHA-256 of the ID (`src/core/namePairs.ts`); an ID whose pair is in use on the engine is not taken.
 - **Resource name**: `devspaces-<owner>-<repo>-<adjective>-<scientist>`, lower case, at most 63 characters. It names the workspace volume, the dev container, the repository of the devspace's images (`:<build number>`, `:prepared`, `:prepared-<service>`), and the Docker Compose project (and so the names that Compose derives from it).
-- **Own objects of Devspaces**: the helper image `devspaces-helper:<12 hex>` with its second tag `devspaces-monitor:<12 hex>`, the worker containers `<devspace>-worker<number>` in the window of a devspace on its engine (for example `devspaces-acme-api-sturdy-kahn-worker1`) and `devspaces-<window>-worker<number>` otherwise (for example `devspaces-api-worker1` for a window of the folder `api`, and `devspaces-api-worker2` for a second such window on the same engine), the batch helpers `devspaces-batch-<session>`, the container and volume `devspaces-monitor`, and the volumes `devspaces-vscode` and `devspaces-helper-cache`.
+- **Own objects of Devspaces**: the helper image `devspaces-worker:<12 hex>` with its second tag `devspaces-monitor:<12 hex>`, the worker containers `<devspace>-worker<number>` in the window of a devspace on its engine (for example `devspaces-acme-api-sturdy-kahn-worker1`) and `devspaces-<window>-worker<number>` otherwise (for example `devspaces-api-worker1` for a window of the folder `api`, and `devspaces-api-worker2` for a second such window on the same engine), the batch helpers `devspaces-batch-<session>`, the container and volume `devspaces-monitor`, and the volumes `devspaces-vscode` and `devspaces-worker-cache`.
 - **Docker context of a remote host**: the SSH alias or host name, with `-<adjective>-<scientist>` of the host only when that name is taken by another context.
 - **Container host name**: the repository name in lower case, so that the shell prompt shows it.
 
@@ -257,8 +257,8 @@ VS Code restores the windows of the last session; a restored window that was con
 | `host-access` | dev container | `unrestricted` for a container created with the host access checks off. |
 | `build-record` | devspace image | The build record of the image as JSON. |
 | `prepared` | prepared image | The key of a prepared image. |
-| `helper`, `build-id` | helper image | The helper image, and the nonce of one build. |
-| `helper-run`, `helper-channel`, `channel-step` | worker and batch helper | The helper containers of Devspaces, the worker's protocol and script hash, and the session of a batch helper. |
+| `worker`, `build-id` | helper image | The helper image, and the nonce of one build. |
+| `worker-run`, `worker-channel`, `channel-step` | worker and batch helper | The helper containers of Devspaces, the worker's protocol and script hash, and the session of a batch helper. |
 | `monitor`, `monitor-create`, `monitor-owner` | Monitor | The monitor container with the hash of its script, image, and mode, a nonce of each creation, and the computer ID of the owner of a permanent monitor. |
 
 ## User interface icons

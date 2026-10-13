@@ -344,7 +344,7 @@ describe('channelRunArgs and openHelperChannel', () => {
     const hash = bundleHash('SCRIPT');
     // The state volume with the lock files is mounted too, and the shared VS Code server store.
     const args = channelRunArgs({
-      tag: 'devspaces-helper:abc',
+      tag: 'devspaces-worker:abc',
       socketPath: '/run/user/1000/docker.sock',
       stateVolume: 'devspaces-monitor',
       vscodeVolume: 'devspaces-vscode',
@@ -354,7 +354,7 @@ describe('channelRunArgs and openHelperChannel', () => {
     });
     expect(args).toEqual([
       'run', '--rm', '-i', '--pull', 'never', '--name', 'devspaces-api-worker1',
-      '--label', 'nimblescape.devspaces.helper-run=true',
+      '--label', 'nimblescape.devspaces.worker-run=true',
       '--label', `${LABEL_HELPER_CHANNEL}=1-x`,
       // No log of the channel on the host; outbound network on the default bridge.
       '--network', 'bridge', '--log-driver', 'none', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
@@ -365,7 +365,7 @@ describe('channelRunArgs and openHelperChannel', () => {
       // never comes from an image.
       '--mount', 'type=volume,source=devspaces-vscode,target=/vscode,volume-nocopy',
       // Pipe loading.
-      'devspaces-helper:abc', 'node', '-e', PIPE_LOADER, '/opt/devspace/channel.js', hash, 'startChannel',
+      'devspaces-worker:abc', 'node', '-e', PIPE_LOADER, '/opt/devspace/channel.js', hash, 'startChannel',
     ]);
     // Neither a restart policy nor -d: the container lives only as long as its connection.
     expect(args).not.toContain('--restart');
@@ -414,7 +414,7 @@ describe('channelRunArgs and openHelperChannel', () => {
         runDirect: async () => ({ exitCode: 0, stdout: `${ENGINE}\n`, stderr: '', timedOut: false }),
         logger: silentLogger,
         script: async () => 'SCRIPT',
-        helperTag: async () => 'devspaces-helper:abc',
+        helperTag: async () => 'devspaces-worker:abc',
         socketPath: async () => '/var/run/docker.sock',
         stateVolume: 'devspaces-monitor',
         vscodeVolume: 'devspaces-vscode',
@@ -423,7 +423,7 @@ describe('channelRunArgs and openHelperChannel', () => {
       REMOTE,
     );
     expect(started?.context).toBe(REMOTE.context);
-    expect(started?.args).toContain('devspaces-helper:abc');
+    expect(started?.args).toContain('devspaces-worker:abc');
     // The worker is named by its window (workerNameStart).
     expect(started?.args[started.args.indexOf('--name') + 1]).toBe('devspaces-api-worker1');
     expect(channel.isOpen).toBe(true);
@@ -486,7 +486,7 @@ describe('channelRunArgs and openHelperChannel', () => {
           runDirect: async () => ({ exitCode: 0, stdout: `${ENGINE}\n`, stderr: '', timedOut: false }),
           logger: { ...silentLogger, warn: (text) => warnings.push(text) },
           script: async () => 'SCRIPT',
-          helperTag: async () => 'devspaces-helper:abc',
+          helperTag: async () => 'devspaces-worker:abc',
           socketPath: async () => '/var/run/docker.sock',
           stateVolume: 'devspaces-monitor',
           vscodeVolume: 'devspaces-vscode',
@@ -542,7 +542,7 @@ describe('channelRunArgs and openHelperChannel', () => {
         runDirect: async () => ({ exitCode: 0, stdout: `${ENGINE}\n`, stderr: '', timedOut: false }),
         logger: silentLogger,
         script: async () => script,
-        helperTag: async () => 'devspaces-helper:abc',
+        helperTag: async () => 'devspaces-worker:abc',
         socketPath: async () => '/var/run/docker.sock',
         stateVolume: 'devspaces-monitor',
         vscodeVolume: 'devspaces-vscode',

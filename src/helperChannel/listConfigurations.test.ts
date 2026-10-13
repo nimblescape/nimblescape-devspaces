@@ -34,7 +34,7 @@ const DEVSPACE = {
   createdAt: '2026-10-01T00:00:00.000Z',
   lastUsedAt: '2026-10-01T00:00:00.000Z',
 } as unknown as Devspace;
-const OWN: OwnHelper = { image: { tag: 'devspaces-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
+const OWN: OwnHelper = { image: { tag: 'devspaces-worker:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
 const PARAMS = { devspaceId: ID, dockerHost: '', owner: { windowId: 'window-1', pid: 4242 } };
 const PATHS = ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'];
 const CONTEXT = () =>

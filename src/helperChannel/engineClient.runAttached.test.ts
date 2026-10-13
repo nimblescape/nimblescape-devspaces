@@ -126,7 +126,7 @@ describe('the attached run of the batch helper over the Engine API', () => {
     expect(create.json).toEqual({
       Image: IMAGE,
       Cmd: loaderCommand({ path: '/opt/devspace/batch.js', hash: HASH, entry: 'startBatchHelper' }),
-      Labels: { 'nimblescape.devspaces.helper-run': 'true', 'nimblescape.devspaces.channel-step': SESSION },
+      Labels: { 'nimblescape.devspaces.worker-run': 'true', 'nimblescape.devspaces.channel-step': SESSION },
       AttachStdin: true,
       AttachStdout: true,
       AttachStderr: true,
@@ -140,7 +140,7 @@ describe('the attached run of the batch helper over the Engine API', () => {
         SecurityOpt: ['no-new-privileges'],
         Mounts: [
           { Type: 'volume', Source: 'devspaces-v', Target: '/workspaces' },
-          { Type: 'volume', Source: 'devspaces-helper-cache', Target: '/devspace-cache' },
+          { Type: 'volume', Source: 'devspaces-worker-cache', Target: '/devspace-cache' },
           { Type: 'bind', Source: '/run/user/1000/docker.sock', Target: '/run/devspace-docker/docker.sock' },
         ],
         Tmpfs: { '/run/devspace-secrets': 'rw,noexec,nosuid,nodev,size=1m,mode=0700' },

@@ -18,14 +18,14 @@ const SERVER = { commit: '0123456789abcdef0123456789abcdef01234567', quality: 's
 const SOCKET = { Type: 'bind', Source: '/var/run/docker.sock', Destination: HELPER_DOCKER_SOCKET };
 
 function inspect(mounts: unknown[]) {
-  return { Image: IMAGE_ID, Config: { Image: 'devspaces-helper:abc' }, Mounts: [SOCKET, ...mounts] };
+  return { Image: IMAGE_ID, Config: { Image: 'devspaces-worker:abc' }, Mounts: [SOCKET, ...mounts] };
 }
 
 describe("the store of the worker's own container", () => {
   it('is the name of the read-write volume at /vscode', () => {
     expect(VSCODE_STORE_DIR).toBe('/vscode');
     expect(ownHelperOf(inspect([{ Type: 'volume', Name: 'devspaces-vscode', Destination: '/vscode', RW: true }]))).toEqual({
-      image: { tag: 'devspaces-helper:abc', id: IMAGE_ID },
+      image: { tag: 'devspaces-worker:abc', id: IMAGE_ID },
       socket: '/var/run/docker.sock',
       vscodeStore: 'devspaces-vscode',
     });
@@ -41,7 +41,7 @@ describe("the store of the worker's own container", () => {
     ['a volume without a name', [{ Type: 'volume', Name: '', Destination: '/vscode', RW: true }]],
   ])('is none for %s; the rest of the own helper is read as before', (_name, mounts) => {
     const own = ownHelperOf(inspect(mounts));
-    expect(own).toEqual({ image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/var/run/docker.sock' });
+    expect(own).toEqual({ image: { tag: 'devspaces-worker:abc', id: IMAGE_ID }, socket: '/var/run/docker.sock' });
   });
 });
 
@@ -54,7 +54,7 @@ describe('the shared VS Code server of the pipeline in the worker', () => {
       secretOf: () => undefined,
       forgetSecret: () => undefined,
       logger,
-      ownHelper: { image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/s.sock' },
+      ownHelper: { image: { tag: 'devspaces-worker:abc', id: IMAGE_ID }, socket: '/s.sock' },
       dockerHost: '',
       owner: { windowId: 'w', pid: 1 },
       devspaceLock: async () => {

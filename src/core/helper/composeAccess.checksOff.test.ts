@@ -120,7 +120,7 @@ const TABLE: Array<[string, ComposeAccessInput, string, HostAccessClass]> = [
   ['a volume of another devspace by its project name', input((m) => (m.volumes = { pgdata: { name: `${OTHER}_pgdata` } })), `volume ${OTHER}_pgdata of another devspace`, 'protected'],
   ['a volume of another devspace by its labels', input(() => undefined, { volumeLabels: { [`${PROJECT}_pgdata`]: { 'nimblescape.devspaces.id': 'other' } } }), `volume ${PROJECT}_pgdata of another devspace`, 'protected'],
   ['a volume of a devspace of another account', input(() => undefined, { foreignVolumes: [`${PROJECT}_pgdata`] }), `volume ${PROJECT}_pgdata of another devspace`, 'protected'],
-  ['the cache volume of the workspace helper', input((m) => (m.volumes = { pgdata: { name: 'devspaces-helper-cache' } })), 'volume devspaces-helper-cache of the workspace helper', 'protected'],
+  ['the cache volume of the workspace helper', input((m) => (m.volumes = { pgdata: { name: 'devspaces-worker-cache' } })), 'volume devspaces-worker-cache of the workspace helper', 'protected'],
   ['the volume of the remote Monitor', input((m) => (m.volumes = { pgdata: { name: 'devspaces-monitor' } })), 'volume devspaces-monitor of the Monitor', 'protected'],
   ['a network of another devspace', input((m) => (m.networks = { other: { name: `${OTHER}_default`, external: true } })), `network ${OTHER}_default of another devspace`, 'protected'],
   ['network_mode of another devspace', input(service('db', { network_mode: `${OTHER}_default` })), `service db: network ${OTHER}_default of another devspace`, 'protected'],

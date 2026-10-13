@@ -177,7 +177,7 @@ describe('host access checks off for the repository', () => {
     ['a token variable of the GitHub CLI', { containerEnv: { GH_TOKEN: 'x' } }, Messages.hostAccess(`variable GH_TOKEN in containerEnv (${GITHUB_CLI_ACCOUNT_REASON})`)],
     ['a variable of container-only Git', { runArgs: ['-e', 'GIT_CONFIG_GLOBAL=/x'] }, Messages.hostAccess('variable GIT_CONFIG_GLOBAL in runArgs')],
     ['initializeCommand', { initializeCommand: 'docker ps' }, Messages.hostAccess('initializeCommand')],
-    ['the cache volume of the workspace helper', { mounts: ['source=devspaces-helper-cache,target=/c,type=volume'] }, Messages.hostAccess('volume devspaces-helper-cache of the workspace helper')],
+    ['the cache volume of the workspace helper', { mounts: ['source=devspaces-worker-cache,target=/c,type=volume'] }, Messages.hostAccess('volume devspaces-worker-cache of the workspace helper')],
     ['the volume of the remote Monitor', { mounts: ['source=devspaces-monitor,target=/s,type=volume'] }, Messages.hostAccess('volume devspaces-monitor of the Monitor')],
     // A name of another devspace is resourceName.
     ['the workspace volume of another devspace', { mounts: [`source=${resourceName('acme/web', OTHER_ID)},target=/w,type=volume`] }, Messages.hostAccess(`volume ${resourceName('acme/web', OTHER_ID)} of another devspace`)],
@@ -396,7 +396,7 @@ describe('variables of the Dev Container CLI in the image metadata', () => {
   // from the basename.
   const VECTORS: Array<[string, string | { source: string; target: string; type: string }, string]> = [
     ['a default of an unset ${localEnv:…}', `source=\${localEnv:NOPE:${OTHER_VOLUME}},target=/x,type=volume`, `volume ${OTHER_VOLUME} of another devspace`],
-    ['a default of an unset ${env:…}', 'source=${env:NOPE:devspaces-helper-cache},target=/c,type=volume', 'volume devspaces-helper-cache of the workspace helper'],
+    ['a default of an unset ${env:…}', 'source=${env:NOPE:devspaces-worker-cache},target=/c,type=volume', 'volume devspaces-worker-cache of the workspace helper'],
     ['the object form', { source: `\${localEnv:NOPE:${OTHER_VOLUME}}`, target: '/x', type: 'volume' }, `volume ${OTHER_VOLUME} of another devspace`],
     [
       'a name built from the basename',
@@ -521,7 +521,7 @@ describe('what the Dev Container CLI substitutes again at up', () => {
         'runArgs',
         'type=volume,source=${env:NOPE2:devspaces-other-abcdef12},target=/y',
       ],
-      ['a -v of the helper cache', { runArgs: ['-v', '$${env:NOPE:{}env:NOPE2:devspaces-helper-cache}:/y'] }, 'runArgs', '${env:NOPE2:devspaces-helper-cache}:/y'],
+      ['a -v of the helper cache', { runArgs: ['-v', '$${env:NOPE:{}env:NOPE2:devspaces-worker-cache}:/y'] }, 'runArgs', '${env:NOPE2:devspaces-worker-cache}:/y'],
       ['-e GH_TOKEN', { runArgs: ['-e', '$${env:NOPE:{}env:NOPE2:GH_TOKEN}=x'] }, 'runArgs', '${env:NOPE2:GH_TOKEN}=x'],
       [
         'a bind mount that TERM makes a volume (N1)',

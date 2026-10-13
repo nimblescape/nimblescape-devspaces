@@ -30,7 +30,7 @@ function deps(overrides: Partial<WorkerServicesDeps>) {
     secretOf: () => undefined,
     forgetSecret: () => undefined,
     logger: silentLogger,
-    ownHelper: { image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/s.sock', vscodeStore: 'devspaces-vscode' },
+    ownHelper: { image: { tag: 'devspaces-worker:abc', id: IMAGE_ID }, socket: '/s.sock', vscodeStore: 'devspaces-vscode' },
     dockerHost: '',
     owner: { windowId: 'w', pid: 1 },
     devspaceLock: async () => {

@@ -11,6 +11,6 @@ describe('isMonitorImageTag: lowercase hex characters', () => {
     expect(isMonitorImageTag('devspaces-monitor:0123456789ag')).toBe(false);
     expect(isMonitorImageTag('devspaces-monitor:zzzzzzzzzzzz')).toBe(false);
     expect(isMonitorImageTag('devspaces-monitor:0123456789AB')).toBe(false);
-    expect(monitorImageTag('devspaces-helper:zzzzzzzzzzzz')).toBeUndefined();
+    expect(monitorImageTag('devspaces-worker:zzzzzzzzzzzz')).toBeUndefined();
   });
 });

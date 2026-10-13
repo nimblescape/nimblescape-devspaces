@@ -976,7 +976,7 @@ describe('the batch helper of the worker', () => {
     const t = tracked();
     for (const p of [
       { volume: '-v', image: IMAGE, socket: SOCKET },
-      { volume: VOLUME, image: 'devspaces-helper:latest', socket: SOCKET },
+      { volume: VOLUME, image: 'devspaces-worker:latest', socket: SOCKET },
       { volume: VOLUME, image: IMAGE, socket: '/a,readonly=false' },
       { volume: VOLUME, image: IMAGE, socket: 'relative.sock' },
     ]) {

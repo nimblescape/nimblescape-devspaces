@@ -161,7 +161,7 @@ describe('helperRefreshDue', () => {
     expect(due(at({ attemptedAt: TWO_DAYS_AGO }), true)).toBe(false);
     expect(due(at({ checkedAt: OLD, attemptedAt: OLD }), true)).toBe(true);
     // A record of the tag of another Dockerfile does not count.
-    expect(due({ images: { 'devspaces-helper:0123456789ab': { checkedAt: TODAY } } }, true)).toBe(true);
+    expect(due({ images: { 'devspaces-worker:0123456789ab': { checkedAt: TODAY } } }, true)).toBe(true);
   });
 
   it('a Dockerfile without a base image has no check and no rebuild', () => {

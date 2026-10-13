@@ -14,7 +14,7 @@ import { ensureHelperImageUse, helperImageTag, type HelperImageDocker } from './
 import type { HelperImageRecord, HelperState } from './helperState';
 
 const BASE = 'node:24-trixie-slim';
-const DOCKERFILE = `ARG BASE_IMAGE=${BASE}\nFROM \${BASE_IMAGE}\nLABEL nimblescape.devspaces.helper=true\n`;
+const DOCKERFILE = `ARG BASE_IMAGE=${BASE}\nFROM \${BASE_IMAGE}\nLABEL nimblescape.devspaces.worker=true\n`;
 const DIGEST = `sha256:${'a'.repeat(64)}`;
 const DIGEST_B = `sha256:${'b'.repeat(64)}`;
 const NOW = Date.parse('2026-09-24T12:00:00Z');
@@ -26,9 +26,9 @@ const CURRENT_ID = `sha256:${'1'.repeat(64)}`;
 const OLD_ID = `sha256:${'2'.repeat(64)}`;
 const NEW_ID = `sha256:${'3'.repeat(64)}`;
 const ORPHAN_ID = `sha256:${'4'.repeat(64)}`;
-const X = 'devspaces-helper:0123456789ab';
-const Y = 'devspaces-helper:abcdef012345';
-const monitorOf = (helperTag: string) => helperTag.replace('devspaces-helper:', 'devspaces-monitor:');
+const X = 'devspaces-worker:0123456789ab';
+const Y = 'devspaces-worker:abcdef012345';
+const monitorOf = (helperTag: string) => helperTag.replace('devspaces-worker:', 'devspaces-monitor:');
 
 const folders: string[] = [];
 afterEach(() => {

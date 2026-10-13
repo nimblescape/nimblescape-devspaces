@@ -38,7 +38,7 @@ function lockOf(script: Script): HeldDevspaceLock {
 }
 
 function build(script: Script, output: string[]) {
-  const helper = new WorkspaceHelper({ logger: silent, ownImage: { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` }, socket: '/var/run/docker.sock', containerRuns: async () => true });
+  const helper = new WorkspaceHelper({ logger: silent, ownImage: { tag: 'devspaces-worker:own', id: `sha256:${'b'.repeat(64)}` }, socket: '/var/run/docker.sock', containerRuns: async () => true });
   return runWithBatchScope(lockOf(script), 'vol', silent, () =>
     helper.build({ volumeName: 'vol', repository: 'acme/api', configPath: '.devcontainer/devcontainer.json', imageName: 'devspaces-x:1', token: TOKEN, onOutput: (text) => output.push(text) }),
   );

@@ -43,7 +43,7 @@ const TOKEN = 'gho_0123456789abcdefSECRET';
 /**
  * The worker's own helper image, from which every step runs.
  */
-const OWN: HelperImageUse = { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` };
+const OWN: HelperImageUse = { tag: 'devspaces-worker:own', id: `sha256:${'b'.repeat(64)}` };
 /** The source of the socket mount of the engine (HelperDeps.socket, the worker's own). */
 const SOCKET = '/var/run/docker.sock';
 
@@ -84,7 +84,7 @@ class FakeDocker {
  * session.
  */
 function commandOf(args: string[]): string[] {
-  const index = args.findIndex((arg) => /^devspaces-helper:/.test(arg) || /^sha256:[0-9a-f]{64}$/.test(arg));
+  const index = args.findIndex((arg) => /^devspaces-worker:/.test(arg) || /^sha256:[0-9a-f]{64}$/.test(arg));
   expect(index).toBeGreaterThan(0);
   return args.slice(index + 1);
 }
@@ -229,7 +229,7 @@ function createHelper(): WorkspaceHelper {
 }
 
 /** The image reference of each `docker run` from index `from` on. */
-const references = (from = 0) => docker.runs.slice(from).map((run) => run.args.find((arg) => arg.startsWith('sha256:') || arg.startsWith('devspaces-helper:')));
+const references = (from = 0) => docker.runs.slice(from).map((run) => run.args.find((arg) => arg.startsWith('sha256:') || arg.startsWith('devspaces-worker:')));
 
 beforeEach(() => {
   docker = new FakeDocker();

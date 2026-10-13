@@ -17,7 +17,7 @@ import { runWithBatchScope } from './batchScope';
 import { DevcontainerCommandError } from './devcontainerCli';
 import { WorkspaceHelper, type HelperDeps } from './workspaceHelper';
 
-const OWN = { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` };
+const OWN = { tag: 'devspaces-worker:own', id: `sha256:${'b'.repeat(64)}` };
 const CONTAINER_ID = '4f1c2b3a9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a';
 const DESCRIPTION = 'postStartCommand from devcontainer.json failed.';
 

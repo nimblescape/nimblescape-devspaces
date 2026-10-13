@@ -100,7 +100,7 @@ describe('host access policy: mounts', () => {
     // of a repository devspaces-tools: not named like the workspace volume of a devspace.
     ['a volume of the repository that starts with devspaces-', 'source=devspaces-tools-node_modules,target=/x,type=volume', []],
     ['an object volume of the repository that starts with devspaces-', { type: 'volume', source: 'devspaces-home', target: '/h' }, []],
-    ['the cache volume of the workspace helper', 'source=devspaces-helper-cache,target=/x,type=volume', ['volume devspaces-helper-cache of the workspace helper']],
+    ['the cache volume of the workspace helper', 'source=devspaces-worker-cache,target=/x,type=volume', ['volume devspaces-worker-cache of the workspace helper']],
     // The Dev Containers extension keeps VS Code Server for its dev containers in `vscode`, and clones repositories into
     // volumes named with a hash.
     ['the cache volume of the Dev Containers extension', 'source=vscode,target=/vscode,type=volume', ['volume vscode of the Dev Containers extension']],
@@ -182,7 +182,7 @@ describe('host access policy: runArgs', () => {
     ['a bind mount with a Windows path', ['-v', 'C:\\data:/data'], ['bind mount C:\\data']],
     ['a volume of another devspace with -v', ['-v', `${OTHER}:/x`], [`volume ${OTHER} of another devspace`]],
     ['--mount with type=bind', ['--mount', 'type=bind,source=/etc,target=/host-etc'], ['bind mount /etc']],
-    ['--mount= with a volume of the helper', ['--mount=type=volume,source=devspaces-helper-cache,target=/c'], ['volume devspaces-helper-cache of the workspace helper']],
+    ['--mount= with a volume of the helper', ['--mount=type=volume,source=devspaces-worker-cache,target=/c'], ['volume devspaces-worker-cache of the workspace helper']],
     ['devices and GPUs', ['--device', '/dev/fuse', '--device-cgroup-rule=c 1:* rwm', '--gpus', 'all'], ['--device=/dev/fuse', '--device-cgroup-rule=c 1:* rwm', '--gpus=all']],
     ['namespaces of the computer', ['--pid=host', '--ipc', 'host', '--uts=host', '--userns=host', '--cgroupns=host'], ['--pid=host', '--ipc=host', '--uts=host', '--userns=host', '--cgroupns=host']],
     ['another namespace mode is not known to be safe', ['--ipc=private'], ['--ipc=private']],
@@ -279,8 +279,8 @@ describe('host access policy: runArgs', () => {
     ['the cache volume of the Dev Containers extension', ['-v', 'vscode:/vscode', '--mount=type=volume,src=vscode,dst=/v'], ['volume vscode of the Dev Containers extension']],
     [
       'labels of Devspaces and of the Dev Container CLI',
-      ['--label', 'nimblescape.devspaces.id=x', '-l', 'nimblescape.devspaces.owner-id=1', '--label=devcontainer.metadata=[]', '-ldevcontainer.local_folder=/Users/x', '--label', ' NIMBLESCAPE.DEVSPACES.container-config=unknown', '--label', 'nimblescape.devspaces.container-version=2', '-l', 'nimblescape.devspaces.helper-run'],
-      ['label nimblescape.devspaces.id', 'label nimblescape.devspaces.owner-id', 'label devcontainer.metadata', 'label devcontainer.local_folder', 'label NIMBLESCAPE.DEVSPACES.container-config', 'label nimblescape.devspaces.container-version', 'label nimblescape.devspaces.helper-run'],
+      ['--label', 'nimblescape.devspaces.id=x', '-l', 'nimblescape.devspaces.owner-id=1', '--label=devcontainer.metadata=[]', '-ldevcontainer.local_folder=/Users/x', '--label', ' NIMBLESCAPE.DEVSPACES.container-config=unknown', '--label', 'nimblescape.devspaces.container-version=2', '-l', 'nimblescape.devspaces.worker-run'],
+      ['label nimblescape.devspaces.id', 'label nimblescape.devspaces.owner-id', 'label devcontainer.metadata', 'label devcontainer.local_folder', 'label NIMBLESCAPE.DEVSPACES.container-config', 'label nimblescape.devspaces.container-version', 'label nimblescape.devspaces.worker-run'],
     ],
     ['the labels that the override configuration adds itself', ['--label', CONTAINER_VERSION_LABEL, '-l', CONTAINER_CONFIG_UNKNOWN_LABEL], []],
     ['other labels', ['--label', 'devspacex=1', '-l', 'devcontainer=1', '--label', 'com.example.devspace.x=1', '--label', 'devspace', '--label', 'devspaces-test.run=1'], []],
@@ -954,7 +954,7 @@ describe('volumeLabelOwner and volumeNameItems (for the Docker Compose policy, c
     const devspace = { id: 'e1', ownerId: '1' };
     expect(volumeNameItems(OWN, { ownVolume: OWN })).toEqual([]);
     expect(volumeNameItems('cache', { ownVolume: OWN })).toEqual([]);
-    expect(volumeNameItems('devspaces-helper-cache', { ownVolume: OWN })).toEqual(['volume devspaces-helper-cache of the workspace helper']);
+    expect(volumeNameItems('devspaces-worker-cache', { ownVolume: OWN })).toEqual(['volume devspaces-worker-cache of the workspace helper']);
     expect(volumeNameItems('cache', { ownVolume: OWN, foreignVolumes: ['cache'] })).toEqual(['volume cache of another devspace']);
     const own = { 'nimblescape.devspaces.id': 'e1', 'nimblescape.devspaces.owner-id': '1', 'nimblescape.devspaces.volume': 'compose' };
     expect(volumeNameItems('data', { ownVolume: OWN, devspace, volumeLabels: { data: own } })).toEqual([]);
@@ -1826,9 +1826,9 @@ describe('host access policy: variables of the Dev Container CLI in mounts', () 
   describe.each<Where>(['metadata', 'config', 'merged'])('in the %s', (where) => {
     it.each<[string, unknown, string]>([
       ['a default of an unset ${localEnv:…} that names a volume of another devspace', `source=\${localEnv:NOPE:${OTHER}},target=/x,type=volume`, FOREIGN],
-      ['a default of an unset ${env:…} that names the cache volume of the helper', 'source=${env:NOPE:devspaces-helper-cache},target=/c,type=volume', HELPER_CACHE],
+      ['a default of an unset ${env:…} that names the cache volume of the helper', 'source=${env:NOPE:devspaces-worker-cache},target=/c,type=volume', HELPER_CACHE],
       ['the object form', { source: `\${localEnv:NOPE:${OTHER}}`, target: '/x', type: 'volume' }, FOREIGN],
-      ['the object form of the helper cache', { type: 'volume', source: '${env:NOPE:devspaces-helper-cache}', target: '/c' }, HELPER_CACHE],
+      ['the object form of the helper cache', { type: 'volume', source: '${env:NOPE:devspaces-worker-cache}', target: '/c' }, HELPER_CACHE],
       ['a name of another devspace built from the basename (repository api)', 'source=devspaces-${localWorkspaceFolderBasename}-tidy-berners,target=/x,type=volume', 'volume devspaces-api-tidy-berners of another devspace'],
       ['a default without a type', `src=\${localEnv:NOPE:${OTHER}},dst=/x`, FOREIGN],
     ])('refuses %s, with the checks on and off', (_name, mount, item) => {
@@ -1920,7 +1920,7 @@ describe('host access policy: variables of the Dev Container CLI in mounts', () 
 
   it.each<[string, string[], string[]]>([
     ['--mount with a default', ['--mount', `source=\${localEnv:NOPE:${OTHER}},target=/x,type=volume`], [FOREIGN]],
-    ['-v with a default', ['-v', '${env:NOPE:devspaces-helper-cache}:/c'], [HELPER_CACHE]],
+    ['-v with a default', ['-v', '${env:NOPE:devspaces-worker-cache}:/c'], [HELPER_CACHE]],
     ['--volume= with the basename', ['--volume=devspaces-${localWorkspaceFolderBasename}-tidy-berners:/x'], ['volume devspaces-api-tidy-berners of another devspace']],
   ])('refuses %s in runArgs, with the checks on and off', (_name, raw, items) => {
     // The runArgs as read-configuration returns them (substituted once).
