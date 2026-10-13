@@ -17,7 +17,8 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { downloadAndUnzipVSCode } from '@vscode/test-electron';
+import * as childProcess from 'child_process';
+import { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath } from '@vscode/test-electron';
 import { BootstrapDocker } from '../../../src/core/docker/bootstrapDocker';
 import { findDockerCli } from '../../../src/core/docker/dockerCli';
 import { HelperImages } from '../../../src/core/helper/helperImages';
@@ -52,9 +53,16 @@ git add -A
 git -c user.name=Test -c user.email=test@example.invalid commit -q -m 'Initial commit'
 `;
 
-/** trustedExtensionAuthAccess of the product.json of the test VS Code names the extension for `github`. */
+/**
+ * trustedExtensionAuthAccess of the product.json of the test VS Code names the extension for `github`. The Dev
+ * Containers extension is installed into the extensions folder of @vscode/test-cli, so that CI can read it before the
+ * tests.
+ */
 async function trustExtension(): Promise<void> {
   const executable = await downloadAndUnzipVSCode(process.env.VSCODE_TEST_VERSION || 'stable');
+  const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(executable);
+  const install = childProcess.spawnSync(cli, [...cliArgs, '--install-extension', 'ms-vscode-remote.remote-containers'], { encoding: 'utf8' });
+  log.info(`Dev Containers: exit code ${install.status}\n${install.stdout}${install.stderr}`);
   const productJson = path.join(path.dirname(executable), 'resources', 'app', 'product.json');
   const product = JSON.parse(fs.readFileSync(productJson, 'utf8')) as { trustedExtensionAuthAccess?: string[] | Record<string, string[]> };
   const trusted = product.trustedExtensionAuthAccess;
