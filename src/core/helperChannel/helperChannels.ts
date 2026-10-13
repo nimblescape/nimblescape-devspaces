@@ -144,9 +144,9 @@ export interface ChannelOpenDeps {
    */
   vscodeVolume: string;
   /**
-   * The name of the window, read once for each start of a worker (also when it takes another number) for the name of
-   * its container (workerContainerName; ConnectionAdapter.windowName). Without it, the worker is named as a window
-   * without a name.
+   * The name of the window, read once for each open of a worker channel (also when the worker takes another number or
+   * starts without network) for the name of its container (workerContainerName; ConnectionAdapter.windowName). Without
+   * it, the worker is named as a window without a name.
    */
   windowName?(): string;
 }
@@ -192,15 +192,16 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
     if (process === undefined) throw new HelperChannelError('open', 'The Docker CLI cannot be started.');
     return HelperChannel.open(process, script, { logger: deps.logger, name });
   };
-  // The names of the containers of the engine that contain WORKER_NAME_PREFIX, with one call without the worker; none
-  // when the list fails (the next number is tried then).
+  const windowName = deps.windowName?.() ?? '';
+  // The names of the containers of the engine that contain WORKER_NAME_PREFIX, with one call without the worker (`,`
+  // separates the names of one container); none when the list fails (the next number is tried then).
   const workerNames = async (): Promise<string[]> => {
     let detail: string;
     try {
       const result = await runWithDockerTarget(target, () =>
         deps.runDirect(['ps', '--all', '--filter', `name=${WORKER_NAME_PREFIX}`, '--format', '{{.Names}}'], { timeoutMs: CHANNEL_PROBE_TIMEOUT_MS }),
       );
-      if (result.exitCode === 0) return result.stdout.split('\n').map((line) => line.trim());
+      if (result.exitCode === 0) return result.stdout.split(/[\n,]/).map((line) => line.trim());
       detail = result.timedOut ? 'no answer in time' : result.stderr.trim().slice(-500) || `exit code ${result.exitCode}`;
     } catch (error) {
       detail = (error as Error).message;
@@ -208,16 +209,16 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
     deps.logger.info(`The containers on ${name} could not be listed for the name of the worker (${detail}), so the worker takes the next number.`);
     return [];
   };
-  // The numbers whose names Docker refused in this open (at most WORKER_NAME_ATTEMPTS), also for the start without
-  // network.
+  // The numbers whose names Docker refused in this open (at most WORKER_NAME_ATTEMPTS), and the last list of the
+  // engine, also for the start without network.
   const inUse = new Set<number>();
+  let listed: string[] = [];
   // The worker with the lowest number from 1 that Docker did not refuse (workerContainerName). When another container
   // on the engine has the name (a worker of another window with the same name, or the last worker of this window while
   // Docker removes it; Docker created nothing), the lowest number that no container has, from a new list of the engine
   // after each refusal.
   const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
-    const windowName = deps.windowName?.() ?? '';
-    for (let number = freeWorkerNumber(windowName, [], inUse); ; ) {
+    for (let number = freeWorkerNumber(windowName, listed, inUse); ; ) {
       const containerName = workerContainerName(windowName, number);
       try {
         return await startNamed(network, containerName);
@@ -227,7 +228,8 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
         if (inUse.size >= WORKER_NAME_ATTEMPTS) {
           throw new HelperChannelError(error.code, `${error.message} Docker refused ${inUse.size} names of the worker on ${name} because other containers have them.`);
         }
-        number = freeWorkerNumber(windowName, await workerNames(), inUse);
+        listed = await workerNames();
+        number = freeWorkerNumber(windowName, listed, inUse);
         deps.logger.info(`The worker name ${containerName} is in use on ${name}, so the worker starts as ${workerContainerName(windowName, number)}.`);
       }
     }
