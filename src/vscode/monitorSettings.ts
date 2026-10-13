@@ -16,7 +16,10 @@ export interface MonitorSettingsDeps {
   settings: () => Pick<ExtensionSettings, 'cacheUpdateSchedule' | 'stopMonitorWhenIdle'>;
   /** The time zone of this computer (usableTimeZone). */
   timeZone: () => string;
-  /** The ID of this computer (computer.id, 32 hex digits): the owner of a permanent monitor that it asks for. */
+  /**
+   * The ID of this computer (computer.id, 32 hex digits): the owner of a permanent monitor that it asks for. A failure to
+   * read it leaves it out (an ensure without it keeps any running permanent monitor), so it never fails an open.
+   */
   computerId: () => string;
 }
 
@@ -30,8 +33,17 @@ export function monitorSettingsFor(deps: MonitorSettingsDeps): MonitorSettings {
     permanent,
     // This computer: the owner of a permanent monitor that it creates (LABEL_MONITOR_OWNER), and how an ensure tells
     // its own permanent monitor from one that another computer keeps.
-    computer: deps.computerId(),
+    ...computerOf(deps),
   };
+}
+
+/** `{ computer }` with the ID of this computer, or nothing when it cannot be read. */
+function computerOf(deps: MonitorSettingsDeps): { computer?: string } {
+  try {
+    return { computer: deps.computerId() };
+  } catch {
+    return {};
+  }
 }
 
 /**

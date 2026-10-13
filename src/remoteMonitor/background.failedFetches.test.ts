@@ -19,7 +19,7 @@ import { silentLogger } from '../core/ports';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import { markServerOpened, serverCommitsUrl, serverFolder, type StoreLockAttempt, type VscodeStoreDeps } from '../core/worker/vscodeServerStore';
 import { BACKGROUND_ENGINE_TIMEOUT_MS, BackgroundRun, type VscodeBackgroundDeps } from './background';
-import { MAX_FAILED_FETCHES, SERVER_UNUSED_MS, type CacheRunState } from './backgroundRules';
+import { MAX_FAILED_FETCHES, SERVER_UNUSED_MS, type CacheRunState, type NetworkContact } from './backgroundRules';
 
 const NOW = Date.parse('2026-10-09T12:00:00Z');
 const DAY = 24 * 60 * 60_000;
@@ -44,7 +44,7 @@ function harness(options: {
   /** The fetch of a server: ready, or not ready (false: no cause; `cause`: the cause that it reports first). */
   ensure: boolean | { cause: unknown };
   /** Part a (default: nothing to do). */
-  images?: () => Promise<boolean | void>;
+  images?: () => Promise<NetworkContact | void>;
   state?: CacheRunState;
   containerIds?: (signal: AbortSignal | undefined) => void;
   /** The processes of the containers that mount the store (each container: its process lines); default none. */
@@ -151,11 +151,10 @@ describe('a run that did not reach the network', () => {
     expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBe(NOW);
   });
 
-  it('a fetch of the server that failed for the network: false, and the version does not wait a day', async () => {
+  it('a fetch of the server that failed for the network after the update service answered: the run reached it, the version waits a day', async () => {
     const h = harness({ commits: { stable: [commit(1)] }, ensure: { cause: offline } });
-    expect(await h.run.run()).toBe(false);
-    expect(h.log).toContain('The background run ended without reaching the network.');
-    expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBeUndefined();
+    expect(await h.run.run()).toBe(true);
+    expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBe(NOW);
   });
 
   it('a fetch that failed without a cause waits a day and counts as reached (no evidence of the network)', async () => {
@@ -164,9 +163,17 @@ describe('a run that did not reach the network', () => {
     expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBe(NOW);
   });
 
-  it('the update service that did not answer: false', async () => {
-    const h = harness({ commits: { stable: offline }, ensure: true });
+  it('nothing answered: the images offline and the update service without an answer: false', async () => {
+    const h = harness({ commits: { stable: offline }, ensure: true, images: async () => 'offline' });
     expect(await h.run.run()).toBe(false);
+    expect(h.log).toContain('The background run ended without reaching the network.');
+    // Without images in use: the update service alone.
+    expect(await harness({ commits: { stable: offline }, ensure: true }).run.run()).toBe(false);
+  });
+
+  it('one part that answered is enough: a registry, or the update service', async () => {
+    expect(await harness({ commits: { stable: offline }, ensure: true, images: async () => 'reached' }).run.run()).toBe(true);
+    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => 'offline' }).run.run()).toBe(true);
   });
 
   it('the update service that answered with a refusal of the release list: true', async () => {
@@ -174,23 +181,23 @@ describe('a run that did not reach the network', () => {
     expect(await h.run.run()).toBe(true);
   });
 
-  it('an image pass that did not reach its registries: false; one that did, or one without an answer: true', async () => {
-    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => false }).run.run()).toBe(false);
-    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => true }).run.run()).toBe(true);
-    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => {} }).run.run()).toBe(true);
+  it('a part that throws for the network counts only while nothing answered', async () => {
+    expect(await harness({ commits: { stable: offline }, ensure: true, images: async () => Promise.reject(offline) }).run.run()).toBe(false);
+    expect(await harness({ commits: { stable: offline }, ensure: true, images: async () => Promise.reject(new Error('a bug')) }).run.run()).toBe(false);
+    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => Promise.reject(offline) }).run.run()).toBe(true);
+    // A part that throws for another cause, and nothing else that failed: true.
+    const unused = Object.assign(new Error('a bug'));
+    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => Promise.reject(unused) }).run.run()).toBe(true);
   });
 
-  it('a part that throws for the network: false; for another cause: true', async () => {
-    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => Promise.reject(offline) }).run.run()).toBe(false);
-    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => Promise.reject(new Error('a bug')) }).run.run()).toBe(true);
-  });
-
-  it('each run starts without the failures of the run before', async () => {
-    let reached = false;
-    const h = harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => reached });
+  it('each run starts without what the run before found', async () => {
+    let contact: 'offline' | 'reached' = 'offline';
+    const h = harness({ commits: { stable: offline }, ensure: true, images: async () => contact });
     expect(await h.run.run()).toBe(false);
-    reached = true;
+    contact = 'reached';
     expect(await h.run.run()).toBe(true);
+    contact = 'offline';
+    expect(await h.run.run()).toBe(false);
   });
 });
 

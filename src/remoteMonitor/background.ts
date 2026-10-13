@@ -56,13 +56,15 @@ import {
   cleanupDue,
   commitsInProcesses,
   fetchRetryDue,
-  isNetworkFailure,
   qualitiesToFetch,
   serverUnused,
   serversToRemove,
   type CacheRunState,
+  type NetworkContact,
+  type RunNetwork,
   type StoredServer,
 } from './backgroundRules';
+import { isNetworkError } from '../core/networkFailure';
 import { engineFailure, type VscodeEngine } from './engine';
 import { cleanupExtensions, downloadExtensions, type ExtensionRunDeps } from './extensionDownloads';
 import { REMOTE_MONITOR_STATE_DIR } from '../core/remoteMonitor/protocol';
@@ -99,7 +101,7 @@ export interface VscodeBackgroundDeps {
 }
 
 /** What the part "extensions" and its cleanup use, from the VS Code part of the run. */
-export function extensionRunDeps(vscode: VscodeBackgroundDeps, deps: Pick<BackgroundRunDeps, 'log' | 'now'>, networkFailure?: (error: unknown) => boolean): ExtensionRunDeps {
+export function extensionRunDeps(vscode: VscodeBackgroundDeps, deps: Pick<BackgroundRunDeps, 'log' | 'now'>, network?: RunNetwork): ExtensionRunDeps {
   return {
     root: vscode.store.root,
     stateDir: vscode.extensionStateDir ?? REMOTE_MONITOR_STATE_DIR,
@@ -108,7 +110,7 @@ export function extensionRunDeps(vscode: VscodeBackgroundDeps, deps: Pick<Backgr
     ...vscode.extensionLocks,
     log: deps.log,
     now: deps.now,
-    ...(networkFailure !== undefined ? { networkFailure } : {}),
+    ...(network !== undefined ? { network } : {}),
   };
 }
 
@@ -116,10 +118,10 @@ export interface BackgroundRunDeps {
   log: (message: string) => void;
   now: () => number;
   /**
-   * Part a: one pass of the image maintenance (ImageMaintenance.pass: nothing without images in use); false when it
-   * did not reach the network.
+   * Part a: one pass of the image maintenance (ImageMaintenance.pass: nothing without images in use) and what it found
+   * of the network (NetworkContact; nothing: none).
    */
-  images: () => Promise<boolean | void>;
+  images: () => Promise<NetworkContact | void>;
   /**
    * Parts b to d, made afresh for each run (its HTTPS reads the proxy of the daemon once, so a failed read or a changed
    * proxy counts only for that run); undefined when the monitor mounts no store (the run then leaves them out, logged).
@@ -144,22 +146,27 @@ interface ServerFindings {
 export class BackgroundRun {
   /** The run never ends; a fetch has its own time limit (ensureServer). */
   private readonly signal = new AbortController().signal;
-  /** A part of the current run did not reach the network (isNetworkFailure). */
+  /** A part of the current run failed for the network while the run had reached no server (RunNetwork). */
   private offline = false;
+  /** A server answered a part of the current run. */
+  private reached = false;
 
   constructor(private readonly deps: BackgroundRunDeps) {}
 
   /**
-   * Parts a to d, each on its own, then the prepares. Never throws. Resolves false when a part did not reach the network
-   * (a failure of isNetworkFailure: the image pass, the update service, the fetch of a server or an extension), so the
-   * schedule tries the run again (CacheSchedule); a failure of anything else does not count.
+   * Parts a to d, each on its own, then the prepares. Never throws. Resolves false when the run did not reach the
+   * network: a part failed for the network (isNetworkError: the image pass, the update service, the fetch of a server or
+   * an extension) and no server answered any part (RunNetwork), so the schedule tries the run again (CacheSchedule).
    */
   async run(): Promise<boolean> {
     const { log } = this.deps;
     this.offline = false;
+    this.reached = false;
     log('The background run starts.');
     await this.part('the images', async () => {
-      if ((await this.deps.images()) === false) this.offline = true;
+      const contact = await this.deps.images();
+      if (contact === 'reached') this.network.reached();
+      else if (contact === 'offline' && !this.reached) this.offline = true;
     });
     const vscode = this.deps.vscode();
     if (vscode === undefined) {
@@ -170,20 +177,24 @@ export class BackgroundRun {
         found = await this.newestServers(vscode);
       });
       // The part "extensions", after the part of the server.
-      await this.part('the VS Code extensions', () => downloadExtensions(extensionRunDeps(vscode, this.deps, this.networkFailure)));
+      await this.part('the VS Code extensions', () => downloadExtensions(extensionRunDeps(vscode, this.deps, this.network)));
       await this.part('the cleanup of the VS Code server store', () => this.cleanupWhenDue(vscode, found));
     }
     const prepares = this.deps.prepares;
     if (prepares !== undefined) await this.part('the prepares of the devspace images', prepares);
-    log(this.offline ? 'The background run ended without reaching the network.' : 'The background run ended.');
-    return !this.offline;
+    const reachedNone = this.offline && !this.reached;
+    log(reachedNone ? 'The background run ended without reaching the network.' : 'The background run ended.');
+    return !reachedNone;
   }
 
-  /** Whether `error` is a failure of the network (isNetworkFailure); if so, the current run did not reach it. */
-  private readonly networkFailure = (error: unknown): boolean => {
-    if (!isNetworkFailure(error)) return false;
-    this.offline = true;
-    return true;
+  /** What the parts of the current run tell it of the network (RunNetwork). */
+  private readonly network: RunNetwork = {
+    reached: () => void (this.reached = true),
+    failed: (error) => {
+      if (this.reached || !isNetworkError(error)) return false;
+      this.offline = true;
+      return true;
+    },
   };
 
   /** One part: a failure is one line of the log, and the run goes on. */
@@ -191,7 +202,7 @@ export class BackgroundRun {
     try {
       await work();
     } catch (error) {
-      this.networkFailure(error);
+      this.network.failed(error);
       this.deps.log(`The background run could not do ${what}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -237,12 +248,14 @@ export class BackgroundRun {
       }
       log(`The newest VS Code server ${server.commit} (${quality}) is not in the shared store yet.`);
       // A success needs no entry removed: a version is fetched only once its failure does not wait anymore, and such
-      // entries are not kept (storeFailedFetches). A fetch that failed for the network does not wait a day: the retry
-      // of the run fetches it.
+      // entries are not kept (storeFailedFetches). A fetch that failed for the network while the run reached no server
+      // does not wait a day: the retry of the run fetches it (RunNetwork).
       let cause: unknown;
       const store = { ...vscode.store, onFailure: (error: unknown) => void (cause = error) };
-      if (await (vscode.ensure ?? ensureServer)(store, server, platform, this.signal)) await this.linkIntoContainers(vscode, server, platform);
-      else if (!this.networkFailure(cause)) failed[version] = this.deps.now();
+      if (await (vscode.ensure ?? ensureServer)(store, server, platform, this.signal)) {
+        this.network.reached();
+        await this.linkIntoContainers(vscode, server, platform);
+      } else if (!this.network.failed(cause)) failed[version] = this.deps.now();
     }
     await this.storeFailedFetches(stored, failed);
     return { platform, released, asked };
@@ -251,9 +264,11 @@ export class BackgroundRun {
   /** The released commits of `quality` on `platform`, newest first (serverCommits), or undefined after one line. */
   private async releasedCommits(vscode: VscodeBackgroundDeps, quality: VscodeQuality, platform: VscodePlatform): Promise<string[] | undefined> {
     try {
-      return await serverCommits(vscode.store.transport, quality, platform, AbortSignal.timeout(UPDATE_SERVICE_TIMEOUT_MS));
+      const commits = await serverCommits(vscode.store.transport, quality, platform, AbortSignal.timeout(UPDATE_SERVICE_TIMEOUT_MS));
+      this.network.reached();
+      return commits;
     } catch (error) {
-      this.networkFailure(error);
+      this.network.failed(error);
       this.deps.log(`The newest VS Code server (${quality}, ${platform}) could not be read from the update service: ${error instanceof Error ? error.message : String(error)}`);
       return undefined;
     }

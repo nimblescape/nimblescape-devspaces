@@ -30,7 +30,8 @@ import { abortError } from '../core/ports';
 import { isListedRepository, parseImageReference, type ImageReferenceParts } from '../core/remoteMonitor/protocol';
 import { referenceText, type RegistryAnswer as TagAnswer } from '../core/remoteMonitor/registryAnswers';
 import type { EngineImage } from '../core/worker/dockerEngine';
-import { isNetworkFailure } from './backgroundRules';
+import { isNetworkError } from '../core/networkFailure';
+import type { NetworkContact } from './backgroundRules';
 import { engineFailure, type ImageEngine } from './engine';
 
 /** Time from the start of the monitor to the first pass. */
@@ -315,8 +316,10 @@ export class ImageMaintenance {
    * a pass by the time limit of every request.
    */
   private unreachable = new Set<string>();
-  /** A pull of the current pass failed for the network (isNetworkFailure). */
+  /** A pull of the current pass failed for the network (isNetworkError). */
   private pullOffline = false;
+  /** A registry answered in the current pass, or a pull of it succeeded. */
+  private reachedRegistry = false;
   private skipLogged = new Set<string>();
 
   constructor(private readonly deps: ImageMaintenanceDeps) {}
@@ -358,14 +361,18 @@ export class ImageMaintenance {
 
   /**
    * One pass: the pulls of the references in use, then the removal of the images that nothing keeps. Never throws.
-   * Resolves false when it did not reach the network: a registry that it asked did not answer (`unreachable`), or a
-   * pull or the pass failed for the network (isNetworkFailure); else true (also without images in use).
+   * Resolves what it found of the network (NetworkContact): `reached` when a registry answered or a pull succeeded;
+   * else `offline` when a registry that it asked did not answer (`unreachable`) or a pull failed for the network
+   * (isNetworkError); else `none` (also without images in use). A failure of the engine itself (a list, an inspect) is
+   * none of the network.
    */
-  async pass(): Promise<boolean> {
+  async pass(): Promise<NetworkContact> {
     this.unreachable = new Set();
     this.pullOffline = false;
+    this.reachedRegistry = false;
     await this.passOnce();
-    return this.unreachable.size === 0 && !this.pullOffline;
+    if (this.reachedRegistry) return 'reached';
+    return this.unreachable.size > 0 || this.pullOffline ? 'offline' : 'none';
   }
 
   private async passOnce(): Promise<void> {
@@ -435,7 +442,6 @@ export class ImageMaintenance {
       // The untagged images of this pass are the ones that the next pass may remove.
       this.seenUntagged = this.untaggedNow;
     } catch (error) {
-      if (isNetworkFailure(error)) this.pullOffline = true;
       this.deps.log(`The images could not be maintained: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       // No empty lists (the other repositories stay: pruneReplacedImages).
@@ -607,6 +613,7 @@ export class ImageMaintenance {
     }
     const result = await request();
     if (result.kind === 'unreachable') this.unreachable.add(host);
+    else this.reachedRegistry = true;
     return result;
   }
 
@@ -663,8 +670,9 @@ export class ImageMaintenance {
     // The pull of the engine without a login (anonymous); an error in its stream fails it.
     try {
       await this.deps.engine.pull(reference, { signal: AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS) });
+      this.reachedRegistry = true;
     } catch (error) {
-      if (isNetworkFailure(error)) this.pullOffline = true;
+      if (isNetworkError(error)) this.pullOffline = true;
       this.deps.log(`${reference} could not be pulled: ${engineFailure(error, IMAGE_PULL_TIMEOUT_MS)}`);
       return false;
     }

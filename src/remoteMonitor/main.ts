@@ -899,6 +899,8 @@ export class CacheSchedule {
   private retryAt: number | undefined;
   /** How many runs in a row did not reach the network (0 while no retry waits). */
   private retries = 0;
+  /** When the last run that did not reach the network ended (while a retry waits). */
+  private lastAttemptAt: number | undefined;
   private loaded = false;
   private running = false;
   /** A check that takes longer than a minute (a slow list of the images) is not joined. */
@@ -941,6 +943,7 @@ export class CacheSchedule {
       this.lastEndAt = stored.lastEndAt;
       this.retryAt = stored.retryAt;
       this.retries = stored.retries ?? 0;
+      this.lastAttemptAt = stored.lastAttemptAt;
     }
     if (!this.running && this.deps.observe) {
       this.observing = this.deps.observe().finally(() => (this.observing = undefined));
@@ -959,7 +962,13 @@ export class CacheSchedule {
     // A request is taken (removed) only here, while no run runs, so one that came during a run is kept for this check
     // after it.
     const requested = (await this.deps.runRequest?.take()) === true;
-    const due = this.retryAt !== undefined ? runRetryDue(this.retryAt, time) : cacheRunDue(this.deps.settings.value.parsed, this.lastEndAt, time, this.deps.settings.value.timeZone);
+    // While a retry waits: its time, or the schedule counted from the last attempt (when it is known), whichever comes
+    // first.
+    const settings = this.deps.settings.value;
+    const due =
+      this.retryAt !== undefined
+        ? runRetryDue(this.retryAt, time) || (this.lastAttemptAt !== undefined && cacheRunDue(settings.parsed, this.lastAttemptAt, time, settings.timeZone))
+        : cacheRunDue(settings.parsed, this.lastEndAt, time, settings.timeZone);
     if (!requested && !due) return;
     if (!requested && this.retryAt !== undefined) this.deps.log(`The background run is tried again (retry ${this.retries}).`);
     if (requested) this.deps.log('"Update All Images Now" asked for the background run; it runs now.');
@@ -1017,13 +1026,15 @@ export class CacheSchedule {
         this.lastEndAt = end;
         this.retryAt = undefined;
         this.retries = 0;
+        this.lastAttemptAt = undefined;
         // Undefined fields are left out of the stored state (JSON), so a waiting retry goes.
-        change = { lastEndAt: end, retryAt: undefined, retries: undefined };
+        change = { lastEndAt: end, retryAt: undefined, retries: undefined, lastAttemptAt: undefined };
       } else {
         this.retries++;
         this.retryAt = end + runRetryDelay(this.retries);
+        this.lastAttemptAt = end;
         this.deps.log(`The background run did not reach the network; it is tried again at ${new Date(this.retryAt).toISOString()}.`);
-        change = { retryAt: this.retryAt, retries: this.retries };
+        change = { retryAt: this.retryAt, retries: this.retries, lastAttemptAt: end };
       }
       await this.deps.state.update(change).catch((error: unknown) => {
         this.deps.log(`The end of the background run could not be stored: ${error instanceof Error ? error.message : String(error)}`);
