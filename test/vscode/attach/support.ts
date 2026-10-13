@@ -10,6 +10,7 @@ import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { DOCKER_CONFIG_FOLDER, GH_CONFIG_FOLDER, GITHUB_TOKEN_FILE } from '../../../src/core/names';
 
 export const EXTENSION_ID = 'nimblescape.nimblescape-devspaces';
 
@@ -50,6 +51,21 @@ export function docker(args: string[]): string {
 export function execIn(user: string, script: string): { code: number | null; out: string } {
   const result = childProcess.spawnSync('docker', ['exec', '-u', user, seed().containerName, 'sh', '-c', script], { encoding: 'utf8' });
   return { code: result.status, out: `${result.stdout}${result.stderr}`.trim() };
+}
+
+/**
+ * A shell script in the container as `user`, with the environment of the container and `args` as $1…; asynchronous,
+ * for programs that may reach a channel of Dev Containers, which the extension host of the tests relays.
+ */
+export function execInAsync(user: string, script: string, args: string[] = []): Promise<{ code: number | null; out: string }> {
+  return new Promise((resolve) => {
+    const child = childProcess.spawn('docker', ['exec', '-u', user, seed().containerName, 'sh', '-c', script, 'sh', ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (data: Buffer) => (out += data.toString()));
+    child.stderr.on('data', (data: Buffer) => (out += data.toString()));
+    child.on('error', (error) => resolve({ code: null, out: String(error) }));
+    child.on('close', (code) => resolve({ code, out: out.trim() }));
+  });
 }
 
 /** Waits until `check` returns a value other than undefined; fails with `what` after `timeoutMs`. */
@@ -170,4 +186,90 @@ export function channelLog(channel: string): string {
 /** Prints every output channel of this start; the evidence of a failed test on CI. */
 export function printLogs(): void {
   for (const [name, text] of outputLogs()) console.log(`\n===== ${name} =====\n${text}`);
+}
+
+/**
+ * The settings of Dev Containers that the override switches off (devContainersSettings), switched on again, as a process
+ * in the container can write them into ~/.vscode-server/data/Machine/settings.json.
+ */
+export const ENABLING_MACHINE_SETTINGS: Record<string, boolean | string> = {
+  'dev.containers.copyGitConfig': true,
+  'remote.containers.copyGitConfig': true,
+  'dev.containers.gitCredentialHelperConfigLocation': 'global',
+  'dev.containers.dockerCredentialHelper': true,
+  'dev.containers.githubCLILoginWithToken': true,
+};
+
+/**
+ * What Git, Docker and the GitHub CLI of the container use, with the environment of the container (containerEnv, as in
+ * the terminals of the window): which credential helpers Git runs for https://github.com and for another host, whether
+ * Git reads the Git configuration of the runner, the configuration file of Docker and whether it names a helper of Dev
+ * Containers, the variables with a GitHub token in the processes of the container, and GH_CONFIG_DIR.
+ */
+export interface EffectiveCredentials {
+  /** The helpers (as Git runs them) that `git credential fill` asks for https://github.com. */
+  githubHelpers: string[];
+  /** The helpers that `git credential fill` asks for https://git.example.invalid. */
+  otherHostHelpers: string[];
+  runnerGitConfig: boolean;
+  dockerConfigFile: string;
+  dockerHelperOfDevContainers: boolean;
+  tokenVariables: string[];
+  ghConfigDir: string;
+}
+
+/** The helpers that `git credential fill` runs for https://$1 (GIT_TRACE), without a prompt. */
+const CREDENTIAL_HELPERS_SCRIPT = `printf 'protocol=https\nhost=%s\n\n' "$1" | GIT_TRACE=1 GIT_TERMINAL_PROMPT=0 timeout 20 git credential fill 2>&1 >/dev/null | sed -n 's/.*trace: run_command: //p'`;
+
+export async function effectiveCredentials(user: string): Promise<EffectiveCredentials> {
+  const helpers = async (host: string): Promise<string[]> =>
+    (await execInAsync(user, CREDENTIAL_HELPERS_SCRIPT, [host])).out.split('\n').filter((line) => line !== '');
+  const githubHelpers = await helpers('github.com');
+  const otherHostHelpers = await helpers('git.example.invalid');
+  const runnerGitConfig = execIn(user, 'git config --get devspaces.marker').code === 0;
+  const dockerConfigFile = execIn(user, 'printf %s "${DOCKER_CONFIG:-$HOME/.docker}/config.json"').out;
+  const dockerHelperOfDevContainers = execIn(user, `grep -qs 'dev-containers' '${dockerConfigFile}'`).code === 0;
+  const tokenVariables = [
+    ...new Set(
+      execIn('root', `cat /proc/[0-9]*/environ 2>/dev/null | tr '\\0' '\\n' | sed -n 's/^\\(GH_TOKEN\\|GITHUB_TOKEN\\|GH_ENTERPRISE_TOKEN\\)=.*/\\1/p'`)
+        .out.split('\n')
+        .filter((line) => line !== ''),
+    ),
+  ];
+  const ghConfigDir = execIn(user, 'printf %s "$GH_CONFIG_DIR"').out;
+  return { githubHelpers, otherHostHelpers, runnerGitConfig, dockerConfigFile, dockerHelperOfDevContainers, tokenVariables, ghConfigDir };
+}
+
+/** A credential helper of Dev Containers (it forwards the request to the computer of the window). */
+export const FORWARDING_HELPER = /vscode|remote-containers|dev-containers/i;
+
+/** Merges `settings` into the machine settings of the VS Code server in the container, as `user`; returns the result. */
+export function changeMachineSettings(user: string, settings: Record<string, unknown>): Record<string, unknown> {
+  const script = `const fs = require('fs');
+const file = require('path').join(require('os').homedir(), '.vscode-server/data/Machine/settings.json');
+const settings = Object.assign(JSON.parse(fs.readFileSync(file, 'utf8')), JSON.parse(process.env.SETTINGS));
+fs.writeFileSync(file, JSON.stringify(settings, null, 2));
+console.log(JSON.stringify(settings));
+`;
+  const result = childProcess.spawnSync('docker', ['exec', '-i', '-u', user, '-e', `SETTINGS=${JSON.stringify(settings)}`, seed().containerName, 'node', '-'], { encoding: 'utf8', input: script });
+  assert.strictEqual(result.status, 0, result.stderr);
+  return JSON.parse(result.stdout) as Record<string, unknown>;
+}
+
+/**
+ * Git asks only the credential helper of the devspace, and only for https://github.com; Git reads no configuration of the
+ * runner; Docker reads the configuration of the volume without a helper of Dev Containers; no process has a GitHub
+ * token in its variables; gh reads the folder of the devspace (src/core/helper/containerGit.ts, containerEnvironment).
+ */
+export async function assertOnlyDevspaceCredentials(user: string): Promise<void> {
+  const effective = await effectiveCredentials(user);
+  console.log(`    what the devspace uses: ${JSON.stringify(effective)}`);
+  assert.ok(effective.githubHelpers.length > 0, 'Git asked no credential helper for https://github.com');
+  for (const helper of effective.githubHelpers) assert.ok(helper.includes(GITHUB_TOKEN_FILE), `Git asked another helper for https://github.com: ${helper}`);
+  assert.deepStrictEqual(effective.otherHostHelpers, [], 'Git asked a credential helper for another host');
+  assert.strictEqual(effective.runnerGitConfig, false, 'Git reads the Git configuration of the runner');
+  assert.strictEqual(effective.dockerConfigFile, `${DOCKER_CONFIG_FOLDER}/config.json`);
+  assert.strictEqual(effective.dockerHelperOfDevContainers, false, 'Docker uses a credential helper of Dev Containers');
+  assert.deepStrictEqual(effective.tokenVariables, []);
+  assert.strictEqual(effective.ghConfigDir, GH_CONFIG_FOLDER);
 }

@@ -11,8 +11,9 @@
 //   development extension with the ID of the installed VSIX would be loaded in its place.
 // - "attach" (CI only, npm run test:vscode:attach after npm run test:vscode:attach:prepare): VS Code starts in the
 //   window of a container that test/vscode/attach/prepare.ts made on the real Docker engine, and runs the tests of
-//   test/vscode/attach/<container>.test.ts there. It exists only when DEVSPACE_TEST_ATTACH names the container
-//   (devspace or plain), so that no local run reaches the Docker engine of this computer.
+//   test/vscode/attach/<kind>.test.ts there. It exists only when DEVSPACE_TEST_ATTACH names the kind (plain,
+//   devspace, or reattach: the devspace again after a restart of VS Code), so that no local run reaches the Docker
+//   engine of this computer.
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
 import * as crypto from 'crypto';
@@ -60,10 +61,10 @@ const checkoutId = crypto.createHash('sha256').update(checkout).digest('hex').sl
  * allows at most 103 bytes in a socket path, which a folder below a checkout often exceeds. The downloaded VS Code and
  * the installed extensions in .vscode-test/ stay.
  */
-function configuration(label, index, options) {
+function configuration(label, index, options, { keepUserDataDir = false } = {}) {
   const userDataDir = path.join(os.tmpdir(), `devspaces ${label} ü ${checkoutId}`);
   const selected = selectedLabels.length === 0 || selectedLabels.includes(label) || selectedLabels.includes(`${index}`);
-  if (!listsOnly && selected) fs.rmSync(userDataDir, { recursive: true, force: true });
+  if (!listsOnly && selected && !keepUserDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
   return {
     label,
     files: 'out/test/vscode/*.test.js',
@@ -98,11 +99,14 @@ function configuration(label, index, options) {
 /**
  * The configuration `attach`: the window of the container DEVSPACE_TEST_ATTACH of out/test/vscode/attach/seed.json, on
  * the Docker engine of this computer. The fake sign-in provider `github` (test/vscode/github) replaces the built-in one.
+ * `reattach` starts VS Code again in the window of the devspace with the user data folder of the run `devspace`, as a
+ * restart of VS Code.
  */
 function attachConfiguration(kind, index) {
-  const seed = JSON.parse(fs.readFileSync(new URL('out/test/vscode/attach/seed.json', import.meta.url), 'utf8'))[kind];
-  if (!seed) throw new Error(`out/test/vscode/attach/seed.json has no container "${kind}".`);
-  const base = configuration('attach', index, {});
+  const container = kind === 'reattach' ? 'devspace' : kind;
+  const seed = JSON.parse(fs.readFileSync(new URL('out/test/vscode/attach/seed.json', import.meta.url), 'utf8'))[container];
+  if (!seed) throw new Error(`out/test/vscode/attach/seed.json has no container "${container}".`);
+  const base = configuration('attach', index, {}, { keepUserDataDir: kind === 'reattach' });
   return {
     ...base,
     files: `out/test/vscode/attach/${kind}.test.js`,

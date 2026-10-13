@@ -11,7 +11,7 @@
 import * as assert from 'assert';
 import { LABEL_PREFIX } from '../../../src/core/names';
 import { WINDOW_RESTORE_TIMEOUT_MS } from '../../../src/vscode/windowDevspace';
-import { channelLog, connectedFolder, credentialPaths, docker, printLogs, seed } from './support';
+import { FORWARDING_HELPER, channelLog, connectedFolder, credentialPaths, docker, effectiveCredentials, printLogs, seed } from './support';
 
 describe('the window of a container that is no devspace', () => {
   const { containerName, user } = seed();
@@ -46,5 +46,13 @@ describe('the window of a container that is no devspace', () => {
     assert.strictEqual(paths.gitConfigOfRunner, true, 'Dev Containers copied no Git configuration of the runner');
     assert.strictEqual(paths.gitCredentialHelper, true, 'Dev Containers configured no Git credential helper');
     assert.strictEqual(paths.dockerCredentialHelper, true, 'Dev Containers configured no Docker credential helper');
+  });
+
+  it('shows that Git of the container asks the helper of Dev Containers', async () => {
+    // The control of assertOnlyDevspaceCredentials: the trace of `git credential fill` sees the forwarding helper.
+    const effective = await effectiveCredentials(user);
+    console.log(`    what the plain container uses: ${JSON.stringify(effective)}`);
+    assert.ok(effective.githubHelpers.some((helper) => FORWARDING_HELPER.test(helper)), effective.githubHelpers.join('\n'));
+    assert.strictEqual(effective.runnerGitConfig, true, 'Git does not read the copied Git configuration of the runner');
   });
 });
