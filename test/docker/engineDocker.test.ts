@@ -37,12 +37,11 @@ describe('the Docker of the pipeline over the Engine API', () => {
   const withVolume = `devspace-test-engine-${tag}:volume`;
 
   beforeAll(() => {
-    // `docker tag` does not pull: the base image may be missing when no file before this one pulled it.
-    if (cli.image(TEST_BASE_IMAGE) === undefined) cli.ok(['pull', TEST_BASE_IMAGE]);
     cli.ok(['volume', 'create', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`, name]);
-    cli.ok(['tag', TEST_BASE_IMAGE, image]);
     const common = ['--network', 'none', '--init', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`];
     cli.ok(['run', '-d', '--name', name, ...common, '--mount', `type=volume,source=${name},target=/workspaces`, TEST_BASE_IMAGE, 'sleep', '600']);
+    // After the run, which pulls the base image when it is missing; `docker tag` does not.
+    cli.ok(['tag', TEST_BASE_IMAGE, image]);
     cli.ok(['create', '--name', `${name}-db-1`, ...common, '--label', `${LABEL_COMPOSE_SERVICE}=db`, TEST_BASE_IMAGE, 'sleep', '600']);
   });
 

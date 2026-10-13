@@ -154,10 +154,9 @@ jobs:
 
   docker:
     # Docker Engine is preinstalled on the runner. The tests build the helper image and run the Dev Container CLI of
-    # the pinned version (devDependency @devcontainers/cli) against it. The test files run one at a time on an engine
-    # (vitest.docker.config.mts), so three groups of files run side by side, each on its own runner and engine. The
-    # groups take about the same time (the times of the files in CI); the last one runs every file that the others do
-    # not name, so a new test file always runs.
+    # the pinned version (devDependency @devcontainers/cli) against it. The test files run one at a time on an engine,
+    # so three groups of files run side by side, each on its own runner and engine. vitest.docker.config.mts names the
+    # files of each group (DEVSPACE_TEST_GROUP); the group "other" runs every file that the others do not name.
     name: docker (${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -165,16 +164,7 @@ jobs:
       # Every group reports its failures, also when another group failed.
       fail-fast: false
       matrix:
-        include:
-          - group: monitor
-            files: test/docker/remoteMonitor.test.ts test/docker/workerBatch.test.ts
-          - group: pipeline
-            files: test/docker/pipeline.test.ts test/docker/compose.test.ts test/docker/helperImage.test.ts
-          - group: other files
-            files: >-
-              --exclude test/docker/remoteMonitor.test.ts --exclude test/docker/workerBatch.test.ts
-              --exclude test/docker/pipeline.test.ts --exclude test/docker/compose.test.ts
-              --exclude test/docker/helperImage.test.ts
+        group: [monitor, pipeline, other]
     steps:
       - name: Check out the source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -190,11 +180,10 @@ jobs:
       - name: Install the locked development tools
         run: npm ci
 
-      # FILES is split into its words on purpose: file filters, or --exclude with a file.
       - name: Run the integration tests against Docker
         env:
-          FILES: ${{ matrix.files }}
-        run: npm run test:docker -- $FILES
+          DEVSPACE_TEST_GROUP: ${{ matrix.group }}
+        run: npm run test:docker
 
   vscode:
     # The tests in a real VS Code (npm run test:vscode, .vscode-test.mjs). The runner has no display, so xvfb-run gives
