@@ -348,12 +348,12 @@ describe('channelRunArgs and openHelperChannel', () => {
       socketPath: '/run/user/1000/docker.sock',
       stateVolume: 'devspaces-monitor',
       vscodeVolume: 'devspaces-vscode',
-      containerName: 'devspaces-worker-1',
+      containerName: 'devspaces-api-worker1',
       label: '1-x',
       scriptHash: hash,
     });
     expect(args).toEqual([
-      'run', '--rm', '-i', '--pull', 'never', '--name', 'devspaces-worker-1',
+      'run', '--rm', '-i', '--pull', 'never', '--name', 'devspaces-api-worker1',
       '--label', 'nimblescape.devspaces.helper-run=true',
       '--label', `${LABEL_HELPER_CHANNEL}=1-x`,
       // No log of the channel on the host; outbound network on the default bridge.
