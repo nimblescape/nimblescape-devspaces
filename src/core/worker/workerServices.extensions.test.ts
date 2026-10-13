@@ -30,7 +30,7 @@ function deps(overrides: Partial<WorkerServicesDeps>) {
     secretOf: () => undefined,
     forgetSecret: () => undefined,
     logger: silentLogger,
-    ownHelper: { image: { tag: 'devspace-helper:abc', id: IMAGE_ID }, socket: '/s.sock', vscodeStore: 'devspace-vscode' },
+    ownHelper: { image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/s.sock', vscodeStore: 'devspaces-vscode' },
     dockerHost: '',
     owner: { windowId: 'w', pid: 1 },
     devspaceLock: async () => {
@@ -47,7 +47,7 @@ describe('the shared extension cache of the pipeline in the worker', () => {
   });
 
   it('records the list of the open with its defaults, and gives the cached files for the platform', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ext-worker-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ext-worker-'));
     temps.push(root);
     // The record is in the volume of the Monitor, a folder of its own here (the same temporary folder holds
     // both; the layout below it is the same).

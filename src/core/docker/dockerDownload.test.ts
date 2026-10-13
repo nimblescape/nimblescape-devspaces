@@ -17,7 +17,7 @@ let dir: string;
 let target: string;
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-download-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-download-'));
   target = path.join(dir, 'Docker.dmg');
 });
 

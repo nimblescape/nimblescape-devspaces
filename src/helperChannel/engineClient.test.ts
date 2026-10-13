@@ -56,14 +56,14 @@ function tarOf(name: string, data: Buffer, typeflag = '0'): Buffer {
 
 const INSPECT = {
   Id: 'c0ffee'.repeat(10) + 'c0ff',
-  Name: '/devspace-acme-api-brave-noether',
+  Name: '/devspaces-acme-api-brave-noether',
   Created: '2026-10-03T19:00:00.000Z',
   RestartCount: 2,
   State: { Status: 'running', Running: true, Paused: false, ExitCode: 0 },
-  Config: { Labels: { 'nimblescape.devspace.id': 'e1' }, Image: 'devspace-acme-api-brave-noether:1' },
+  Config: { Labels: { 'nimblescape.devspaces.id': 'e1' }, Image: 'devspaces-acme-api-brave-noether:1' },
   Image: 'sha256:' + 'a'.repeat(64),
   Mounts: [
-    { Type: 'volume', Name: 'devspace-acme-api-brave-noether' },
+    { Type: 'volume', Name: 'devspaces-acme-api-brave-noether' },
     // Only the mounts of the type volume, whatever else has a name.
     { Type: 'bind', Name: 'not-a-volume', Source: '/tmp' },
     { Type: 'tmpfs', Name: 'not-a-volume-either' },
@@ -101,7 +101,7 @@ describe('the port of the engine over the Engine API', () => {
       masked?: string[];
     } = {},
   ): Promise<{ engine: DockerEngine; calls: Call[] }> {
-    folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-engine-'));
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-engine-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     const calls: Call[] = [];
@@ -146,20 +146,20 @@ describe('the port of the engine over the Engine API', () => {
 
   it('reads a container with its state, labels, image and volumes; a missing one is undefined', async () => {
     const { engine, calls } = await serve((call) => (call.url.includes('missing') ? { status: 404, json: { message: 'No such container' } } : { status: 200, json: INSPECT }));
-    expect(await engine.container('devspace-acme-api-brave-noether')).toEqual({
+    expect(await engine.container('devspaces-acme-api-brave-noether')).toEqual({
       id: INSPECT.Id,
-      name: 'devspace-acme-api-brave-noether',
+      name: 'devspaces-acme-api-brave-noether',
       state: 'running',
       rawState: 'running',
       exitCode: 0,
       restartCount: 2,
-      labels: { 'nimblescape.devspace.id': 'e1' },
-      image: 'devspace-acme-api-brave-noether:1',
+      labels: { 'nimblescape.devspaces.id': 'e1' },
+      image: 'devspaces-acme-api-brave-noether:1',
       imageId: INSPECT.Image,
-      volumes: ['devspace-acme-api-brave-noether'],
+      volumes: ['devspaces-acme-api-brave-noether'],
       created: '2026-10-03T19:00:00.000Z',
     });
-    expect(calls[0]).toMatchObject({ method: 'GET', url: '/containers/devspace-acme-api-brave-noether/json' });
+    expect(calls[0]).toMatchObject({ method: 'GET', url: '/containers/devspaces-acme-api-brave-noether/json' });
     expect(await engine.container('missing')).toBeUndefined();
   });
 
@@ -182,10 +182,10 @@ describe('the port of the engine over the Engine API', () => {
           ? { status: 404, json: { message: 'No such container' } }
           : { status: 200, json: INSPECT },
     );
-    const found = await engine.containers('nimblescape.devspace.id=e1');
+    const found = await engine.containers('nimblescape.devspaces.id=e1');
     expect(found).toHaveLength(1);
     expect(found[0].id).toBe(INSPECT.Id);
-    expect(decodeURIComponent(calls[0].url)).toBe('/containers/json?all=true&filters={"label":["nimblescape.devspace.id=e1"]}');
+    expect(decodeURIComponent(calls[0].url)).toBe('/containers/json?all=true&filters={"label":["nimblescape.devspaces.id=e1"]}');
   });
 
   it('runs a process in a container: its output by stream, its exit code, and its input on the connection', async () => {
@@ -492,7 +492,7 @@ describe('the port of the engine over the Engine API', () => {
   });
 
   it('rejects a hijack to a socket that does not exist, and one that is cancelled before it starts', async () => {
-    folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-engine-'));
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-engine-'));
     folders.push(folder);
     await expect(engineHijack(path.join(folder, 'missing.sock'))({ path: '/exec/x/start', json: {}, onFrame: () => {} })).rejects.toThrow();
     const { calls } = await serve(execAnswers());
@@ -652,9 +652,9 @@ describe('the port of the engine over the Engine API', () => {
         if (call.url.startsWith('/commit')) return { status: 201, json: { Id: 'sha256:new' } };
         return { status: 204 };
       });
-      expect(await engine.labelImage('registry:5000/devspace-a:2', { add: 'y' })).toBe('sha256:new');
+      expect(await engine.labelImage('registry:5000/devspaces-a:2', { add: 'y' })).toBe('sha256:new');
       const commit = calls.find((call) => call.url.startsWith('/commit'))!;
-      expect(decodeURIComponent(commit.url)).toBe('/commit?container=tmp&repo=registry:5000/devspace-a&tag=2&pause=false');
+      expect(decodeURIComponent(commit.url)).toBe('/commit?container=tmp&repo=registry:5000/devspaces-a&tag=2&pause=false');
       expect(JSON.parse(commit.body)).toEqual({ Cmd: ['node'], Labels: { keep: 'x', add: 'y' }, User: 'dev' });
       // The throwaway container goes with its anonymous volumes (`v=true`).
       expect(calls.at(-1)).toMatchObject({ method: 'DELETE', url: '/containers/tmp?force=true&v=true' });
@@ -687,7 +687,7 @@ describe('the port of the engine over the Engine API', () => {
           requests.push(request);
           return (await route(request)) ?? ok({ message: 'not routed' }, 500);
         };
-        return { engine: dockerEngine(api, engineHijack(path.join(os.tmpdir(), 'devspace-no-socket'))), requests };
+        return { engine: dockerEngine(api, engineHijack(path.join(os.tmpdir(), 'devspaces-no-socket'))), requests };
       }
       const containerJson = (id: string) => ({ Id: id, Name: `/${id}`, State: { Status: 'running', Running: true }, Config: { Labels: {}, Image: 'img' }, Mounts: [] });
 
@@ -830,7 +830,7 @@ describe('the port of the engine over the Engine API', () => {
             'DELETE /containers/read1',
           ]);
           const [create, read, removal] = requests;
-          expect(create.path).toMatch(/^\/containers\/create\?name=devspace-read-[0-9a-f]{12}$/);
+          expect(create.path).toMatch(/^\/containers\/create\?name=devspaces-read-[0-9a-f]{12}$/);
           expect(create.json).toEqual({ Image: 'img:1', Cmd: ['true'], Entrypoint: [], Labels: {} });
           expect(read.path).toBe('/containers/read1/archive?path=%2Fetc%2Fpasswd');
           expect(read.latin1).toBe(true);
@@ -944,26 +944,26 @@ describe('the port of the engine over the Engine API', () => {
         it('reads the file of the container through the archive endpoint as Latin-1 and gives its bytes; nothing else is asked', async () => {
           const { engine, requests } = fake(() => archive(tarOf('monitor.js', SCRIPT)));
           const signal = new AbortController().signal;
-          expect(await engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024, signal)).toEqual(SCRIPT);
+          expect(await engine.containerFile('devspaces-monitor', '/opt/devspace/monitor.js', 1024, signal)).toEqual(SCRIPT);
           expect(requests).toHaveLength(1);
-          expect(requests[0]).toMatchObject({ method: 'GET', path: '/containers/devspace-monitor/archive?path=%2Fopt%2Fdevspace%2Fmonitor.js', latin1: true, signal });
+          expect(requests[0]).toMatchObject({ method: 'GET', path: '/containers/devspaces-monitor/archive?path=%2Fopt%2Fdevspace%2Fmonitor.js', latin1: true, signal });
           // The answer is bounded to the archive of a file of the bound, not to the default bound of an answer.
           expect(requests[0].maxCharacters).toBe(maxTarFileArchiveBytes(1024));
           const large = fake(() => archive(tarOf('monitor.js', SCRIPT)));
-          await large.engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 8 * 1024 * 1024);
+          await large.engine.containerFile('devspaces-monitor', '/opt/devspace/monitor.js', 8 * 1024 * 1024);
           expect(large.requests[0].maxCharacters).toBeGreaterThan(8 * 1024 * 1024);
         });
 
         it('missing: only a 404 with the message of a missing container or file', async () => {
-          for (const message of ['No such container: devspace-monitor', 'no container with name or ID "devspace-monitor" found: no such container', 'Could not find the file /opt/devspace/monitor.js in container devspace-monitor', 'lstat /var/lib/docker/overlay2/x/merged/opt/devspace/monitor.js: no such file or directory', 'stat /opt/devspace/monitor.js: no such file or directory', 'Could not find the file /opt/devspace/monitor.js in container devspace-monitor.\n', 'No such container: devspace-monitor\n']) {
+          for (const message of ['No such container: devspaces-monitor', 'no container with name or ID "devspaces-monitor" found: no such container', 'Could not find the file /opt/devspace/monitor.js in container devspaces-monitor', 'lstat /var/lib/docker/overlay2/x/merged/opt/devspace/monitor.js: no such file or directory', 'stat /opt/devspace/monitor.js: no such file or directory', 'Could not find the file /opt/devspace/monitor.js in container devspaces-monitor.\n', 'No such container: devspaces-monitor\n']) {
             const { engine } = fake(() => ok({ message }, 404));
-            expect(await engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024), message).toBe('missing');
+            expect(await engine.containerFile('devspaces-monitor', '/opt/devspace/monitor.js', 1024), message).toBe('missing');
           }
           // A 404 of something on the way (an old API version, a proxy), or one that only quotes an inner error, is no
           // evidence.
           for (const message of ['page not found', 'error mounting "/var/lib/docker/volumes/x/_data" to rootfs at "/data": no such file or directory', 'no such container in the cache: retry']) {
             const elsewhere = fake(() => ok({ message }, 404));
-            await expect(elsewhere.engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024), message).rejects.toMatchObject({ status: 404, message });
+            await expect(elsewhere.engine.containerFile('devspaces-monitor', '/opt/devspace/monitor.js', 1024), message).rejects.toMatchObject({ status: 404, message });
           }
         });
 
@@ -979,11 +979,11 @@ describe('the port of the engine over the Engine API', () => {
           ];
           for (const [index, answer] of cases.entries()) {
             const { engine } = fake(() => answer);
-            expect(await engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024), `case ${index}`).toBeUndefined();
+            expect(await engine.containerFile('devspaces-monitor', '/opt/devspace/monitor.js', 1024), `case ${index}`).toBeUndefined();
           }
           // A file of exactly the bound is read.
           const bound = Buffer.alloc(1024, 0x61);
-          expect(await fake(() => archive(tarOf('monitor.js', bound))).engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024)).toEqual(bound);
+          expect(await fake(() => archive(tarOf('monitor.js', bound))).engine.containerFile('devspaces-monitor', '/opt/devspace/monitor.js', 1024)).toEqual(bound);
         });
 
         it('fails for other answers and for a transport error; a path that is no absolute path of a file is refused before any request', async () => {
@@ -1021,10 +1021,10 @@ describe('the port of the engine over the Engine API', () => {
         if (request.path.startsWith('/commit')) return { status: 201, body: JSON.stringify({ Id: 'sha256:new' }), truncated: false };
         return { status: 204, body: '', truncated: false };
       };
-      const engine = dockerEngine(fakeApi, engineHijack(path.join(os.tmpdir(), 'devspace-no-socket')));
+      const engine = dockerEngine(fakeApi, engineHijack(path.join(os.tmpdir(), 'devspaces-no-socket')));
       expect(await engine.labelImage('img:1', { a: 'b' })).toBe('sha256:new');
       const create = requests.find((request) => request.path.startsWith('/containers/create'))!;
-      expect(create.path).toMatch(/^\/containers\/create\?name=devspace-label-[0-9a-f]{12}$/);
+      expect(create.path).toMatch(/^\/containers\/create\?name=devspaces-label-[0-9a-f]{12}$/);
       // The create has a time limit, never the cancel signal of the operation.
       expect(create.signal).toBeDefined();
       const removal = requests.at(-1)!;
@@ -1042,7 +1042,7 @@ describe('the port of the engine over the Engine API', () => {
         requests.push({ method: request.method, path: request.path, signal: request.signal });
         if (request.path.startsWith('/containers/create')) throw new Error('socket hang up');
         return fakeApi(request);
-      }, engineHijack(path.join(os.tmpdir(), 'devspace-no-socket')));
+      }, engineHijack(path.join(os.tmpdir(), 'devspaces-no-socket')));
       requests.length = 0;
       await expect(broken.labelImage('img:1', {})).rejects.toThrow('socket hang up');
       const brokenName = requests.find((request) => request.path.startsWith('/containers/create'))!.path.split('name=')[1];

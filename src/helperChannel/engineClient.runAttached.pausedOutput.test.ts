@@ -11,7 +11,7 @@ import { dockerEngine } from './engineClient';
 
 const SESSION = '0a1b2c3d4e5f60718293a4b5';
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
-const SPEC = batchRunSpec({ session: SESSION, volume: 'devspace-v', image: `sha256:${'a'.repeat(64)}`, socket: '/run/docker.sock', scriptHash: 'f'.repeat(64) });
+const SPEC = batchRunSpec({ session: SESSION, volume: 'devspaces-v', image: `sha256:${'a'.repeat(64)}`, socket: '/run/docker.sock', scriptHash: 'f'.repeat(64) });
 
 describe('the attached run with a paused output', () => {
   it('resumes the output when the process ended, so its last output comes at once', async () => {

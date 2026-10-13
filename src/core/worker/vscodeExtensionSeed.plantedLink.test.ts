@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe('the seed never writes through a link planted at the name', () => {
   it('a link to a folder planted between the check and ln: the hard link is not made inside that folder', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ext-seed-r1-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ext-seed-r1-'));
     temps.push(root);
     const store = path.join(root, 'store');
     const home = path.join(root, 'home');

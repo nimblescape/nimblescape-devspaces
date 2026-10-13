@@ -42,7 +42,7 @@ describe.runIf(gnuTools)('the two passes that give the files of the Git user to 
   // place of 0:0, so every entry still belongs to that user after the first pass and the second pass reaches the link
   // too; what chown reached shows in the change time of the inodes, which chown sets also when the owner stays the same.
   it('changes the link itself in the second pass, never the file outside that it points to (kills the mutant: the second pass without -h)', () => {
-    const base = tempDir('devspace-11igr2-links-');
+    const base = tempDir('devspaces-11igr2-links-');
     const ws = path.join(base, 'workspaces');
     const outside = path.join(base, 'outside');
     const bin = path.join(base, 'bin');
@@ -77,7 +77,7 @@ describe.runIf(gnuTools)('the two passes that give the files of the Git user to 
   // user below a folder of another user keeps the files of others in it (the first pass changes only what belongs to the
   // Git user, `--from`).
   it.runIf(process.getuid?.() === 0)('as root: the second pass gives a folder of the Git user below another folder to root, not the files of other users in it (kills the mutant: the second pass with chown -R)', () => {
-    const base = tempDir('devspace-11igr2-root-');
+    const base = tempDir('devspaces-11igr2-root-');
     const ws = path.join(base, 'workspaces');
     const sub = path.join(ws, 'repo', 'sub');
     fs.mkdirSync(sub, { recursive: true });

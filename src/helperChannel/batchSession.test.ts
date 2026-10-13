@@ -203,7 +203,7 @@ describe('the start of the batch helper of a flow when it fails', () => {
     return { ctx, engine, calls, logs, kills, specs, controller, order, progress };
   }
   const deps = (engine: DockerEngine) => ({ engineOf: () => engine, readScript: () => 'script', openTimeoutMs: 100 });
-  const target = { volume: 'devspace-v', image: `sha256:${'b'.repeat(64)}`, socket: '/var/run/docker.sock' };
+  const target = { volume: 'devspaces-v', image: `sha256:${'b'.repeat(64)}`, socket: '/var/run/docker.sock' };
 
   it('a helper that never answers is ended and removed by its label, and the start fails', async () => {
     const { ctx, engine, calls, kills, specs } = context();
@@ -212,7 +212,7 @@ describe('the start of the batch helper of a flow when it fails', () => {
     expect(kills).toContain('kill');
     expect(calls.map((call) => call[0])).toEqual(['inspect', 'runAttached', 'containerIds', 'removeContainer']);
     expect(calls[0]).toEqual(['inspect', 'volume', target.volume]);
-    expect(calls[2]).toEqual(['containerIds', `nimblescape.devspace.channel-step=${specs[0].labels['nimblescape.devspace.channel-step']}`]);
+    expect(calls[2]).toEqual(['containerIds', `nimblescape.devspaces.channel-step=${specs[0].labels['nimblescape.devspaces.channel-step']}`]);
     expect(calls[3]).toEqual(['removeContainer', 'f'.repeat(64)]);
     // The helper runs from the image and with the socket of the request; the removal waits for the end of its call.
     expect(specs[0].image).toBe(target.image);
@@ -256,7 +256,7 @@ describe('the start of the batch helper of a flow when it fails', () => {
     await expect(workerBatchSession(deps(missing.engine), missing.ctx, target)).rejects.toMatchObject({ code: 'missingVolume' });
     expect(missing.calls.map((call) => call[0])).toEqual(['inspect']);
     const renamed = context();
-    renamed.engine.inspect = async () => ({ Name: 'devspace-other' });
+    renamed.engine.inspect = async () => ({ Name: 'devspaces-other' });
     await expect(workerBatchSession(deps(renamed.engine), renamed.ctx, target)).rejects.toMatchObject({ code: 'missingVolume' });
     expect(renamed.calls).toEqual([]);
     const broken = context();

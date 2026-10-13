@@ -32,9 +32,9 @@ describe('the Docker of the pipeline over the Engine API', () => {
   const apiDocker = new EngineDocker(dockerEngine(engineApi(socket), engineHijack(socket)), log);
   const id = newDevspaceId();
   const tag = crypto.randomBytes(4).toString('hex');
-  const name = `devspace-test-engine-${tag}`;
-  const image = `devspace-test-engine-${tag}:1`;
-  const withVolume = `devspace-test-engine-${tag}:volume`;
+  const name = `devspaces-test-engine-${tag}`;
+  const image = `devspaces-test-engine-${tag}:1`;
+  const withVolume = `devspaces-test-engine-${tag}:volume`;
 
   beforeAll(() => {
     cli.ok(['volume', 'create', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`, name]);
@@ -80,26 +80,26 @@ describe('the Docker of the pipeline over the Engine API', () => {
     expect(byId(await apiDocker.devspaceContainers(id))).toEqual(byId(listed.map((listedId) => cliListed(listedId)!)));
     expect(await apiDocker.containerState(`${name}-db-1`)).toBe(mapContainerState(cli.container(`${name}-db-1`)!.State.Status));
     expect(await apiDocker.containerState(`${name}-db-1`)).toBe('stopped');
-    expect(await apiDocker.containerState('devspace-test-missing')).toBe('missing');
-    expect(await apiDocker.inspectVolumes([name, 'devspace-test-missing'])).toEqual([toVolumeInfo(cli.volume(name))]);
-    expect([await apiDocker.volumeExists(name), await apiDocker.volumeExists('devspace-test-missing')]).toEqual([true, false]);
+    expect(await apiDocker.containerState('devspaces-test-missing')).toBe('missing');
+    expect(await apiDocker.inspectVolumes([name, 'devspaces-test-missing'])).toEqual([toVolumeInfo(cli.volume(name))]);
+    expect([await apiDocker.volumeExists(name), await apiDocker.volumeExists('devspaces-test-missing')]).toEqual([true, false]);
     const details = cli.image(image)!;
     expect(await apiDocker.imageId(image)).toBe(details.Id);
     expect(await apiDocker.imageNames(image)).toEqual({ repoTags: details.RepoTags ?? [], repoDigests: details.RepoDigests ?? [] });
     expect(await apiDocker.imageLabels(image)).toEqual(toLabels(details.Config.Labels));
     expect(await apiDocker.imageConfig(image)).toEqual(JSON.parse(cli.ok(['image', 'inspect', '--format', '{{json .Config}}', image])));
     // The tags of exactly this repository, sorted by tag, numbers numerically (as listImageTags sorts them).
-    const repository = `devspace-test-engine-${tag}`;
+    const repository = `devspaces-test-engine-${tag}`;
     const tags = cli
       .lines(['image', 'ls', '--format', '{{.Repository}}:{{.Tag}}', repository])
       .filter((reference) => reference.startsWith(`${repository}:`) && !reference.endsWith(':<none>'))
       .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
     expect(tags).toContain(image);
     expect(await apiDocker.listImageTags(repository)).toEqual([...new Set(tags)]);
-    const references = [image, 'devspace-test-missing:1', 'Not A Reference'];
+    const references = [image, 'devspaces-test-missing:1', 'Not A Reference'];
     // As the Docker CLI answers about each reference: a missing image is left out; a reference that the CLI refuses as such
     // (an invalid reference) is `invalid`.
-    expect(cli.run(['image', 'inspect', 'devspace-test-missing:1']).err).toMatch(/no such image/i);
+    expect(cli.run(['image', 'inspect', 'devspaces-test-missing:1']).err).toMatch(/no such image/i);
     const refused = cli.run(['image', 'inspect', 'Not A Reference']);
     expect(refused.code).not.toBe(0);
     // The engine refuses it as a reference (400, both image stores), so it is always `invalid` (a missing image is the
@@ -116,10 +116,10 @@ describe('the Docker of the pipeline over the Engine API', () => {
 
   it('labels an image without a build: the labels are there, the configuration is kept, the image runs', async () => {
     const before = cli.image(image)!;
-    await apiDocker.labelImage(image, { [LABEL_DEVSPACE_ID]: id, 'nimblescape.devspace.test': 'yes' });
+    await apiDocker.labelImage(image, { [LABEL_DEVSPACE_ID]: id, 'nimblescape.devspaces.test': 'yes' });
     const after = cli.image(image)!;
     expect(after.Id).not.toBe(before.Id);
-    expect(after.Config.Labels).toMatchObject({ [LABEL_DEVSPACE_ID]: id, 'nimblescape.devspace.test': 'yes' });
+    expect(after.Config.Labels).toMatchObject({ [LABEL_DEVSPACE_ID]: id, 'nimblescape.devspaces.test': 'yes' });
     expect(cli.ok(['run', '--rm', '--network', 'none', image, 'echo', 'labelled'])).toBe('labelled');
     // No container of the commit is left.
     expect(cli.lines(['ps', '-a', '--filter', `ancestor=${image}`, '--format', '{{.ID}}'])).toEqual([]);
@@ -134,16 +134,16 @@ describe('the Docker of the pipeline over the Engine API', () => {
     expect(await apiDocker.imageUserIds(TEST_BASE_IMAGE, 'root')).toEqual({ uid: '0', gid: '0' });
     expect(await apiDocker.imageUserIds(TEST_BASE_IMAGE, '0')).toEqual({ uid: '0', gid: '0' });
     expect(await apiDocker.imageUserIds(TEST_BASE_IMAGE, 'nobody')).toEqual({ uid, gid });
-    expect(await apiDocker.imageUserIds(TEST_BASE_IMAGE, 'devspace-no-such-user')).toBeUndefined();
+    expect(await apiDocker.imageUserIds(TEST_BASE_IMAGE, 'devspaces-no-such-user')).toBeUndefined();
     // A path that does not exist is unknown, not a failure; a missing image is a failure.
     const engine = dockerEngine(engineApi(socket), engineHijack(socket));
     expect(await engine.imageFile(TEST_BASE_IMAGE, '/etc/devspace-missing')).toBeUndefined();
     // A folder is no regular file (any base image has /etc).
     expect(await engine.imageFile(TEST_BASE_IMAGE, '/etc')).toBeUndefined();
-    await expect(apiDocker.imageUserIds('devspace-test-missing:1', 'root')).rejects.toThrow();
+    await expect(apiDocker.imageUserIds('devspaces-test-missing:1', 'root')).rejects.toThrow();
     // No container of the reads is left.
     expect(cli.lines(['ps', '-aq', '--no-trunc']).filter((id) => !containersBefore.has(id))).toEqual([]);
-    expect(cli.lines(['ps', '-aq', '--filter', 'name=devspace-read-'])).toEqual([]);
+    expect(cli.lines(['ps', '-aq', '--filter', 'name=devspaces-read-'])).toEqual([]);
   });
 
   it('leaves no anonymous volume of an image with `VOLUME` behind', async () => {
@@ -154,7 +154,7 @@ describe('the Docker of the pipeline over the Engine API', () => {
     const before = anonymous();
     // The read of /etc/passwd (its container is created from the image).
     expect(await apiDocker.imageUserIds(withVolume, 'root')).toEqual({ uid: '0', gid: '0' });
-    await apiDocker.labelImage(withVolume, { 'nimblescape.devspace.test': 'yes' });
+    await apiDocker.labelImage(withVolume, { 'nimblescape.devspaces.test': 'yes' });
     expect([...anonymous()].filter((volume) => !before.has(volume))).toEqual([]);
   });
 
@@ -211,9 +211,9 @@ describe('the Docker of the pipeline over the Engine API', () => {
     expect(identity.id).not.toBe('');
     expect(identity).toEqual(engineIdentity(cli.ok([...ENGINE_IDENTITY_ARGS])));
     // A label of this test alone, so that no prune here reaches another container of the run or of the user.
-    const pruneLabel = `devspace-test.prune=${tag}`;
+    const pruneLabel = `devspaces-test.prune=${tag}`;
     // A label key that `label!` names, as the sweep names the label of the Monitor (SWEEP_FILTERS).
-    const guardKey = `devspace-test.guard-${tag}`;
+    const guardKey = `devspaces-test.guard-${tag}`;
     const stopped = cli.ok(['create', '--name', `${name}-prune-stopped`, '--label', runLabel, '--label', pruneLabel, TEST_BASE_IMAGE, 'true']);
     const guarded = cli.ok(['create', '--name', `${name}-prune-guarded`, '--label', runLabel, '--label', pruneLabel, '--label', `${guardKey}=1`, TEST_BASE_IMAGE, 'true']);
     cli.ok(['run', '-d', '--name', `${name}-prune-running`, '--network', 'none', '--init', '--label', runLabel, '--label', pruneLabel, TEST_BASE_IMAGE, 'sleep', '600']);
@@ -278,7 +278,7 @@ describe('the Docker of the pipeline over the Engine API', () => {
         expect([...commitsInProcesses(processes!)], key).toEqual([commit]);
       }
       expect(await engine.processes(ids.stopped, AbortSignal.timeout(60_000))).toBeUndefined();
-      expect(await engine.processes('devspace-test-missing', AbortSignal.timeout(60_000))).toBeUndefined();
+      expect(await engine.processes('devspaces-test-missing', AbortSignal.timeout(60_000))).toBeUndefined();
     } finally {
       cli.run(['rm', '-f', names.running, names.paused, names.stopped]);
       cli.run(['volume', 'rm', volume]);
@@ -292,11 +292,11 @@ describe('the Docker of the pipeline over the Engine API', () => {
   it('stops, renames and removes as the Docker CLI does; a missing container is no failure', async () => {
     await apiDocker.stopContainer(name);
     expect(cli.container(name)?.State.Running).toBe(false);
-    await apiDocker.stopContainer('devspace-test-missing');
+    await apiDocker.stopContainer('devspaces-test-missing');
     await apiDocker.renameContainer(`${name}-db-1`, `${name}-db-2`);
     expect(cli.container(`${name}-db-2`)).toBeDefined();
     await apiDocker.removeContainer(`${name}-db-2`);
-    await apiDocker.removeContainer('devspace-test-missing');
+    await apiDocker.removeContainer('devspaces-test-missing');
     expect(cli.container(`${name}-db-2`)).toBeUndefined();
     // An image in use is not removed, either way; it is an answer, not a failure.
     cli.ok(['create', '--name', `${name}-user`, '--label', runLabel, image, 'true']);

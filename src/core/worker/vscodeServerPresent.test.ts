@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 function sandbox() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-present-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-present-'));
   temps.push(root);
   const home = path.join(root, 'home', 'vscode');
   fs.mkdirSync(home, { recursive: true });

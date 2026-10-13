@@ -4,10 +4,10 @@
 
 // Entry point of the Monitor of a Docker engine (on every engine, local and remote). Bundled into the worker's
 // script as the module `devspace:monitor-script` (scripts/workerScripts.mjs), which the worker gives the monitor
-// container that it creates. The container devspace-monitor (image: the worker's own helper image by its
+// container that it creates. The container devspaces-monitor (image: the worker's own helper image by its
 // monitor tag, of which the monitor runs only Node.js, `flock` (the lock of the records, and the devspace lock of an
 // automatic stop: stopLock.ts over src/core/helperChannel/lockFile.ts) and `timeout` (the run limit under the lock of
-// the records); the Docker socket of its engine at /var/run/docker.sock; the volume devspace-monitor at /state)
+// the records); the Docker socket of its engine at /var/run/docker.sock; the volume devspaces-monitor at /state)
 // runs the pipe loader (src/core/loader/pipeLoader.ts): at the first start it gets the script over its standard input,
 // stores it at /opt/devspace/monitor.js and calls startMonitor (`run`); after a restart it starts the stored file
 // again. The workers run the other subcommands in it as `node /opt/devspace/monitor.js …` (an exec over the Engine API
@@ -33,13 +33,13 @@
 // It uses Node.js built-ins, small pure modules of src/core, and the worker's client of the Engine API (engine.ts:
 // src/helperChannel/engineClient.ts over engineApi.ts): it talks to its engine over that socket, never through a Docker
 // CLI. Every argument and every file it reads is checked (protocol.ts); it never acts on a container without the label
-// nimblescape.devspace.id, and it removes nothing but its own files (records, leftover temporary files of
+// nimblescape.devspaces.id, and it removes nothing but its own files (records, leftover temporary files of
 // the volume) and, with image maintenance, the images of the repositories it manages that no rule keeps (those of the
 // image references in use); and, in the shared VS Code server store that it mounts at /vscode, the server versions and
 // the temporary folders that its cleanup names (background.ts); and the prepared images of devspaces without a
 // volume, and the worker scripts of other versions in its volume (prepares.ts). Its background run prepares the next
 // devspace image of each devspace of the engine by the worker's own script, run as a child process in its
-// container (prepares.ts). The log goes to stdout (`docker logs devspace-monitor`), one line per event.
+// container (prepares.ts). The log goes to stdout (`docker logs devspaces-monitor`), one line per event.
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -322,7 +322,7 @@ export class RemoteMonitorLoop {
   private busyLogged = new Set<string>();
   private lockFailedLogged = new Set<string>();
   /**
-   * The monotonic time at which a container with the label nimblescape.devspace.id was last seen running
+   * The monotonic time at which a container with the label nimblescape.devspaces.id was last seen running
    * (or Docker did not answer, which is not known to be idle); the start of the loop at first. Also when the decision
    * of a tick was `active` (a fresh record; only that, not a `created` labelled container or a keep of a devspace
    * whose container has not ended).
@@ -343,7 +343,7 @@ export class RemoteMonitorLoop {
   }
 
   /**
-   * How long (ms) no container with the label nimblescape.devspace.id ran, as the finished ticks saw it. A
+   * How long (ms) no container with the label nimblescape.devspaces.id ran, as the finished ticks saw it. A
    * kept devspace that runs counts as running. Nor was a tick `active` (decide).
    */
   idleMs(): number {
@@ -552,7 +552,7 @@ export function timingFromEnv(env: NodeJS.ProcessEnv): { tickMs: number; timing:
 
 /**
  * The monitor exits (code 0, so the restart policy `on-failure` leaves it exited) after this time without a running
- * container with the label nimblescape.devspace.id, when it maintains no images. Nor a fresh record
+ * container with the label nimblescape.devspaces.id, when it maintains no images. Nor a fresh record
  * (RemoteDecision.active), so an open whose clone and build take longer than this keeps it (its window sends heartbeats
  * for its busy mark). A `created` container or a keep without a running container does not keep it. The next open
  * ensures it again (`docker start`), and again right after its container started; the heartbeats of a window start it

@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The commands of the Monitor container of the worker's engine (`monitor.js` in `devspace-monitor`),
+// The commands of the Monitor container of the worker's engine (`monitor.js` in `devspaces-monitor`),
 // over the Engine API (`exec`); every remote action is a worker operation: the heartbeat, its image settings and image
 // list (on the input of the command), and Delete's `forget`. Pure over the port; no `vscode`. Each command is an entry
 // of the registry of the container scripts (monitorHeartbeat, monitorForget, monitorSettings, monitorImages in

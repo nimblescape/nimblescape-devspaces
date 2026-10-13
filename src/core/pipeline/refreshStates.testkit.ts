@@ -20,7 +20,7 @@ export const ENV_GIT_FAILS = '66666666-6666-4666-8666-666666666666';
 const ENV_UNKNOWN = '77777777-7777-4777-8777-777777777777';
 
 function env(id: string, name: string, branch: boolean, user?: string): StateDevspace {
-  const value: StateDevspace = { id, containerName: `devspace-${name}`, volumeName: `devspace-${name}-vol`, folder: `/workspaces/${name}`, branch };
+  const value: StateDevspace = { id, containerName: `devspaces-${name}`, volumeName: `devspaces-${name}-vol`, folder: `/workspaces/${name}`, branch };
   if (user !== undefined) value.user = user;
   return value;
 }
@@ -60,14 +60,14 @@ interface Container {
 }
 
 const CONTAINERS: Container[] = [
-  { id: 'a'.repeat(64), name: 'devspace-api', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_API } },
-  { id: 'b'.repeat(64), name: 'devspace-api-db-1', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_API, [LABEL_COMPOSE_SERVICE]: 'db' } },
-  { id: 'c'.repeat(64), name: 'devspace-web', status: 'exited', labels: { [LABEL_DEVSPACE_ID]: ENV_WEB } },
-  { id: 'd'.repeat(64), name: 'devspace-web-db-1', status: 'exited', labels: { [LABEL_DEVSPACE_ID]: ENV_WEB, [LABEL_COMPOSE_SERVICE]: 'db' } },
-  { id: 'e'.repeat(64), name: 'devspace-ops', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_OPS } },
-  { id: 'f'.repeat(64), name: 'devspace-detached', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_DETACHED } },
-  { id: '1'.repeat(64), name: 'devspace-git-fails', status: 'paused', labels: { [LABEL_DEVSPACE_ID]: ENV_GIT_FAILS } },
-  { id: '2'.repeat(64), name: 'devspace-unknown', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_UNKNOWN } },
+  { id: 'a'.repeat(64), name: 'devspaces-api', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_API } },
+  { id: 'b'.repeat(64), name: 'devspaces-api-db-1', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_API, [LABEL_COMPOSE_SERVICE]: 'db' } },
+  { id: 'c'.repeat(64), name: 'devspaces-web', status: 'exited', labels: { [LABEL_DEVSPACE_ID]: ENV_WEB } },
+  { id: 'd'.repeat(64), name: 'devspaces-web-db-1', status: 'exited', labels: { [LABEL_DEVSPACE_ID]: ENV_WEB, [LABEL_COMPOSE_SERVICE]: 'db' } },
+  { id: 'e'.repeat(64), name: 'devspaces-ops', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_OPS } },
+  { id: 'f'.repeat(64), name: 'devspaces-detached', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_DETACHED } },
+  { id: '1'.repeat(64), name: 'devspaces-git-fails', status: 'paused', labels: { [LABEL_DEVSPACE_ID]: ENV_GIT_FAILS } },
+  { id: '2'.repeat(64), name: 'devspaces-unknown', status: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV_UNKNOWN } },
 ];
 
 /** The ID of the container of the fixture with the name `name`, if there is one. */
@@ -76,13 +76,13 @@ export function fixtureContainerId(name: string): string | undefined {
 }
 
 const LABELLED_VOLUMES: Record<string, Record<string, string>> = {
-  'devspace-api-vol': { [LABEL_DEVSPACE_ID]: ENV_API },
-  'devspace-ops-vol': { [LABEL_DEVSPACE_ID]: ENV_OPS },
-  'devspace-detached-vol': { [LABEL_DEVSPACE_ID]: ENV_DETACHED },
-  'devspace-git-fails-vol': { [LABEL_DEVSPACE_ID]: ENV_GIT_FAILS },
+  'devspaces-api-vol': { [LABEL_DEVSPACE_ID]: ENV_API },
+  'devspaces-ops-vol': { [LABEL_DEVSPACE_ID]: ENV_OPS },
+  'devspaces-detached-vol': { [LABEL_DEVSPACE_ID]: ENV_DETACHED },
+  'devspaces-git-fails-vol': { [LABEL_DEVSPACE_ID]: ENV_GIT_FAILS },
 };
 /** A volume without the labels, created outside of the extension. */
-const UNLABELLED_VOLUMES = new Set(['devspace-web-vol']);
+const UNLABELLED_VOLUMES = new Set(['devspaces-web-vol']);
 
 interface FixtureAnswer {
   exitCode: number;
@@ -104,11 +104,11 @@ function execAnswer(reference: string, user: string | undefined, command: readon
   if (command.length !== branchRead.length || command.some((arg, index) => arg !== branchRead[index])) {
     return { exitCode: 125, stdout: '', stderr: 'unexpected exec' };
   }
-  if (container === 'devspace-api') {
+  if (container === 'devspaces-api') {
     return user === 'node' && folder === '/workspaces/api' ? ok('feature/x\n') : { exitCode: 125, stdout: '', stderr: 'wrong user' };
   }
-  if (container === 'devspace-detached') return ok('\n');
-  if (container === 'devspace-git-fails') return { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository\n' };
+  if (container === 'devspaces-detached') return ok('\n');
+  if (container === 'devspaces-git-fails') return { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository\n' };
   return { exitCode: 125, stdout: '', stderr: `unexpected exec in ${container}` };
 }
 

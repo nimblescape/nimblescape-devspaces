@@ -1129,8 +1129,8 @@ const readDockerfile = (file) => {
 const main = () => {
   const version = compose(['version', '--short']);
   if (version.status !== 0) return failure(version, 'docker compose version');
-  const probeFolder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-compose-probe-'));
-  const probe = compose(['--project-directory', probeFolder, '-p', 'devspace-probe', '-f', '-', 'config', '--format', 'json'], {
+  const probeFolder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-compose-probe-'));
+  const probe = compose(['--project-directory', probeFolder, '-p', 'devspaces-probe', '-f', '-', 'config', '--format', 'json'], {
     cwd: probeFolder,
     input: 'services:\n  probe:\n    image: probe\n    environment:\n      V: "a$$b"\n',
   });

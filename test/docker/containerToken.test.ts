@@ -39,7 +39,7 @@ describe('the token in the memory of a real container', () => {
 
   /** A running container of the base image with the tmpfs of the token and `args`, as the override configuration starts it. */
   function start(args: string[]): string {
-    const name = `devspace-test-token-${crypto.randomBytes(4).toString('hex')}`;
+    const name = `devspaces-test-token-${crypto.randomBytes(4).toString('hex')}`;
     created.containers.push(name);
     devspaceOf.set(name, newDevspaceId());
     cli.ok([
@@ -64,7 +64,7 @@ describe('the token in the memory of a real container', () => {
   }
 
   function volume(): string {
-    const name = `devspace-test-token-${crypto.randomBytes(4).toString('hex')}`;
+    const name = `devspaces-test-token-${crypto.randomBytes(4).toString('hex')}`;
     created.volumes.push(name);
     cli.ok(['volume', 'create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, name]);
     return name;
@@ -86,7 +86,7 @@ describe('the token in the memory of a real container', () => {
    * of the exec); a failure throws its reason without the token.
    */
   const write = async (container: string): Promise<void> => {
-    const result = await runScript(engine, container, 'tokenWrite', [USER, 'devspace-test'], { user: 'root', timeoutMs: 30_000 });
+    const result = await runScript(engine, container, 'tokenWrite', [USER, 'devspaces-test'], { user: 'root', timeoutMs: 30_000 });
     if (result.exitCode !== 0) throw new Error(tokenRunMessage(result, DUMMY_TOKEN));
   };
   const remove = (container: string) =>

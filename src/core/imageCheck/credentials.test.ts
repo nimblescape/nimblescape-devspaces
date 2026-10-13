@@ -38,7 +38,7 @@ describe('DockerCredentialStore', () => {
   let dockerDir: string;
 
   beforeEach(() => {
-    home = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
     dockerDir = path.join(home, '.docker');
     fs.mkdirSync(dockerDir);
   });
@@ -194,7 +194,7 @@ describe('DockerCredentialStore', () => {
   });
 
   it('reads the folder of DOCKER_CONFIG', async () => {
-    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
     try {
       writeConfig({ auths: { 'ghcr.io': { auth: base64('from:env') } } }, other);
       writeConfig({ auths: { 'ghcr.io': { auth: base64('from:home') } } });

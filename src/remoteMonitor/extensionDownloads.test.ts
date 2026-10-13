@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 function store(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ext-run-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ext-run-'));
   temps.push(root);
   return root;
 }
@@ -250,7 +250,7 @@ describe('the part "extensions" of the background run', () => {
     const f = fake(root);
     const vscode = {
       store: { root, transport: f.deps.transport },
-      storeVolume: 'devspace-vscode',
+      storeVolume: 'devspaces-vscode',
       engine: { architecture: async () => 'x86_64', containerSummaries: async () => [] },
       tryLock: async () => ({ kind: 'busy' }) as StoreLockAttempt,
       ensure: async () => true,
@@ -304,7 +304,7 @@ describe('the cleanup of the extension cache', () => {
     const f = fake(root);
     const vscode = {
       store: { root, transport: f.deps.transport },
-      storeVolume: 'devspace-vscode',
+      storeVolume: 'devspaces-vscode',
       engine: { architecture: async () => 'x86_64', containerSummaries: async () => [] },
       tryLock: async () => ({ kind: 'busy' }) as StoreLockAttempt,
       ensure: async () => true,

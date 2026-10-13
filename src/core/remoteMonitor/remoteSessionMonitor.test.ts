@@ -35,7 +35,7 @@ import {
 import { parseDockerTime, type MonitorEngine } from './monitorEngine';
 
 const SCRIPT = 'console.log("monitor")';
-const TAG = 'devspace-helper:0123456789ab';
+const TAG = 'devspaces-helper:0123456789ab';
 const SOCKET = '/var/run/docker.sock';
 const LABEL = remoteMonitorLabelValue(SCRIPT, TAG);
 
@@ -71,7 +71,7 @@ const SAME: ArchiveAnswer = Buffer.from(SCRIPT);
 /** The read of the stored script past its time limit (engineMonitor). */
 const TIMED_OUT = new Error('no answer in time');
 /** The engine's refusal of the name of the create (status 409, its message as the engine client gives it). */
-const CONFLICT = 'Conflict. The container name "/devspace-monitor" is already in use by container "abc". You have to remove (or rename) that container to be able to reuse that name.';
+const CONFLICT = 'Conflict. The container name "/devspaces-monitor" is already in use by container "abc". You have to remove (or rename) that container to be able to reuse that name.';
 /** The removal of the container is already in progress (another window). */
 const inProgress = () => Promise.reject(new EngineError(`removal of container ${MONITOR_ID} is already in progress`, 409));
 
@@ -216,7 +216,7 @@ describe('RemoteSessionMonitor.ensure', () => {
     expect(docker.commands()).toEqual(['inspect']);
     // The inspect of the container by its name, whose answer engineMonitor reads for the status, the exit code, the
     // labels, the restart count, the ID and the creation time (monitorInspected).
-    expect(docker.calls[0].args).toEqual(['inspect', 'devspace-monitor']);
+    expect(docker.calls[0].args).toEqual(['inspect', 'devspaces-monitor']);
   });
 
   it('starts the container of this version when it is stopped', async () => {
@@ -226,9 +226,9 @@ describe('RemoteSessionMonitor.ensure', () => {
     expect(docker.calls.map((call) => call.args)).toEqual([
       expect.anything(),
       ['start', MONITOR_ID],
-      ['archive', 'devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH],
+      ['archive', 'devspaces-monitor', REMOTE_MONITOR_SCRIPT_PATH],
       // The check that fails is followed by an inspect by the same ID (exited with 0 again: no evidence, kept).
-      ['inspect', 'devspace-monitor'],
+      ['inspect', 'devspaces-monitor'],
     ]);
   });
 
@@ -267,7 +267,7 @@ describe('RemoteSessionMonitor.ensure', () => {
     // The conflict is checked by the nonce.
     expect(docker.commands()).toEqual(['inspect', 'archive', 'rm', 'run', 'ps', 'inspect']);
     expect(docker.calls[2].args).toEqual(['rm', MONITOR_ID]);
-    expect(docker.calls.some((call) => call.args[0] === 'rm' && call.args.includes('devspace-monitor'))).toBe(false);
+    expect(docker.calls.some((call) => call.args[0] === 'rm' && call.args.includes('devspaces-monitor'))).toBe(false);
   });
 
   it('runs the helper image of the open by its checked image ID, with the label and the log line of its tag', async () => {
@@ -284,7 +284,7 @@ describe('RemoteSessionMonitor.ensure', () => {
     expect(createIdOf(byId)).not.toBe(createIdOf(tagged));
     expect(byId.labels[LABEL_MONITOR]).toBe(LABEL);
     expect(JSON.stringify(byId)).not.toContain(TAG);
-    expect(logger.lines).toContain(`info The Monitor on the Docker host was created (devspace-monitor, image ${TAG}).`);
+    expect(logger.lines).toContain(`info The Monitor on the Docker host was created (devspaces-monitor, image ${TAG}).`);
   });
 
   it('replaces a container of the name without the label', async () => {
@@ -303,7 +303,7 @@ describe('RemoteSessionMonitor.ensure', () => {
     // The spec of the attached create of the engine, which sets the open input, the dropped capabilities, no new
     // privileges and never a pull itself (engineClient.attached.test.ts).
     expect(spec).toEqual({
-      name: 'devspace-monitor',
+      name: 'devspaces-monitor',
       image: TAG,
       // The nonce of this create next to the label of the version.
       labels: { [LABEL_MONITOR]: LABEL, [LABEL_MONITOR_CREATE]: createId },
@@ -313,7 +313,7 @@ describe('RemoteSessionMonitor.ensure', () => {
       network: 'default',
       // The log of the monitor is capped, with the driver named.
       log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
-      mounts: { socket: '/run/user/1000/docker.sock', volume: 'devspace-monitor', volumeTarget: '/state' },
+      mounts: { socket: '/run/user/1000/docker.sock', volume: 'devspaces-monitor', volumeTarget: '/state' },
       env: {},
       // The pipe loader with the path, the hash and the entry; the script is not on the command line.
       command: ['node', '-e', PIPE_LOADER, REMOTE_MONITOR_SCRIPT_PATH, bundleHash(SCRIPT), 'startMonitor'],
@@ -403,15 +403,15 @@ describe('RemoteSessionMonitor.ensure', () => {
       engine: engineMonitor(new FakeDocker(() => undefined).engine),
       logger: new Log(),
       script: async () => SCRIPT,
-      containerName: 'devspace-test-monitor',
-      volumeName: 'devspace-test-monitor-state',
-      labels: { 'devspace-test.run': 'abc' },
+      containerName: 'devspaces-test-monitor',
+      volumeName: 'devspaces-test-monitor-state',
+      labels: { 'devspaces-test.run': 'abc' },
       containerEnv: { DEVSPACE_MONITOR_TICK_MS: '500' },
     });
     const spec = custom.runSpec(TAG, SOCKET, LABEL, SCRIPT);
-    expect(spec.name).toBe('devspace-test-monitor');
-    expect(spec.mounts).toMatchObject({ volume: 'devspace-test-monitor-state', volumeTarget: '/state' });
-    expect(spec.labels['devspace-test.run']).toBe('abc');
+    expect(spec.name).toBe('devspaces-test-monitor');
+    expect(spec.mounts).toMatchObject({ volume: 'devspaces-test-monitor-state', volumeTarget: '/state' });
+    expect(spec.labels['devspaces-test.run']).toBe('abc');
     expect(spec.env).toEqual({ DEVSPACE_MONITOR_TICK_MS: '500' });
   });
 });
@@ -468,7 +468,7 @@ describe('RemoteSessionMonitor.ensure with the pipe loader', () => {
       const docker = new FakeDocker((args) => (args[0] === 'inspect' ? inspected('restarting', LABEL, 1, 1) : args[0] === 'archive' ? answer : undefined));
       expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe(outcome);
       expect(docker.commands()).toEqual(commands);
-      expect(docker.calls[1].args).toEqual(['archive', 'devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH]);
+      expect(docker.calls[1].args).toEqual(['archive', 'devspaces-monitor', REMOTE_MONITOR_SCRIPT_PATH]);
       if (outcome === 'created') expect(docker.calls[2].args).toEqual(['rm', MONITOR_ID]);
       else expect(logger.lines.join('\n')).toContain('is restarting with its script; it is kept');
     });
@@ -585,7 +585,7 @@ describe('RemoteSessionMonitor.ensure with the pipe loader', () => {
 
 // A monitor whose first load was cut off, the removal of a failed create by its nonce, and more edge cases.
 describe('RemoteSessionMonitor.ensure: the stored script and the nonce of a create', () => {
-  const SHA = ['archive', 'devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH];
+  const SHA = ['archive', 'devspaces-monitor', REMOTE_MONITOR_SCRIPT_PATH];
   // Only definite evidence of another or no stored script replaces the monitor: the engine's answer that the file or
   // the container does not exist, or a file of another script.
   const replacing = [
@@ -617,7 +617,7 @@ describe('RemoteSessionMonitor.ensure: the stored script and the nonce of a crea
       expect(docker.calls[1].args).toEqual(SHA);
       // By the ID, never by the name.
       expect(docker.calls[2].args).toEqual(['rm', MONITOR_ID]);
-      expect(logger.lines).toContain('info The Monitor on the Docker host was restarted without its script; it is replaced (devspace-monitor).');
+      expect(logger.lines).toContain('info The Monitor on the Docker host was restarted without its script; it is replaced (devspaces-monitor).');
     });
   }
 
@@ -632,7 +632,7 @@ describe('RemoteSessionMonitor.ensure: the stored script and the nonce of a crea
       expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect']);
       expect(docker.calls[1].args).toEqual(SHA);
       expect(logger.lines).toEqual([
-        'info The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (devspace-monitor).',
+        'info The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (devspaces-monitor).',
       ]);
     });
   }
@@ -655,7 +655,7 @@ describe('RemoteSessionMonitor.ensure: the stored script and the nonce of a crea
       // The inspect by the same ID finds it paused again: no evidence, kept without another check.
       expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect']);
       expect(logger.lines).toEqual([
-        'info The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (devspace-monitor).',
+        'info The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (devspaces-monitor).',
       ]);
     });
   }
@@ -703,12 +703,12 @@ describe('RemoteSessionMonitor.ensure: the stored script and the nonce of a crea
     const createId = createIdOf(docker.spec(1));
     expect(createId).toBeDefined();
     expect(docker.calls.map((call) => call.args)).toEqual([
-      ['inspect', 'devspace-monitor'],
-      ['run', 'devspace-monitor'],
+      ['inspect', 'devspaces-monitor'],
+      ['run', 'devspaces-monitor'],
       ['ps', `${LABEL_MONITOR_CREATE}=${createId}`],
       ['rm', CREATED_ID],
     ]);
-    expect(docker.calls.some((call) => call.args[0] === 'rm' && call.args.includes('devspace-monitor'))).toBe(false);
+    expect(docker.calls.some((call) => call.args[0] === 'rm' && call.args.includes('devspaces-monitor'))).toBe(false);
   });
 
   it('nothing is removed when no container has the nonce, or the list fails; each create has its own nonce', async () => {
@@ -1036,7 +1036,7 @@ describe('RemoteSessionMonitor.ensure: probes of the stored-script check and the
   // The cleanup of a failed create removes only what the list of its nonce gave as a full ID: never a name or another
   // word of the answer.
   it('the cleanup of a failed create removes only full IDs of its list', async () => {
-    const docker = new FakeDocker((args) => (args[0] === 'inspect' ? MISSING : args[0] === 'ps' ? ['devspace-monitor', CREATED_ID.slice(0, 12), CREATED_ID] : undefined), ENDS());
+    const docker = new FakeDocker((args) => (args[0] === 'inspect' ? MISSING : args[0] === 'ps' ? ['devspaces-monitor', CREATED_ID.slice(0, 12), CREATED_ID] : undefined), ENDS());
     expect(await monitor(docker).ensure(TAG, SOCKET)).toBe('failed');
     expect(docker.calls.filter((call) => call.args[0] === 'rm').map((call) => call.args)).toEqual([['rm', CREATED_ID]]);
   });
@@ -1061,7 +1061,7 @@ describe('RemoteSessionMonitor.ensure: created containers, the nonce, and IDs', 
     vi.useRealTimers();
   });
 
-  const SHA = ['archive', 'devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH];
+  const SHA = ['archive', 'devspaces-monitor', REMOTE_MONITOR_SCRIPT_PATH];
   const OTHER_ID = 'beef'.padEnd(64, '2');
   /** `.Created` of the inspected container, as Docker gives it (nanoseconds), and the same in ms. */
   const CREATED_AT = '2026-09-30T10:00:00.123456789Z';
@@ -1217,7 +1217,7 @@ describe('RemoteSessionMonitor.ensure: created containers, the nonce, and IDs', 
     expect(await ensured).toBe('created');
     expect(docker.commands()).toEqual([...allCreatedLooks, 'info', 'rm', 'run']);
     expect(removals(docker).map((call) => call.args)).toEqual([['rm', MONITOR_ID]]);
-    expect(logger.lines).toContain('info The Monitor on the Docker host was created 90 seconds ago and never started; it is replaced (devspace-monitor).');
+    expect(logger.lines).toContain('info The Monitor on the Docker host was created 90 seconds ago and never started; it is replaced (devspaces-monitor).');
   });
 
   it('exactly at the stale age it is kept', async () => {
@@ -1449,7 +1449,7 @@ describe('RemoteSessionMonitor.ensure: created containers, the nonce, and IDs', 
     expect(docker.calls.map((call) => call.args)).toEqual([expect.anything(), ['start', MONITOR_ID], SHA]);
     // The signals of the start and of the check are linked to it.
     expectSignalsFollow([docker.calls[1], docker.calls[2]], controller);
-    expect(logger.lines).toEqual(['info The Monitor on the Docker host was started again (devspace-monitor).']);
+    expect(logger.lines).toEqual(['info The Monitor on the Docker host was started again (devspaces-monitor).']);
   });
 
   for (const [what, answer] of [
@@ -1463,7 +1463,7 @@ describe('RemoteSessionMonitor.ensure: created containers, the nonce, and IDs', 
       expect(docker.commands()).toEqual(['inspect', 'start', 'archive', 'rm', 'run']);
       expect(docker.calls[1].args).toEqual(['start', MONITOR_ID]);
       expect(docker.calls[3].args).toEqual(['rm', MONITOR_ID]);
-      expect(logger.lines).toContain('info The Monitor on the Docker host was started again without its script; it is replaced (devspace-monitor).');
+      expect(logger.lines).toContain('info The Monitor on the Docker host was started again without its script; it is replaced (devspaces-monitor).');
     });
   }
 
@@ -1479,7 +1479,7 @@ describe('RemoteSessionMonitor.ensure: created containers, the nonce, and IDs', 
       // and the same RestartCount: no evidence, kept).
       expect(docker.commands()).toEqual(['inspect', 'start', 'archive', 'inspect']);
       expect(logger.lines).toEqual([
-        'info The Monitor on the Docker host was started again and its stored script could not be checked; it is kept (devspace-monitor).',
+        'info The Monitor on the Docker host was started again and its stored script could not be checked; it is kept (devspaces-monitor).',
       ]);
     });
   }
@@ -1504,7 +1504,7 @@ describe('RemoteSessionMonitor.ensure: created containers, the nonce, and IDs', 
       const docker = new FakeDocker((args) => (args[0] === 'inspect' ? answer : args[0] === 'archive' ? NO_SCRIPT : undefined));
       expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('failed');
       expect(docker.commands()).toEqual(commands);
-      expect(docker.calls.some((call) => call.args.includes('devspace-monitor') && call.args[0] !== 'inspect' && call.args[0] !== 'archive')).toBe(false);
+      expect(docker.calls.some((call) => call.args.includes('devspaces-monitor') && call.args[0] !== 'inspect' && call.args[0] !== 'archive')).toBe(false);
       expect(logger.lines.join('\n')).toContain('the ID of the Monitor container cannot be read; it is kept.');
       expect(logger.lines.some((line) => line.includes('it is replaced'))).toBe(false);
     });
@@ -1794,12 +1794,12 @@ describe('RemoteSessionMonitor.ensure: the waits of a conflict and of a created 
 // evidence (replaced by its ID); anything else → kept, without a second read.
 describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
   const NAME = 'remote monitor restart check';
-  const SHA = ['archive', 'devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH];
+  const SHA = ['archive', 'devspaces-monitor', REMOTE_MONITOR_SCRIPT_PATH];
   /** A check that fails without an answer that counts as evidence (a transport error of the read). */
   const FAILED = new EngineError('error during connect: read: connection reset by peer', 0);
   const OTHER_ID = 'beef'.padEnd(64, '2');
-  const KEPT_LOG = 'info The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (devspace-monitor).';
-  const REPLACED_LOG = 'info The Monitor on the Docker host was restarted without its script; it is replaced (devspace-monitor).';
+  const KEPT_LOG = 'info The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (devspaces-monitor).';
+  const REPLACED_LOG = 'info The Monitor on the Docker host was restarted without its script; it is replaced (devspaces-monitor).';
   /**
    * The answers of inspect and of the checks in order (the last one repeats); any other call succeeds. An Error is the
    * failure of the call; a function is called for its answer.
@@ -1827,7 +1827,7 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
       expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('created');
       expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect', 'rm', 'run']);
       expect(docker.calls[1].args).toEqual(SHA);
-      expect(docker.calls[2].args.at(-1)).toBe('devspace-monitor');
+      expect(docker.calls[2].args.at(-1)).toBe('devspaces-monitor');
       expect(docker.calls[3].args).toEqual(['rm', MONITOR_ID]);
       expect(logger.lines).toContain(REPLACED_LOG);
       expect(logger.lines).not.toContain(KEPT_LOG);
@@ -1921,7 +1921,7 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
       expect(docker.commands()).toEqual(['inspect', 'start', 'archive', 'inspect', 'rm', 'run']);
       expect(docker.calls[1].args).toEqual(['start', MONITOR_ID]);
       expect(docker.calls[4].args).toEqual(['rm', MONITOR_ID]);
-      expect(logger.lines).toContain('info The Monitor on the Docker host was started again without its script; it is replaced (devspace-monitor).');
+      expect(logger.lines).toContain('info The Monitor on the Docker host was started again without its script; it is replaced (devspaces-monitor).');
     });
   }
 
@@ -1938,7 +1938,7 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
     expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('started');
     expect(docker.commands()).toEqual(['inspect', 'start', 'archive', 'inspect']);
     expect(logger.lines).toEqual([
-      'info The Monitor on the Docker host was started again and its stored script could not be checked; it is kept (devspace-monitor).',
+      'info The Monitor on the Docker host was started again and its stored script could not be checked; it is kept (devspaces-monitor).',
     ]);
   });
 
@@ -1961,7 +1961,7 @@ describe('the image ID of a monitor tag', () => {
     const plain = monitor(new FakeDocker(() => undefined));
     expect(plain.runSpec(TAG, SOCKET, LABEL, SCRIPT)).not.toHaveProperty('imageId');
     const id = `sha256:${'b'.repeat(64)}`;
-    expect(plain.runSpec('devspace-monitor:0123456789ab', SOCKET, LABEL, SCRIPT, undefined, 'nonce', id)).toMatchObject({ image: 'devspace-monitor:0123456789ab', imageId: id });
+    expect(plain.runSpec('devspaces-monitor:0123456789ab', SOCKET, LABEL, SCRIPT, undefined, 'nonce', id)).toMatchObject({ image: 'devspaces-monitor:0123456789ab', imageId: id });
     const specs: MonitorRunSpec[] = [];
     const engine: MonitorEngine = {
       inspect: async () => ({ exists: false }),
@@ -1976,10 +1976,10 @@ describe('the image ID of a monitor tag', () => {
       },
     };
     const ensuring = new RemoteSessionMonitor({ engine, logger: new Log(), script: async () => SCRIPT });
-    expect(await ensuring.ensureOrThrow(TAG, SOCKET, undefined, 'devspace-monitor:0123456789ab', id)).toBe('created');
-    expect(specs[0]).toMatchObject({ image: 'devspace-monitor:0123456789ab', imageId: id });
+    expect(await ensuring.ensureOrThrow(TAG, SOCKET, undefined, 'devspaces-monitor:0123456789ab', id)).toBe('created');
+    expect(specs[0]).toMatchObject({ image: 'devspaces-monitor:0123456789ab', imageId: id });
     expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, TAG));
-    expect(await new RemoteSessionMonitor({ engine, logger: new Log(), script: async () => SCRIPT }).ensure(TAG, SOCKET, undefined, 'devspace-monitor:0123456789ab', id)).toBe('created');
+    expect(await new RemoteSessionMonitor({ engine, logger: new Log(), script: async () => SCRIPT }).ensure(TAG, SOCKET, undefined, 'devspaces-monitor:0123456789ab', id)).toBe('created');
     expect(specs[1]).toMatchObject({ imageId: id });
   });
 });

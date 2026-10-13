@@ -103,9 +103,9 @@ describe('host access checks off for the repository', () => {
     expect(h.helper.ups).toHaveLength(1);
     const runArgs = h.helper.ups[0].override.runArgs as string[];
     const name = devspace.containerName;
-    // With the labels of Docker Compose set empty, the label nimblescape.devspace.config-path, and the tmpfs of the
+    // With the labels of Docker Compose set empty, the label nimblescape.devspaces.config-path, and the tmpfs of the
     // token at the end.
-    expect(runArgs).toEqual(['--label', 'nimblescape.devspace.container-version=1', '--label', 'nimblescape.devspace.host-access=unrestricted', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', name, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
+    expect(runArgs).toEqual(['--label', 'nimblescape.devspaces.container-version=1', '--label', 'nimblescape.devspaces.host-access=unrestricted', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', name, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
     // The labels of the override configuration pass the policy also with the checks on. Checked as the override
     // configuration (its labels of Docker Compose set empty).
     expect(hostAccessProblems({ config: { runArgs }, ownVolume: devspace.volumeName, overrideConfiguration: true })).toEqual([]);
@@ -129,10 +129,10 @@ describe('host access checks off for the repository', () => {
       '/dev/fuse',
       '--label',
       // The tmpfs of the token at the end.
-      'nimblescape.devspace.container-version=1',
+      'nimblescape.devspaces.container-version=1',
       '--label',
-      'nimblescape.devspace.host-access=unrestricted',
-      // With the label nimblescape.devspace.config-path.
+      'nimblescape.devspaces.host-access=unrestricted',
+      // With the label nimblescape.devspaces.config-path.
       ...CONFIG_PATH_LABEL,
       ...CLEARED_COMPOSE_LABELS,
       '--name',
@@ -158,9 +158,9 @@ describe('host access checks off for the repository', () => {
     h.helper.config = { image: BASE_IMAGE, runArgs: ['-p', '8080:80', '-p0.0.0.0:9000:9000', '-P'], appPort: [3000, '5000:5000', '0.0.0.0:6000:6000'] };
     await h.service.openDevspace(ENV_ID, options());
     const override = h.helper.ups[0].override;
-    // With the labels of Docker Compose set empty, the label nimblescape.devspace.config-path, and the tmpfs of the
+    // With the labels of Docker Compose set empty, the label nimblescape.devspaces.config-path, and the tmpfs of the
     // token at the end.
-    expect(override.runArgs).toEqual(['-p', '8080:80', '-p0.0.0.0:9000:9000', '-P', '--label', 'nimblescape.devspace.container-version=1', '--label', 'nimblescape.devspace.host-access=unrestricted', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
+    expect(override.runArgs).toEqual(['-p', '8080:80', '-p0.0.0.0:9000:9000', '-P', '--label', 'nimblescape.devspaces.container-version=1', '--label', 'nimblescape.devspaces.host-access=unrestricted', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
     expect(override.appPort).toEqual([3000, '5000:5000', '0.0.0.0:6000:6000']);
   });
 
@@ -177,11 +177,11 @@ describe('host access checks off for the repository', () => {
     ['a token variable of the GitHub CLI', { containerEnv: { GH_TOKEN: 'x' } }, Messages.hostAccess(`variable GH_TOKEN in containerEnv (${GITHUB_CLI_ACCOUNT_REASON})`)],
     ['a variable of container-only Git', { runArgs: ['-e', 'GIT_CONFIG_GLOBAL=/x'] }, Messages.hostAccess('variable GIT_CONFIG_GLOBAL in runArgs')],
     ['initializeCommand', { initializeCommand: 'docker ps' }, Messages.hostAccess('initializeCommand')],
-    ['the cache volume of the workspace helper', { mounts: ['source=devspace-helper-cache,target=/c,type=volume'] }, Messages.hostAccess('volume devspace-helper-cache of the workspace helper')],
-    ['the volume of the remote Monitor', { mounts: ['source=devspace-monitor,target=/s,type=volume'] }, Messages.hostAccess('volume devspace-monitor of the Monitor')],
+    ['the cache volume of the workspace helper', { mounts: ['source=devspaces-helper-cache,target=/c,type=volume'] }, Messages.hostAccess('volume devspaces-helper-cache of the workspace helper')],
+    ['the volume of the remote Monitor', { mounts: ['source=devspaces-monitor,target=/s,type=volume'] }, Messages.hostAccess('volume devspaces-monitor of the Monitor')],
     // A name of another devspace is resourceName.
     ['the workspace volume of another devspace', { mounts: [`source=${resourceName('acme/web', OTHER_ID)},target=/w,type=volume`] }, Messages.hostAccess(`volume ${resourceName('acme/web', OTHER_ID)} of another devspace`)],
-    ['a label of Devspaces', { runArgs: ['--label', 'nimblescape.devspace.id=x'] }, Messages.unsupportedOptions('label nimblescape.devspace.id')],
+    ['a label of Devspaces', { runArgs: ['--label', 'nimblescape.devspaces.id=x'] }, Messages.unsupportedOptions('label nimblescape.devspaces.id')],
     ['an unknown flag', { runArgs: ['--pull=always', '--privileged'] }, Messages.unsupportedOptions('--pull')],
     ['--restart always', { runArgs: ['--restart=always'] }, Messages.unsupportedOptions('--restart=always')],
     ['a log driver that writes to the computer', { runArgs: ['--log-driver', 'syslog'] }, Messages.hostAccess('--log-driver=syslog')],
@@ -239,9 +239,9 @@ describe('host access checks on again (containerIsCurrent)', () => {
     const [container] = h.docker.containersOf(ENV_ID);
     expect(container.id).not.toBe(before);
     expect(container.labels[LABEL_HOST_ACCESS]).toBeUndefined();
-    // With the labels of Docker Compose set empty, the label nimblescape.devspace.config-path, and the tmpfs of the
+    // With the labels of Docker Compose set empty, the label nimblescape.devspaces.config-path, and the tmpfs of the
     // token at the end.
-    expect(h.helper.ups[0].override.runArgs).toEqual(['--label', 'nimblescape.devspace.container-version=1', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
+    expect(h.helper.ups[0].override.runArgs).toEqual(['--label', 'nimblescape.devspaces.container-version=1', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
     expect(h.progress.details).toEqual([Messages.containerHostAccessChecksOn]);
     expect(h.logger.infos.some((line) => line.includes('was created while the host access checks were off. They are on now'))).toBe(true);
     // The next open starts it as it is.
@@ -281,7 +281,7 @@ describe('host access checks on again (containerIsCurrent)', () => {
   it('does not let the merged configuration of such a container block the open that creates it again', async () => {
     // The CLI merges the metadata of the existing container, which holds what the checks allowed while they were off.
     await seedDevspace(h, { container: 'stopped', containerLabels: UNRESTRICTED_LABELS });
-    h.helper.merged = { privileged: true, runArgs: ['--label', 'nimblescape.devspace.container-version=1', '--label', 'nimblescape.devspace.host-access=unrestricted'] };
+    h.helper.merged = { privileged: true, runArgs: ['--label', 'nimblescape.devspaces.container-version=1', '--label', 'nimblescape.devspaces.host-access=unrestricted'] };
     await h.service.openDevspace(ENV_ID, options());
     expect(h.helper.ups.map((up) => [up.image, up.removeExistingContainer])).toEqual([[IMAGE_1, true]]);
     expect(h.docker.containersOf(ENV_ID)[0].labels[LABEL_HOST_ACCESS]).toBeUndefined();
@@ -396,11 +396,11 @@ describe('variables of the Dev Container CLI in the image metadata', () => {
   // from the basename.
   const VECTORS: Array<[string, string | { source: string; target: string; type: string }, string]> = [
     ['a default of an unset ${localEnv:…}', `source=\${localEnv:NOPE:${OTHER_VOLUME}},target=/x,type=volume`, `volume ${OTHER_VOLUME} of another devspace`],
-    ['a default of an unset ${env:…}', 'source=${env:NOPE:devspace-helper-cache},target=/c,type=volume', 'volume devspace-helper-cache of the workspace helper'],
+    ['a default of an unset ${env:…}', 'source=${env:NOPE:devspaces-helper-cache},target=/c,type=volume', 'volume devspaces-helper-cache of the workspace helper'],
     ['the object form', { source: `\${localEnv:NOPE:${OTHER_VOLUME}}`, target: '/x', type: 'volume' }, `volume ${OTHER_VOLUME} of another devspace`],
     [
       'a name built from the basename',
-      `source=devspace-acme-\${localWorkspaceFolderBasename}-${namePair(OTHER_ID)},target=/x,type=volume`,
+      `source=devspaces-acme-\${localWorkspaceFolderBasename}-${namePair(OTHER_ID)},target=/x,type=volume`,
       `volume ${resourceName(REPO, OTHER_ID)} of another devspace`,
     ],
   ];
@@ -442,10 +442,10 @@ describe('variables of the Dev Container CLI in the image metadata', () => {
 
     it('does not support a volume named by a variable of the workspace helper process', async () => {
       await seedDevspace(h, { container: null });
-      const mount = 'source=${localEnv:HOSTNAME:devspace-other-abcdef12},target=/x,type=volume';
+      const mount = 'source=${localEnv:HOSTNAME:devspaces-other-abcdef12},target=/x,type=volume';
       h.docker.imageConfigs.set(IMAGE_1, imageConfigWithUser('vscode', [{ id: 'feature', mounts: [mount] }]));
       const error = await rejection(h.service.openDevspace(ENV_ID, options()));
-      expect(error.message).toBe(Messages.unsupportedOptions(`mount ${JSON.stringify(mount)} uses \${localEnv:HOSTNAME:devspace-other-abcdef12}, which cannot be checked`));
+      expect(error.message).toBe(Messages.unsupportedOptions(`mount ${JSON.stringify(mount)} uses \${localEnv:HOSTNAME:devspaces-other-abcdef12}, which cannot be checked`));
       expect(h.helper.ups).toEqual([]);
     });
 
@@ -517,17 +517,17 @@ describe('what the Dev Container CLI substitutes again at up', () => {
     it.each<[string, Record<string, unknown>, string, string]>([
       [
         'a --mount of another devspace (main: $${env:NOPE:{}env:NOPE2:…})',
-        { runArgs: ['--mount', 'type=volume,source=$${env:NOPE:{}env:NOPE2:devspace-other-abcdef12},target=/y'] },
+        { runArgs: ['--mount', 'type=volume,source=$${env:NOPE:{}env:NOPE2:devspaces-other-abcdef12},target=/y'] },
         'runArgs',
-        'type=volume,source=${env:NOPE2:devspace-other-abcdef12},target=/y',
+        'type=volume,source=${env:NOPE2:devspaces-other-abcdef12},target=/y',
       ],
-      ['a -v of the helper cache', { runArgs: ['-v', '$${env:NOPE:{}env:NOPE2:devspace-helper-cache}:/y'] }, 'runArgs', '${env:NOPE2:devspace-helper-cache}:/y'],
+      ['a -v of the helper cache', { runArgs: ['-v', '$${env:NOPE:{}env:NOPE2:devspaces-helper-cache}:/y'] }, 'runArgs', '${env:NOPE2:devspaces-helper-cache}:/y'],
       ['-e GH_TOKEN', { runArgs: ['-e', '$${env:NOPE:{}env:NOPE2:GH_TOKEN}=x'] }, 'runArgs', '${env:NOPE2:GH_TOKEN}=x'],
       [
         'a bind mount that TERM makes a volume (N1)',
-        { runArgs: ['--mount', 'type=bind,source=devspace-other-abcdef12,target=/y,$${env:NOPE:{}env:TERM:type=volume}'] },
+        { runArgs: ['--mount', 'type=bind,source=devspaces-other-abcdef12,target=/y,$${env:NOPE:{}env:TERM:type=volume}'] },
         'runArgs',
-        'type=bind,source=devspace-other-abcdef12,target=/y,${env:TERM:type=volume}',
+        'type=bind,source=devspaces-other-abcdef12,target=/y,${env:TERM:type=volume}',
       ],
       ['-e GH_TOKEN with TERM (N2)', { runArgs: ['-e', '$${env:NOPE:{}env:TERM:GH_TOKEN}=x'] }, 'runArgs', '${env:TERM:GH_TOKEN}=x'],
       ['-p on all addresses (N3)', { runArgs: ['-p', '${localEnv:A:$}{localEnv:B:8080}'] }, 'runArgs', '${localEnv:B:8080}'],
@@ -543,7 +543,7 @@ describe('what the Dev Container CLI substitutes again at up', () => {
 
     it('refuses a bind mount of the label that TERM makes a volume, before up', async () => {
       await seedDevspace(h, { container: null });
-      const mount = 'type=bind,source=devspace-other-abcdef12,target=/y,${localEnv:TERM:type=volume}';
+      const mount = 'type=bind,source=devspaces-other-abcdef12,target=/y,${localEnv:TERM:type=volume}';
       h.docker.imageConfigs.set(IMAGE_1, imageConfigWithUser('vscode', [{ id: 'feature', mounts: [mount] }]));
       const error = await rejection(h.service.openDevspace(ENV_ID, options()));
       expect(error.message).toBe(Messages.unsupportedOptions(leftover('mount', mount, '${localEnv:TERM:type=volume}')));

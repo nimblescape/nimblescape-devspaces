@@ -132,9 +132,9 @@ describe('the sweep operation', () => {
     // Every stopped helper container (the label of the helper runs, which the channels carry too), never the Session
     // Monitor.
     expect(requests).toEqual([{ filters: { label: [LABEL_HELPER_RUN], 'label!': [LABEL_MONITOR], until: ['10m'] }, signal: ctx.signal }]);
-    expect(LABEL_HELPER_RUN).toBe('nimblescape.devspace.helper-run');
-    expect(LABEL_MONITOR).toBe('nimblescape.devspace.monitor');
-    expect(LABEL_HELPER_CHANNEL).toBe('nimblescape.devspace.helper-channel');
+    expect(LABEL_HELPER_RUN).toBe('nimblescape.devspaces.helper-run');
+    expect(LABEL_MONITOR).toBe('nimblescape.devspaces.monitor');
+    expect(LABEL_HELPER_CHANNEL).toBe('nimblescape.devspaces.helper-channel');
     // The log line names the helper containers.
     expect(logs).toContain('info The sweep removed 2 stopped helper container(s) older than 10 minutes.');
     const none = sweepEngine(async () => []);
@@ -176,7 +176,7 @@ describe('the operations windowState and refresh over the port of the engine', (
     return { context: value, progress, controller };
   }
 
-  const PARAMS = { devspaceId: ENV_API, containerName: 'devspace-api', checks: 'on', branch: { folder: '/workspaces/api', user: 'node' } };
+  const PARAMS = { devspaceId: ENV_API, containerName: 'devspaces-api', checks: 'on', branch: { folder: '/workspaces/api', user: 'node' } };
 
   it('refresh: the states and branches of the fixture, with its progress', async () => {
     const { engine } = fixtureEngine();
@@ -191,7 +191,7 @@ describe('the operations windowState and refresh over the port of the engine', (
     const { context: ctx } = engineContext();
     expect(parseWindowStateValue(await windowStateOperation(() => engine)(PARAMS, ctx))).toEqual({ state: 'running', outdated: 'version', branch: 'feature/x' });
     // The branch is read from the dev container of the rule by its ID, not by the name of the request.
-    expect(execs).toEqual([{ container: fixtureContainerId('devspace-api'), user: 'node', signal: ctx.signal }]);
+    expect(execs).toEqual([{ container: fixtureContainerId('devspaces-api'), user: 'node', signal: ctx.signal }]);
   });
 
   it('windowState: invalid parameters or a secret are invalid, before the engine is asked; the secret is not echoed', async () => {

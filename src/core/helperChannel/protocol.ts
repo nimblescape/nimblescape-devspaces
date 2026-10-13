@@ -404,7 +404,7 @@ export function newCleanupLabel(): string {
   return randomBytes(12).toString('hex');
 }
 
-/** The `--label` value of a container of a step: `nimblescape.devspace.channel-step=<value>`. */
+/** The `--label` value of a container of a step: `nimblescape.devspaces.channel-step=<value>`. */
 export function channelStepLabel(value: string): string {
   return `${LABEL_CHANNEL_STEP}=${value}`;
 }

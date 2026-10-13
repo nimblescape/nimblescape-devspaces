@@ -94,7 +94,7 @@ describe('a devspace of another Docker host is never acted on', () => {
 
   it('reads nothing of it from Docker', async () => {
     // The reads of the window go through windowStateInWorker.
-    expect(await h.operations.windowStateInWorker((await h.registry.get(ENV_ID))!, 'devspace-x', { branch: true })).toBeUndefined();
+    expect(await h.operations.windowStateInWorker((await h.registry.get(ENV_ID))!, 'devspaces-x', { branch: true })).toBeUndefined();
     // The one read of the removable volumes (removableVolumesOf).
     expect((await h.service.removableVolumesOf(ENV_ID)).additional).toEqual([]);
     expect(await h.service.repositoryServiceData(ENV_ID)).toEqual([]);
@@ -201,7 +201,7 @@ describe('an endpoint that is neither local nor SSH is never reached', () => {
     const shown = () => u.ui.warnings.filter((warning) => warning === Messages.dockerEndpointUnsupported(ENDPOINT));
     expect(await u.operations.inspectStates()).toEqual(new Map());
     // The reads of the window go through windowStateInWorker.
-    expect(await u.operations.windowStateInWorker((await u.registry.get(ENV_ID))!, 'devspace-x', { branch: true })).toBeUndefined();
+    expect(await u.operations.windowStateInWorker((await u.registry.get(ENV_ID))!, 'devspaces-x', { branch: true })).toBeUndefined();
     expect(await u.operations.inspectStates()).toEqual(new Map());
     expect(shown()).toHaveLength(1);
     expect(await u.service.reconcileFromVolumes()).toBe(0);

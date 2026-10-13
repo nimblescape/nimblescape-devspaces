@@ -3,7 +3,7 @@
 # Licensed under the MIT License. See LICENSE in the repository root for details.
 
 # Workspace helper of the Devspaces extension (implementation notes 7).
-# The extension builds this image locally and tags it devspace-helper:<hash of this file and the CLI version>.
+# The extension builds this image locally and tags it devspaces-helper:<hash of this file and the CLI version>.
 # It must build with BuildKit and with the classic builder: no syntax directive, no heredocs, no RUN --mount.
 ARG BASE_IMAGE=node:24-trixie-slim
 FROM ${BASE_IMAGE}
@@ -49,6 +49,6 @@ RUN set -eux; \
     install -d -m 0700 -o root -g root /run/devspace-docker; \
     setpriv --version
 
-LABEL nimblescape.devspace.helper=true
+LABEL nimblescape.devspaces.helper=true
 ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
 CMD ["sh"]

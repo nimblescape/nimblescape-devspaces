@@ -14,14 +14,14 @@ import { dockerEngine } from './engineClient';
 
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
 const SPEC: MonitorRunSpec = {
-  name: 'devspace-monitor',
-  image: 'devspace-monitor:0123456789ab',
+  name: 'devspaces-monitor',
+  image: 'devspaces-monitor:0123456789ab',
   imageId: 'sha256:' + 'b'.repeat(64),
-  labels: { 'nimblescape.devspace.monitor': 'label', 'nimblescape.devspace.monitor-create': 'nonce' },
+  labels: { 'nimblescape.devspaces.monitor': 'label', 'nimblescape.devspaces.monitor-create': 'nonce' },
   restartPolicy: 'on-failure',
   network: 'none',
   log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
-  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-monitor', volumeTarget: '/state' },
+  mounts: { socket: '/var/run/docker.sock', volume: 'devspaces-monitor', volumeTarget: '/state' },
   env: { DEVSPACE_IMAGE_TZ: 'UTC' },
   command: ['node', '-e', 'loader', '/opt/devspace/monitor.js', 'hash', 'startMonitor'],
 };
@@ -41,7 +41,7 @@ describe('the check of the image ID of the attached create', () => {
   });
 
   it('a cancel while the engine does not answer the inspect is aborted', async () => {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-inspect-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-inspect-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     const urls: string[] = [];

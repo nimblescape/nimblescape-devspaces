@@ -31,7 +31,7 @@ function readyServer(folder: string, marker: string): void {
 }
 
 function harness(unpack: VscodeStoreDeps['unpack']) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-store-r2-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-store-r2-'));
   temps.push(root);
   const body = Buffer.from('the archive');
   const log: string[] = [];

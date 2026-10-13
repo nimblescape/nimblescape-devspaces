@@ -417,8 +417,8 @@ describe('a lost registry: the named volumes without labels that the container o
     h.docker.volumes.set(anonymous, { 'com.docker.volume.anonymous': '' });
     h.docker.volumes.set('shop_db', { 'com.docker.compose.project': 'shop', 'com.docker.compose.volume': 'db' });
     h.docker.volumes.set('web-cache', additionalVolumeLabels('f0000001-0000-4000-8000-000000000001', ACCOUNT));
-    h.docker.volumes.set('devspace-acme-web-f0000001', { [LABEL_DEVSPACE_ID]: 'f0000001-0000-4000-8000-000000000001', [LABEL_REPOSITORY]: 'acme/web' });
-    lostRegistry([anonymous, 'shop_db', 'web-cache', 'devspace-acme-web-f0000001', 'gone']);
+    h.docker.volumes.set('devspaces-acme-web-f0000001', { [LABEL_DEVSPACE_ID]: 'f0000001-0000-4000-8000-000000000001', [LABEL_REPOSITORY]: 'acme/web' });
+    lostRegistry([anonymous, 'shop_db', 'web-cache', 'devspaces-acme-web-f0000001', 'gone']);
     expect(await h.service.reconcileFromVolumes()).toBeGreaterThanOrEqual(1);
     expect((await h.registry.get(OTHER_ID))?.additionalVolumes).toBeUndefined();
   });
@@ -681,7 +681,7 @@ describe('images of the devspaces of other accounts', () => {
     // only the owner label of the volume names the owner.
     h.docker.volumes.set('web-data', { [LABEL_DEVSPACE_ID]: remote, [LABEL_OWNER_ID]: ACCOUNT.id });
     // The name of the image does not hold the ID (it holds the repository, which that volume does not name); the label
-    // nimblescape.devspace.id that the extension gives its images links it.
+    // nimblescape.devspaces.id that the extension gives its images links it.
     h.docker.imageConfigs.set(image, { Labels: { [LABEL_DEVSPACE_ID]: remote } });
     h.helper.config = { image };
     await h.service.open(TARGET, options());
@@ -691,12 +691,12 @@ describe('images of the devspaces of other accounts', () => {
   it('refuses an image labelled with the ID of a devspace of another account, also under an unrelated name', async () => {
     h.docker.images.add('tools:1');
     h.docker.imageIds.set('tools:1', `sha256:${'1'.repeat(64)}`);
-    h.docker.imageRepoNames.set('tools:1', { repoTags: ['tools:1', 'devspace-copy:1'], repoDigests: [] });
-    // The devspace ENV_ID of OTHER_ACCOUNT (registry); the image is listed under a devspace- name of no devspace.
+    h.docker.imageRepoNames.set('tools:1', { repoTags: ['tools:1', 'devspaces-copy:1'], repoDigests: [] });
+    // The devspace ENV_ID of OTHER_ACCOUNT (registry); the image is listed under a devspaces- name of no devspace.
     h.docker.imageConfigs.set('tools:1', { Labels: { [LABEL_DEVSPACE_ID]: ENV_ID } });
-    h.docker.images.add('devspace-copy:1');
-    h.docker.imageIds.set('devspace-copy:1', `sha256:${'1'.repeat(64)}`);
-    h.docker.imageConfigs.set('devspace-copy:1', { Labels: { [LABEL_DEVSPACE_ID]: ENV_ID } });
+    h.docker.images.add('devspaces-copy:1');
+    h.docker.imageIds.set('devspaces-copy:1', `sha256:${'1'.repeat(64)}`);
+    h.docker.imageConfigs.set('devspaces-copy:1', { Labels: { [LABEL_DEVSPACE_ID]: ENV_ID } });
     await refused('tools:1');
   });
 
@@ -704,11 +704,11 @@ describe('images of the devspaces of other accounts', () => {
     await seedDevspace(h, { id: OTHER_ID, repository: WEB, container: null, volume: false, image: false });
     h.docker.images.add('tools:1');
     h.docker.imageIds.set('tools:1', `sha256:${'1'.repeat(64)}`);
-    h.docker.imageRepoNames.set('tools:1', { repoTags: ['tools:1', 'devspace-copy:1'], repoDigests: [] });
+    h.docker.imageRepoNames.set('tools:1', { repoTags: ['tools:1', 'devspaces-copy:1'], repoDigests: [] });
     h.docker.imageConfigs.set('tools:1', { Labels: { [LABEL_DEVSPACE_ID]: OTHER_ID } });
-    h.docker.images.add('devspace-copy:1');
-    h.docker.imageIds.set('devspace-copy:1', `sha256:${'1'.repeat(64)}`);
-    h.docker.imageConfigs.set('devspace-copy:1', { Labels: { [LABEL_DEVSPACE_ID]: OTHER_ID } });
+    h.docker.images.add('devspaces-copy:1');
+    h.docker.imageIds.set('devspaces-copy:1', `sha256:${'1'.repeat(64)}`);
+    h.docker.imageConfigs.set('devspaces-copy:1', { Labels: { [LABEL_DEVSPACE_ID]: OTHER_ID } });
     h.helper.config = { image: 'tools:1' };
     await h.service.open(TARGET, options());
     expect(h.helper.builds).toHaveLength(1);
@@ -737,9 +737,9 @@ describe('images of the devspaces of other accounts', () => {
     expect(h.helper.builds).toHaveLength(1);
   });
 
-  it('allows a name like devspace-… that is no image of a devspace', async () => {
-    h.docker.images.add('devspace-tools:1');
-    h.helper.config = { image: 'devspace-tools:1' };
+  it('allows a name like devspaces-… that is no image of a devspace', async () => {
+    h.docker.images.add('devspaces-tools:1');
+    h.helper.config = { image: 'devspaces-tools:1' };
     await h.service.open(TARGET, options());
     expect(h.helper.builds).toHaveLength(1);
   });

@@ -19,7 +19,7 @@ const SESSION = '0a1b2c3d4e5f60718293a4b5';
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
 const IMAGE = `sha256:${'a'.repeat(64)}`;
 const HASH = 'f'.repeat(64);
-const SPEC = batchRunSpec({ session: SESSION, volume: 'devspace-v', image: IMAGE, socket: '/run/user/1000/docker.sock', scriptHash: HASH });
+const SPEC = batchRunSpec({ session: SESSION, volume: 'devspaces-v', image: IMAGE, socket: '/run/user/1000/docker.sock', scriptHash: HASH });
 
 function frame(text: string): Buffer {
   return Buffer.from(text, 'utf8');
@@ -121,12 +121,12 @@ describe('the attached run of the batch helper over the Engine API', () => {
     expect(run.id).toBe(ID);
     expect(fake.order).toEqual(['POST /containers/create', `HIJACK /containers/${ID}/attach`, `POST /containers/${ID}/wait`, `POST /containers/${ID}/start`]);
     const [create, wait, start] = fake.requests;
-    expect(create.path).toBe(`/containers/create?name=devspace-batch-${SESSION}`);
+    expect(create.path).toBe(`/containers/create?name=devspaces-batch-${SESSION}`);
     // Every option of `docker run --rm -i --pull never` of the helper (batchRunArgs), as the CLI sends it.
     expect(create.json).toEqual({
       Image: IMAGE,
       Cmd: loaderCommand({ path: '/opt/devspace/batch.js', hash: HASH, entry: 'startBatchHelper' }),
-      Labels: { 'nimblescape.devspace.helper-run': 'true', 'nimblescape.devspace.channel-step': SESSION },
+      Labels: { 'nimblescape.devspaces.helper-run': 'true', 'nimblescape.devspaces.channel-step': SESSION },
       AttachStdin: true,
       AttachStdout: true,
       AttachStderr: true,
@@ -139,8 +139,8 @@ describe('the attached run of the batch helper over the Engine API', () => {
         LogConfig: { Type: 'none', Config: {} },
         SecurityOpt: ['no-new-privileges'],
         Mounts: [
-          { Type: 'volume', Source: 'devspace-v', Target: '/workspaces' },
-          { Type: 'volume', Source: 'devspace-helper-cache', Target: '/devspace-cache' },
+          { Type: 'volume', Source: 'devspaces-v', Target: '/workspaces' },
+          { Type: 'volume', Source: 'devspaces-helper-cache', Target: '/devspace-cache' },
           { Type: 'bind', Source: '/run/user/1000/docker.sock', Target: '/run/devspace-docker/docker.sock' },
         ],
         Tmpfs: { '/run/devspace-secrets': 'rw,noexec,nosuid,nodev,size=1m,mode=0700' },
@@ -211,7 +211,7 @@ describe('the attached run of the batch helper over the Engine API', () => {
 
   it('refuses a create that the engine refuses (a name in use, a missing image) with its status, and attaches nothing', async () => {
     for (const [status, message] of [
-      [409, 'Conflict. The container name "/devspace-batch-x" is already in use by container "abc".'],
+      [409, 'Conflict. The container name "/devspaces-batch-x" is already in use by container "abc".'],
       [404, 'No such image: sha256:aaaa'],
     ] as const) {
       const fake = fakeEngine(running({ '/containers/create': { status, json: { message } } }));

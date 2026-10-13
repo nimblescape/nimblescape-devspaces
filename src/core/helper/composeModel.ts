@@ -21,13 +21,13 @@ export interface ComposeModel {
 }
 
 /** Key of the workspace volume in the top-level `volumes` of our model. The check refuses it in a repository. */
-export const WORKSPACE_VOLUME_KEY = 'devspace-workspace';
+export const WORKSPACE_VOLUME_KEY = 'devspaces-workspace';
 
 /**
  * Key of the shared VS Code server store (VSCODE_STORE_VOLUME, or the store of the worker) in the top-level `volumes`
  * of our up model. The check refuses it in a repository.
  */
-export const VSCODE_STORE_KEY = 'devspace-vscode';
+export const VSCODE_STORE_KEY = 'devspaces-vscode';
 
 /**
  * The oldest Compose plugin with the YAML tags `!reset` (2.24.0) and `!override` (2.24.4): the fallback (the

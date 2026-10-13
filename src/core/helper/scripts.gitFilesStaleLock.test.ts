@@ -20,7 +20,7 @@ import { GIT_FILES_SCRIPT, gitFilesCommand } from './scripts';
 const folders: string[] = [];
 
 function tempDir(): string {
-  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-11igr3-')));
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-11igr3-')));
   folders.push(dir);
   return dir;
 }

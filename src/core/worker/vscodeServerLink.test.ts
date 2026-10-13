@@ -38,7 +38,7 @@ interface Sandbox {
 }
 
 function sandbox(): Sandbox {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-link-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-link-'));
   temps.push(root);
   const store = path.join(root, 'store');
   const home = path.join(root, 'home', 'vscode');

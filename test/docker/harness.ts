@@ -116,7 +116,7 @@ export function testEngine(env: NodeJS.ProcessEnv, secrets: Readonly<Record<stri
 }
 
 /** The account of the fake GitHub session; the devspaces of the tests belong to it. */
-export const TEST_ACCOUNT = { id: '4242', login: 'devspace-test' };
+export const TEST_ACCOUNT = { id: '4242', login: 'devspaces-test' };
 
 export const fakeAuth: GitHubAuth = {
   getToken: async () => DUMMY_TOKEN,
@@ -156,7 +156,7 @@ export function dockerTestContext(name: string): DockerTestContext {
  * removeRunObjects removes it. Created now when it is missing; returns its name.
  */
 export function testStateVolume(context: Pick<DockerTestContext, 'run' | 'cli'>, name: string): string {
-  const volume = `devspace-test-state-${name}-${context.run.runId}`;
+  const volume = `devspaces-test-state-${name}-${context.run.runId}`;
   if (context.cli.volume(volume) === undefined) context.cli.ok(['volume', 'create', '--label', `${TEST_RUN_LABEL}=${context.run.runId}`, volume]);
   return volume;
 }
@@ -167,7 +167,7 @@ export function testStateVolume(context: Pick<DockerTestContext, 'run' | 'cli'>,
  * removeRunObjects removes it. Created now when it is missing; returns its name.
  */
 export function testVscodeVolume(context: Pick<DockerTestContext, 'run' | 'cli'>, name: string): string {
-  const volume = `devspace-test-vscode-${name}-${context.run.runId}`;
+  const volume = `devspaces-test-vscode-${name}-${context.run.runId}`;
   if (context.cli.volume(volume) === undefined) context.cli.ok(['volume', 'create', '--label', `${TEST_RUN_LABEL}=${context.run.runId}`, volume]);
   return volume;
 }

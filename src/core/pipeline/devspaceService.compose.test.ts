@@ -314,7 +314,7 @@ describe('first open of a Docker Compose configuration', () => {
     // The volumes are created before `up` with the labels of the devspace: the project volume as service data.
     const labels = { [LABEL_DEVSPACE_ID]: ENV_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id };
     // The volume of the service db is labelled as its data.
-    expect(h.docker.volumes.get(`${PROJECT}_pgdata`)).toEqual({ ...labels, [LABEL_VOLUME]: VOLUME_KIND_COMPOSE, 'nimblescape.devspace.service-data': 'true' });
+    expect(h.docker.volumes.get(`${PROJECT}_pgdata`)).toEqual({ ...labels, [LABEL_VOLUME]: VOLUME_KIND_COMPOSE, 'nimblescape.devspaces.service-data': 'true' });
     // The volume of a `mounts` entry is a volume of the project too (`<project>_cache`), so it is `compose` (never
     // shared with another devspace), not `additional`.
     expect(h.docker.volumes.get(`${PROJECT}_cache`)).toEqual({ ...labels, [LABEL_VOLUME]: VOLUME_KIND_COMPOSE });
@@ -585,9 +585,9 @@ describe('first open of a Docker Compose configuration', () => {
 
   it('refuses a label of the extension on the image of a side service before up creates the containers', async () => {
     h.docker.images.add(DB_IMAGE);
-    h.docker.imageConfigs.set(DB_IMAGE, { Labels: { 'nimblescape.devspace.compose-service': 'x' } });
+    h.docker.imageConfigs.set(DB_IMAGE, { Labels: { 'nimblescape.devspaces.compose-service': 'x' } });
     const error = await rejection(h.service.open(TARGET, options()));
-    expect(error.message).toBe(Messages.hostAccess(`label nimblescape.devspace.compose-service of the image ${DB_IMAGE}`));
+    expect(error.message).toBe(Messages.hostAccess(`label nimblescape.devspaces.compose-service of the image ${DB_IMAGE}`));
     expect(h.helper.ups).toEqual([]);
   });
 
@@ -933,7 +933,7 @@ describe('existing Docker Compose devspace', () => {
   // A configuration of another kind is not kept (keepsKind false). A helperFailed during an update fails the open: the
   // running single container created without the configuration is not opened as it is.
   it('ends the open with helperFailed although the single container created without the configuration still runs when the configuration now uses Docker Compose and the rebuild fails with helperFailed', async () => {
-    await seedDevspace(h, { container: 'running', containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspace.container-config': 'unknown' } });
+    await seedDevspace(h, { container: 'running', containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspaces.container-config': 'unknown' } });
     h.docker.images.add(DB_IMAGE);
     const single = h.docker.containersOf(ENV_ID)[0];
     h.ui.configurationChangedAnswer = 'rebuildNow';
@@ -1159,7 +1159,7 @@ describe('existing Docker Compose devspace', () => {
     await h.service.openDevspace(ENV_ID, options());
     // The HelperImageUse names the image ID `id`: the current tag with its image ID (there is no previous helper
     // image).
-    const previous = { tag: 'devspace-helper:test', id: h.helper.currentHelperImageId };
+    const previous = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
     expect(h.helper.helperImages.map((entry) => entry.call)).toEqual(expect.arrayContaining(['readConfiguration', 'composeModel', 'up']));
     expect(h.helper.helperImages.filter((entry) => JSON.stringify(entry.image) !== JSON.stringify(previous))).toEqual([]);
   });
@@ -1226,7 +1226,7 @@ describe('existing Docker Compose devspace', () => {
     out.realPaths = { ...out.realPaths, [SOURCE]: null };
     out.mountAncestors = { [SOURCE]: FOLDER };
     useCompose(h, out);
-    await seedDevspace(h, { container: 'running', containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspace.container-config': 'unknown' } });
+    await seedDevspace(h, { container: 'running', containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspaces.container-config': 'unknown' } });
     h.docker.images.add(DB_IMAGE);
     const single = h.docker.containersOf(ENV_ID)[0];
     h.ui.configurationChangedAnswer = 'rebuildNow';
@@ -1245,7 +1245,7 @@ describe('existing Docker Compose devspace', () => {
   });
 
   it('ends the open with helperFailed, without the detail of a switch, and keeps the running single container when the Git setup before up fails with helperFailed before the switch to Docker Compose removed it', async () => {
-    await seedDevspace(h, { container: 'running', containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspace.container-config': 'unknown' } });
+    await seedDevspace(h, { container: 'running', containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspaces.container-config': 'unknown' } });
     h.docker.images.add(DB_IMAGE);
     const single = h.docker.containersOf(ENV_ID)[0];
     h.ui.configurationChangedAnswer = 'rebuildNow';
@@ -1381,7 +1381,7 @@ describe('Docker Compose with the host access checks off for the repository', ()
   it('does not take a side service for unrestricted when the image that Compose built has the label', async () => {
     useCompose(h, {
       ...output((m) => (m.services.tool = { build: { context: FOLDER, dockerfile: 'tool.Dockerfile' } })),
-      dockerfiles: { tool: 'FROM alpine:3.22\nLABEL nimblescape.devspace.host-access=unrestricted\n' },
+      dockerfiles: { tool: 'FROM alpine:3.22\nLABEL nimblescape.devspaces.host-access=unrestricted\n' },
       realPaths: { '/workspaces': '/workspaces', [`${FOLDER}/init.sql`]: `${FOLDER}/init.sql`, [FOLDER]: FOLDER, [`${FOLDER}/tool.Dockerfile`]: `${FOLDER}/tool.Dockerfile` },
     });
     // The image that Compose builds during `up` (not checked before it): its label would reach the container.
@@ -1487,7 +1487,7 @@ describe('Delete of a Docker Compose devspace', () => {
     await h.service.open(TARGET, options());
     expect(h.docker.volumes.get('myapp-db')?.[LABEL_VOLUME]).toBe(VOLUME_KIND_ADDITIONAL);
     // And the label of the data of a service.
-    expect(h.docker.volumes.get('myapp-db')?.['nimblescape.devspace.service-data']).toBe('true');
+    expect(h.docker.volumes.get('myapp-db')?.['nimblescape.devspaces.service-data']).toBe('true');
     expect((await h.registry.get(ENV_ID))?.serviceVolumes).toEqual(['myapp-db']);
     // The one read of the removable volumes (removableVolumesOf).
     expect((await h.service.removableVolumesOf(ENV_ID)).serviceData).toContain('myapp-db');
@@ -1901,7 +1901,7 @@ describe('restore of a Docker Compose devspace after a lost registry', () => {
   it('restores the volumes of the services from their label, and asks about them at Delete', async () => {
     // A volume with `name:` of the model (label `additional`) that the database used; no container mounts it now.
     seedVolumes({
-      'myapp-db': { ...volumeLabelsOf(VOLUME_KIND_ADDITIONAL), 'nimblescape.devspace.service-data': 'true' },
+      'myapp-db': { ...volumeLabelsOf(VOLUME_KIND_ADDITIONAL), 'nimblescape.devspaces.service-data': 'true' },
       'shared-tools': volumeLabelsOf(VOLUME_KIND_ADDITIONAL),
     });
     expect(await h.service.reconcileFromVolumes()).toBe(1);
@@ -2492,7 +2492,7 @@ describe('configurations that share a compose file, and the report of a switch',
   });
 
   it.each(['.devcontainer/a\\b/devcontainer.json', '.devcontainer/my config/devcontainer.json'])(
-    'starts a single container of the configuration %j, with the label nimblescape.devspace.config-path (D5-2)',
+    'starts a single container of the configuration %j, with the label nimblescape.devspaces.config-path (D5-2)',
     async (configPath) => {
       const other = createHarness({ newDevspaceId: () => ENV_ID });
       try {
@@ -2724,7 +2724,7 @@ describe('a bind mount of a repository folder that does not exist yet', () => {
     await h.service.open(TARGET, options());
     expect(h.helper.createdFolders).toEqual([[SOURCE]]);
     // There is no previous helper image: the current tag with its image ID.
-    const previous = { tag: 'devspace-helper:test', id: h.helper.currentHelperImageId };
+    const previous = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
     expect(h.helper.helperImages.filter((entry) => entry.call === 'createRepositoryFolders')).toEqual([{ call: 'createRepositoryFolders', image: previous }]);
   });
 
@@ -4886,7 +4886,7 @@ describe('recreate offer: Docker Compose', () => {
       h.helper.currentHelperImageId = `sha256:${'5'.repeat(64)}`;
       h.helper.helperImages.length = 0;
       await h.service.openDevspace(ENV_ID, options());
-      const previous = { tag: 'devspace-helper:test', id: `sha256:${'5'.repeat(64)}` };
+      const previous = { tag: 'devspaces-helper:test', id: `sha256:${'5'.repeat(64)}` };
       const hashes = h.helper.helperImages.filter((entry) => entry.call === 'composeServiceHashes');
       expect(hashes.length).toBeGreaterThan(0);
       expect(hashes.filter((entry) => JSON.stringify(entry.image) !== JSON.stringify(previous))).toEqual([]);
@@ -5336,24 +5336,24 @@ describe('the shared VS Code server store in Docker Compose', () => {
 
   it('the up model mounts the store read-only into the dev service; it is never created or recorded as a volume of the devspace', async () => {
     h.cleanup();
-    h = createHarness({ newDevspaceId: () => ENV_ID, vscodeStoreVolume: 'devspace-vscode', vscodeServer: { server: SERVER, fetch: async () => 'linux-x64' } });
+    h = createHarness({ newDevspaceId: () => ENV_ID, vscodeStoreVolume: 'devspaces-vscode', vscodeServer: { server: SERVER, fetch: async () => 'linux-x64' } });
     useCompose(h);
     await h.service.open(TARGET, options());
     const m = upModel();
     // `volume: { nocopy: true }`, so that Docker never copies the image's /opt/devspace/vscode into an empty store.
-    expect(m.services.app.volumes).toContainEqual({ type: 'volume', source: 'devspace-vscode', target: '/opt/devspace/vscode', read_only: true, volume: { nocopy: true } });
-    expect(m.volumes?.['devspace-vscode']).toEqual({ name: 'devspace-vscode', external: true });
-    expect(JSON.stringify(m.services.db)).not.toContain('devspace-vscode');
-    expect(h.docker.log.filter((line) => line.includes('devspace-vscode'))).toEqual([]);
-    expect(h.docker.volumes.has('devspace-vscode')).toBe(false);
-    expect(JSON.stringify(await h.registry.get(ENV_ID))).not.toContain('devspace-vscode');
+    expect(m.services.app.volumes).toContainEqual({ type: 'volume', source: 'devspaces-vscode', target: '/opt/devspace/vscode', read_only: true, volume: { nocopy: true } });
+    expect(m.volumes?.['devspaces-vscode']).toEqual({ name: 'devspaces-vscode', external: true });
+    expect(JSON.stringify(m.services.db)).not.toContain('devspaces-vscode');
+    expect(h.docker.log.filter((line) => line.includes('devspaces-vscode'))).toEqual([]);
+    expect(h.docker.volumes.has('devspaces-vscode')).toBe(false);
+    expect(JSON.stringify(await h.registry.get(ENV_ID))).not.toContain('devspaces-vscode');
   });
 
   it('without a server: the up model has no store', async () => {
     h.cleanup();
-    h = createHarness({ newDevspaceId: () => ENV_ID, vscodeStoreVolume: 'devspace-vscode' });
+    h = createHarness({ newDevspaceId: () => ENV_ID, vscodeStoreVolume: 'devspaces-vscode' });
     useCompose(h);
     await h.service.open(TARGET, options());
-    expect(JSON.stringify(upModel())).not.toContain('devspace-vscode');
+    expect(JSON.stringify(upModel())).not.toContain('devspaces-vscode');
   });
 });

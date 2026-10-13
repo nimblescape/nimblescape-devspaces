@@ -17,7 +17,7 @@ import {
 let root: string;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
 });
 
 afterEach(() => {

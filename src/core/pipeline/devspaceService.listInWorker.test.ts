@@ -131,14 +131,14 @@ describe('the reads of an attached window through the worker, from the extension
   it('sends the container, the host access checks of the repository, and with `branch` the Git user and folder', async () => {
     const { h, sent } = harness(async () => ({ state: 'running', branch: 'main' }));
     const env = await seedDevspace(h, { container: 'running' });
-    expect(await h.operations.windowStateInWorker(env, 'devspace-x', { branch: true })).toEqual({ state: 'running', branch: 'main' });
+    expect(await h.operations.windowStateInWorker(env, 'devspaces-x', { branch: true })).toEqual({ state: 'running', branch: 'main' });
     expect(sent[0]).toMatchObject({
       op: OP_WINDOW_STATE,
-      params: { devspaceId: ENV_ID, containerName: 'devspace-x', checks: 'on', branch: { folder: '/workspaces/api', user: 'vscode' } },
+      params: { devspaceId: ENV_ID, containerName: 'devspaces-x', checks: 'on', branch: { folder: '/workspaces/api', user: 'vscode' } },
       timeoutMs: WINDOW_STATE_FLOW_TIMEOUT_MS,
     });
-    await h.operations.windowStateInWorker(env, 'devspace-x');
-    expect(sent[1].params).toEqual({ devspaceId: ENV_ID, containerName: 'devspace-x', checks: 'on' });
+    await h.operations.windowStateInWorker(env, 'devspaces-x');
+    expect(sent[1].params).toEqual({ devspaceId: ENV_ID, containerName: 'devspaces-x', checks: 'on' });
   });
 
   it('is unknown (undefined) when the worker cannot be reached, fails, or answers an invalid value; it never throws', async () => {
@@ -147,10 +147,10 @@ describe('the reads of an attached window through the worker, from the extension
     };
     const { h } = harness(() => answer());
     const env = await seedDevspace(h, { container: 'running' });
-    expect(await h.operations.windowStateInWorker(env, 'devspace-x')).toBeUndefined();
+    expect(await h.operations.windowStateInWorker(env, 'devspaces-x')).toBeUndefined();
     answer = async () => ({ state: 'paused' });
-    expect(await h.operations.windowStateInWorker(env, 'devspace-x')).toBeUndefined();
-    expect(h.logger.infos.some((line) => line.includes('The state of the container devspace-x could not be read'))).toBe(true);
+    expect(await h.operations.windowStateInWorker(env, 'devspaces-x')).toBeUndefined();
+    expect(h.logger.infos.some((line) => line.includes('The state of the container devspaces-x could not be read'))).toBe(true);
   });
 
   // A read makes the worker ready passively and within its time limit; a read with the signal of an operation of the
@@ -159,7 +159,7 @@ describe('the reads of an attached window through the worker, from the extension
     const { h, sent } = harness(async () => ({ state: 'running' }));
     const env = await seedDevspace(h, { container: 'running' });
     const signal = new AbortController().signal;
-    await h.operations.windowStateInWorker(env, 'devspace-x', { signal });
+    await h.operations.windowStateInWorker(env, 'devspaces-x', { signal });
     expect(sent[0]).toMatchObject({ timeoutMs: WINDOW_STATE_FLOW_TIMEOUT_MS });
     // That very signal, not one bounded by a time limit.
     expect(sent[0].signal).toBe(signal);
@@ -169,8 +169,8 @@ describe('the reads of an attached window through the worker, from the extension
   it('a read is passive and bounded by its time limit, with and without the branch', async () => {
     const { h, sent } = harness(async () => ({ state: 'running' }));
     const env = await seedDevspace(h, { container: 'running' });
-    await h.operations.windowStateInWorker(env, 'devspace-x', { branch: true });
-    await h.operations.windowStateInWorker(env, 'devspace-x');
+    await h.operations.windowStateInWorker(env, 'devspaces-x', { branch: true });
+    await h.operations.windowStateInWorker(env, 'devspaces-x');
     for (const each of sent) {
       expect(each).toMatchObject({ passive: true, timeoutMs: WINDOW_STATE_FLOW_TIMEOUT_MS });
       expect(each.signal).toBeInstanceOf(AbortSignal);
@@ -185,8 +185,8 @@ describe('the reads of an attached window through the worker, from the extension
       const env = await seedDevspace(h, { container: 'running' });
       const { h: h2, sent } = harness(async () => ({ state: 'running' }));
       await seedDevspace(h2, { container: 'running' });
-      await h.operations.windowStateInWorker(env, 'devspace-x');
-      await h2.operations.windowStateInWorker(env, 'devspace-x');
+      await h.operations.windowStateInWorker(env, 'devspaces-x');
+      await h2.operations.windowStateInWorker(env, 'devspaces-x');
       expect(timeout).toHaveBeenCalledWith(WINDOW_STATE_FLOW_TIMEOUT_MS);
       // That signal is the one sent.
       expect(sent[0].signal).toBe(timeout.mock.results[1].value);
@@ -202,7 +202,7 @@ describe('the reads of an attached window through the worker, from the extension
     const env = await h.registry.updateDevspace(ENV_ID, (entry) => {
       entry.dockerHost = 'other-box';
     });
-    expect(await h.operations.windowStateInWorker(env ?? (await h.registry.get(ENV_ID))!, 'devspace-x')).toBeUndefined();
+    expect(await h.operations.windowStateInWorker(env ?? (await h.registry.get(ENV_ID))!, 'devspaces-x')).toBeUndefined();
     expect(sent).toEqual([]);
   });
 });
@@ -213,7 +213,7 @@ describe('the reads of an attached window through the worker: the parameters', (
     const { h, sent } = harness(async () => ({ state: 'running' }));
     const env = await seedDevspace(h, { container: 'running' });
     h.settings = { ...h.settings, hostAccessChecksOff: [REPO] };
-    await h.operations.windowStateInWorker(env, 'devspace-x');
+    await h.operations.windowStateInWorker(env, 'devspaces-x');
     expect((sent[0].params as { checks: string }).checks).toBe('off');
   });
 
@@ -228,7 +228,7 @@ describe('the reads of an attached window through the worker: the parameters', (
   it('an empty remote user is not sent: the branch is read as the default user', async () => {
     const { h, sent } = harness(async () => ({ state: 'missing' }));
     const env = await seedDevspace(h, { container: 'running' });
-    expect(await h.operations.windowStateInWorker({ ...env, remoteUser: '' }, 'devspace-x', { branch: true })).toEqual({ state: 'missing' });
+    expect(await h.operations.windowStateInWorker({ ...env, remoteUser: '' }, 'devspaces-x', { branch: true })).toEqual({ state: 'missing' });
     expect((sent[0].params as { branch: unknown }).branch).toEqual({ folder: '/workspaces/api' });
   });
 });

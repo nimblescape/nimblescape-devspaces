@@ -13,7 +13,7 @@ import { workerBatchSession, type BatchDeps } from './batch';
 import { contextSecrets } from './operationContext.testkit';
 import { OperationError, type OperationContext, type Pausable } from './server';
 
-const VOLUME = 'devspace-vol-1';
+const VOLUME = 'devspaces-vol-1';
 const P = { volume: VOLUME, image: `sha256:${'a'.repeat(64)}`, socket: '/var/run/docker.sock' };
 
 function contextOf(pausable?: OperationContext['pausable']): OperationContext {

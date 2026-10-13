@@ -220,11 +220,11 @@ describe('the commands of the Monitor are entries of the registry', () => {
     expect(plain.sort()).toEqual(['monitorImages', 'monitorSettings']);
     const { engine, execs } = fakeEngine();
     const signal = new AbortController().signal;
-    await runScript(engine, 'devspace-monitor', 'monitorSettings', [], { input: '{"prefixes":[]}', timeoutMs: 20_000, signal });
-    await runScript(engine, 'devspace-monitor', 'monitorImages', [], { input: '{"repositories":[]}' });
+    await runScript(engine, 'devspaces-monitor', 'monitorSettings', [], { input: '{"prefixes":[]}', timeoutMs: 20_000, signal });
+    await runScript(engine, 'devspaces-monitor', 'monitorImages', [], { input: '{"repositories":[]}' });
     expect(execs).toEqual([
-      { container: 'devspace-monitor', command: ['node', REMOTE_MONITOR_SCRIPT_PATH, 'settings', '-'], options: { input: '{"prefixes":[]}', timeoutMs: 20_000, signal } },
-      { container: 'devspace-monitor', command: ['node', REMOTE_MONITOR_SCRIPT_PATH, 'images', '-'], options: { input: '{"repositories":[]}' } },
+      { container: 'devspaces-monitor', command: ['node', REMOTE_MONITOR_SCRIPT_PATH, 'settings', '-'], options: { input: '{"prefixes":[]}', timeoutMs: 20_000, signal } },
+      { container: 'devspaces-monitor', command: ['node', REMOTE_MONITOR_SCRIPT_PATH, 'images', '-'], options: { input: '{"repositories":[]}' } },
     ]);
     for (const name of Object.keys(CONTAINER_SCRIPTS) as ContainerScript[]) {
       if (plain.includes(name)) continue;

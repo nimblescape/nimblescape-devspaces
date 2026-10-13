@@ -44,7 +44,7 @@ describe('the certificate of a registry of an IP address through the tunnel', ()
   let cert: Buffer;
   const closers: (() => Promise<void>)[] = [];
   beforeAll(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-proxy-r2-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-proxy-r2-'));
     execFileSync(
       'openssl',
       ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=probe', '-addext', 'subjectAltName=IP:127.0.0.1,IP:10.1.2.4', '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem')],

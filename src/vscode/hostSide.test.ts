@@ -202,7 +202,7 @@ describe('the volumes of a removal from a flow', () => {
     expect(registry.remove).toHaveBeenCalledWith('e1', { kept: ['api-db'], removed: ['api-cache'] });
     registry.remove.mockClear();
     await expect(host.records.remove('e1', { removed: ['other-account-data'] })).rejects.toThrow('not additional volumes');
-    await expect(host.records.remove('e1', { kept: ['devspace-other'] })).rejects.toThrow('not additional volumes');
+    await expect(host.records.remove('e1', { kept: ['devspaces-other'] })).rejects.toThrow('not additional volumes');
     registry.get.mockResolvedValueOnce(undefined as unknown as Devspace);
     await expect(host.records.remove('e2', { removed: ['api-cache'] })).rejects.toThrow('not additional volumes');
     expect(registry.remove).not.toHaveBeenCalled();

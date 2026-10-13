@@ -85,7 +85,7 @@ describe('the registry writes of an open: entries, clashes and build records', (
   });
 
   it('an ID or a container name that the registry has is a clash, even under other names', async () => {
-    const other = { repository: 'acme/web', volumeName: 'devspace-elsewhere', containerName: 'devspace-elsewhere' };
+    const other = { repository: 'acme/web', volumeName: 'devspaces-elsewhere', containerName: 'devspaces-elsewhere' };
     for (const existing of [entryOf(NEW, other), entryOf(OTHER, { ...other, containerName: resourceName(REPOSITORY, NEW) })]) {
       const { ask, file } = firstOpen([existing]);
       await expect(ask('createDevspace', CREATE)).rejects.toMatchObject({ code: 'invalid', message: expect.stringContaining('already') });

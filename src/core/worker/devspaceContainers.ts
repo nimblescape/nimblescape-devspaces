@@ -67,7 +67,7 @@ export function runningDevContainers<T extends RuleContainer>(containers: readon
 
 /**
  * The running containers of the other services of Docker Compose among `containers` (label
- * nimblescape.devspace.compose-service): the running containers that are no dev container (isDevContainer), by the
+ * nimblescape.devspaces.compose-service): the running containers that are no dev container (isDevContainer), by the
  * recorded name `containerName`, so that these and runningDevContainers are every running container of the devspace,
  * each once.
  */

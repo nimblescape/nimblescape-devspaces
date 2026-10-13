@@ -16,11 +16,11 @@ const OWN = resourceName('acme/api', ID);
 describe('a repository named *.code-workspace', () => {
   it('checks the volume that the CLI mounts for ${localWorkspaceFolderBasename}', () => {
     const variables = helperCliVariables('mallory/evil.code-workspace');
-    const input = { ownVolume: 'devspace-evil.code-workspace-11111111', devspace: { id: 'attackerenv', ownerId: '1' }, variables };
+    const input = { ownVolume: 'devspaces-evil.code-workspace-11111111', devspace: { id: 'attackerenv', ownerId: '1' }, variables };
     const metadata = [{ mounts: ['type=volume,source=${localWorkspaceFolderBasename}-node_modules,target=/x'] }];
     // `up` mounts evil.code-workspace-node_modules (the repository folder), not workspaces-node_modules.
     expect(mountedVolumeNames({ ...input, metadata })).toEqual(['evil.code-workspace-node_modules']);
-    const victim = { 'nimblescape.devspace.id': 'victimenv', 'nimblescape.devspace.owner-id': '2', 'nimblescape.devspace.volume': 'additional' };
+    const victim = { 'nimblescape.devspaces.id': 'victimenv', 'nimblescape.devspaces.owner-id': '2', 'nimblescape.devspaces.volume': 'additional' };
     // The volume that `up` mounts.
     const report = hostAccessReport({ ...input, metadata, volumeLabels: { 'evil.code-workspace-node_modules': victim } }, false);
     expect(report.hostAccess).toHaveLength(1);

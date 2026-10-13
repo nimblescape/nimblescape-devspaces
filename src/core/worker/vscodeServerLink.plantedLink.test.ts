@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 function sandbox() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-link-r1-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-link-r1-'));
   temps.push(root);
   const store = path.join(root, 'store');
   const server = path.join(store, 'server', 'stable', 'linux-x64', COMMIT);

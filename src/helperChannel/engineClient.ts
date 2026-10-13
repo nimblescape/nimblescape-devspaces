@@ -338,7 +338,7 @@ export function dockerEngine(
       // child of the previous image, which is then kept. No label of ours on it; the commit would copy it into the
       // image. A name of its own (the commit does not copy it), by which it is removed also when its create did not
       // answer within its time limit.
-      const name = `devspace-label-${crypto.randomBytes(6).toString('hex')}`;
+      const name = `devspaces-label-${crypto.randomBytes(6).toString('hex')}`;
       const removeByName = () =>
         api({ method: 'DELETE', path: `/containers/${name}?force=true&v=true`, signal: AbortSignal.timeout(RUN_CLEANUP_TIMEOUT_MS) }).catch(() => undefined);
       const limit = AbortSignal.timeout(RUN_CLEANUP_TIMEOUT_MS);
@@ -348,7 +348,7 @@ export function dockerEngine(
       } catch (error) {
         // The engine may have created it although the answer failed; the name is ours, so it goes in every case. A
         // create that the engine ends only after this removal stays behind, never started, findable by the
-        // `devspace-label-` name.
+        // `devspaces-label-` name.
         await removeByName();
         if (!limit.aborted) throw error;
         throw new EngineError(`The engine did not answer the create of a container for the labels of ${image} within ${RUN_CLEANUP_TIMEOUT_MS / 1000} s.`, 0);
@@ -385,7 +385,7 @@ export function dockerEngine(
       if (signal?.aborted) throw abortError();
       // As labelImage: a name of its own, by which it is removed also when its create did not answer within its time
       // limit, and the create without the signal of the operation, so that a cancel never leaves it created but unknown.
-      const name = `devspace-read-${crypto.randomBytes(6).toString('hex')}`;
+      const name = `devspaces-read-${crypto.randomBytes(6).toString('hex')}`;
       const removeByName = () =>
         api({ method: 'DELETE', path: `/containers/${name}?force=true&v=true`, signal: AbortSignal.timeout(RUN_CLEANUP_TIMEOUT_MS) }).catch(() => undefined);
       const limit = AbortSignal.timeout(RUN_CLEANUP_TIMEOUT_MS);

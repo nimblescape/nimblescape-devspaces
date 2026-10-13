@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The heartbeats of a window to the Monitor container (`devspace-monitor`) of the Docker engine of each
+// The heartbeats of a window to the Monitor container (`devspaces-monitor`) of the Docker engine of each
 // devspace that the window uses, on every engine, local and remote. Driven by the window's tick of 15 s
 // (SessionCoordinator).
 //

@@ -18,7 +18,7 @@ export interface ContainerInfo {
   /** `State.Status` of `docker inspect`, for example `exited`. */
   rawState: string;
   labels: Record<string, string>;
-  /** Image reference that the container was created from (`Config.Image`), for example `devspace-acme-api-brave-noether:2`. */
+  /** Image reference that the container was created from (`Config.Image`), for example `devspaces-acme-api-brave-noether:2`. */
   image: string;
   /**
    * The full ID of the image that the container was created from (`Image` of `docker inspect`); `image` is only a name,

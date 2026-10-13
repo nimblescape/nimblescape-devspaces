@@ -54,7 +54,7 @@ const fake = vi.hoisted(() => {
 // Hoisted above the imports by vitest.
 vi.mock('vscode', () => fake.vscode);
 
-const NAME = 'devspace-acme-api-3f2a9c1e';
+const NAME = 'devspaces-acme-api-3f2a9c1e';
 
 function remoteFolder(name: string, folder = '/workspaces/api', dockerContext?: string): { uri: FakeUri } {
   return { uri: fake.uri({ scheme: 'vscode-remote', authority: encodeAuthority(name, dockerContext), path: folder }) };
@@ -86,7 +86,7 @@ describe('ConnectionAdapter', () => {
 
   it('opens the folder when the window shows another container or another folder', async () => {
     fake.state.remoteName = 'attached-container';
-    fake.state.workspaceFolders = [remoteFolder('devspace-acme-web-7c1d2e3f', '/workspaces/api')];
+    fake.state.workspaceFolders = [remoteFolder('devspaces-acme-web-7c1d2e3f', '/workspaces/api')];
     await new ConnectionAdapter().open(NAME, '/workspaces/api');
     fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/other')];
     await new ConnectionAdapter().open(NAME, '/workspaces/api');
@@ -95,22 +95,22 @@ describe('ConnectionAdapter', () => {
 
   // The Docker context of a remote devspace is part of the window's authority.
   it('opens the folder URI with the Docker context, in this window and in a new one', async () => {
-    await new ConnectionAdapter().open(NAME, '/workspaces/api', 'devspace-remote-2e9f507b');
-    await new ConnectionAdapter().openInNewWindow(NAME, '/workspaces/api', 'devspace-remote-2e9f507b');
+    await new ConnectionAdapter().open(NAME, '/workspaces/api', 'devspaces-remote-2e9f507b');
+    await new ConnectionAdapter().openInNewWindow(NAME, '/workspaces/api', 'devspaces-remote-2e9f507b');
     for (const call of fake.state.commands) {
-      expect((call as [string, FakeUri])[1]).toMatchObject({ authority: encodeAuthority(NAME, 'devspace-remote-2e9f507b'), path: '/workspaces/api' });
+      expect((call as [string, FakeUri])[1]).toMatchObject({ authority: encodeAuthority(NAME, 'devspaces-remote-2e9f507b'), path: '/workspaces/api' });
     }
     expect(fake.state.commands).toHaveLength(2);
   });
 
   it('reloads only a window with the same context; a window without it (or with another) opens the new URI', async () => {
     fake.state.remoteName = 'attached-container';
-    fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api', 'devspace-remote-2e9f507b')];
-    await new ConnectionAdapter().open(NAME, '/workspaces/api', 'devspace-remote-2e9f507b');
+    fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api', 'devspaces-remote-2e9f507b')];
+    await new ConnectionAdapter().open(NAME, '/workspaces/api', 'devspaces-remote-2e9f507b');
     fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api')];
-    await new ConnectionAdapter().open(NAME, '/workspaces/api', 'devspace-remote-2e9f507b');
-    fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api', 'devspace-remote-5709ff28')];
-    await new ConnectionAdapter().open(NAME, '/workspaces/api', 'devspace-remote-2e9f507b');
+    await new ConnectionAdapter().open(NAME, '/workspaces/api', 'devspaces-remote-2e9f507b');
+    fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api', 'devspaces-remote-5709ff28')];
+    await new ConnectionAdapter().open(NAME, '/workspaces/api', 'devspaces-remote-2e9f507b');
     expect(fake.state.commands.map((call) => call[0])).toEqual([RELOAD_WINDOW_COMMAND, OPEN_FOLDER_COMMAND, OPEN_FOLDER_COMMAND]);
   });
 
@@ -157,22 +157,22 @@ describe('ConnectionAdapter', () => {
     fake.state.remoteName = 'attached-container';
     fake.state.workspaceFile = fake.uri({
       scheme: 'vscode-remote',
-      authority: encodeAuthority('devspace-acme-web-7c1d2e3f'),
+      authority: encodeAuthority('devspaces-acme-web-7c1d2e3f'),
       path: '/workspaces/web/web.code-workspace',
     });
     fake.state.workspaceFolders = [remoteFolder(NAME)];
-    expect(new ConnectionAdapter().currentContainerName()).toBe('devspace-acme-web-7c1d2e3f');
+    expect(new ConnectionAdapter().currentContainerName()).toBe('devspaces-acme-web-7c1d2e3f');
   });
 
   // The context in the window's own authority.
   it('reads the Docker context of the attached window, and none without one or outside an attached window', () => {
     fake.state.remoteName = 'attached-container';
-    fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api', 'devspace-remote-5709ff28')];
-    expect(new ConnectionAdapter().currentDockerContext()).toBe('devspace-remote-5709ff28');
+    fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api', 'devspaces-remote-5709ff28')];
+    expect(new ConnectionAdapter().currentDockerContext()).toBe('devspaces-remote-5709ff28');
     fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api')];
     expect(new ConnectionAdapter().currentDockerContext()).toBeUndefined();
     fake.state.remoteName = 'ssh-remote';
-    fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api', 'devspace-remote-5709ff28')];
+    fake.state.workspaceFolders = [remoteFolder(NAME, '/workspaces/api', 'devspaces-remote-5709ff28')];
     expect(new ConnectionAdapter().currentDockerContext()).toBeUndefined();
   });
 

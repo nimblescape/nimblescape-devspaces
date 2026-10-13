@@ -65,7 +65,7 @@ const hasDash = hasProgram('dash', ['-c', 'true']);
 
 const tempDirs: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   tempDirs.push(dir);
   return dir;
 }
@@ -1377,7 +1377,7 @@ const hasSetpriv = hasProgram('setpriv', ['--version']);
  */
 describe.skipIf(!hasGit || !isRoot || !hasSetpriv)('GIT_SUMMARY_SCRIPT as the repository owner', () => {
   function ownerRepo(): string | undefined {
-    const base = fs.mkdtempSync(path.join(fs.existsSync('/var/tmp') ? '/var/tmp' : os.tmpdir(), 'devspace-owner-'));
+    const base = fs.mkdtempSync(path.join(fs.existsSync('/var/tmp') ? '/var/tmp' : os.tmpdir(), 'devspaces-owner-'));
     tempDirs.push(base);
     fs.chmodSync(base, 0o755);
     if (!passableForOthers(base)) return undefined;
@@ -1586,7 +1586,7 @@ describe.skipIf(!hasGit || !isRoot || !hasSetpriv)('GIT_SUMMARY_SCRIPT as the re
 describe.skipIf(process.getuid?.() !== 0)('the fix before the create after a new clone, with real tools as root', () => {
   // Its own time limit (the setup of 3000 folders is synchronous).
   it('gives every file of a repository with many folders its owner quickly (one chown for many files, not one per folder)', { timeout: 60_000 }, () => {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-many-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-many-'));
     try {
       const repository = path.join(folder, 'repo');
       for (let i = 0; i < 3000; i++) {

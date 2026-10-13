@@ -14,7 +14,7 @@ import { TOKEN_REMOVE_FLOW_TIMEOUT_MS } from '../pipeline/operationBase';
 import { removeTokenFlow, TOKEN_REMOVE_TIMEOUT_MS } from './tokenRemoveFlow';
 
 const DEVSPACE_ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-const CONTAINER = 'devspace-acme-api-brave-noether';
+const CONTAINER = 'devspaces-acme-api-brave-noether';
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
 
 function container(overrides: Partial<EngineContainer> = {}): EngineContainer {
@@ -24,7 +24,7 @@ function container(overrides: Partial<EngineContainer> = {}): EngineContainer {
     state: 'running',
     rawState: 'running',
     labels: { [LABEL_DEVSPACE_ID]: DEVSPACE_ID },
-    image: 'devspace-acme-api-brave-noether:1',
+    image: 'devspaces-acme-api-brave-noether:1',
     ...overrides,
   };
 }

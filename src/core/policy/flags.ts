@@ -286,7 +286,7 @@ export function portProblems(spec: string): string[] {
 /**
  * `--label`: no reserved key (isReservedLabel, compared without case and surrounding spaces), except the exact labels
  * that the override configuration adds itself (OWN_LABELS). In `docker run`, the runArgs come after the id label of the
- * Dev Container CLI (`nimblescape.devspace.id`), and the last label of a key wins: the extension and the
+ * Dev Container CLI (`nimblescape.devspaces.id`), and the last label of a key wins: the extension and the
  * Monitor would no longer find the container, or take it for another devspace. Other `devspace.…` keys are
  * allowed.
  */

@@ -5,7 +5,7 @@
 // The model that `up` runs (compose.ts) with the switch of the host access checks of the repository
 // (../hostAccessChecks.ts), and the host name of the dev container. With the checks off, the rewrite keeps what only
 // the class `computer` refuses (published ports on other addresses, bind mounts of the computer) and labels every
-// container nimblescape.devspace.host-access=unrestricted, as buildOverrideConfig does for a single container.
+// container nimblescape.devspaces.host-access=unrestricted, as buildOverrideConfig does for a single container.
 import { describe, expect, it } from 'vitest';
 import { HOST_ACCESS_UNRESTRICTED, LABEL_HOST_ACCESS, composeProjectName, resourceName } from '../names';
 import type { ComposeModel, ComposeService } from './composeModel';
@@ -79,13 +79,13 @@ describe('the host name of the dev container', () => {
 });
 
 describe('composeUpModel with the host access checks off', () => {
-  it('labels every container nimblescape.devspace.host-access=unrestricted only while the checks are off', () => {
+  it('labels every container nimblescape.devspaces.host-access=unrestricted only while the checks are off', () => {
     const off = composeUpModel(model(), params({ hostAccessChecks: 'off' })).model;
     expect(off.services.app.labels).toMatchObject({ [LABEL_HOST_ACCESS]: HOST_ACCESS_UNRESTRICTED });
     expect(off.services.db.labels).toMatchObject({ [LABEL_HOST_ACCESS]: HOST_ACCESS_UNRESTRICTED });
     const built = composeBuildModel(model(), params({ hostAccessChecks: 'off' })).model;
     expect(built.services.db.labels).toMatchObject({ [LABEL_HOST_ACCESS]: HOST_ACCESS_UNRESTRICTED });
-    // With the checks on, every service gets nimblescape.devspace.host-access=checked, so that a label of an image
+    // With the checks on, every service gets nimblescape.devspaces.host-access=checked, so that a label of an image
     // cannot decide it.
     for (const checks of [undefined, 'on'] as const) {
       const on = composeUpModel(model(), params({ hostAccessChecks: checks })).model;
@@ -113,9 +113,9 @@ describe('composeUpModel with the host access checks off', () => {
     const app = { volumes: [{ type: 'bind', source: '/workspaces', target: '/workspaces' }, socket] };
     const db = { volumes: [{ type: 'bind', source: `${REPO}/init.sql`, target: '/init.sql', read_only: true }] };
     const result = composeUpModel(model(app, db), params({ hostAccessChecks: 'off' })).model;
-    expect(result.services.app.volumes).toEqual([{ type: 'volume', source: 'devspace-workspace', target: '/workspaces' }, socket]);
+    expect(result.services.app.volumes).toEqual([{ type: 'volume', source: 'devspaces-workspace', target: '/workspaces' }, socket]);
     expect(result.services.db.volumes).toEqual([
-      { type: 'volume', source: 'devspace-workspace', target: '/init.sql', volume: { nocopy: true, subpath: 'api/init.sql' }, read_only: true },
+      { type: 'volume', source: 'devspaces-workspace', target: '/init.sql', volume: { nocopy: true, subpath: 'api/init.sql' }, read_only: true },
     ]);
     expect(() => composeUpModel(model(app), params())).toThrow('bind mount /var/run/docker.sock');
   });

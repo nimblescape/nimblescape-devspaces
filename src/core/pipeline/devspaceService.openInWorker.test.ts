@@ -23,7 +23,7 @@ type FlowOptions = Parameters<OperationFlow>[2];
 
 const SOURCE = '0123456789abcdef0123456789abcdef';
 const IMAGES = { schedule: '7 6 * * *', timeZone: 'UTC' };
-const OPENED = { devspaceId: ENV_ID, containerName: 'devspace-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
+const OPENED = { devspaceId: ENV_ID, containerName: 'devspaces-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
 
 function harness(answer: (op: string, params: unknown, options: FlowOptions) => Promise<unknown>, overrides: Partial<DevspaceServiceDeps & DevspaceOperationsDeps> = {}) {
   const sent: { op: string; params: Record<string, unknown>; timeoutMs?: number; signal?: AbortSignal }[] = [];

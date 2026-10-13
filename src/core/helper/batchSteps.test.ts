@@ -97,7 +97,7 @@ describe('batchStepCommand', () => {
         readFiles: { repository: REPO, configPath: '.devcontainer/devcontainer.json' },
         listConfigs: { repository: REPO },
         readConfiguration: { repository: REPO, configPath: '.devcontainer/devcontainer.json', devspaceId: ID, merged: false },
-        build: { repository: REPO, configPath: '.devcontainer/devcontainer.json', imageName: 'devspace-x' },
+        build: { repository: REPO, configPath: '.devcontainer/devcontainer.json', imageName: 'devspaces-x' },
         composeModel: { repository: REPO, files: [`${FOLDER}/compose.yml`], project: 'p' },
         composeHash: { repository: REPO, model: '{}', project: 'p' },
         createFolders: { repository: REPO, folders: [`${FOLDER}/data`] },
@@ -137,23 +137,23 @@ describe('batchStepCommand', () => {
     // Every build runs through WRITE_AND_RUN_SCRIPT, for its lockfile rule. Build and up run with the entitlement check
     // of bake off (BAKE_FS_ENTITLEMENTS_OFF, Buildx 0.37.2). The build takes the token to mask its output
     // (`secret: 'mask'`, as up and run-user-commands).
-    expect(batchStepCommand('build', { repository: REPO, configPath: '.devcontainer/devcontainer.json', imageName: 'devspace-x:1' })).toEqual({
-      command: writeAndRunCommand({ repositoryConfig: configFile }, buildArgs({ workspaceFolder: FOLDER, configPath: configFile, imageName: 'devspace-x:1' })),
+    expect(batchStepCommand('build', { repository: REPO, configPath: '.devcontainer/devcontainer.json', imageName: 'devspaces-x:1' })).toEqual({
+      command: writeAndRunCommand({ repositoryConfig: configFile }, buildArgs({ workspaceFolder: FOLDER, configPath: configFile, imageName: 'devspaces-x:1' })),
       input: writeAndRunInput(undefined, undefined),
       env: { BUILDX_BAKE_ENTITLEMENTS_FS: '0' },
       git: false,
       secret: 'mask',
     });
-    expect(batchStepCommand('build', { repository: REPO, configPath: '.devcontainer/devcontainer.json', imageName: 'devspace-x:1', override, files })).toEqual({
-      command: writeAndRunCommand({ repositoryConfig: configFile, config: OVERRIDE_CONFIG_PATH }, buildArgs({ workspaceFolder: FOLDER, configPath: OVERRIDE_CONFIG_PATH, imageName: 'devspace-x:1' })),
+    expect(batchStepCommand('build', { repository: REPO, configPath: '.devcontainer/devcontainer.json', imageName: 'devspaces-x:1', override, files })).toEqual({
+      command: writeAndRunCommand({ repositoryConfig: configFile, config: OVERRIDE_CONFIG_PATH }, buildArgs({ workspaceFolder: FOLDER, configPath: OVERRIDE_CONFIG_PATH, imageName: 'devspaces-x:1' })),
       input: writeAndRunInput(files, override),
       env: { BUILDX_BAKE_ENTITLEMENTS_FS: '0' },
       git: false,
       secret: 'mask',
     });
     // A prepare builds with --frozen-lockfile; only `true`, never with our copy of the configuration (Docker Compose).
-    expect(batchStepCommand('build', { repository: REPO, configPath: '.devcontainer/devcontainer.json', imageName: 'devspace-x:prepared', frozenLockfile: true })).toEqual({
-      command: writeAndRunCommand({ repositoryConfig: configFile }, buildArgs({ workspaceFolder: FOLDER, configPath: configFile, imageName: 'devspace-x:prepared', frozenLockfile: true })),
+    expect(batchStepCommand('build', { repository: REPO, configPath: '.devcontainer/devcontainer.json', imageName: 'devspaces-x:prepared', frozenLockfile: true })).toEqual({
+      command: writeAndRunCommand({ repositoryConfig: configFile }, buildArgs({ workspaceFolder: FOLDER, configPath: configFile, imageName: 'devspaces-x:prepared', frozenLockfile: true })),
       input: writeAndRunInput(undefined, undefined),
       env: { BUILDX_BAKE_ENTITLEMENTS_FS: '0' },
       git: false,

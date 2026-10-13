@@ -150,7 +150,7 @@ let dir: string;
 let file: string;
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-scope-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-scope-'));
   file = path.join(dir, `repositories-${ACCOUNT_ID}.json`);
 });
 

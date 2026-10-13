@@ -17,7 +17,7 @@ const TAG = helperImageTag('FROM node:22-bookworm-slim\n');
 let dir: string;
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-11ier1-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-11ier1-'));
 });
 
 afterEach(() => {

@@ -48,7 +48,7 @@ export default async function setup(project: TestProject): Promise<() => void> {
   const dockerPath = findDockerCli(process.env, process.platform);
   if (!dockerPath) throw new Error('The Docker tests need the Docker CLI, and it was not found.');
   const runId = crypto.randomBytes(4).toString('hex');
-  const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-docker-tests-'));
+  const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-docker-tests-'));
   const run: DockerTestRun = {
     runId,
     runDir,

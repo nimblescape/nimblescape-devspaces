@@ -122,7 +122,7 @@ describe('composeAccessReport: services (rule table 4.2)', () => {
   it.each<[string, string, Record<string, unknown>, HostAccessReport]>([
     // image
     ['an image', 'db', { image: 'mirror.gcr.io/library/alpine:3.22' }, NONE],
-    // A name like devspace-… is allowed; the pipeline refuses an image of the devspaces of another account by its ID
+    // A name like devspaces-… is allowed; the pipeline refuses an image of the devspaces of another account by its ID
     // (otherAccountImageItems).
     ['an image named like the image of a devspace', 'db', { image: `${OTHER}:3` }, NONE],
     ['an image named like the image of a devspace on Docker Hub', 'db', { image: `docker.io/library/${OTHER}-app` }, NONE],
@@ -140,7 +140,7 @@ describe('composeAccessReport: services (rule table 4.2)', () => {
     ['an absolute Dockerfile outside the repository', 'db', { build: { context: REPO, dockerfile: '/root/Dockerfile' } }, A('service db: Dockerfile /root/Dockerfile')],
     ['a dockerfile_inline', 'db', { build: { context: REPO, dockerfile_inline: 'FROM alpine' } }, NONE],
     ['a build label', 'db', { build: { context: REPO, labels: { team: 'a' } } }, NONE],
-    ['a reserved build label', 'db', { build: { context: REPO, labels: { 'nimblescape.devspace.id': 'x' } } }, U('service db: build label nimblescape.devspace.id')],
+    ['a reserved build label', 'db', { build: { context: REPO, labels: { 'nimblescape.devspaces.id': 'x' } } }, U('service db: build label nimblescape.devspaces.id')],
     // Labels of another tool with the prefix devspace. are not the extension's.
     ['a build label of another tool with the prefix devspace.', 'db', { build: { context: REPO, labels: { 'devspace.fingerprint': 'x', 'devspace.inputs': 'y' } } }, NONE],
     ['build ssh', 'db', { build: { context: REPO, ssh: ['default'] } }, A('service db: build ssh')],
@@ -193,10 +193,10 @@ describe('composeAccessReport: services (rule table 4.2)', () => {
     ['a container_name', 'db', { container_name: 'db1' }, NONE],
     // labels
     ['labels', 'db', { labels: { team: 'a' } }, NONE],
-    ['a devspace. label', 'db', { labels: { 'nimblescape.devspace.id': 'x' } }, U('service db: label nimblescape.devspace.id')],
-    ['a label of the extension (list, another case)', 'db', { labels: [' Nimblescape.DevSpace.Compose-Service=x'] }, U('service db: label Nimblescape.DevSpace.Compose-Service')],
+    ['a devspace. label', 'db', { labels: { 'nimblescape.devspaces.id': 'x' } }, U('service db: label nimblescape.devspaces.id')],
+    ['a label of the extension (list, another case)', 'db', { labels: [' Nimblescape.DevSpaces.Compose-Service=x'] }, U('service db: label Nimblescape.DevSpaces.Compose-Service')],
     ['labels of another tool with the prefix devspace.', 'db', { labels: { 'devspace.fingerprint': 'x', 'devspace.inputs': 'y' } }, NONE],
-    ['a later label with the prefix of the extension', 'db', { labels: { 'nimblescape.devspace.future': 'x' } }, U('service db: label nimblescape.devspace.future')],
+    ['a later label with the prefix of the extension', 'db', { labels: { 'nimblescape.devspaces.future': 'x' } }, U('service db: label nimblescape.devspaces.future')],
     ['a devcontainer. label (list)', 'db', { labels: ['devcontainer.metadata=[]'] }, U('service db: label devcontainer.metadata')],
     ['a com.docker.compose. label', 'db', { labels: { 'com.docker.compose.project': 'other' } }, U('service db: label com.docker.compose.project')],
     ['a label_file', 'db', { label_file: ['./labels'] }, U('service db: label_file')],
@@ -379,13 +379,13 @@ describe('composeAccessReport: the top level', () => {
     // Not supported (the pipeline creates the volumes without them).
     ['a volume with another driver', (m) => (m.volumes = { pgdata: { name: `${PROJECT}_pgdata`, driver: 'nfs' } }), U('volume pgdata: driver nfs (Devspaces creates the volumes with the local driver and without options; for a tmpfs, use the tmpfs option of the service)')],
     ['a volume with driver options', (m) => (m.volumes = { pgdata: { name: `${PROJECT}_pgdata`, driver_opts: { type: 'none', device: '/Users/x', o: 'bind' } } }), U('volume pgdata: driver options (Devspaces creates the volumes with the local driver and without options; for a tmpfs, use the tmpfs option of the service)')],
-    ['a volume with a reserved label', (m) => (m.volumes = { pgdata: { name: `${PROJECT}_pgdata`, labels: { 'nimblescape.devspace.volume': 'additional' } } }), U('volume pgdata: label nimblescape.devspace.volume')],
+    ['a volume with a reserved label', (m) => (m.volumes = { pgdata: { name: `${PROJECT}_pgdata`, labels: { 'nimblescape.devspaces.volume': 'additional' } } }), U('volume pgdata: label nimblescape.devspaces.volume')],
     ['a volume with a label of another tool with the prefix devspace.', (m) => (m.volumes = { pgdata: { name: `${PROJECT}_pgdata`, labels: { 'devspace.fingerprint': 'x' } } }), NONE],
     ['a volume with an unknown option', (m) => (m.volumes = { pgdata: { name: `${PROJECT}_pgdata`, future: 1 } }), U('volume pgdata: future')],
-    ['the key of the workspace volume', (m) => (m.volumes = { ...m.volumes, 'devspace-workspace': { name: `${PROJECT}_devspace-workspace` } }), U('volume key devspace-workspace (Devspaces uses it)')],
+    ['the key of the workspace volume', (m) => (m.volumes = { ...m.volumes, 'devspaces-workspace': { name: `${PROJECT}_devspace-workspace` } }), U('volume key devspaces-workspace (Devspaces uses it)')],
     ['a volume of the project of another devspace', (m) => (m.volumes = { ...m.volumes, data: { name: `${OTHER}_pgdata`, external: true } }), A(`volume ${OTHER}_pgdata of another devspace`)],
     ['the workspace volume of another devspace', (m) => (m.volumes = { ...m.volumes, data: { name: OTHER, external: true } }), A(`volume ${OTHER} of another devspace`)],
-    ['the cache volume of the helper', (m) => (m.volumes = { ...m.volumes, data: { name: 'devspace-helper-cache', external: true } }), A('volume devspace-helper-cache of the workspace helper')],
+    ['the cache volume of the helper', (m) => (m.volumes = { ...m.volumes, data: { name: 'devspaces-helper-cache', external: true } }), A('volume devspaces-helper-cache of the workspace helper')],
     ['a volume of the Dev Containers extension', (m) => (m.volumes = { ...m.volumes, data: { name: 'vscode', external: true } }), A('volume vscode of the Dev Containers extension')],
     // networks
     ['a bridge network', (m) => (m.networks = { front: { driver: 'bridge', internal: true, attachable: true, enable_ipv6: false, ipam: { config: [] }, labels: { a: 'b' } } }), NONE],
@@ -394,7 +394,7 @@ describe('composeAccessReport: the top level', () => {
     ['network driver options', (m) => (m.networks = { lan: { driver_opts: { parent: 'eth0' } } }), A('network lan: driver options')],
     ['a network of another devspace', (m) => (m.networks = { other: { name: `${OTHER}_default`, external: true } }), A(`network ${OTHER}_default of another devspace`)],
     ['a network with a reserved label', (m) => (m.networks = { front: { labels: { 'com.docker.compose.network': 'x' } } }), U('network front: label com.docker.compose.network')],
-    ['a network with a label of the extension', (m) => (m.networks = { front: { labels: { 'nimblescape.devspace.id': 'x' } } }), U('network front: label nimblescape.devspace.id')],
+    ['a network with a label of the extension', (m) => (m.networks = { front: { labels: { 'nimblescape.devspaces.id': 'x' } } }), U('network front: label nimblescape.devspaces.id')],
     ['a network with a label of another tool with the prefix devspace.', (m) => (m.networks = { front: { labels: { 'devspace.inputs': 'x' } } }), NONE],
     ['a network with an unknown option', (m) => (m.networks = { front: { future: 1 } }), U('network front: future')],
   ])('%s', (_name, change, expected) => {
@@ -402,9 +402,9 @@ describe('composeAccessReport: the top level', () => {
   });
 
   it('allows the own project volume when it exists with the labels of the devspace, and refuses one of another account', () => {
-    const own = { 'nimblescape.devspace.id': ID, 'nimblescape.devspace.owner-id': '42', 'nimblescape.devspace.volume': 'compose' };
+    const own = { 'nimblescape.devspaces.id': ID, 'nimblescape.devspaces.owner-id': '42', 'nimblescape.devspaces.volume': 'compose' };
     expect(composeAccessReport(input({ volumeLabels: { [`${PROJECT}_pgdata`]: own } }))).toEqual(NONE);
-    const other = { ...own, 'nimblescape.devspace.id': '11111111-0000-4000-8000-000000000000' };
+    const other = { ...own, 'nimblescape.devspaces.id': '11111111-0000-4000-8000-000000000000' };
     expect(composeAccessReport(input({ volumeLabels: { [`${PROJECT}_pgdata`]: other } }))).toEqual(A(`volume ${PROJECT}_pgdata of another devspace`));
     expect(composeAccessReport(input({ foreignVolumes: [`${PROJECT}_pgdata`] }))).toEqual(A(`volume ${PROJECT}_pgdata of another devspace`));
     expect(composeAccessReport(input({ volumeLabels: { [`${PROJECT}_pgdata`]: { 'com.docker.compose.project': 'shop' } } }))).toEqual(

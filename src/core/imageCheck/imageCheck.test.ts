@@ -270,7 +270,7 @@ describe('ImageChecker', () => {
 describe('compareWithBuildRecord', () => {
   const record: BuildRecord = {
     builtAt: '2026-09-24T15:44:00Z',
-    devspaceImage: 'devspace-3f2a9c1e:2',
+    devspaceImage: 'devspaces-3f2a9c1e:2',
     buildNumber: 2,
     configPath: '.devcontainer/devcontainer.json',
     configHash: 'sha256:7d0f',

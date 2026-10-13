@@ -202,7 +202,7 @@ describe('the open with the shared VS Code server', () => {
   });
 
   it('the store of the worker by its name (a volume of the Docker tests): mounted, never created, and checked by that name', async () => {
-    const store = 'devspace-test-vscode-x';
+    const store = 'devspaces-test-vscode-x';
     const t = harness({ vscodeServer: { server: SERVER, fetch: fakeFetch().fetch }, vscodeStoreVolume: store });
     t.helper.containerMounts = [{ ...STORE_MOUNT, volume: store }];
     t.docker.execHandler = (_container, command) => (command[2] === VSCODE_SERVER_LINK_SCRIPT ? { stdout: 'linked\n' } : {});
@@ -213,7 +213,7 @@ describe('the open with the shared VS Code server', () => {
   });
 
   it('a lost registry: the store that the container of a devspace mounts is not recorded again (by either name)', async () => {
-    for (const store of [VSCODE_STORE_VOLUME, 'devspace-test-vscode-x']) {
+    for (const store of [VSCODE_STORE_VOLUME, 'devspaces-test-vscode-x']) {
       const t = harness({ vscodeStoreVolume: store });
       const workspace = resourceName(REPO, ENV_ID);
       t.docker.volumes.set(workspace, { [LABEL_DEVSPACE_ID]: ENV_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id });

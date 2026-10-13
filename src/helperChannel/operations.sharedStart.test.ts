@@ -36,12 +36,12 @@ const TABLE: Record<string, { params: unknown; invalid: string; secret: string }
   sweep: { params: {}, invalid: 'The sweep operation takes no parameters.', secret: 'The sweep operation takes no secret.' },
   refresh: { params: { devspaces: [] }, invalid: 'The parameters of the refresh operation are invalid.', secret: 'The refresh operation takes no secret.' },
   tokenRemove: {
-    params: { devspaceId: ID, containerName: 'devspace-acme-api-brave-noether' },
+    params: { devspaceId: ID, containerName: 'devspaces-acme-api-brave-noether' },
     invalid: 'The parameters of the tokenRemove operation are invalid.',
     secret: 'The tokenRemove operation takes no secret.',
   },
   stop: {
-    params: { devspaceId: ID, containerName: 'devspace-acme-api-brave-noether', folder: '/workspaces/api', waitSeconds: 10 },
+    params: { devspaceId: ID, containerName: 'devspaces-acme-api-brave-noether', folder: '/workspaces/api', waitSeconds: 10 },
     invalid: 'The parameters of the stop operation are invalid.',
     secret: 'The stop operation takes no secret.',
   },
@@ -57,7 +57,7 @@ const TABLE: Record<string, { params: unknown; invalid: string; secret: string }
     secret: 'The deleteCheck operation takes no secret.',
   },
   windowState: {
-    params: { devspaceId: ID, containerName: 'devspace-acme-api-brave-noether', checks: 'on' },
+    params: { devspaceId: ID, containerName: 'devspaces-acme-api-brave-noether', checks: 'on' },
     invalid: 'The parameters of the windowState operation are invalid.',
     secret: 'The windowState operation takes no secret.',
   },

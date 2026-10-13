@@ -20,7 +20,7 @@ const NAME = `stable-linux-x64-${COMMIT}`;
 
 const temps: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-11h2r1-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-11h2r1-'));
   temps.push(dir);
   return dir;
 }

@@ -7,8 +7,8 @@
 import { describe, expect, it } from 'vitest';
 import { composeRecordOf } from './recordRules';
 
-const record = { builtAt: '', devspaceImage: 'devspace-3f2a9c1e:1', buildNumber: 1, configPath: 'c', configHash: 'h', images: {}, features: {} };
-const valid = { service: 'app', images: ['devspace-3f2a9c1e-app'], serviceImages: ['postgres:16'], version: '2.40.3', inputsHash: 'sha256:x' };
+const record = { builtAt: '', devspaceImage: 'devspaces-3f2a9c1e:1', buildNumber: 1, configPath: 'c', configHash: 'h', images: {}, features: {} };
+const valid = { service: 'app', images: ['devspaces-3f2a9c1e-app'], serviceImages: ['postgres:16'], version: '2.40.3', inputsHash: 'sha256:x' };
 
 describe('composeRecordOf, an empty service', () => {
   it('rejects an empty service in an otherwise valid record', () => {

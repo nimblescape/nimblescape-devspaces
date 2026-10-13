@@ -20,7 +20,7 @@ describe('DockerHostIndicator', () => {
 
   it('shows the remote host next to the view name and in the title', () => {
     const view: { description?: string; title?: string } = {};
-    new DockerHostIndicator(view, silentLogger).update(dockerTargetOf('ssh://machines', 'devspace-remote-5709ff28'));
+    new DockerHostIndicator(view, silentLogger).update(dockerTargetOf('ssh://machines', 'devspaces-remote-5709ff28'));
     expect(view.description).toBe(DockerHostTexts.remote('machines'));
     expect(view.description).toBe('Remote: machines');
     // The merged header of the single view shows the title, not the description.
@@ -65,9 +65,9 @@ describe('DockerHostIndicator', () => {
   it('gives the list the Docker host for its first row, and only when it changed', () => {
     const rows: Array<ShownDockerHost | undefined> = [];
     const indicator = new DockerHostIndicator({}, silentLogger, (host) => rows.push(host));
-    indicator.update(dockerTargetOf('ssh://htldvmhn', 'devspace-remote-2e9f507b'));
-    indicator.update(dockerTargetOf('ssh://htldvmhn', 'devspace-remote-2e9f507b'));
-    indicator.update(dockerTargetOf('ssh://machines', 'devspace-remote-5709ff28'));
+    indicator.update(dockerTargetOf('ssh://htldvmhn', 'devspaces-remote-2e9f507b'));
+    indicator.update(dockerTargetOf('ssh://htldvmhn', 'devspaces-remote-2e9f507b'));
+    indicator.update(dockerTargetOf('ssh://machines', 'devspaces-remote-5709ff28'));
     indicator.update(LOCAL_DOCKER_TARGET);
     indicator.update(LOCAL_DOCKER_TARGET);
     expect(rows).toEqual([

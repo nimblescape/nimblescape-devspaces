@@ -621,7 +621,7 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * Entries for the volumes with the label nimblescape.devspace.id, when registry.json is missing, not
+   * Entries for the volumes with the label nimblescape.devspaces.id, when registry.json is missing, not
    * valid, or has invalid entries. Only when Docker runs; Docker is not started for this. By the worker of the Docker
    * host; `passive` (the default, a call in the background): it is made ready as for the refresh. `adopt`, for a window
    * whose container the registry did not know at activation (no open pipeline runs for it): it takes its devspace
@@ -2060,7 +2060,7 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Why the container of the devspace exists but must not be used as it is: `version`, it was made by an older
-   * version of the extension (label nimblescape.devspace.container-version); `hostAccess`, it was made while the host
+   * version of the extension (label nimblescape.devspaces.container-version); `hostAccess`, it was made while the host
    * access checks of the repository were off, and they are on now (containerIsCurrent). `undefined` otherwise, and when
    * Docker cannot be asked. Never throws.
    */

@@ -175,11 +175,11 @@ describe('open: first open', () => {
       workspaceFolder: '/workspaces/api',
       shutdownAction: 'none',
     });
-    // With the labels of Docker Compose set empty, the label nimblescape.devspace.config-path, and the tmpfs of the
+    // With the labels of Docker Compose set empty, the label nimblescape.devspaces.config-path, and the tmpfs of the
     // token.
     expect(h.helper.ups[0].override.runArgs).toEqual([
       '--label',
-      'nimblescape.devspace.container-version=1',
+      'nimblescape.devspaces.container-version=1',
       ...CONFIG_PATH_LABEL,
       ...CLEARED_COMPOSE_LABELS,
       '--name',
@@ -312,7 +312,7 @@ describe('open: first open', () => {
     expect(error.message).toBe(Messages.buildFailed);
     expect(await h.registry.list()).toEqual([]);
     expect(h.docker.volumes.size).toBe(0);
-    expect([...h.docker.images].filter((image) => image.startsWith('devspace-'))).toEqual([]);
+    expect([...h.docker.images].filter((image) => image.startsWith('devspaces-'))).toEqual([]);
   });
 
   // The container is made only from an image that the engine has after the build.
@@ -397,7 +397,7 @@ describe('open: first open', () => {
     // A new clone: no service has run on the files yet, so no path of a service is left out.
     expect(fix.serviceFolders).toBeUndefined();
     expect(h.helper.helperImages.filter((entry) => entry.call === 'fixRepositoryOwnership')).toEqual([
-      { call: 'fixRepositoryOwnership', image: { tag: 'devspace-helper:test', id: h.helper.currentHelperImageId } },
+      { call: 'fixRepositoryOwnership', image: { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId } },
     ]);
     // No container of the devspace image runs for it.
     expect(h.docker.log.filter((line) => line.startsWith('run '))).toEqual([]);
@@ -602,7 +602,7 @@ describe('open: first open', () => {
     await h.service.open(TARGET, options());
     expect(h.ui.infos).toEqual([Messages.configurationNotFound(DEFAULT_CONFIG_PATH, 'python')]);
     // There is no previous helper image: the helper image of the open is the current tag with its image ID.
-    const previous = { tag: 'devspace-helper:test', id: h.helper.currentHelperImageId };
+    const previous = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
     const used = h.helper.helperImages.filter((entry) => entry.call === 'listConfigurations' || entry.call === 'readConfigFiles');
     expect(used.filter((entry) => entry.call === 'listConfigurations')).toHaveLength(1);
     // The read of the missing configuration and the read of the fallback.
@@ -1390,7 +1390,7 @@ describe('open: existing devspace', () => {
   // At Step 5 the configuration is not known yet, so a running container created without it counts as current and opens
   // as it is.
   it('opens a running container that was created without the configuration without the workspace helper', async () => {
-    await seedDevspace(h, { container: 'running', containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspace.container-config': 'unknown' } });
+    await seedDevspace(h, { container: 'running', containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspaces.container-config': 'unknown' } });
     h.helper.ensureImageError = new UserFacingError('helperFailed', Messages.helperFailed, 'apt-get failed');
     // The tag of the helper image exists (under the lock, the open builds only a missing tag); the maintaining ensure
     // of the open fails. A missing tag refuses the open before anything is changed (devspaceService.lock.test.ts).
@@ -1478,7 +1478,7 @@ describe('open: existing devspace', () => {
     const firstId = `sha256:${'5'.repeat(64)}`;
     h.helper.currentHelperImageId = firstId;
     await h.service.open(TARGET, options());
-    const previous = { tag: 'devspace-helper:test', id: firstId };
+    const previous = { tag: 'devspaces-helper:test', id: firstId };
     const calls = h.helper.helperImages.map((entry) => entry.call);
     expect(calls).toEqual(expect.arrayContaining(['clone', 'readConfigFiles', 'readConfiguration', 'build', 'up', 'runUserCommands', 'prepareGit']));
     expect(h.helper.helperImages.filter((entry) => JSON.stringify(entry.image) !== JSON.stringify(previous))).toEqual([]);
@@ -1489,7 +1489,7 @@ describe('open: existing devspace', () => {
     await h.service.open(TARGET, options());
     expect(h.helper.helperImages.length).toBeGreaterThan(0);
     // The current tag is pinned by the ID of its image, too.
-    const current = { tag: 'devspace-helper:test', id: h.helper.currentHelperImageId };
+    const current = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
     expect(h.helper.helperImages.filter((entry) => JSON.stringify(entry.image) !== JSON.stringify(current))).toEqual([]);
   });
 
@@ -1677,7 +1677,7 @@ describe('open: existing devspace', () => {
       await seedDevspace(h, {
         record: { images: { [BASE_IMAGE]: DIGEST_OLD } },
         container: 'running',
-        containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspace.container-config': 'unknown' },
+        containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspaces.container-config': 'unknown' },
       });
       h.helper.buildError = gone;
       const error = await rejection(h.service.open(TARGET, options()));
@@ -3253,7 +3253,7 @@ describe('open: existing devspace', () => {
         order.push('open start');
         await blocked;
         order.push('open end');
-        return { opened: { devspaceId: ENV_ID, containerName: 'devspace-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' } };
+        return { opened: { devspaceId: ENV_ID, containerName: 'devspaces-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' } };
       },
     });
     worker = fakeWorkerFlow(h, h.lock.take);
@@ -3368,7 +3368,7 @@ describe('open: registry lost', () => {
     expect([...h.ui.infos, ...h.ui.warnings]).toEqual([]);
   });
 
-  it('restores no volume without a valid label nimblescape.devspace.owner-id, and creates a devspace of the account', async () => {
+  it('restores no volume without a valid label nimblescape.devspaces.owner-id, and creates a devspace of the account', async () => {
     h.docker.volumes.set(OLD_NAME, { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO });
     const result = await h.service.open(TARGET, options());
     expect(result.devspace.id).not.toBe(OTHER_ID);
@@ -4251,7 +4251,7 @@ describe('reconcileFromVolumes', () => {
     const name = resourceName(REPO, OTHER_ID);
     h.docker.volumes.set(name, { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id });
     h.docker.volumes.set('api-node_modules', additionalVolumeLabels(OTHER_ID, ACCOUNT));
-    const foreign = ['vscode', 'vsc-remote-containers', `api-${'0f'.repeat(16)}`, 'devspace-helper-cache', 'devspace-monitor', resourceName('acme/web', '12345678-0000-4000-8000-000000000012')];
+    const foreign = ['vscode', 'vsc-remote-containers', `api-${'0f'.repeat(16)}`, 'devspaces-helper-cache', 'devspaces-monitor', resourceName('acme/web', '12345678-0000-4000-8000-000000000012')];
     const container = h.docker.addContainer({ devspaceId: OTHER_ID, name, state: 'stopped', image: devspaceImageName(REPO, OTHER_ID, 1) });
     h.docker.containers.set(container.id, { ...container, volumes: [name, ...foreign, 'api-node_modules'] });
     expect(await h.service.reconcileFromVolumes()).toBe(1);
@@ -4601,8 +4601,8 @@ describe('container-only Git', () => {
   it.each<[string, 'stopped' | 'running', Record<string, string>]>([
     ['a stopped container without the label', 'stopped', {}],
     ['a running container without the label', 'running', {}],
-    ['a container of an older version', 'stopped', { 'nimblescape.devspace.container-version': '0' }],
-    ['a running container with an invalid label', 'running', { 'nimblescape.devspace.container-version': 'x' }],
+    ['a container of an older version', 'stopped', { 'nimblescape.devspaces.container-version': '0' }],
+    ['a running container with an invalid label', 'running', { 'nimblescape.devspaces.container-version': 'x' }],
   ])('creates %s again from the devspace image, without a build; the volume stays', async (_name, state, labels) => {
     await seedDevspace(h, { container: state, containerLabels: labels });
     const before = h.docker.containersOf(ENV_ID)[0].id;
@@ -4612,7 +4612,7 @@ describe('container-only Git', () => {
     const containers = h.docker.containersOf(ENV_ID);
     expect(containers).toHaveLength(1);
     expect(containers[0].id).not.toBe(before);
-    expect(containers[0].labels['nimblescape.devspace.container-version']).toBe('1');
+    expect(containers[0].labels['nimblescape.devspaces.container-version']).toBe('1');
     expect(h.docker.volumes.has(NAME)).toBe(true);
     expect(h.docker.log.filter((line) => line.startsWith('volume rm'))).toEqual([]);
     expect(result.containerName).toBe(NAME);
@@ -4631,9 +4631,9 @@ describe('container-only Git', () => {
     for (const env of [override.containerEnv, override.remoteEnv]) {
       for (const name of ['SSH_AUTH_SOCK', 'REMOTE_CONTAINERS_IPC', 'BROWSER', 'GNUPGHOME']) expect(env).not.toHaveProperty(name);
     }
-    // With the labels of Docker Compose set empty, the label nimblescape.devspace.config-path, and the tmpfs of the
+    // With the labels of Docker Compose set empty, the label nimblescape.devspaces.config-path, and the tmpfs of the
     // token at the end.
-    expect((override.runArgs as string[]).slice(-14)).toEqual(['--label', 'nimblescape.devspace.container-version=1', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
+    expect((override.runArgs as string[]).slice(-14)).toEqual(['--label', 'nimblescape.devspaces.container-version=1', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
   });
 
   it('starts a current container as it is', async () => {
@@ -4697,7 +4697,7 @@ describe('container-only Git', () => {
       expect(h.helper.calls.filter((call) => call.startsWith('up'))).toEqual([`up ${IMAGE_1} --remove-existing-container`]);
       const provisional = h.docker.containersOf(ENV_ID)[0];
       expect(provisional.id).not.toBe(original);
-      expect(provisional.labels).toMatchObject({ 'nimblescape.devspace.container-version': '1', 'nimblescape.devspace.container-config': 'unknown' });
+      expect(provisional.labels).toMatchObject({ 'nimblescape.devspaces.container-version': '1', 'nimblescape.devspaces.container-config': 'unknown' });
       expect(h.progress.details).toContain(Messages.containerRecreated);
 
       // While the configuration stays broken, the provisional container is only started.
@@ -4717,12 +4717,12 @@ describe('container-only Git', () => {
       expect(h.helper.calls.filter((call) => call.startsWith('up'))).toEqual([`up ${IMAGE_1} --remove-existing-container`]);
       const last = h.helper.ups[h.helper.ups.length - 1];
       expect(last.override.runArgs).toEqual(expect.arrayContaining(['--network=host', '--cap-add=SYS_PTRACE']));
-      expect(last.override.runArgs).not.toContain('nimblescape.devspace.container-config=unknown');
+      expect(last.override.runArgs).not.toContain('nimblescape.devspaces.container-config=unknown');
       expect(last.override.appPort).toEqual(['127.0.0.1:3000:3000']);
       const final = h.docker.containersOf(ENV_ID);
       expect(final).toHaveLength(1);
       expect(final[0].id).not.toBe(provisional.id);
-      expect(final[0].labels['nimblescape.devspace.container-config']).toBeUndefined();
+      expect(final[0].labels['nimblescape.devspaces.container-config']).toBeUndefined();
       expect(h.progress.details).toEqual([Messages.containerConfigApplied]);
       expect(h.helper.builds).toEqual([]);
 
@@ -4915,7 +4915,7 @@ describe('single containers: build contexts, images, Dockerfiles and labels', ()
     await h.service.open(TARGET, options());
     expect(h.helper.dockerfileReads).toEqual(['Dockerfile']);
     // There is no previous helper image: the helper image of the open is the current tag with its image ID.
-    const previous = { tag: 'devspace-helper:test', id: h.helper.currentHelperImageId };
+    const previous = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
     const reads = h.helper.helperImages.filter((entry) => entry.call === 'readConfigFiles');
     // The read of the configuration and the read of the Dockerfile.
     expect(reads.length).toBeGreaterThanOrEqual(2);
@@ -4974,7 +4974,7 @@ describe('single containers: build contexts, images, Dockerfiles and labels', ()
   });
 
   it('refuses an image that Docker would find by the prefix of its ID, and allows an image named with hexadecimal characters', async () => {
-    // `a1b2c3d4` is no name of a local image: Docker takes it for the prefix of the ID of devspace-7c1d2e3f:2.
+    // `a1b2c3d4` is no name of a local image: Docker takes it for the prefix of the ID of devspaces-7c1d2e3f:2.
     h.docker.images.add('a1b2c3d4');
     h.docker.imageRepoNames.set('a1b2c3d4', { repoTags: [THEIRS_2], repoDigests: [] });
     h.helper.config = { image: 'a1b2c3d4' };
@@ -5059,9 +5059,9 @@ describe('single containers: build contexts, images, Dockerfiles and labels', ()
 
   it('refuses a devspace image with a label of the extension before the container is created', async () => {
     await seedDevspace(h, { container: null });
-    h.docker.imageConfigs.set(IMAGE_1, { User: '', Labels: { 'nimblescape.devspace.compose-service': 'x', 'devcontainer.metadata': '[]' } });
+    h.docker.imageConfigs.set(IMAGE_1, { User: '', Labels: { 'nimblescape.devspaces.compose-service': 'x', 'devcontainer.metadata': '[]' } });
     const error = await rejection(h.service.openDevspace(ENV_ID, options()));
-    expect(error.message).toBe(Messages.hostAccess(`label nimblescape.devspace.compose-service of the image ${IMAGE_1}`));
+    expect(error.message).toBe(Messages.hostAccess(`label nimblescape.devspaces.compose-service of the image ${IMAGE_1}`));
     expect(h.helper.ups).toEqual([]);
   });
 
@@ -5080,12 +5080,12 @@ describe('single containers: build contexts, images, Dockerfiles and labels', ()
 
   it('refuses an update whose new image carries a label of the extension, and starts the old container', async () => {
     await seedDevspace(h, { record: { images: { [BASE_IMAGE]: DIGEST_OLD } }, container: 'stopped' });
-    // labelImage gives the new image the devspace's own nimblescape.devspace.id after the build (it
+    // labelImage gives the new image the devspace's own nimblescape.devspaces.id after the build (it
     // overwrites one of the Dockerfile), so the test uses another label of the extension.
-    h.helper.buildLabels = { 'devspace.fingerprint': 'f', 'nimblescape.devspace.compose-service': 'x' };
+    h.helper.buildLabels = { 'devspace.fingerprint': 'f', 'nimblescape.devspaces.compose-service': 'x' };
     await h.service.openDevspace(ENV_ID, options());
     expect(h.helper.ups.map((u) => u.image)).toEqual([IMAGE_1]);
-    expect(h.ui.warnings).toEqual([Messages.updateRefused(`label nimblescape.devspace.compose-service of the image ${IMAGE_2}`)]);
+    expect(h.ui.warnings).toEqual([Messages.updateRefused(`label nimblescape.devspaces.compose-service of the image ${IMAGE_2}`)]);
   });
 
   it('passes a devspace image with its own labels and refuses one with the ID label of another devspace', async () => {
@@ -5129,7 +5129,7 @@ describe('single containers: build contexts, images, Dockerfiles and labels', ()
   it('finds a container whose image gave it the label of a Compose service, and creates it again once the checks are on', async () => {
     await seedDevspace(h, {
       container: 'running',
-      containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), [LABEL_HOST_ACCESS]: HOST_ACCESS_UNRESTRICTED, 'nimblescape.devspace.compose-service': 'x' },
+      containerLabels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), [LABEL_HOST_ACCESS]: HOST_ACCESS_UNRESTRICTED, 'nimblescape.devspaces.compose-service': 'x' },
     });
     const old = h.docker.containersOf(ENV_ID)[0].id;
     await h.service.openDevspace(ENV_ID, options());
@@ -5214,18 +5214,18 @@ describe('host access policy in the pipeline', () => {
       return;
     }
     await h.service.openDevspace(ENV_ID, options());
-    // With the labels of Docker Compose set empty, the label nimblescape.devspace.config-path, and the tmpfs of the
+    // With the labels of Docker Compose set empty, the label nimblescape.devspaces.config-path, and the tmpfs of the
     // token at the end.
-    expect(h.helper.ups[0].override.runArgs).toEqual([...passed, '--label', 'nimblescape.devspace.container-version=1', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
+    expect(h.helper.ups[0].override.runArgs).toEqual([...passed, '--label', 'nimblescape.devspaces.container-version=1', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
   });
 
   it('removes --rm, -i, -t, -d, and --name before up, and names them in the log', async () => {
     await seedDevspace(h, { container: null });
     h.helper.config = { image: BASE_IMAGE, runArgs: ['--rm', '-it', '--cap-drop', 'ALL', '-d', '--name', 'mine', '--label', '--rm'] };
     await h.service.openDevspace(ENV_ID, options());
-    // With the labels of Docker Compose set empty, the label nimblescape.devspace.config-path, and the tmpfs of the
+    // With the labels of Docker Compose set empty, the label nimblescape.devspaces.config-path, and the tmpfs of the
     // token at the end.
-    expect(h.helper.ups[0].override.runArgs).toEqual(['--cap-drop', 'ALL', '--label', '--rm', '--label', 'nimblescape.devspace.container-version=1', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
+    expect(h.helper.ups[0].override.runArgs).toEqual(['--cap-drop', 'ALL', '--label', '--rm', '--label', 'nimblescape.devspaces.container-version=1', ...CONFIG_PATH_LABEL, ...CLEARED_COMPOSE_LABELS, '--name', NAME, '--hostname', 'api', ...TOKEN_TMPFS_ARGS]);
     const lines = h.logger.infos.filter((line) => line.startsWith(`Removed from the runArgs of ${REPO}: `));
     expect(lines).toHaveLength(1);
     for (const removed of ['--rm (Devspaces stops, starts, and recreates the container', '-it (the container runs without a terminal', '-d (the Dev Container CLI stays attached', '--name mine (the container gets the name of the devspace)']) {
@@ -5457,13 +5457,13 @@ describe('host access policy in the pipeline', () => {
   it('refuses labels of Devspaces and variables of container-only Git before any build (findings 5 and 6)', async () => {
     h.helper.config = {
       image: BASE_IMAGE,
-      runArgs: ['--label', 'nimblescape.devspace.id=someone-else', '-e', 'GIT_CONFIG_GLOBAL=/tmp/gitconfig'],
+      runArgs: ['--label', 'nimblescape.devspaces.id=someone-else', '-e', 'GIT_CONFIG_GLOBAL=/tmp/gitconfig'],
       remoteEnv: { GIT_CONFIG_PARAMETERS: "'credential.helper=store'" },
     };
     const error = await rejection(h.service.open(TARGET, options()));
     expect(error.code).toBe('hostAccess');
     expect(error.message).toBe(
-      Messages.hostAccessAndUnsupported('variable GIT_CONFIG_GLOBAL in runArgs, variable GIT_CONFIG_PARAMETERS in remoteEnv', 'label nimblescape.devspace.id'),
+      Messages.hostAccessAndUnsupported('variable GIT_CONFIG_GLOBAL in runArgs, variable GIT_CONFIG_PARAMETERS in remoteEnv', 'label nimblescape.devspaces.id'),
     );
     expect(h.helper.builds).toEqual([]);
     expect(h.helper.ups).toEqual([]);
@@ -5483,7 +5483,7 @@ describe('host access policy in the pipeline', () => {
     expect(error.message).toBe(Messages.hostAccess('volume shop_db of the Docker Compose project shop'));
     // The cleanup of the failed first open reads the labels of the workspace volume too, and the first open reads them
     // after it created it (requireOwnVolume).
-    const workspace = expect.stringMatching(/^devspace-acme-api-[a-z]+-[a-z]+$/);
+    const workspace = expect.stringMatching(/^devspaces-acme-api-[a-z]+-[a-z]+$/);
     expect(h.docker.volumeInspections).toEqual([[workspace], ['shop_db', 'cache'], [workspace]]);
     expect(h.helper.builds).toEqual([]);
   });
@@ -5492,7 +5492,7 @@ describe('host access policy in the pipeline', () => {
     await h.service.open(TARGET, options());
     expect(h.helper.ups).toHaveLength(1);
     // Only the labels of the workspace volume (requireOwnVolume).
-    expect(h.docker.volumeInspections).toEqual([[expect.stringMatching(/^devspace-acme-api-[a-z]+-[a-z]+$/)]]);
+    expect(h.docker.volumeInspections).toEqual([[expect.stringMatching(/^devspaces-acme-api-[a-z]+-[a-z]+$/)]]);
   });
 
   describe('named volumes of devspaces of other accounts (finding 4)', () => {

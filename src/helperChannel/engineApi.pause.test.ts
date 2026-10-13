@@ -38,7 +38,7 @@ describe('the pause of a hijacked stream', () => {
   });
 
   it('reads no output while paused, and all of it after the resume', async () => {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-pause-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-pause-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     let engineSide: net.Socket | undefined;

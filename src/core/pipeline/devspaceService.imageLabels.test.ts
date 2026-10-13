@@ -161,7 +161,7 @@ describe('the labels of a new devspace image, and its pinned ID', () => {
     expect(h.helper.builds).toHaveLength(1);
     expect(h.helper.ups).toEqual([]);
     expect(await h.registry.list()).toEqual([]);
-    expect([...h.docker.images].filter((image) => image.startsWith('devspace-'))).toEqual([]);
+    expect([...h.docker.images].filter((image) => image.startsWith('devspaces-'))).toEqual([]);
   });
 
   it('fails a first open whose image is gone after its labels, and writes no record', async () => {
@@ -297,7 +297,7 @@ describe('reconcileFromVolumes and the names of the devspaces', () => {
   });
 
   it.each([
-    ['the name of the short ID', 'devspace-acme-api-3f2a9c1e'],
+    ['the name of the short ID', 'devspaces-acme-api-3f2a9c1e'],
     ['the name of another ID', resourceName(REPO, OTHER_ID)],
     ['the name of another repository', resourceName('acme/web', ENV_ID)],
     ['a name of its own', 'my-volume'],

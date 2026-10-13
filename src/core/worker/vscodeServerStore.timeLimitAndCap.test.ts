@@ -30,7 +30,7 @@ function deps(more: Partial<VscodeStoreDeps>): { deps: VscodeStoreDeps; log: str
   const log: string[] = [];
   const requests: HttpRequest[] = [];
   const logger: Logger = { ...silentLogger, info: (message) => log.push(`info ${message}`), warn: (message) => log.push(`warn ${message}`) };
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-store-r2probe-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-store-r2probe-'));
   temps.push(root);
   return {
     log,

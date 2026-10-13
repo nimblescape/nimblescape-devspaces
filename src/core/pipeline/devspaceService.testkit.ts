@@ -93,9 +93,9 @@ export const T0 = Date.parse('2026-09-24T15:40:00.000Z');
  */
 export const CLEARED_COMPOSE_LABELS: readonly string[] = ['--label', 'com.docker.compose.project=', '--label', 'com.docker.compose.service='];
 /**
- * The label nimblescape.devspace.config-path of the override configuration, for the default configuration.
+ * The label nimblescape.devspaces.config-path of the override configuration, for the default configuration.
  */
-export const CONFIG_PATH_LABEL: readonly string[] = ['--label', 'nimblescape.devspace.config-path=.devcontainer/devcontainer.json'];
+export const CONFIG_PATH_LABEL: readonly string[] = ['--label', 'nimblescape.devspaces.config-path=.devcontainer/devcontainer.json'];
 /** The tmpfs of the token at the end of the runArgs of the override configuration. */
 export const TOKEN_TMPFS_ARGS: readonly string[] = ['--tmpfs', TOKEN_TMPFS];
 
@@ -216,7 +216,7 @@ export class FakeDocker implements DevspaceDocker {
 
   /**
    * As EngineDocker.listProjectImages. With `devspaceId`, only the images whose label
-   * nimblescape.devspace.id is that ID (an unlabelled `<project>-*` image is left out too).
+   * nimblescape.devspaces.id is that ID (an unlabelled `<project>-*` image is left out too).
    */
   async listProjectImages(project: string, devspaceId?: string): Promise<string[]> {
     const owner = (image: string): string | undefined => this.imageConfigs.get(image)?.Labels?.[LABEL_DEVSPACE_ID];
@@ -556,7 +556,7 @@ export class FakeDocker implements DevspaceDocker {
   devspaceImageLists = 0;
 
   /**
-   * As `docker image ls --filter reference=devspace-*`: the images whose repository starts with `devspace-`, each ID
+   * As `docker image ls --filter reference=devspaces-*`: the images whose repository starts with `devspaces-`, each ID
    * once with its references (the ID as inspectImageNames gives it).
    */
   async listDevspaceImages(): Promise<ImageInfo[]> {
@@ -567,7 +567,7 @@ export class FakeDocker implements DevspaceDocker {
       // Docker stores and lists a name of Docker Hub without its registry and `library/`; `*` of the filter does not
       // match `/`.
       const name = reference.replace(/^(docker\.io|index\.docker\.io|registry-1\.docker\.io)\//, '').replace(/^library\//, '');
-      if (!/^devspace-[^/]*$/.test(name)) continue;
+      if (!/^devspaces-[^/]*$/.test(name)) continue;
       const tagged = name.includes(':') ? name : `${name}:latest`;
       const id = this.imageIds.get(reference) ?? `sha256:image-of-${reference}`;
       const image = byId.get(id) ?? { id, tags: [], createdAt: '' };
@@ -598,7 +598,7 @@ export class FakeDocker implements DevspaceDocker {
    */
   fullContainerIds = false;
 
-  /** `labels` default: the label nimblescape.devspace.container-version of the current setup. */
+  /** `labels` default: the label nimblescape.devspaces.container-version of the current setup. */
   addContainer(p: {
     devspaceId: string;
     name: string;
@@ -635,7 +635,7 @@ export class FakeDocker implements DevspaceDocker {
 
 /**
  * Labels of an additional volume that the pipeline created for the devspace `id` (additionalVolumeLabels): only
- * these make a volume the devspace's own. `owner` null: a volume without the label nimblescape.devspace.owner-id (made
+ * these make a volume the devspace's own. `owner` null: a volume without the label nimblescape.devspaces.owner-id (made
  * by hand).
  */
 export function additionalVolumeLabels(
@@ -680,7 +680,7 @@ export function fakeServiceHash(service: unknown): string {
 }
 
 export class FakeHelper implements DevspaceHelper {
-  /** Calls in order, for example `clone main`, `build devspace-3f2a9c1e:1`, `up devspace-3f2a9c1e:1 --remove-existing-container`. */
+  /** Calls in order, for example `clone main`, `build devspaces-3f2a9c1e:1`, `up devspaces-3f2a9c1e:1 --remove-existing-container`. */
   readonly calls: string[] = [];
   /** Files of the repository in the volume, per configuration path. */
   files: Record<string, FakeFiles> = { [DEFAULT_CONFIG_PATH]: { configText: DEFAULT_CONFIG_TEXT } };
@@ -699,7 +699,7 @@ export class FakeHelper implements DevspaceHelper {
    * not.
    */
   tagPresent = false;
-  /** The ID of the image of the current tag `devspace-helper:test`, which the open pins. */
+  /** The ID of the image of the current tag `devspaces-helper:test`, which the open pins. */
   currentHelperImageId = `sha256:${'4'.repeat(64)}`;
   cloneError: Maybe<Error>;
   readConfigurationError: Maybe<Error>;
@@ -835,7 +835,7 @@ export class FakeHelper implements DevspaceHelper {
   async ownImageUse(_signal?: AbortSignal): Promise<HelperImageUse> {
     this.calls.push('ensureImage');
     if (this.ensureImageError) throw this.ensureImageError;
-    return { tag: 'devspace-helper:test', id: this.currentHelperImageId };
+    return { tag: 'devspaces-helper:test', id: this.currentHelperImageId };
   }
 
   /**
@@ -847,7 +847,7 @@ export class FakeHelper implements DevspaceHelper {
   async ensureImagePresent(_options: { onOutput?: (text: string) => void; signal?: AbortSignal } = {}): Promise<HelperImageUse> {
     this.calls.push('ensureImagePresent');
     if (this.ensureImageError && !this.tagPresent) throw this.ensureImageError;
-    return { tag: 'devspace-helper:test', id: this.currentHelperImageId };
+    return { tag: 'devspaces-helper:test', id: this.currentHelperImageId };
   }
 
   async clone(p: { volumeName: string; repository: string; branch?: string; token: string; image?: HelperImageUse; signal?: AbortSignal }): Promise<void> {
@@ -1598,7 +1598,7 @@ export function fakeWorkerFlow(h: Pick<Harness, 'docker' | 'helper' | 'logger' |
 export type HarnessOverrides = Partial<Omit<DevspaceServiceDeps & DevspaceOperationsDeps, 'registry'> & { registry: WindowDevspaceStore }>;
 
 export function createHarness(overrides: HarnessOverrides = {}): Harness {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   const paths = new StoragePaths(root);
   paths.ensureDirectoriesSync();
   let now = T0;
@@ -1712,7 +1712,7 @@ export interface SeedOptions {
   image?: boolean;
   /** The workspace volume exists. Default true. */
   volume?: boolean;
-  /** Labels of the container. Default: the label nimblescape.devspace.container-version of the current setup. */
+  /** Labels of the container. Default: the label nimblescape.devspaces.container-version of the current setup. */
   containerLabels?: Record<string, string>;
   /** Default: ACCOUNT. */
   owner?: GitHubAccount;

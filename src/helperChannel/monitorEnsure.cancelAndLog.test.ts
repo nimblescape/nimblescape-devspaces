@@ -11,7 +11,7 @@ import { monitorEnsureOperation } from './flowOperations';
 import { contextSecrets } from './operationContext.testkit';
 import type { OperationContext } from './server';
 
-const OWN: OwnHelper = { image: { tag: 'devspace-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
+const OWN: OwnHelper = { image: { tag: 'devspaces-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
 const IMAGES = { schedule: '7 6 * * *', timeZone: 'UTC' };
 
 function contextOf() {

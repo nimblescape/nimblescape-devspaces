@@ -70,7 +70,7 @@ let dir: string;
 let state: RemoteDockerState;
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-'));
   state = new RemoteDockerState(path.join(dir, 'remote-docker.json'));
   vi.clearAllMocks();
 });
@@ -503,9 +503,9 @@ describe('the Docker context commands', () => {
     expect(localContextChoice('desktop-linux', [local('default'), local('desktop-linux'), own('box', 'box')])).toBe('desktop-linux');
     expect(localContextChoice('gone', [local('default')])).toBe('default');
     expect(localContextChoice(undefined, [local('default'), local('desktop-linux')])).toBe('default');
-    // A context named `devspace-remote` without the description of Devspaces is not one of ours; like any context of
+    // A context named `devspaces-remote` without the description of Devspaces is not one of ours; like any context of
     // the user it is remembered.
-    expect(localContextChoice('devspace-remote', [local('default'), local('devspace-remote')])).toBe('devspace-remote');
+    expect(localContextChoice('devspaces-remote', [local('default'), local('devspaces-remote')])).toBe('devspaces-remote');
     // Never a context of ours: ours by the description, whatever the name.
     expect(localContextChoice('box', [local('default'), own('box', 'box')])).toBe('default');
     expect(localContextChoice('anything', [local('default'), own('anything', 'me@box')])).toBe('default');

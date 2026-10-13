@@ -24,7 +24,7 @@ const EXIT = 'the Monitor exits. The next open starts it again.';
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-11h2r3-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-11h2r3-'));
 });
 
 afterEach(() => {
@@ -48,7 +48,7 @@ describe('the idle exit after the removals of old records', () => {
     fs.mkdirSync(store);
     const vscode = {
       store: { root: store },
-      storeVolume: 'devspace-vscode',
+      storeVolume: 'devspaces-vscode',
       // The monitor's volume of the run (the extension lists) is the temporary state folder of the test, as main gives
       // its own to vscodeBackgroundDeps; never the real /state.
       extensionStateDir: stateDir,

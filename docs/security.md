@@ -68,10 +68,10 @@ The checks are on for every repository by default. The user setting `devspaces.h
 - Everything of another devspace: its workspace volume, a volume that a devspace of another GitHub account uses or that its Delete kept, its named networks, and the images of the devspaces of other accounts (by image ID, not by name).
 - The processes of other containers, and their volumes through `--volumes-from` or `volumes_from`, also of the dev container for the other services of Docker Compose.
 - The folders of Devspaces as paths of the configuration (a mount, a build context, or a Dockerfile): the token folder `/run/devspace` (also as `/var/run/devspace`), the configuration folder `/workspaces/.devspace+`, and the folders of the helper with the Docker socket and the token. A mount propagation that shares `/`, `/run`, or `/var/run` with the host is refused too.
-- The cache volume of the helper and the volumes of Devspaces (`devspace-monitor`, `devspace-vscode`).
+- The cache volume of the helper and the volumes of Devspaces (`devspaces-monitor`, `devspaces-vscode`).
 - The variables that set the Git configuration (`GIT_CONFIG`, `GIT_CONFIG_*`) or that Devspaces sets (`GIT_SSH_COMMAND`, `DOCKER_CONFIG`, `GH_CONFIG_DIR`), and the token and host variables of the GitHub CLI (`GH_TOKEN`, `GITHUB_TOKEN`, `GH_ENTERPRISE_TOKEN`, `GITHUB_ENTERPRISE_TOKEN`, `GH_HOST`), in `runArgs`, `containerEnv`, and `remoteEnv`, also when a Feature or the base image sets them.
 - `initializeCommand`: it would run in the helper, which has the Docker socket.
-- Labels with the prefixes `nimblescape.devspace.` and `devcontainer.` (except `devcontainer.metadata`), and the labels of Docker Compose. Such a label could hide a container from Devspaces or make it look like another devspace.
+- Labels with the prefixes `nimblescape.devspaces.` and `devcontainer.` (except `devcontainer.metadata`), and the labels of Docker Compose. Such a label could hide a container from Devspaces or make it look like another devspace.
 - A Dockerfile longer than 1 MiB, or one that links out of the repository.
 - Options of `runArgs` and `build.options` that Devspaces does not know.
 

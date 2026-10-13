@@ -43,18 +43,18 @@ export interface DevspaceDocker {
    */
   imageUserIds(image: string, user: string, options?: { signal?: AbortSignal; timeoutMs?: number }): Promise<UserIds | undefined>;
   /**
-   * The dev container of the devspace (label nimblescape.devspace.id, isDevContainer) by the one rule of
+   * The dev container of the devspace (label nimblescape.devspaces.id, isDevContainer) by the one rule of
    * the dev container (devContainerOf): the container named `containerName` whatever its state, else the newest running
    * one, else the newest one.
    */
   findContainer(devspaceId: string, containerName: string): Promise<ContainerInfo | undefined>;
   /**
-   * All containers with the label nimblescape.devspace.id, running or not (the refresh reads all
+   * All containers with the label nimblescape.devspaces.id, running or not (the refresh reads all
    * devspaces at once). Each with the time of its create, for the rule of the dev container.
    */
   listDevspaceContainers(): Promise<ListedContainer[]>;
   /**
-   * The containers with the label nimblescape.devspace.id of `devspaceId`, running or not: its dev
+   * The containers with the label nimblescape.devspaces.id of `devspaceId`, running or not: its dev
    * container and the other services; each with the time of its create.
    */
   devspaceContainers(devspaceId: string): Promise<ListedContainer[]>;
@@ -66,7 +66,7 @@ export interface DevspaceDocker {
   removeNetwork(name: string): Promise<void>;
   /**
    * The images that Docker Compose built for the project `project` (`<project>-*` with a tag), as `repository:tag`; with
-   * `devspaceId`, only those whose label nimblescape.devspace.id names that devspace.
+   * `devspaceId`, only those whose label nimblescape.devspaces.id names that devspace.
    */
   listProjectImages(project: string, devspaceId?: string): Promise<string[]>;
   /**
@@ -96,7 +96,7 @@ export interface DevspaceDocker {
   volumeExists(name: string): Promise<boolean>;
   createVolume(name: string, labels: Record<string, string>): Promise<void>;
   removeVolume(name: string): Promise<void>;
-  /** The volumes with the label nimblescape.devspace.id. */
+  /** The volumes with the label nimblescape.devspaces.id. */
   listDevspaceVolumes(signal?: AbortSignal): Promise<VolumeInfo[]>;
   /** The volumes of `names` that exist, each once. */
   inspectVolumes(names: readonly string[]): Promise<VolumeInfo[]>;
@@ -128,7 +128,7 @@ export interface DevspaceDocker {
   removeImage(reference: string): Promise<boolean>;
   /** The tags `repository:tag` of exactly this repository, sorted by tag, numbers numerically. */
   listImageTags(repository: string): Promise<string[]>;
-  /** The named images `devspace-*`, each once with its references. */
+  /** The named images `devspaces-*`, each once with its references. */
   listDevspaceImages(signal?: AbortSignal): Promise<ImageInfo[]>;
   /**
    * `docker pull`. EngineDocker.pullImage asks for the login of the registry of the reference itself, and holds it only

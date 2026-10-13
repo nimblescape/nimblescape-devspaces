@@ -16,7 +16,7 @@ import type { Devspace } from '../core/types';
 import { Controller, type ControllerDeps } from './controller';
 import { resetFakeVscode } from './testing/fakeVscode';
 
-const CONTAINER = 'devspace-acme-api-3f2a9c1e';
+const CONTAINER = 'devspaces-acme-api-3f2a9c1e';
 
 function devspace(): Devspace {
   return {
@@ -65,11 +65,11 @@ afterEach(() => vi.restoreAllMocks());
 describe('readyForWindow', () => {
   it('lets the window connect to a container the worker reads as running, read by the name of the result', async () => {
     const p = probe();
-    expect(await readyForWindow(p, 'devspace-result-name')).toBeUndefined();
+    expect(await readyForWindow(p, 'devspaces-result-name')).toBeUndefined();
     expect(p.windowStateInWorker).toHaveBeenCalledTimes(1);
     // The name of the container of the open's result, without the branch, with a signal (bounded, ended by the cancel
     // of the open), so not passive.
-    expect(p.windowStateInWorker.mock.calls[0][1]).toBe('devspace-result-name');
+    expect(p.windowStateInWorker.mock.calls[0][1]).toBe('devspaces-result-name');
     const options = p.windowStateInWorker.mock.calls[0][2];
     expect(Object.keys(options ?? {})).toEqual(['signal']);
     expect(options?.signal).toBeInstanceOf(AbortSignal);

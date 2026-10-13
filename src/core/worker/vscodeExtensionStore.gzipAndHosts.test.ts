@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 function folder(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ext-store-r1-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ext-store-r1-'));
   temps.push(root);
   return root;
 }

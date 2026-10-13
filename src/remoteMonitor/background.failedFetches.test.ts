@@ -52,9 +52,9 @@ function harness(options: {
   /** The processes of the containers that mount the store (each container: its process lines); default none. */
   processes?: Record<string, string[][]>;
 }) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-background-ph2r2-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-background-ph2r2-'));
   temps.push(root);
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-background-ph2r2-state-'));
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-background-ph2r2-state-'));
   temps.push(stateDir);
   const log: string[] = [];
   const requests: HttpRequest[] = [];
@@ -84,7 +84,7 @@ function harness(options: {
   };
   const vscode: VscodeBackgroundDeps = {
     store,
-    storeVolume: 'devspace-vscode',
+    storeVolume: 'devspaces-vscode',
     // The monitor's volume of the run (the extension lists) is a temporary folder, never the real /state (as in
     // background.test.ts).
     extensionStateDir: stateDir,

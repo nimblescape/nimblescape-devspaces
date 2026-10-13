@@ -10,7 +10,7 @@ import { unusedEngine } from './dockerEngine.testkit';
 import { removeTokenFlow } from './tokenRemoveFlow';
 
 const DEVSPACE_ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-const CONTAINER = 'devspace-acme-api-brave-noether';
+const CONTAINER = 'devspaces-acme-api-brave-noether';
 
 function container(id: string, name: string, state: 'running' | 'stopped', created: string): EngineContainer {
   return { id: id.repeat(64), name, state, rawState: state === 'running' ? 'running' : 'exited', labels: { [LABEL_DEVSPACE_ID]: DEVSPACE_ID }, image: 'img:1', created };

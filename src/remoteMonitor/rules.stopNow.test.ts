@@ -14,8 +14,8 @@ const OTHER = 'fedcba9876543210fedcba9876543210';
 const T0 = Date.parse('2026-10-11T12:00:00.000Z');
 const MINUTE = 60_000;
 
-const dev: RemoteContainer = { id: 'dev', state: 'running', name: 'devspace-api', devspaceId: A, composeService: '' };
-const db: RemoteContainer = { id: 'db', state: 'running', name: 'devspace-api-db-1', devspaceId: A, composeService: 'db' };
+const dev: RemoteContainer = { id: 'dev', state: 'running', name: 'devspaces-api', devspaceId: A, composeService: '' };
+const db: RemoteContainer = { id: 'db', state: 'running', name: 'devspaces-api-db-1', devspaceId: A, composeService: 'db' };
 
 function record(at: number, extra: Partial<RemoteRecord> = {}): RemoteRecord {
   return { source: SOURCE, devspaceId: A, at, keepRunning: false, limitSeconds: 600, ...extra };

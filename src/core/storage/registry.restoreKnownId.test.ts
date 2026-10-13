@@ -30,7 +30,7 @@ let root: string;
 let registry: DevspaceRegistry;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-restore-r1-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-restore-r1-'));
   registry = new DevspaceRegistry(new StoragePaths(root));
 });
 

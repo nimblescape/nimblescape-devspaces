@@ -27,7 +27,7 @@ function setup() {
       secretOf: () => undefined,
       forgetSecret: () => undefined,
       logger: silentLogger,
-      ownHelper: { image: { tag: 'devspace-helper:abc', id: `sha256:${'e'.repeat(64)}` }, socket: '/s.sock' },
+      ownHelper: { image: { tag: 'devspaces-helper:abc', id: `sha256:${'e'.repeat(64)}` }, socket: '/s.sock' },
       dockerHost: '',
       owner: { windowId: 'w', pid: 1 },
       devspaceLock: async () => Promise.reject(new Error('no lock in this test')),

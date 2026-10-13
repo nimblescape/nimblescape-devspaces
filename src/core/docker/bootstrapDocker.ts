@@ -403,7 +403,7 @@ export class BootstrapDocker {
 
   /**
    * Local images with a label (`docker image ls --filter label=<label> --no-trunc`, then the same with `--filter
-   * dangling=true`), for example `nimblescape.devspace.helper=true`. Dangling images are included, with no tags. One
+   * dangling=true`), for example `nimblescape.devspaces.helper=true`. Dangling images are included, with no tags. One
    * entry per image ID, with all its tags. Throws CommandError.
    */
   async listImagesByLabel(label: string): Promise<ImageInfo[]> {
@@ -449,7 +449,7 @@ export class BootstrapDocker {
   }
 
   /**
-   * `docker build -t <tag> -f <dockerfile> [--pull] [--no-cache] [--label k=v]… --label nimblescape.devspace.build-id=<nonce>
+   * `docker build -t <tag> -f <dockerfile> [--pull] [--no-cache] [--label k=v]… --label nimblescape.devspaces.build-id=<nonce>
    * [--build-arg k=v]… <context>`. `pull`: pull the base images even if they exist locally; `noCache`: build every step
    * again. Docker moves the tag only when the build succeeds. Throws CommandError when the build fails.
    *

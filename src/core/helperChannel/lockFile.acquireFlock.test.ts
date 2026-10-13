@@ -148,7 +148,7 @@ describe('each caller keeps its errors', () => {
   describe('storeLock and storeTryLock (the shared VS Code store)', () => {
     let root: string;
     beforeEach(() => {
-      root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-c5-store-'));
+      root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-c5-store-'));
     });
     afterEach(() => {
       fs.rmSync(root, { recursive: true, force: true });

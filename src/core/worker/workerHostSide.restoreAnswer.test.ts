@@ -9,8 +9,8 @@ import { workerHostSide } from './workerHostSide';
 describe('records.restore in the worker', () => {
   it('sends the entries as record restore and refuses an invalid answer', async () => {
     const asked: unknown[] = [];
-    const ok = workerHostSide(async (request) => (asked.push(request), { added: 1, skipped: ['devspace-x'] }), () => undefined);
-    expect(await ok.records.restore([])).toEqual({ added: 1, skipped: ['devspace-x'] });
+    const ok = workerHostSide(async (request) => (asked.push(request), { added: 1, skipped: ['devspaces-x'] }), () => undefined);
+    expect(await ok.records.restore([])).toEqual({ added: 1, skipped: ['devspaces-x'] });
     expect(asked).toEqual([{ kind: 'record', call: 'restore', args: [[]] }]);
     const odd = workerHostSide(async () => ({ added: '1', skipped: [] }), () => undefined);
     await expect(odd.records.restore([])).rejects.toThrow('invalid value');

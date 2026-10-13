@@ -40,7 +40,7 @@ describe('the time limit of the lists and the stop of the Monitor', () => {
   it('containerSummaries gives its signal to the request, so the time limit ends a list that the engine does not answer', async () => {
     const { engine, requests } = hangingEngine(LIST);
     const limit = new AbortController();
-    const listed = engine.containerSummaries('nimblescape.devspace.id', limit.signal);
+    const listed = engine.containerSummaries('nimblescape.devspaces.id', limit.signal);
     limit.abort();
     await expect(listed).rejects.toMatchObject({ name: 'AbortError' });
     // The one request of the list got the signal (or one that ended with it).

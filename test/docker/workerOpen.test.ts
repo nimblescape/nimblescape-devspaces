@@ -6,7 +6,7 @@
 // and the extension's HostSide over a real registry and real session files) to a real worker, whose own pipeline builds
 // the image, runs `up` and the lifecycle commands in its batch helper, writes the token, makes sure that the Session
 // Monitor runs, and records the open through the requests of the operation. The window would connect with the answer.
-// The test makes sure of the Monitor of the engine (devspace-monitor); it is skipped where one exists
+// The test makes sure of the Monitor of the engine (devspaces-monitor); it is skipped where one exists
 // before the tests (a monitor of the user is never touched), and removes the one it made.
 import * as fs from 'fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -27,7 +27,7 @@ import {
 } from './harness';
 import { monitorOfUser as engineHadMonitor, removeTestMonitor, seedTestMonitorRun, workerWindow } from './workerWindow';
 
-const REPOSITORY = 'devspace-test/worker-open';
+const REPOSITORY = 'devspaces-test/worker-open';
 const FOLDER = '/workspaces/worker-open';
 const CONFIG_PATH = '.devcontainer/devcontainer.json';
 const REMOTE_USER = 'dev';

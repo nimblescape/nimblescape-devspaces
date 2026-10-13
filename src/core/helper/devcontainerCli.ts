@@ -217,7 +217,7 @@ export class DevcontainerCommandError extends CommandError {
 /**
  * Override configuration for `up`: only image, workspaceMount, workspaceFolder, runArgs (the repository values as the
  * host access policy checks them, overrideRunArgs: without any --name and with 127.0.0.1 for published ports without an
- * address; plus `--label nimblescape.devspace.container-version=<n>`, the labels `com.docker.compose.project` and
+ * address; plus `--label nimblescape.devspaces.container-version=<n>`, the labels `com.docker.compose.project` and
  * `com.docker.compose.service` with empty values (COMPOSE_CLEARED_LABELS), and `--name <container name>`, and
  * `--hostname <repository name>` (containerHostname) unless the runArgs decide the host name themselves,
  * runArgsDecideHostname, then `--tmpfs TOKEN_TMPFS`, the folder of the token in memory, and last, with
@@ -226,7 +226,7 @@ export class DevcontainerCommandError extends CommandError {
  * shutdownAction 'none' (ATTACHED_SHUTDOWN_ACTION, ../devContainers.ts). `hostAccessChecks` `off` (the switch of the
  * repository, ../policy/hostAccessChecks.ts): the published ports of runArgs and appPort keep the address that the
  * configuration gives them (appPort as the configuration writes it), and runArgs get
- * `--label nimblescape.devspace.host-access=unrestricted`, so that the container is created again once the checks are
+ * `--label nimblescape.devspaces.host-access=unrestricted`, so that the container is created again once the checks are
  * on. `initializeCommand` is never passed: the host access policy refuses a configuration with one.
  */
 export function buildOverrideConfig(p: {
@@ -237,7 +237,7 @@ export function buildOverrideConfig(p: {
   runArgs?: string[];
   appPort?: DevcontainerConfig['appPort'];
   hostAccessChecks?: HostAccessChecks;
-  /** The configuration path of the devspace, as the label nimblescape.devspace.config-path. */
+  /** The configuration path of the devspace, as the label nimblescape.devspaces.config-path. */
   configPath?: string;
   /**
    * The volume of the shared VS Code server store, mounted read-only at VSCODE_STORE_TARGET (vscodeStoreMount), last;

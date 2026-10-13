@@ -186,7 +186,7 @@ describe('the entry of a first open, the configuration and the build records as 
         { ...CREATE, owner: { id: '7', login: 'mallory' } },
         { ...CREATE, createdAt: '2030-01-01T00:00:00.000Z' },
         { ...CREATE, busy: null },
-        { ...CREATE, volumeName: 'devspace-other' },
+        { ...CREATE, volumeName: 'devspaces-other' },
         { ...CREATE, dockerHost: 'ssh://elsewhere' },
         null,
         [CREATE],
@@ -421,8 +421,8 @@ describe('the entry of a first open, the configuration and the build records as 
       const updated = (await ask('configuration', ID, {
         select: '.devcontainer/python/devcontainer.json',
         shutdownActionNone: true,
-        addVolumes: ['devspace-cache', 'devspace-db'],
-        addServiceVolumes: ['devspace-db'],
+        addVolumes: ['devspaces-cache', 'devspaces-db'],
+        addServiceVolumes: ['devspaces-db'],
         keepRefusedFor: { configPath: DEFAULT, configHash: `sha256:${'f'.repeat(64)}` },
         serviceFolders: { folders: ['/workspaces/api/db'], overflow: false },
         cloned: true,
@@ -430,8 +430,8 @@ describe('the entry of a first open, the configuration and the build records as 
       expect(updated).toMatchObject({
         configPath: '.devcontainer/python/devcontainer.json',
         shutdownActionNone: true,
-        additionalVolumes: ['devspace-cache', 'devspace-db'],
-        serviceVolumes: ['devspace-db'],
+        additionalVolumes: ['devspaces-cache', 'devspaces-db'],
+        serviceVolumes: ['devspaces-db'],
         serviceFolders: ['/workspaces/api/db'],
       });
       // Another configuration hash: the refused update goes; the clone forgets the Git state.
@@ -448,7 +448,7 @@ describe('the entry of a first open, the configuration and the build records as 
         { addVolumes: ['a b'] },
         { addVolumes: [`v${'x'.repeat(255)}`] },
         { addVolumes: Array.from({ length: 1001 }, (_, i) => `v${i}`) },
-        { addVolumes: 'devspace-cache' },
+        { addVolumes: 'devspaces-cache' },
         { addServiceVolumes: ['/etc'] },
         { keepRefusedFor: { configPath: DEFAULT } },
         { keepRefusedFor: { configPath: DEFAULT, configHash: 'h'.repeat(257) } },
@@ -479,31 +479,31 @@ describe('the entry of a first open, the configuration and the build records as 
 
     it('leaves out and logs the own workspace volume, the workspace volume of another entry, a volume of another account and a volume that another account kept', async () => {
       const others = [
-        entryOf(OTHER, { repository: 'acme/web', volumeName: 'devspace-web', additionalVolumes: ['devspace-shared'] }),
-        entryOf('e-foreign', { repository: 'acme/api', owner: { id: '7', login: 'other' }, volumeName: 'devspace-foreign', additionalVolumes: ['devspace-theirs'] }),
+        entryOf(OTHER, { repository: 'acme/web', volumeName: 'devspaces-web', additionalVolumes: ['devspaces-shared'] }),
+        entryOf('e-foreign', { repository: 'acme/api', owner: { id: '7', login: 'other' }, volumeName: 'devspaces-foreign', additionalVolumes: ['devspaces-theirs'] }),
       ];
       const kept: KeptVolume[] = [
-        { name: 'devspace-kept-theirs', owner: { id: '7', login: 'other' }, keptAt: '2026-10-01T00:00:00.000Z' },
-        { name: 'devspace-kept-own', owner: { id: ACCOUNT.id, login: 'octo' }, keptAt: '2026-10-01T00:00:00.000Z' },
+        { name: 'devspaces-kept-theirs', owner: { id: '7', login: 'other' }, keptAt: '2026-10-01T00:00:00.000Z' },
+        { name: 'devspaces-kept-own', owner: { id: ACCOUNT.id, login: 'octo' }, keptAt: '2026-10-01T00:00:00.000Z' },
       ];
       const { ask, warnings } = setup([entryOf(ID), ...others], { kept });
-      const addVolumes = [name(ID), name(ID).toUpperCase(), 'devspace-web', 'devspace-foreign', 'devspace-theirs', 'DEVSPACE-THEIRS', 'devspace-kept-theirs', 'devspace-cache', 'devspace-shared', 'devspace-kept-own'];
-      const updated = (await ask('configuration', ID, { addVolumes, addServiceVolumes: ['devspace-cache', 'devspace-theirs', 'devspace-other'] })) as Devspace;
+      const addVolumes = [name(ID), name(ID).toUpperCase(), 'devspaces-web', 'devspaces-foreign', 'devspaces-theirs', 'DEVSPACES-THEIRS', 'devspaces-kept-theirs', 'devspaces-cache', 'devspaces-shared', 'devspaces-kept-own'];
+      const updated = (await ask('configuration', ID, { addVolumes, addServiceVolumes: ['devspaces-cache', 'devspaces-theirs', 'devspaces-other'] })) as Devspace;
       // An additional volume of another entry of the same account is shared (recordedVolumes), and so is one that a Delete
       // of the same account kept.
-      expect(updated.additionalVolumes).toEqual(['devspace-cache', 'devspace-shared', 'devspace-kept-own']);
+      expect(updated.additionalVolumes).toEqual(['devspaces-cache', 'devspaces-shared', 'devspaces-kept-own']);
       // The volumes of the services are additional volumes of the entry after the change, and no other.
-      expect(updated.serviceVolumes).toEqual(['devspace-cache']);
+      expect(updated.serviceVolumes).toEqual(['devspaces-cache']);
       expect(warnings).toEqual([
         `The worker recorded the volume ${name(ID)} for acme/api, which is left out: it is the workspace volume of the devspace.`,
         `The worker recorded the volume ${name(ID).toUpperCase()} for acme/api, which is left out: it is the workspace volume of the devspace.`,
-        'The worker recorded the volume devspace-web for acme/api, which is left out: it is the workspace volume of another devspace.',
-        'The worker recorded the volume devspace-foreign for acme/api, which is left out: it is the workspace volume of another devspace.',
-        'The worker recorded the volume devspace-theirs for acme/api, which is left out: a devspace of another account uses it.',
-        'The worker recorded the volume DEVSPACE-THEIRS for acme/api, which is left out: a devspace of another account uses it.',
-        'The worker recorded the volume devspace-kept-theirs for acme/api, which is left out: a Delete of another account kept it.',
-        'The worker recorded the volume devspace-theirs of a service for acme/api, which is left out: it is no additional volume of the devspace.',
-        'The worker recorded the volume devspace-other of a service for acme/api, which is left out: it is no additional volume of the devspace.',
+        'The worker recorded the volume devspaces-web for acme/api, which is left out: it is the workspace volume of another devspace.',
+        'The worker recorded the volume devspaces-foreign for acme/api, which is left out: it is the workspace volume of another devspace.',
+        'The worker recorded the volume devspaces-theirs for acme/api, which is left out: a devspace of another account uses it.',
+        'The worker recorded the volume DEVSPACES-THEIRS for acme/api, which is left out: a devspace of another account uses it.',
+        'The worker recorded the volume devspaces-kept-theirs for acme/api, which is left out: a Delete of another account kept it.',
+        'The worker recorded the volume devspaces-theirs of a service for acme/api, which is left out: it is no additional volume of the devspace.',
+        'The worker recorded the volume devspaces-other of a service for acme/api, which is left out: it is no additional volume of the devspace.',
       ]);
     });
 
@@ -541,8 +541,8 @@ describe('the entry of a first open, the configuration and the build records as 
     });
 
     it('a volume of a service that the entry recorded before stays a volume of a service', async () => {
-      const { ask } = setup([entryOf(ID, { additionalVolumes: ['devspace-db'] })]);
-      expect(await ask('configuration', ID, { addServiceVolumes: ['devspace-db'] })).toMatchObject({ serviceVolumes: ['devspace-db'] });
+      const { ask } = setup([entryOf(ID, { additionalVolumes: ['devspaces-db'] })]);
+      expect(await ask('configuration', ID, { addServiceVolumes: ['devspaces-db'] })).toMatchObject({ serviceVolumes: ['devspaces-db'] });
     });
 
     it('the service folders as the pipeline records them: paths of the repository, within the bounds', async () => {
@@ -603,7 +603,7 @@ describe('the entry of a first open, the configuration and the build records as 
         ['an overlong configuration hash', buildRecord(ID, 7, { configHash: 'h'.repeat(257) })],
         ['a time that is none', buildRecord(ID, 7, { builtAt: 'yesterday' })],
         ['a field beyond the list', { ...buildRecord(ID, 7), lastBuildNumber: 99 }],
-        ['a Compose image of another project', buildRecord(ID, 7, { compose: { ...compose, images: ['devspace-other-app'] } })],
+        ['a Compose image of another project', buildRecord(ID, 7, { compose: { ...compose, images: ['devspaces-other-app'] } })],
         ['too many Compose images', buildRecord(ID, 7, { compose: { ...compose, images: Array.from({ length: 1001 }, (_, i) => `${prefix}-${i}`) } })],
         ['too many Compose service images', buildRecord(ID, 7, { compose: { ...compose, serviceImages: Array.from({ length: 1001 }, (_, i) => `img${i}`) } })],
         ['a Compose part without its service', buildRecord(ID, 7, { compose: { ...compose, service: '' } })],
@@ -699,13 +699,13 @@ describe('the entry of a first open, the configuration and the build records as 
     expect(file().devspaces[0]).toMatchObject({ id: NEW, createdAt: new Date(NOW).toISOString(), owner: ACCOUNT, busy: ownCreate() });
     // The open goes on with the entry as the extension recorded it.
     expect(built).toEqual(file().devspaces[0]);
-    await records.configuration(NEW, { select: DEFAULT, shutdownActionNone: false, addVolumes: ['devspace-cache'], addServiceVolumes: ['devspace-cache'], keepRefusedFor: { configPath: DEFAULT, configHash: DIGEST }, serviceFolders: { folders: [], overflow: false }, cloned: true });
+    await records.configuration(NEW, { select: DEFAULT, shutdownActionNone: false, addVolumes: ['devspaces-cache'], addServiceVolumes: ['devspaces-cache'], keepRefusedFor: { configPath: DEFAULT, configHash: DIGEST }, serviceFolders: { folders: [], overflow: false }, cloned: true });
     await records.build(NEW, { kind: 'number', buildNumber: 1 });
     const record = buildRecord(NEW, 1, { compose: { service: 'app', images: [`${composeProjectName(REPOSITORY, NEW)}-app`], serviceImages: [], version: '2.39.0', inputsHash: DIGEST } });
     await records.build(NEW, { kind: 'record', record, dropRefused: true });
     await records.build(NEW, { kind: 'rebaseline', devspaceImage: record.devspaceImage, configHash: DIGEST, version: '2.40.0' });
     await records.build(NEW, { kind: 'refused', refusedUpdate: REFUSED });
-    expect(file().devspaces[0]).toMatchObject({ additionalVolumes: ['devspace-cache'], serviceVolumes: ['devspace-cache'], lastBuildNumber: 1, buildRecord: { compose: { version: '2.40.0' } }, refusedUpdate: REFUSED });
+    expect(file().devspaces[0]).toMatchObject({ additionalVolumes: ['devspaces-cache'], serviceVolumes: ['devspaces-cache'], lastBuildNumber: 1, buildRecord: { compose: { version: '2.40.0' } }, refusedUpdate: REFUSED });
     await records.dropCreated(NEW);
     expect(file().devspaces).toEqual([]);
   });

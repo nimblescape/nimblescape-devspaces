@@ -21,7 +21,7 @@ afterEach(() => {
 
 describe('the use marker of an open', () => {
   it('is created without any access for the group and others', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-store-ph2r2-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-store-ph2r2-'));
     temps.push(root);
     const commit = 'a'.repeat(40);
     await markServerOpened(root, { commit, quality: 'stable' }, 'linux-x64', new Date(Date.parse('2026-10-09T12:00:00Z')));
@@ -34,7 +34,7 @@ describe('the use marker of an open', () => {
 
 describe('the fetch of the background run is no use', () => {
   it('ensureServer of a present version marks nothing (no used/ folder, no marker)', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-store-ph2r2-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-store-ph2r2-'));
     temps.push(root);
     const server = { commit: 'b'.repeat(40), quality: 'insider' as const };
     const folder = serverFolder(root, server, 'linux-x64');

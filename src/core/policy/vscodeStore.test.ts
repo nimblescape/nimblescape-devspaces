@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The host access policy protects the shared VS Code server store. A repository can name the volume devspace-vscode in
+// The host access policy protects the shared VS Code server store. A repository can name the volume devspaces-vscode in
 // no spelling (its mounts, its runArgs, its Docker Compose model), read-only or not, whatever the switch of the checks
 // says, and can mount nothing at or below its target /opt/devspace/vscode. Only the exact `--mount` that the override
 // configuration adds is allowed, in the override configuration and in the merged configuration (which holds it for an
@@ -15,7 +15,7 @@ import { checkContainer, composeAccessReport, configFolderTarget, foreignVolumeN
 const ID = 'e0000001-0000-4000-8000-000000000001';
 const OWN = resourceName('acme/api', ID);
 const DEVSPACE = { id: ID, ownerId: '1001' };
-const STORE_ITEM = 'volume devspace-vscode of the shared VS Code server store';
+const STORE_ITEM = 'volume devspaces-vscode of the shared VS Code server store';
 const INTERNAL = "mounts into the extension's internal folder are not supported";
 const OUR_MOUNT = vscodeStoreMount(VSCODE_STORE_VOLUME);
 
@@ -24,14 +24,14 @@ function input(config: Record<string, unknown>, more: Partial<HostAccessInput> =
 }
 
 describe('the name and the target of the shared VS Code server store', () => {
-  it('are fixed: devspace-vscode, read-only at /opt/devspace/vscode', () => {
-    expect(VSCODE_STORE_VOLUME).toBe('devspace-vscode');
+  it('are fixed: devspaces-vscode, read-only at /opt/devspace/vscode', () => {
+    expect(VSCODE_STORE_VOLUME).toBe('devspaces-vscode');
     expect(VSCODE_STORE_TARGET).toBe('/opt/devspace/vscode');
     // `volume-nocopy`, so that Docker never copies the image's /opt/devspace/vscode into an empty store.
-    expect(OUR_MOUNT).toBe('type=volume,source=devspace-vscode,target=/opt/devspace/vscode,readonly,volume-nocopy');
-    expect(foreignVolumeName('devspace-vscode')).toBe('the shared VS Code server store');
+    expect(OUR_MOUNT).toBe('type=volume,source=devspaces-vscode,target=/opt/devspace/vscode,readonly,volume-nocopy');
+    expect(foreignVolumeName('devspaces-vscode')).toBe('the shared VS Code server store');
     // Only the exact name.
-    expect(foreignVolumeName('devspace-vscode2')).toBeUndefined();
+    expect(foreignVolumeName('devspaces-vscode2')).toBeUndefined();
   });
 
   it('reserves the target and every path below it, not its parents or a folder that only starts like it', () => {
@@ -48,22 +48,22 @@ describe('the name and the target of the shared VS Code server store', () => {
 describe('a repository never names the store', () => {
   // Each spelling of a single container, with the checks on and off (the class `protected` is never lifted).
   const spellings: Array<[string, Record<string, unknown>]> = [
-    ['a mounts text', { mounts: ['source=devspace-vscode,target=/x,type=volume'] }],
-    ['a read-only mounts text', { mounts: ['source=devspace-vscode,target=/x,type=volume,readonly'] }],
-    ['a mounts object', { mounts: [{ type: 'volume', source: 'devspace-vscode', target: '/x' }] }],
-    ['a read-only mounts object', { mounts: [{ type: 'volume', source: 'devspace-vscode', target: '/x', readonly: true }] }],
-    ['--mount in runArgs', { runArgs: ['--mount', 'type=volume,source=devspace-vscode,target=/x,readonly'] }],
-    ['--mount= in runArgs', { runArgs: ['--mount=type=volume,src=devspace-vscode,dst=/x'] }],
-    ['-v in runArgs', { runArgs: ['-v', 'devspace-vscode:/x:ro'] }],
-    ['--volume in runArgs', { runArgs: ['--volume', 'devspace-vscode:/x'] }],
-    ['--volume= in runArgs', { runArgs: ['--volume=devspace-vscode:/x'] }],
+    ['a mounts text', { mounts: ['source=devspaces-vscode,target=/x,type=volume'] }],
+    ['a read-only mounts text', { mounts: ['source=devspaces-vscode,target=/x,type=volume,readonly'] }],
+    ['a mounts object', { mounts: [{ type: 'volume', source: 'devspaces-vscode', target: '/x' }] }],
+    ['a read-only mounts object', { mounts: [{ type: 'volume', source: 'devspaces-vscode', target: '/x', readonly: true }] }],
+    ['--mount in runArgs', { runArgs: ['--mount', 'type=volume,source=devspaces-vscode,target=/x,readonly'] }],
+    ['--mount= in runArgs', { runArgs: ['--mount=type=volume,src=devspaces-vscode,dst=/x'] }],
+    ['-v in runArgs', { runArgs: ['-v', 'devspaces-vscode:/x:ro'] }],
+    ['--volume in runArgs', { runArgs: ['--volume', 'devspaces-vscode:/x'] }],
+    ['--volume= in runArgs', { runArgs: ['--volume=devspaces-vscode:/x'] }],
   ];
   it.each(spellings.flatMap(([name, config]) => [true, false].map((checksOn) => [name, config, checksOn] as const)))('refuses %s (checks on: %s)', (_name, config, checksOn) => {
     expect(hostAccessReport(input(config), checksOn).hostAccess).toEqual([STORE_ITEM]);
   });
 
   it('refuses the name in the image metadata too', () => {
-    expect(hostAccessReport({ ownVolume: OWN, devspace: DEVSPACE, metadata: [{ mounts: ['source=devspace-vscode,target=/x,type=volume'] }] }, false).hostAccess).toEqual([STORE_ITEM]);
+    expect(hostAccessReport({ ownVolume: OWN, devspace: DEVSPACE, metadata: [{ mounts: ['source=devspaces-vscode,target=/x,type=volume'] }] }, false).hostAccess).toEqual([STORE_ITEM]);
   });
 
   it.each([true, false])('refuses every mount at or below the target, of any kind (checks on: %s)', (checksOn) => {
@@ -102,17 +102,17 @@ describe('the override configuration mounts the store, exactly so', () => {
   });
 
   it.each([
-    ['without readonly', 'type=volume,source=devspace-vscode,target=/opt/devspace/vscode'],
-    ['readonly first', 'readonly,type=volume,source=devspace-vscode,target=/opt/devspace/vscode'],
-    ['with src and dst', 'type=volume,src=devspace-vscode,dst=/opt/devspace/vscode,readonly'],
-    ['ro=true', 'type=volume,source=devspace-vscode,target=/opt/devspace/vscode,ro=true'],
-    ['another target', 'type=volume,source=devspace-vscode,target=/opt/vscode,readonly'],
-    ['with a subpath', 'type=volume,source=devspace-vscode,target=/opt/devspace/vscode,readonly,volume-subpath=server'],
+    ['without readonly', 'type=volume,source=devspaces-vscode,target=/opt/devspace/vscode'],
+    ['readonly first', 'readonly,type=volume,source=devspaces-vscode,target=/opt/devspace/vscode'],
+    ['with src and dst', 'type=volume,src=devspaces-vscode,dst=/opt/devspace/vscode,readonly'],
+    ['ro=true', 'type=volume,source=devspaces-vscode,target=/opt/devspace/vscode,ro=true'],
+    ['another target', 'type=volume,source=devspaces-vscode,target=/opt/vscode,readonly'],
+    ['with a subpath', 'type=volume,source=devspaces-vscode,target=/opt/devspace/vscode,readonly,volume-subpath=server'],
     // The exemption follows the text with `volume-nocopy`; the text without it (a copy-up of the image into an empty
     // store), and every other spelling of nocopy, stay refused.
-    ['the text without volume-nocopy', 'type=volume,source=devspace-vscode,target=/opt/devspace/vscode,readonly'],
-    ['volume-nocopy=true', 'type=volume,source=devspace-vscode,target=/opt/devspace/vscode,readonly,volume-nocopy=true'],
-    ['volume-nocopy first', 'volume-nocopy,type=volume,source=devspace-vscode,target=/opt/devspace/vscode,readonly'],
+    ['the text without volume-nocopy', 'type=volume,source=devspaces-vscode,target=/opt/devspace/vscode,readonly'],
+    ['volume-nocopy=true', 'type=volume,source=devspaces-vscode,target=/opt/devspace/vscode,readonly,volume-nocopy=true'],
+    ['volume-nocopy first', 'volume-nocopy,type=volume,source=devspaces-vscode,target=/opt/devspace/vscode,readonly'],
     ['volume-nocopy twice', `${OUR_MOUNT},volume-nocopy`],
   ])('refuses any other text in the override configuration (%s)', (_name, value) => {
     const report = checkContainer('finalRunArgs', { ...input({ runArgs: ['--mount', value] }), checks: 'off' });
@@ -120,18 +120,18 @@ describe('the override configuration mounts the store, exactly so', () => {
   });
 
   it('refuses -v with the store in the override configuration', () => {
-    const report = checkContainer('finalRunArgs', { ...input({ runArgs: ['-v', 'devspace-vscode:/opt/devspace/vscode:ro'] }), checks: 'off' });
+    const report = checkContainer('finalRunArgs', { ...input({ runArgs: ['-v', 'devspaces-vscode:/opt/devspace/vscode:ro'] }), checks: 'off' });
     expect(report.hostAccess).toEqual([STORE_ITEM]);
   });
 
   it('allows the mount of the store of the worker (a volume of the Docker tests) only when the input names it', () => {
-    const test = vscodeStoreMount('devspace-test-vscode-x');
+    const test = vscodeStoreMount('devspaces-test-vscode-x');
     const args = ['--mount', test];
-    expect(checkContainer('finalRunArgs', { ...input({ runArgs: args }, { vscodeStoreVolume: 'devspace-test-vscode-x' }), checks: 'on' })).toEqual({ hostAccess: [], unsupported: [] });
-    // Without it, the exemption is the one of devspace-vscode: the other volume at the reserved target is refused.
+    expect(checkContainer('finalRunArgs', { ...input({ runArgs: args }, { vscodeStoreVolume: 'devspaces-test-vscode-x' }), checks: 'on' })).toEqual({ hostAccess: [], unsupported: [] });
+    // Without it, the exemption is the one of devspaces-vscode: the other volume at the reserved target is refused.
     expect(checkContainer('finalRunArgs', { ...input({ runArgs: args }), checks: 'on' }).unsupported).toEqual([`mount at /opt/devspace/vscode (${INTERNAL})`]);
-    // With it, devspace-vscode itself is not exempt (the name stays protected).
-    expect(checkContainer('finalRunArgs', { ...input({ runArgs: ['--mount', OUR_MOUNT] }, { vscodeStoreVolume: 'devspace-test-vscode-x' }), checks: 'on' }).hostAccess).toEqual([STORE_ITEM]);
+    // With it, devspaces-vscode itself is not exempt (the name stays protected).
+    expect(checkContainer('finalRunArgs', { ...input({ runArgs: ['--mount', OUR_MOUNT] }, { vscodeStoreVolume: 'devspaces-test-vscode-x' }), checks: 'on' }).hostAccess).toEqual([STORE_ITEM]);
   });
 
   it('leaves the other exemptions of the override configuration as they were', () => {
@@ -157,13 +157,13 @@ describe('a Docker Compose model never names the store', () => {
 
   it.each([true, false])('refuses the volume by its name in the long and the short syntax, and the key of the up model (checks on: %s)', (checksOn) => {
     // Long syntax, a key whose name is the store.
-    expect(report({ volumes: [{ type: 'volume', source: 'store', target: '/x', read_only: true }] }, { store: { name: 'devspace-vscode', external: true } }, checksOn).hostAccess).toEqual([STORE_ITEM]);
+    expect(report({ volumes: [{ type: 'volume', source: 'store', target: '/x', read_only: true }] }, { store: { name: 'devspaces-vscode', external: true } }, checksOn).hostAccess).toEqual([STORE_ITEM]);
     // Short syntax.
-    expect(report({ volumes: ['store:/x:ro'] }, { store: { name: 'devspace-vscode', external: true } }, checksOn).hostAccess).toEqual([STORE_ITEM]);
+    expect(report({ volumes: ['store:/x:ro'] }, { store: { name: 'devspaces-vscode', external: true } }, checksOn).hostAccess).toEqual([STORE_ITEM]);
     // The key of the up model (an external volume of the key's name is the store).
-    expect(report({ volumes: [{ type: 'volume', source: 'devspace-vscode', target: '/x' }] }, { 'devspace-vscode': { external: true } }, checksOn)).toEqual({
+    expect(report({ volumes: [{ type: 'volume', source: 'devspaces-vscode', target: '/x' }] }, { 'devspaces-vscode': { external: true } }, checksOn)).toEqual({
       hostAccess: [STORE_ITEM],
-      unsupported: ['volume key devspace-vscode (Devspaces uses it)'],
+      unsupported: ['volume key devspaces-vscode (Devspaces uses it)'],
     });
   });
 

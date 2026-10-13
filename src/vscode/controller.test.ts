@@ -52,7 +52,7 @@ const OTHER_WINDOW_ID = 'window-2';
 const OTHER_PID = 4242;
 const ENV_ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
 const OTHER_ENV_ID = '7c1d2e3f-0000-4000-8000-000000000002';
-const CONTAINER = 'devspace-acme-api-3f2a9c1e';
+const CONTAINER = 'devspaces-acme-api-3f2a9c1e';
 /** The signed-in account; the devspaces of the tests belong to it unless a test names another owner. */
 const ACCOUNT: GitHubAccount = { id: '1001', login: 'octo' };
 const OTHER_ACCOUNT: GitHubAccount = { id: '2002', login: 'someone' };
@@ -104,7 +104,7 @@ function repositoryInfo(nameWithOwner: string, overrides: Partial<RepositoryInfo
 
 /**
  * The container of the devspace as `docker.findContainer` gives it; `version` is its label
- * nimblescape.devspace.container-version.
+ * nimblescape.devspaces.container-version.
  */
 /**
  * The token removal is a flow of the worker, so the controller sends the operation `tokenRemove`.
@@ -119,7 +119,7 @@ function containerInfo(version: string | undefined): ContainerInfo {
     name: CONTAINER,
     state: 'running',
     rawState: 'running',
-    image: 'devspace-acme-api:1',
+    image: 'devspaces-acme-api:1',
     labels: version === undefined ? {} : { [LABEL_CONTAINER_VERSION]: version },
   };
 }
@@ -262,7 +262,7 @@ function createHarness(
   } = {},
 ): Harness {
   const listOpenMode: Harness['listOpenMode'] = { value: 'singleClick' };
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   const clock = { now: () => NOW };
   const paths = new StoragePaths(root);
   paths.ensureDirectoriesSync();
@@ -845,7 +845,7 @@ describe('Start', () => {
   it('shows the other window of a local devspace without a context', async () => {
     await h.registry.add(devspace());
     h.coordinator.otherActiveWindows.mockResolvedValue([
-      { windowId: OTHER_WINDOW_ID, pid: OTHER_PID, devspaceId: ENV_ID, state: 'active', updatedAt: iso(NOW), dockerContext: 'devspace-remote-11111111' },
+      { windowId: OTHER_WINDOW_ID, pid: OTHER_PID, devspaceId: ENV_ID, state: 'active', updatedAt: iso(NOW), dockerContext: 'devspaces-remote-11111111' },
     ]);
     await run('start', row('acme/api', devspace()));
     expect(h.connection.open.mock.calls).toEqual([[CONTAINER, '/workspaces/api']]);
@@ -1330,7 +1330,7 @@ describe('Keep Running When Closed and Stop When Closed', () => {
   });
 
   it('keeps the switch and warns when the Monitor cannot be told', async () => {
-    const sendHeartbeat = vi.fn(async () => ({ ok: false as const, detail: 'No such container: devspace-monitor' }));
+    const sendHeartbeat = vi.fn(async () => ({ ok: false as const, detail: 'No such container: devspaces-monitor' }));
     recreateHarness({ sessionMonitor: { sendHeartbeat, sendStop: vi.fn(async () => ({ ok: true as const })) } });
     await h.registry.add(devspace());
     await run('keepRunning', row('acme/api', devspace()));
@@ -1438,7 +1438,7 @@ describe('Delete', () => {
   it('names every folder that the containers of the services may mount in the confirmation of Delete', async () => {
     const record = {
       builtAt: iso(NOW),
-      devspaceImage: 'devspace-3f2a9c1e:1',
+      devspaceImage: 'devspaces-3f2a9c1e:1',
       buildNumber: 1,
       configPath: '.devcontainer/devcontainer.json',
       configHash: 'sha256:x',
@@ -1457,7 +1457,7 @@ describe('Delete', () => {
   it('names the service data in folders of the repository in the confirmation', async () => {
     const record = {
       builtAt: iso(NOW),
-      devspaceImage: 'devspace-3f2a9c1e:1',
+      devspaceImage: 'devspaces-3f2a9c1e:1',
       buildNumber: 1,
       configPath: '.devcontainer/devcontainer.json',
       configHash: 'sha256:x',
@@ -1527,7 +1527,7 @@ describe('Delete', () => {
 
   // The volumes of a Docker Compose project (the data of its services) are asked about apart, none ticked.
   describe('the data of the services of a Docker Compose devspace', () => {
-    const DATA = ['devspace-3f2a9c1e_pgdata', 'devspace-3f2a9c1e_cache'];
+    const DATA = ['devspaces-3f2a9c1e_pgdata', 'devspaces-3f2a9c1e_cache'];
 
     async function deleteWithServiceData(pick: (items: Array<{ label: string; picked?: boolean }>) => unknown): Promise<void> {
       await h.registry.add(devspace({ additionalVolumes: ['api-db', ...DATA] }));
@@ -2566,11 +2566,11 @@ describe('Connection of this window', () => {
     const env = devspace();
     await h.registry.add(env);
     const reads = h.service.currentBranch.mock.calls.length;
-    await h.controller.openAttachedWindow(env, 'devspace-old', { devspaceId: env.id, windowId: WINDOW_ID, createdAt: iso(NOW - 5000) });
+    await h.controller.openAttachedWindow(env, 'devspaces-old', { devspaceId: env.id, windowId: WINDOW_ID, createdAt: iso(NOW - 5000) });
     await settle(() => h.service.currentBranch.mock.calls.length > reads, 'the branch of the window');
     h.service.windowStateInWorker.mockResolvedValueOnce(undefined);
     await run('start', { devspaceId: ENV_ID });
-    expect(h.service.windowStateInWorker.mock.calls.filter((call) => call[2]?.signal !== undefined).map((call) => call[1])).toEqual(['devspace-old']);
+    expect(h.service.windowStateInWorker.mock.calls.filter((call) => call[2]?.signal !== undefined).map((call) => call[1])).toEqual(['devspaces-old']);
   });
 
   it('a Cancel during the read in the operation of Start shows no error', async () => {
@@ -2769,18 +2769,18 @@ describe('Connection of this window', () => {
     const env = devspace();
     await h.registry.add(env);
     const reads = h.service.currentBranch.mock.calls.length;
-    await h.controller.openAttachedWindow(env, 'devspace-old', { devspaceId: env.id, windowId: WINDOW_ID, createdAt: iso(NOW - 5000) });
+    await h.controller.openAttachedWindow(env, 'devspaces-old', { devspaceId: env.id, windowId: WINDOW_ID, createdAt: iso(NOW - 5000) });
     await settle(() => h.service.currentBranch.mock.calls.length > reads, 'the branch of the window');
     const before = h.service.windowStateInWorker.mock.calls.length;
     h.controller.onHeartbeat();
     await settle(() => h.service.windowStateInWorker.mock.calls.length > before, 'the read of the state');
-    expect(h.service.windowStateInWorker.mock.calls.slice(before).map((call) => call[1])).toEqual(['devspace-old']);
+    expect(h.service.windowStateInWorker.mock.calls.slice(before).map((call) => call[1])).toEqual(['devspaces-old']);
     // The branch read too.
-    expect(h.service.windowStateInWorker.mock.calls.filter((call) => call[2]?.branch === true).map((call) => call[1])).toEqual(['devspace-old']);
+    expect(h.service.windowStateInWorker.mock.calls.filter((call) => call[2]?.branch === true).map((call) => call[1])).toEqual(['devspaces-old']);
     h.docker.containerState.mockResolvedValue('running');
     await run('start', { devspaceId: ENV_ID });
-    expect(h.service.windowStateInWorker.mock.lastCall?.[1]).toBe('devspace-old');
-    expect(env.containerName).not.toBe('devspace-old');
+    expect(h.service.windowStateInWorker.mock.lastCall?.[1]).toBe('devspaces-old');
+    expect(env.containerName).not.toBe('devspaces-old');
   });
 
   // A read that ends after the window left its devspace changes nothing.
@@ -3027,7 +3027,7 @@ describe('Accounts', () => {
 
   it('starts the own devspace of the account for a repository that has a devspace of another account', async () => {
     await h.registry.add(devspace({ owner: OTHER_ACCOUNT }));
-    const own = devspace({ id: 'c1d2e3f4-0000-4000-8000-000000000003', containerName: 'devspace-octo-api-c1d2e3f4' });
+    const own = devspace({ id: 'c1d2e3f4-0000-4000-8000-000000000003', containerName: 'devspaces-octo-api-c1d2e3f4' });
     h.service.openInWorker.mockImplementation(async () => {
       await h.registry.add(own);
       return openResult(own);
@@ -3051,7 +3051,7 @@ describe('Accounts', () => {
       h.auth.getAccount.mockResolvedValue(OTHER_ACCOUNT);
       return Actions.tryAgain;
     });
-    const own = devspace({ id: 'c1d2e3f4-0000-4000-8000-000000000003', containerName: 'devspace-acme-api-c1d2e3f4', owner: OTHER_ACCOUNT });
+    const own = devspace({ id: 'c1d2e3f4-0000-4000-8000-000000000003', containerName: 'devspaces-acme-api-c1d2e3f4', owner: OTHER_ACCOUNT });
     h.service.openInWorker.mockImplementation(async () => {
       await h.registry.add(own);
       return openResult(own);
@@ -3304,7 +3304,7 @@ describe('Accounts', () => {
   // the worker (the flow itself: src/core/worker/tokenRemoveFlow.test.ts); the controller sends it and logs what it
   // answered.
   describe('the removal of the token from the running container', () => {
-    const VOLUME = 'devspace-acme-api-volume';
+    const VOLUME = 'devspaces-acme-api-volume';
 
     async function takeTokenOut(): Promise<void> {
       const env = devspace({ owner: OTHER_ACCOUNT, volumeName: VOLUME });
@@ -3605,7 +3605,7 @@ describe('Accounts', () => {
 
   describe('Try again of a first open of Select configuration… after the account changed', () => {
     const OTHER_ENV = () =>
-      devspace({ id: OTHER_ENV_ID, owner: OTHER_ACCOUNT, containerName: 'devspace-acme-api-7c1d2e3f', volumeName: 'devspace-acme-api-7c1d2e3f' });
+      devspace({ id: OTHER_ENV_ID, owner: OTHER_ACCOUNT, containerName: 'devspaces-acme-api-7c1d2e3f', volumeName: 'devspaces-acme-api-7c1d2e3f' });
 
     beforeEach(async () => {
       // ACCOUNT has no devspace of acme/api; OTHER_ACCOUNT has one.
@@ -3634,7 +3634,7 @@ describe('Accounts', () => {
   });
 
   it('Try again of a first open of Select configuration… with the configuration of the devspace of the new account already does nothing more', async () => {
-    await h.registry.add(devspace({ id: OTHER_ENV_ID, owner: OTHER_ACCOUNT, containerName: 'devspace-acme-api-7c1d2e3f', volumeName: 'devspace-acme-api-7c1d2e3f' }));
+    await h.registry.add(devspace({ id: OTHER_ENV_ID, owner: OTHER_ACCOUNT, containerName: 'devspaces-acme-api-7c1d2e3f', volumeName: 'devspaces-acme-api-7c1d2e3f' }));
     h.sidebar.infos.set('acme/api', repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] }));
     h.service.openInWorker.mockRejectedValueOnce(new UserFacingError('buildFailed', Messages.buildFailed, 'log'));
     let retried = false;
@@ -3796,7 +3796,7 @@ describe('the switch of the host access checks', () => {
 
   const unrestricted: ContainerInfo = {
     ...containerInfo(String(CONTAINER_VERSION)),
-    labels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspace.host-access': 'unrestricted' },
+    labels: { [LABEL_CONTAINER_VERSION]: String(CONTAINER_VERSION), 'nimblescape.devspaces.host-access': 'unrestricted' },
   };
 
   it('role A: closes the connection to a container of the checks-off time when the checks are on and the pipeline refused', async () => {
@@ -4121,8 +4121,8 @@ describe('the Docker host of the current Docker context', () => {
   function remoteDevspace(overrides: Partial<Devspace> = {}): Devspace {
     return devspace({
       id: REMOTE_ENV_ID,
-      containerName: 'devspace-acme-api-a1b2c3d4',
-      volumeName: 'devspace-acme-api-a1b2c3d4',
+      containerName: 'devspaces-acme-api-a1b2c3d4',
+      volumeName: 'devspaces-acme-api-a1b2c3d4',
       dockerHost: 'build-box',
       ...overrides,
     });
@@ -4178,7 +4178,7 @@ describe('the Docker host of the current Docker context', () => {
   });
 
   it('a restored window of the current host opens without a question', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     const env = remoteDevspace();
     await h.registry.add(env);
     await h.controller.openAttachedWindow(env, env.containerName, undefined);
@@ -4189,7 +4189,7 @@ describe('the Docker host of the current Docker context', () => {
 
   // The operation's context does not replace a context that the window names already (a user-made one).
   it('a restored window that names another working context keeps it, also inside the operation', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     const env = remoteDevspace();
     await h.registry.add(env);
     h.connection.currentContainerName.mockReturnValue(env.containerName);
@@ -4201,11 +4201,11 @@ describe('the Docker host of the current Docker context', () => {
   });
 
   it('a restored window that names the context already stays as it is', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     const env = remoteDevspace();
     await h.registry.add(env);
     h.connection.currentContainerName.mockReturnValue(env.containerName);
-    h.connection.currentDockerContext.mockReturnValue('devspace-remote-11111111');
+    h.connection.currentDockerContext.mockReturnValue('devspaces-remote-11111111');
     await h.controller.openAttachedWindow(env, env.containerName, undefined);
     // The window is not opened again with the context.
     expect(h.connection.open).not.toHaveBeenCalled();
@@ -4213,7 +4213,7 @@ describe('the Docker host of the current Docker context', () => {
 
   // The status of the other window is read once; it closing meanwhile does not drop the context.
   it('uses the status of the other window that it decided on, not a second read', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     await h.registry.add(remoteDevspace());
     // A context other than the operation's, and no pipeline, so only the other-window branch can pass.
     h.coordinator.otherActiveWindows.mockResolvedValueOnce([
@@ -4222,12 +4222,12 @@ describe('the Docker host of the current Docker context', () => {
     h.coordinator.otherActiveWindows.mockResolvedValue([]);
     await run('start', row('acme/api', remoteDevspace()));
     expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
-    expect(h.connection.open.mock.calls).toEqual([['devspace-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box']]);
+    expect(h.connection.open.mock.calls).toEqual([['devspaces-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box']]);
   });
 
   // The other window is shown by exactly its URI, with the context of its status file.
   it('shows the other window of a remote devspace with the context that its status file names, or none', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     await h.registry.add(remoteDevspace());
     h.coordinator.otherActiveWindows.mockResolvedValue([
       { windowId: OTHER_WINDOW_ID, pid: OTHER_PID, devspaceId: REMOTE_ENV_ID, state: 'active', updatedAt: iso(NOW), dockerContext: 'my-build-box' },
@@ -4239,8 +4239,8 @@ describe('the Docker host of the current Docker context', () => {
     await run('start', row('acme/api', remoteDevspace()));
     expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
     expect(h.connection.open.mock.calls).toEqual([
-      ['devspace-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box'],
-      ['devspace-acme-api-a1b2c3d4', '/workspaces/api'],
+      ['devspaces-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box'],
+      ['devspaces-acme-api-a1b2c3d4', '/workspaces/api'],
     ]);
   });
 
@@ -4258,15 +4258,15 @@ describe('the Docker host of the current Docker context', () => {
     current = dockerTargetOf('ssh://build-box', 'my-build-box');
     await h.registry.add(remoteDevspace());
     h.service.openDevspaceInWorker.mockImplementation(async (id: string) => {
-      current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+      current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
       return openResult((await h.registry.get(id))!);
     });
     await run('start', row('acme/api', remoteDevspace()));
-    expect(h.connection.open).toHaveBeenCalledWith('devspace-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box');
+    expect(h.connection.open).toHaveBeenCalledWith('devspaces-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box');
   });
 
   it('the reload for the owner account keeps the context of the window (outside an operation)', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     recreateHarness({ leaveCheckMs: 100, dockerTargets: pinnedTargets(), remoteDocker: remote });
     const env = remoteDevspace();
     await h.registry.add(env);
@@ -4278,16 +4278,16 @@ describe('the Docker host of the current Docker context', () => {
     await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close');
     h.auth.getAccount.mockResolvedValue(ACCOUNT);
     await h.controller.onSessionChanged();
-    expect(h.connection.open).toHaveBeenCalledWith('devspace-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box');
+    expect(h.connection.open).toHaveBeenCalledWith('devspaces-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box');
   });
 
   it('the reload for the owner account names the created context when the current one is on another host', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     recreateHarness({ leaveCheckMs: 100, dockerTargets: pinnedTargets(), remoteDocker: remote });
     const env = remoteDevspace();
     await h.registry.add(env);
     h.connection.currentContainerName.mockReturnValue(env.containerName);
-    h.connection.currentDockerContext.mockReturnValue('devspace-remote-11111111');
+    h.connection.currentDockerContext.mockReturnValue('devspaces-remote-11111111');
     await connectHere(env);
     h.connection.currentDockerContext.mockReturnValue(undefined);
     h.auth.getAccount.mockResolvedValue(OTHER_ACCOUNT);
@@ -4297,14 +4297,14 @@ describe('the Docker host of the current Docker context', () => {
     h.auth.getAccount.mockResolvedValue(ACCOUNT);
     await h.controller.onSessionChanged();
     // The context named after the host.
-    expect(h.connection.open).toHaveBeenCalledWith('devspace-acme-api-a1b2c3d4', '/workspaces/api', remoteContextNames('build-box')[0]);
+    expect(h.connection.open).toHaveBeenCalledWith('devspaces-acme-api-a1b2c3d4', '/workspaces/api', remoteContextNames('build-box')[0]);
   });
 
   // Outside an operation, the context comes from this window's own authority, then from the current context on that
   // host, then from "Use a Remote Docker Host…". The own-authority step and the created context are covered by the
   // owner-account reload tests above; this step is checked through the reload for the owner account too.
   it('outside an operation names the current context on the host when the window names none', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     recreateHarness({ leaveCheckMs: 100, dockerTargets: pinnedTargets(), remoteDocker: remote });
     const env = remoteDevspace();
     await h.registry.add(env);
@@ -4316,7 +4316,7 @@ describe('the Docker host of the current Docker context', () => {
     await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close');
     h.auth.getAccount.mockResolvedValue(ACCOUNT);
     await h.controller.onSessionChanged();
-    expect(h.connection.open).toHaveBeenCalledWith('devspace-acme-api-a1b2c3d4', '/workspaces/api', 'devspace-remote-11111111');
+    expect(h.connection.open).toHaveBeenCalledWith('devspaces-acme-api-a1b2c3d4', '/workspaces/api', 'devspaces-remote-11111111');
   });
 
   // Checked through the reload for the owner account.
@@ -4332,7 +4332,7 @@ describe('the Docker host of the current Docker context', () => {
     h.auth.getAccount.mockResolvedValue(ACCOUNT);
     await h.controller.onSessionChanged();
     // Named after the host (`build-box`), created by ensureRemoteContext when missing.
-    expect(h.connection.open).toHaveBeenCalledWith('devspace-acme-api-a1b2c3d4', '/workspaces/api', 'build-box');
+    expect(h.connection.open).toHaveBeenCalledWith('devspaces-acme-api-a1b2c3d4', '/workspaces/api', 'build-box');
     const calls = h.docker.run.mock.calls.map(([args]) => (args as string[]).join(' '));
     expect(calls).toContain('context ls --format {{json .}}');
     expect(calls).toContain(`context create build-box --description ${ownContextDescription('build-box')} --docker host=ssh://build-box`);
@@ -4367,7 +4367,7 @@ describe('the Docker host of the current Docker context', () => {
       recreateHarness({ leaveCheckMs: 100 });
       contextsAre([{ Name: 'default', DockerEndpoint: 'unix:///var/run/docker.sock' }, { Name: 'build-box', Description: 'mine', DockerEndpoint: 'ssh://build-box' }]);
       expect(await reopen()).toEqual([]);
-      expect(h.connection.open).toHaveBeenCalledWith('devspace-acme-api-a1b2c3d4', '/workspaces/api', 'build-box');
+      expect(h.connection.open).toHaveBeenCalledWith('devspaces-acme-api-a1b2c3d4', '/workspaces/api', 'build-box');
     });
 
     it('creates the name with the pair of the host when a context with the name points elsewhere', async () => {
@@ -4375,7 +4375,7 @@ describe('the Docker host of the current Docker context', () => {
       contextsAre([{ Name: 'build-box', Description: 'mine', DockerEndpoint: 'ssh://me@elsewhere' }]);
       const pair = remoteContextNames('build-box')[1];
       expect(await reopen()).toEqual([`context create ${pair} --description ${ownContextDescription('build-box')} --docker host=ssh://build-box`]);
-      expect(h.connection.open).toHaveBeenCalledWith('devspace-acme-api-a1b2c3d4', '/workspaces/api', pair);
+      expect(h.connection.open).toHaveBeenCalledWith('devspaces-acme-api-a1b2c3d4', '/workspaces/api', pair);
     });
   });
 
@@ -4396,7 +4396,7 @@ describe('the Docker host of the current Docker context', () => {
     const env = remoteDevspace();
     await h.registry.add(env);
     remote.offerSwitchBack.mockImplementation(async () => {
-      current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+      current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
       return true;
     });
     await h.controller.openAttachedWindow(env, env.containerName, undefined);
@@ -4430,7 +4430,7 @@ describe('the Docker host of the current Docker context', () => {
   it('reads the Docker context again for the next operation (a switch while VS Code runs takes effect)', async () => {
     await h.registry.add(devspace());
     await run('stop', row('acme/api', devspace()));
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     await run('stop', row('acme/api', devspace()));
     expect(operations.map((target) => target.host)).toEqual(['', 'build-box']);
   });
@@ -4438,7 +4438,7 @@ describe('the Docker host of the current Docker context', () => {
   // The window connects only when the current Docker context is the devspace's host and the container runs, and the
   // log shows which Docker the Dev Containers extension will ask.
   it('does not connect the window when the Docker context changed to another host during the start', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     await h.registry.add(remoteDevspace());
     h.service.openDevspaceInWorker.mockImplementation(async (id: string) => {
       await h.sessionFiles.writePending(id, WINDOW_ID);
@@ -4460,14 +4460,14 @@ describe('the Docker host of the current Docker context', () => {
     current = dockerTargetOf('ssh://build-box', 'my-build-box');
     await h.registry.add(remoteDevspace());
     await run('start', row('acme/api', remoteDevspace()));
-    expect(h.connection.open).toHaveBeenCalledWith('devspace-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box');
+    expect(h.connection.open).toHaveBeenCalledWith('devspaces-acme-api-a1b2c3d4', '/workspaces/api', 'my-build-box');
   });
 
   it('names no context when DOCKER_HOST decides the remote host (the Dev Containers extension follows it too)', async () => {
     current = dockerTargetOf('ssh://build-box', undefined);
     await h.registry.add(remoteDevspace());
     await run('start', row('acme/api', remoteDevspace()));
-    expect(h.connection.open.mock.calls[0]).toEqual(['devspace-acme-api-a1b2c3d4', '/workspaces/api']);
+    expect(h.connection.open.mock.calls[0]).toEqual(['devspaces-acme-api-a1b2c3d4', '/workspaces/api']);
   });
 
   it('names no context in the window of a local devspace', async () => {
@@ -4479,8 +4479,8 @@ describe('the Docker host of the current Docker context', () => {
   // The check reads the current context itself, although the operation's calls are pinned to its own context
   // (DOCKER_CONTEXT), with the real DockerTargets.
   it('does not connect the window when the current context changed during the start (real DockerTargets)', async () => {
-    const endpoints: Record<string, string> = { 'devspace-remote-11111111': 'ssh://build-box', default: 'unix:///var/run/docker.sock' };
-    let currentContext = 'devspace-remote-11111111';
+    const endpoints: Record<string, string> = { 'devspaces-remote-11111111': 'ssh://build-box', default: 'unix:///var/run/docker.sock' };
+    let currentContext = 'devspaces-remote-11111111';
     const cli = {
       isInstalled: () => true,
       // As BootstrapDocker.run: the context of the running operation (DOCKER_CONTEXT) wins over the current one.
@@ -4504,7 +4504,7 @@ describe('the Docker host of the current Docker context', () => {
   });
 
   it('does not connect the window when the container does not run after the start', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     await h.registry.add(remoteDevspace());
     h.docker.containerState.mockResolvedValue('stopped');
     h.service.openDevspaceInWorker.mockImplementation(async (id: string) => {
@@ -4515,11 +4515,11 @@ describe('the Docker host of the current Docker context', () => {
     expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
     // The pending connection file of the pipeline is removed.
     expect(await h.sessionFiles.readPendings()).toEqual([]);
-    expect(h.docker.containerState.mock.calls.filter(([name]) => name === 'devspace-acme-api-a1b2c3d4').length).toBeGreaterThanOrEqual(5);
+    expect(h.docker.containerState.mock.calls.filter(([name]) => name === 'devspaces-acme-api-a1b2c3d4').length).toBeGreaterThanOrEqual(5);
     // Each check of the attach is a read of the worker (windowStateInWorker), never a Docker call of the window (this
     // harness's worker reads the same fake).
-    expect(h.service.windowStateInWorker.mock.calls.filter(([, name]) => name === 'devspace-acme-api-a1b2c3d4').length).toBeGreaterThanOrEqual(5);
-    expect(fakeVscode.window.showErrorMessage.mock.calls[0]?.[0]).toBe(Messages.containerNotReady('acme/api', 'devspace-acme-api-a1b2c3d4'));
+    expect(h.service.windowStateInWorker.mock.calls.filter(([, name]) => name === 'devspaces-acme-api-a1b2c3d4').length).toBeGreaterThanOrEqual(5);
+    expect(fakeVscode.window.showErrorMessage.mock.calls[0]?.[0]).toBe(Messages.containerNotReady('acme/api', 'devspaces-acme-api-a1b2c3d4'));
     expect(h.coordinator.writePending).not.toHaveBeenCalled();
     expect(h.connection.open).not.toHaveBeenCalled();
   });
@@ -4527,7 +4527,7 @@ describe('the Docker host of the current Docker context', () => {
   it('does not connect the window when the worker cannot read the container, and names that in the log', async () => {
     // Each check of the attach is a bounded read of the worker within the operation (with a signal, so not passive); an
     // unread state counts as not running.
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     await h.registry.add(remoteDevspace());
     h.service.windowStateInWorker.mockResolvedValue(undefined);
     h.service.openDevspaceInWorker.mockImplementation(async (id: string) => {
@@ -4535,26 +4535,26 @@ describe('the Docker host of the current Docker context', () => {
       return openResult((await h.registry.get(id))!);
     });
     await run('start', row('acme/api', remoteDevspace()));
-    const reads = h.service.windowStateInWorker.mock.calls.filter(([, name]) => name === 'devspace-acme-api-a1b2c3d4');
+    const reads = h.service.windowStateInWorker.mock.calls.filter(([, name]) => name === 'devspaces-acme-api-a1b2c3d4');
     expect(reads.length).toBeGreaterThanOrEqual(5);
     for (const [, , options] of reads) expect((options as { signal?: AbortSignal } | undefined)?.signal).toBeInstanceOf(AbortSignal);
     expect(h.logger.warn).toHaveBeenCalledWith(expect.stringContaining('does not run (state: not readable)'));
-    expect(fakeVscode.window.showErrorMessage.mock.calls[0]?.[0]).toBe(Messages.containerNotReady('acme/api', 'devspace-acme-api-a1b2c3d4'));
+    expect(fakeVscode.window.showErrorMessage.mock.calls[0]?.[0]).toBe(Messages.containerNotReady('acme/api', 'devspaces-acme-api-a1b2c3d4'));
     expect(await h.sessionFiles.readPendings()).toEqual([]);
     expect(h.connection.open).not.toHaveBeenCalled();
   });
 
   it('logs the current context and both inspects before the window connects', async () => {
-    current = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
     await h.registry.add(remoteDevspace());
     await run('start', row('acme/api', remoteDevspace()));
     // The window of a remote devspace names the Docker context of its operation.
-    expect(h.connection.open).toHaveBeenCalledWith('devspace-acme-api-a1b2c3d4', '/workspaces/api', 'devspace-remote-11111111');
+    expect(h.connection.open).toHaveBeenCalledWith('devspaces-acme-api-a1b2c3d4', '/workspaces/api', 'devspaces-remote-11111111');
     const calls = h.docker.run.mock.calls.map(([args]) => (args as string[]).join(' '));
     expect(calls).toContain('context show');
-    expect(calls).toContain('inspect --type container /devspace-acme-api-a1b2c3d4 --format {{.Id}} {{.State.Status}}');
-    // The context that the operation used (here `devspace-remote-11111111`), not a derived name.
-    expect(calls).toContain('--context devspace-remote-11111111 inspect --type container /devspace-acme-api-a1b2c3d4 --format {{.Id}} {{.State.Status}}');
+    expect(calls).toContain('inspect --type container /devspaces-acme-api-a1b2c3d4 --format {{.Id}} {{.State.Status}}');
+    // The context that the operation used (here `devspaces-remote-11111111`), not a derived name.
+    expect(calls).toContain('--context devspaces-remote-11111111 inspect --type container /devspaces-acme-api-a1b2c3d4 --format {{.Id}} {{.State.Status}}');
     const logged = h.logger.info.mock.calls.map(([line]) => String(line));
     expect(logged.some((line) => line.startsWith('Before the window connects: Current Docker context:'))).toBe(true);
   });
@@ -4562,7 +4562,7 @@ describe('the Docker host of the current Docker context', () => {
 
 // Close and Keep Running closes the window; the container keeps running this time.
 describe('Close and Keep Running', () => {
-  const REMOTE_TARGET = dockerTargetOf('ssh://build-box', 'devspace-remote-11111111');
+  const REMOTE_TARGET = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
   let current: DockerTarget;
   let sendHeartbeat: ReturnType<typeof vi.fn<(devspaceId: string) => Promise<{ ok: true } | { ok: false; detail: string }>>>;
   const order: string[] = [];
@@ -4590,7 +4590,7 @@ describe('Close and Keep Running', () => {
       order.push('close');
     });
     // A window names the context of its host in its authority.
-    if (target.kind === 'remote') h.connection.currentDockerContext.mockReturnValue('devspace-remote-11111111');
+    if (target.kind === 'remote') h.connection.currentDockerContext.mockReturnValue('devspaces-remote-11111111');
   }
 
   function remoteHarness(options: { leaveCheckMs?: number } = {}): void {

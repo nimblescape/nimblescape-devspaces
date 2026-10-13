@@ -120,7 +120,7 @@ describeUnix('the helper channel script in a Node.js process', () => {
   }
 
   beforeAll(async () => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-channel-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-channel-'));
     fs.mkdirSync(path.join(dir, 'bin'));
     fs.writeFileSync(path.join(dir, 'bin', 'docker'), FAKE_DOCKER, { mode: 0o755 });
     env = { ...process.env, PATH: `${path.join(dir, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`, FAKE_DOCKER_LOG: path.join(dir, 'calls.log') };

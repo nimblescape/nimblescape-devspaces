@@ -30,7 +30,7 @@ const C2 = commit(2);
 const C3 = commit(3);
 const C4 = commit(4);
 const C5 = commit(5);
-const STORE = 'devspace-vscode';
+const STORE = 'devspaces-vscode';
 const STORE_MOUNT = { type: 'volume', volume: STORE, target: '/opt/devspace/vscode', readOnly: true as const };
 const METADATA = JSON.stringify([{ id: 'base', remoteUser: 'root' }, { remoteUser: 'vscode' }]);
 
@@ -80,10 +80,10 @@ function harness(options: {
   /** The list of the containers that mount the store fails. */
   storeContainers?: Error;
 }) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-background-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-background-'));
   temps.push(root);
   // The monitor's volume of the run is a temporary folder too (never the real /state).
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-background-state-'));
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-background-state-'));
   temps.push(stateDir);
   const log: string[] = [];
   const requests: HttpRequest[] = [];
@@ -284,7 +284,7 @@ describe('the background run of the Monitor', () => {
 describe('the link of a new server into the running dev containers', () => {
   const containers: Container[] = [
     { id: 'a', name: 'dev-a', state: 'running', mounts: [STORE_MOUNT], labels: { 'devcontainer.metadata': METADATA } },
-    { id: 'b', name: 'dev-b', state: 'running', mounts: [{ type: 'volume', volume: 'devspace-workspace-x', target: '/workspaces' }], labels: { 'devcontainer.metadata': METADATA } },
+    { id: 'b', name: 'dev-b', state: 'running', mounts: [{ type: 'volume', volume: 'devspaces-workspace-x', target: '/workspaces' }], labels: { 'devcontainer.metadata': METADATA } },
     { id: 'c', name: 'dev-c', state: 'running', mounts: [STORE_MOUNT], labels: {} },
     { id: 'd', name: 'dev-d', state: 'exited', mounts: [STORE_MOUNT], labels: { 'devcontainer.metadata': METADATA } },
     { id: 'e', name: 'dev-e', state: 'running', mounts: [STORE_MOUNT], labels: { 'devcontainer.metadata': JSON.stringify([{ remoteUser: 'node' }]) }, exec: { exitCode: 1, stdout: '', stderr: 'ln: failed\n', timedOut: false } },

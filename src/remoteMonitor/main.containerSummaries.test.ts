@@ -37,7 +37,7 @@ const FOREIGN_ID = 'f'.repeat(64);
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-11imr2-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-11imr2-'));
 });
 
 afterEach(() => {
@@ -122,16 +122,16 @@ describe('the loop of the Monitor on the summaries of the list', () => {
   // hide every older devspace container: none of them would be stopped, and the records of their devspaces would
   // count as without container).
   it('skips a summary with a label that is no devspace ID, and reads the summaries after it', async () => {
-    expect(remoteContainersOf([foreign(), summary(DEV_ID, 'devspace-api', A), summary(DB_ID, 'devspace-api-db-1', A, 'db')])).toEqual([
-      { id: DEV_ID, state: 'running', name: 'devspace-api', devspaceId: A, composeService: '' },
-      { id: DB_ID, state: 'running', name: 'devspace-api-db-1', devspaceId: A, composeService: 'db' },
+    expect(remoteContainersOf([foreign(), summary(DEV_ID, 'devspaces-api', A), summary(DB_ID, 'devspaces-api-db-1', A, 'db')])).toEqual([
+      { id: DEV_ID, state: 'running', name: 'devspaces-api', devspaceId: A, composeService: '' },
+      { id: DB_ID, state: 'running', name: 'devspaces-api-db-1', devspaceId: A, composeService: 'db' },
     ]);
     staleRecord();
     const stops: string[] = [];
     // The list of the tick (by the label) has the foreign container first; the list under the lock (by `<label>=<A>`)
     // has only the container of A, as the engine filters it.
     const { loop } = loopOf({
-      containerSummaries: async (label) => (label === LABEL_DEVSPACE_ID ? [foreign(), summary(DEV_ID, 'devspace-api', A)] : [summary(DEV_ID, 'devspace-api', A)]),
+      containerSummaries: async (label) => (label === LABEL_DEVSPACE_ID ? [foreign(), summary(DEV_ID, 'devspaces-api', A)] : [summary(DEV_ID, 'devspaces-api', A)]),
       stop: async (id) => void stops.push(id),
     });
     expect(await loop.tick()).toEqual([A]);
@@ -152,7 +152,7 @@ describe('the loop of the Monitor on the summaries of the list', () => {
     await loop.removals;
     expect(loop.idleMs()).toBe(5 * MINUTE);
     // The same container with the ID of a devspace counts (the control of this probe).
-    const counted = loopOf({ containerSummaries: async () => [summary(FOREIGN_ID, 'devspace-b', A)], stop: async () => {} }, { monotonic: () => clock });
+    const counted = loopOf({ containerSummaries: async () => [summary(FOREIGN_ID, 'devspaces-b', A)], stop: async () => {} }, { monotonic: () => clock });
     clock = 10 * MINUTE;
     expect(await counted.loop.tick()).toEqual([]);
     expect(counted.loop.idleMs()).toBe(0);
@@ -167,7 +167,7 @@ describe('the loop of the Monitor on the summaries of the list', () => {
     const dir = heartbeatDir(stateDir);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, heartbeatFileName(SOURCE, B)), JSON.stringify({ at: T0 - 9 * 24 * 60 * MINUTE, keepRunning: false, limitSeconds: 600, seq: 0 }));
-    let listed: EngineContainerSummary[] = [summary(DB_ID, 'devspace-b', B, undefined, 'exited')];
+    let listed: EngineContainerSummary[] = [summary(DB_ID, 'devspaces-b', B, undefined, 'exited')];
     const removed: string[] = [];
     const { loop, lines } = loopOf({ containerSummaries: async () => listed, stop: async () => {} }, { removeRecord: async (record) => (removed.push(record.devspaceId), true) });
     expect(await loop.tick()).toEqual([]);
@@ -208,7 +208,7 @@ describe('the loop of the Monitor on the summaries of the list', () => {
     await withLimits(async (limits) => {
       const api: EngineApi = async (request) =>
         request.method === 'GET'
-          ? { status: 200, body: JSON.stringify([{ Id: DEV_ID, Names: ['/devspace-api'], State: 'running', Labels: { [LABEL_DEVSPACE_ID]: A } }]), truncated: false }
+          ? { status: 200, body: JSON.stringify([{ Id: DEV_ID, Names: ['/devspaces-api'], State: 'running', Labels: { [LABEL_DEVSPACE_ID]: A } }]), truncated: false }
           : never(request);
       const events: string[] = [];
       const { loop, lines } = loopOf(dockerEngine(api, async () => Promise.reject(new Error('no exec in this test'))), {
@@ -221,7 +221,7 @@ describe('the loop of the Monitor on the summaries of the list', () => {
       limits[2].controller.abort();
       expect(await ticked).toEqual([]);
       expect(events).toEqual([`lock ${A}`, `release ${A}`]);
-      expect(lines).toContain('The container devspace-api could not be stopped: Docker did not answer within 60 seconds.');
+      expect(lines).toContain('The container devspaces-api could not be stopped: Docker did not answer within 60 seconds.');
     });
   });
 });

@@ -30,7 +30,7 @@ let paths: StoragePaths;
 let code: string;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-checks-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-checks-'));
   paths = new StoragePaths(root);
   paths.ensureDirectoriesSync();
   code = CODE;

@@ -213,9 +213,9 @@ describe('extractBaseImages on Dockerfiles that name images outside FROM', () =>
     const text = [
       '# syntax=docker/dockerfile:1.7',
       'FROM alpine:3.22 AS base',
-      'COPY --from=devspace-11111111:2 /x /x',
+      'COPY --from=devspaces-11111111:2 /x /x',
       'COPY --chown=1000 --from=ghcr.io/acme/tools:1 /t /t',
-      'RUN --mount=type=bind,from=devspace-22222222,source=/a,target=/a --mount=type=cache,target=/c true',
+      'RUN --mount=type=bind,from=devspaces-22222222,source=/a,target=/a --mount=type=cache,target=/c true',
       'RUN --mount type=cache,from=cache-image,target=/c true',
       'ADD --chown=1 https://example.com/x /x',
     ].join('\n');
@@ -232,25 +232,25 @@ describe('extractBaseImages on Dockerfiles that name images outside FROM', () =>
       'ARG TAG=2',
       'FROM alpine',
       'ARG TAG',
-      'ARG SOURCE=devspace-11111111',
-      'ENV OTHER=devspace-33333333',
+      'ARG SOURCE=devspaces-11111111',
+      'ENV OTHER=devspaces-33333333',
       'COPY --from=${SOURCE}:${TAG} /a /a',
       'COPY --from=$OTHER /b /b',
       'ARG TARGETARCH',
       'RUN --mount=from=tools-$TARGETARCH,target=/t true',
-      'FROM devspace-${TARGETVARIANT}',
+      'FROM devspaces-${TARGETVARIANT}',
     ].join('\n');
     expect(extractBaseImages(text)).toEqual(['alpine']);
-    expect(extractBaseImages(text, { TARGETVARIANT: 'v8' })).toEqual(['alpine', 'devspace-v8']);
+    expect(extractBaseImages(text, { TARGETVARIANT: 'v8' })).toEqual(['alpine', 'devspaces-v8']);
   });
 
   it('stops after the target stage, whatever COPY --from names', () => {
-    const text = ['FROM alpine AS one', 'COPY --from=devspace-1 /a /a', 'FROM debian AS two', 'COPY --from=devspace-2 /b /b'].join('\n');
+    const text = ['FROM alpine AS one', 'COPY --from=devspaces-1 /a /a', 'FROM debian AS two', 'COPY --from=devspaces-2 /b /b'].join('\n');
     expect(extractBaseImages(text, {}, { target: 'one' })).toEqual(['alpine']);
   });
 
   it('reads the FROM of a Dockerfile with quoted --mount fields', () => {
-    const text = 'FROM alpine\nRUN --mount=type=bind,\\"from=devspace-1\\",target=/x --mount="from=devspace-2, target=/y" ls\n';
+    const text = 'FROM alpine\nRUN --mount=type=bind,\\"from=devspaces-1\\",target=/x --mount="from=devspaces-2, target=/y" ls\n';
     expect(extractBaseImages(text)).toEqual(['alpine']);
   });
 
@@ -264,7 +264,7 @@ describe('extractBaseImages on Dockerfiles that name images outside FROM', () =>
     'FROM x:1${NOPE%%.*}',
     'FROM alpine:${NOPE%x}',
     'ARG A=alpine\nFROM ${A:0:3}',
-    'ARG A=devspace-1\nFROM ${A:0:3}',
+    'ARG A=devspaces-1\nFROM ${A:0:3}',
     'ARG A=alpine\nARG B=${A:0:3}\nFROM $B',
     'FROM ${}',
     'FROM ${:x}',
@@ -281,7 +281,7 @@ describe('extractBaseImages on Dockerfiles that name images outside FROM', () =>
     '\ufeff# syntax=a/b:1\nFROM x',
     '# escape=`\n# check=skip=all\n# syntax=a/b:1\nFROM x',
     '// syntax=a/b:1\nFROM x',
-    '# syntax=devspace-11111111:1\nFROM x',
+    '# syntax=devspaces-11111111:1\nFROM x',
     '# syntax=docker.io/attacker/frontend:1\nFROM x',
   ])('reads the FROM image of %j whatever frontend it names', (text) => {
     expect(extractBaseImages(text)).toEqual(['x']);
@@ -313,7 +313,7 @@ describe('variable names as BuildKit reads them', () => {
   });
 
   it('expands positional and special parameters and names of Unicode letters that are not set to the empty text', () => {
-    expect(extractBaseImages('FROM dev$1space$@-${2}x$$y$éa$é\\z\n')).toEqual(['devspace-xyz']);
+    expect(extractBaseImages('FROM dev$1spaces$@-${2}x$$y$éa$é\\z\n')).toEqual(['devspaces-xyz']);
     expect(extractBaseImages('ARG é=alp\nARG 1=ine\nFROM $é${1}\n')).toEqual(['alpine']);
     expect(extractBaseImages('ARG é=alpine\nFROM $é\n')).toEqual(['alpine']);
   });
@@ -364,7 +364,7 @@ describe('the limits of extractBaseImages: skipped for the update check, in line
     // Never refused as too large to check: such a Dockerfile gives no base images.
     expect(extractBaseImages(many)).toEqual([]);
     expect(extractBaseImages(`FROM alpine\n# ${'x'.repeat(MAX_DOCKERFILE_LENGTH)}\n`)).toEqual([]);
-    expect(extractBaseImages(`FROM devspace-11111111:1\n# ${'x'.repeat(MAX_DOCKERFILE_LENGTH)}\n`, { BUILDKIT_SYNTAX: 'evil/frontend' })).toEqual([]);
+    expect(extractBaseImages(`FROM devspaces-11111111:1\n# ${'x'.repeat(MAX_DOCKERFILE_LENGTH)}\n`, { BUILDKIT_SYNTAX: 'evil/frontend' })).toEqual([]);
   });
 
   it('reads 1000 pattern forms on a value of 64 KiB quickly', () => {

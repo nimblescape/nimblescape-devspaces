@@ -49,7 +49,7 @@ const own = (fields: Partial<BusyMark> = {}): BusyMark => ({ operation: 'create'
 const live: MarkLiveness = { now: NOW };
 
 function buildRecord(fields: Partial<BuildRecord> = {}): BuildRecord {
-  return { builtAt: '2026-10-01T00:00:00.000Z', devspaceImage: 'devspace-acme-api-x:3', buildNumber: 3, configPath: '.devcontainer/devcontainer.json', configHash: 'sha256:old', images: {}, features: {}, ...fields };
+  return { builtAt: '2026-10-01T00:00:00.000Z', devspaceImage: 'devspaces-acme-api-x:3', buildNumber: 3, configPath: '.devcontainer/devcontainer.json', configHash: 'sha256:old', images: {}, features: {}, ...fields };
 }
 
 const composeRecord = () => buildRecord({ compose: { service: 'app', images: ['p-app'], serviceImages: [], version: '2.29.0', inputsHash: 'sha256:inputs' } });
@@ -251,14 +251,14 @@ describe('the registry writes of the open', () => {
     });
 
     it('rebaseline: the Compose record takes the new hash and version, only while its image is unchanged', async () => {
-      const result = await setup({ buildRecord: composeRecord() }).records.build(ID, { kind: 'rebaseline', devspaceImage: 'devspace-acme-api-x:3', configHash: 'sha256:new', version: '2.30.0' });
+      const result = await setup({ buildRecord: composeRecord() }).records.build(ID, { kind: 'rebaseline', devspaceImage: 'devspaces-acme-api-x:3', configHash: 'sha256:new', version: '2.30.0' });
       expect(result?.buildRecord).toEqual({ ...composeRecord(), configHash: 'sha256:new', compose: { ...composeRecord().compose, version: '2.30.0' } });
-      const rebuilt = await setup({ buildRecord: composeRecord() }).records.build(ID, { kind: 'rebaseline', devspaceImage: 'devspace-acme-api-x:2', configHash: 'sha256:new', version: '2.30.0' });
+      const rebuilt = await setup({ buildRecord: composeRecord() }).records.build(ID, { kind: 'rebaseline', devspaceImage: 'devspaces-acme-api-x:2', configHash: 'sha256:new', version: '2.30.0' });
       expect(rebuilt?.buildRecord).toEqual(composeRecord());
     });
 
     it('rebaseline: nothing without a (valid) Compose record', async () => {
-      const change = { kind: 'rebaseline', devspaceImage: 'devspace-acme-api-x:3', configHash: 'sha256:new', version: '2.30.0' } as const;
+      const change = { kind: 'rebaseline', devspaceImage: 'devspaces-acme-api-x:3', configHash: 'sha256:new', version: '2.30.0' } as const;
       expect((await setup({ buildRecord: buildRecord() }).records.build(ID, change))?.buildRecord).toEqual(buildRecord());
       expect(await setup().records.build(ID, change)).not.toHaveProperty('buildRecord');
     });

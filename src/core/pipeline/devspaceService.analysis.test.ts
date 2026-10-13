@@ -29,7 +29,7 @@ let bundleCode: string;
 let h: Harness | undefined;
 
 beforeAll(() => {
-  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   bundle = path.join(outDir, 'configurationAnalysisWorker.js');
   // Same options as esbuild.mjs.
   buildSync({

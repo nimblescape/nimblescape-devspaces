@@ -351,7 +351,7 @@ export function isNotRunning(error: unknown): boolean {
 }
 
 /**
- * Whether a container of a devspace is its dev container: without the label nimblescape.devspace.compose-service of
+ * Whether a container of a devspace is its dev container: without the label nimblescape.devspaces.compose-service of
  * the other services of Docker Compose, or with the name of the devspace.
  */
 export function isDevContainer(container: { name: string; labels: Record<string, string> }, containerName: string): boolean {

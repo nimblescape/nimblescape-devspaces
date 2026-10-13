@@ -36,11 +36,11 @@ import { TEST_BASE_IMAGE, TEST_RUN_LABEL, removeRunObjects } from './dockerRun';
 import { DUMMY_TOKEN, HELPER_DOCKERFILE, dockerTestContext, testHelperImage } from './harness';
 import { inProcessBatches, workerScript, type InProcessBatches } from './workerLocks';
 
-const REPOSITORY = 'devspace-test/worker-batch';
+const REPOSITORY = 'devspaces-test/worker-batch';
 /** As the folder of REPOSITORY in the volume. */
 const FOLDER = '/workspaces/worker-batch';
 /** The clone goes to a folder of its own (the folder of REPOSITORY exists and is no repository). */
-const CLONED = 'devspace-test/worker-batch-clone';
+const CLONED = 'devspaces-test/worker-batch-clone';
 
 async function waitUntil(condition: () => boolean, what: string, timeoutMs = 60_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -56,7 +56,7 @@ describe('the batch helper of the worker', () => {
   const runner = new NodeProcessRunner();
   const docker = new BootstrapDocker(runner, run.dockerPath, env, log);
   const targets = new DockerTargets(docker, env, log);
-  const volume = `devspace-test-batch-${run.runId}`;
+  const volume = `devspaces-test-batch-${run.runId}`;
   let script = '';
   let helperTag = '';
   /** The helper image with a `git` that only waits (deterministic Git steps). */
@@ -86,8 +86,8 @@ describe('the batch helper of the worker', () => {
     helperTag = use.tag;
     // A `git` first on PATH that only waits: the clone runs as the Git user until its time limit.
     const dockerfile = `FROM ${helperTag}\nRUN printf '#!/bin/sh\\nexec sleep 300\\n' > /usr/local/bin/git && chmod 0755 /usr/local/bin/git\nLABEL ${TEST_RUN_LABEL}=${run.runId}\n`;
-    cli.ok(['build', '-q', '-f', '-', '-t', `devspace-test-batch-git:${run.runId}`, path.dirname(HELPER_DOCKERFILE)], dockerfile);
-    waitingGitImage = cli.ok(['image', 'inspect', '--format', '{{.Id}}', `devspace-test-batch-git:${run.runId}`]);
+    cli.ok(['build', '-q', '-f', '-', '-t', `devspaces-test-batch-git:${run.runId}`, path.dirname(HELPER_DOCKERFILE)], dockerfile);
+    waitingGitImage = cli.ok(['image', 'inspect', '--format', '{{.Id}}', `devspaces-test-batch-git:${run.runId}`]);
     cli.ok(['volume', 'create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, volume]);
     // The repository and CONFIG_FOLDER as an open leaves them (owner 1000, CONFIG_FOLDER 0755 with a readable file).
     cli.ok([
@@ -109,7 +109,7 @@ describe('the batch helper of the worker', () => {
     // No in-process batch helper is left over. Also when the setup failed before the batch helpers.
     const batchLeftovers = batches === undefined ? [] : await batches.dispose();
     for (const session of sessions) for (const id of helpersOf(session)) cli.run(['rm', '-f', id]);
-    cli.run(['rmi', '-f', `devspace-test-batch-git:${run.runId}`]);
+    cli.run(['rmi', '-f', `devspaces-test-batch-git:${run.runId}`]);
     removeRunObjects(cli, run.runId);
     // No worker is started, so none can be left over.
     expect(batchLeftovers).toEqual([]);
@@ -133,7 +133,7 @@ describe('the batch helper of the worker', () => {
   it('refuses a missing volume and does not create it', async () => {
     // Opened from the test process.
     const target = await targets.current();
-    const missing = `devspace-test-batch-missing-${run.runId}`;
+    const missing = `devspaces-test-batch-missing-${run.runId}`;
     await expect(batches!.open({ volume: missing, image: waitingGitImage, socket: helperDockerSocket(env, process.platform, target.endpoint) })).rejects.toMatchObject({
       code: 'missingVolume',
     });
@@ -199,7 +199,7 @@ describe('the batch helper of the worker', () => {
       };
     };
     const socket = helperDockerSocket(env, process.platform, (await targets.current()).endpoint);
-    expect(created.Name).toBe(`/devspace-batch-${session.session}`);
+    expect(created.Name).toBe(`/devspaces-batch-${session.session}`);
     expect(created.Image).toBe(waitingGitImage);
     expect(created.Config.Labels).toMatchObject({ [LABEL_HELPER_RUN]: 'true', [LABEL_CHANNEL_STEP]: session.session });
     expect([created.Config.OpenStdin, created.Config.StdinOnce, created.Config.Tty]).toEqual([true, true, false]);
@@ -246,7 +246,7 @@ describe('the batch helper of the worker', () => {
       ['git.yml', 'git remote resource is disabled by "COMPOSE_EXPERIMENTAL_GIT_REMOTE"'],
       ['oci.yml', 'OCI remote resource is disabled by "COMPOSE_EXPERIMENTAL_OCI_REMOTE"'],
     ]) {
-      const result = await session.step('composeModel', { repository: REPOSITORY, files: [`${FOLDER}/${file}`], project: 'devspace-batch-test' });
+      const result = await session.step('composeModel', { repository: REPOSITORY, files: [`${FOLDER}/${file}`], project: 'devspaces-batch-test' });
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout.trim().split('\n').pop()!)).toMatchObject({ error: expect.stringContaining(disabled) });
     }
@@ -260,7 +260,7 @@ describe('the batch helper of the worker', () => {
     // Opened from the test process.
     const session = await openBatch(waitingGitImage);
     const container = helpersOf(session.session)[0];
-    const result = await session.step('composeModel', { repository: REPOSITORY, files: [`${FOLDER}/token.yml`], project: 'devspace-batch-test' });
+    const result = await session.step('composeModel', { repository: REPOSITORY, files: [`${FOLDER}/token.yml`], project: 'devspaces-batch-test' });
     const output = `${result.stdout}\n${result.stderr}`;
     expect(output).toMatch(/permission denied/i);
     expect(output).not.toContain('[user]');
@@ -276,7 +276,7 @@ describe('the batch helper of the worker', () => {
     // Opened from the test process.
     const session = await openBatch(waitingGitImage);
     const container = helpersOf(session.session)[0];
-    const result = await session.step('composeModel', { repository: REPOSITORY, files: [`${FOLDER}/owner.yml`], project: 'devspace-batch-test' });
+    const result = await session.step('composeModel', { repository: REPOSITORY, files: [`${FOLDER}/owner.yml`], project: 'devspaces-batch-test' });
     expect(result.exitCode).toBe(0);
     const printed = JSON.parse(result.stdout.trim().split('\n').pop()!) as { error?: string; model?: { services: Record<string, { environment?: Record<string, string> }> } };
     expect(printed.error).toBeUndefined();

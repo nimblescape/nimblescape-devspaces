@@ -105,7 +105,7 @@ describe('the messages of a remote Docker host', () => {
   });
 
   it('points to the details, not to a short wait, when the container does not run', () => {
-    const text = Messages.containerNotReady('acme/api', 'devspace-acme-api-a1b2c3d4');
+    const text = Messages.containerNotReady('acme/api', 'devspaces-acme-api-a1b2c3d4');
     expect(text).toContain('does not run');
     expect(text).toContain('details');
     expect(text).not.toContain('yet');

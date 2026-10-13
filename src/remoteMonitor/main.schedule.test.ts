@@ -24,7 +24,7 @@ const T0 = Date.parse('2026-10-09T10:00:00Z');
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-11h2-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-11h2-'));
 });
 
 afterEach(() => {
@@ -203,16 +203,16 @@ describe('the VS Code part of the container', () => {
     const engine = unusedEngine();
     expect(vscodeBackgroundDeps({}, engine, () => {})).toBeUndefined();
     for (const name of ['', '-x', 'a/b', 'a b', '../x']) expect(vscodeBackgroundDeps({ DEVSPACE_VSCODE_STORE: name }, engine, () => {}), name).toBeUndefined();
-    const deps = vscodeBackgroundDeps({ DEVSPACE_VSCODE_STORE: 'devspace-vscode' }, engine, () => {});
-    expect(deps?.storeVolume).toBe('devspace-vscode');
+    const deps = vscodeBackgroundDeps({ DEVSPACE_VSCODE_STORE: 'devspaces-vscode' }, engine, () => {});
+    expect(deps?.storeVolume).toBe('devspaces-vscode');
     expect(deps?.store.root).toBe('/vscode');
     expect(deps?.store.background).toBe(true);
   });
 
   it('the extension lists in the volume of the run: /state, or the state folder that `run` is given', () => {
     const engine = unusedEngine();
-    expect(vscodeBackgroundDeps({ DEVSPACE_VSCODE_STORE: 'devspace-vscode' }, engine, () => {})?.extensionStateDir).toBe('/state');
-    expect(vscodeBackgroundDeps({ DEVSPACE_VSCODE_STORE: 'devspace-vscode' }, engine, () => {}, '/tmp/devspace-state')?.extensionStateDir).toBe('/tmp/devspace-state');
+    expect(vscodeBackgroundDeps({ DEVSPACE_VSCODE_STORE: 'devspaces-vscode' }, engine, () => {})?.extensionStateDir).toBe('/state');
+    expect(vscodeBackgroundDeps({ DEVSPACE_VSCODE_STORE: 'devspaces-vscode' }, engine, () => {}, '/tmp/devspace-state')?.extensionStateDir).toBe('/tmp/devspace-state');
   });
 });
 
@@ -229,7 +229,7 @@ describe('the idle exit during a background run', () => {
     fs.mkdirSync(store);
     const vscode = {
       store: { root: store },
-      storeVolume: 'devspace-vscode',
+      storeVolume: 'devspaces-vscode',
       // The monitor's volume of the run (the extension lists) is the temporary state folder of the test, as main gives
       // its own to vscodeBackgroundDeps; never the real /state.
       extensionStateDir: stateDir,
@@ -286,7 +286,7 @@ describe('the idle exit during a background run', () => {
     fs.mkdirSync(store);
     const vscode = {
       store: { root: store },
-      storeVolume: 'devspace-vscode',
+      storeVolume: 'devspaces-vscode',
       // The monitor's volume of the run (the extension lists) is the temporary state folder of the test, as main gives
       // its own to vscodeBackgroundDeps; never the real /state.
       extensionStateDir: stateDir,

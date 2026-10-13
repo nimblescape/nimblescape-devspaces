@@ -23,7 +23,7 @@ import { contextSecrets } from './operationContext.testkit';
 import { OperationError, type OperationContext } from './server';
 
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-const NAME = 'devspace-acme-api-brave-noether';
+const NAME = 'devspaces-acme-api-brave-noether';
 const SOURCE = '0123456789abcdef0123456789abcdef';
 const DEVSPACE = {
   id: ID,
@@ -35,7 +35,7 @@ const DEVSPACE = {
   createdAt: '2026-10-01T00:00:00.000Z',
   lastUsedAt: '2026-10-01T00:00:00.000Z',
 } as unknown as Devspace;
-const OWN: OwnHelper = { image: { tag: 'devspace-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
+const OWN: OwnHelper = { image: { tag: 'devspaces-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
 const PARAMS = { devspaceId: ID, dockerHost: '', owner: { windowId: 'window-1', pid: 4242 }, additionalVolumesToRemove: [] as string[], monitorSource: SOURCE };
 
 interface Setup {
@@ -99,7 +99,7 @@ function run(setup: Setup = {}, params: Record<string, unknown> = {}) {
     removeImage: async (reference) => (engineCalls.push(`removeImage ${reference}`), 'missing'),
     volumeNames: async () => [],
     networkNames: async () => [],
-    inspect: async (kind, reference) => (kind === 'volume' && reference === 'api-db' ? { Name: 'api-db', Labels: { [LABEL_DEVSPACE_ID]: ID, 'nimblescape.devspace.repository': 'acme/api', 'nimblescape.devspace.volume': 'additional', 'nimblescape.devspace.owner-id': '42' } } : kind === 'volume' && reference === NAME && volumeLabels !== null ? { Name: NAME, Labels: volumeLabels } : undefined),
+    inspect: async (kind, reference) => (kind === 'volume' && reference === 'api-db' ? { Name: 'api-db', Labels: { [LABEL_DEVSPACE_ID]: ID, 'nimblescape.devspaces.repository': 'acme/api', 'nimblescape.devspaces.volume': 'additional', 'nimblescape.devspaces.owner-id': '42' } } : kind === 'volume' && reference === NAME && volumeLabels !== null ? { Name: NAME, Labels: volumeLabels } : undefined),
     removeVolume: async (name) => {
       engineCalls.push(`removeVolume ${name}`);
       if (setup.volumeRemoveFails) throw new EngineError('volume is in use', 409);

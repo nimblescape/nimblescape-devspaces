@@ -15,7 +15,7 @@ import { engineHijack } from '../../helperChannel/engineApi';
 import { dockerEngine } from '../../helperChannel/engineClient';
 
 const ENV = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-const NAME = 'devspace-acme-api-brave-noether';
+const NAME = 'devspaces-acme-api-brave-noether';
 
 function container(overrides: Partial<EngineContainer> = {}): EngineContainer {
   return { id: 'a'.repeat(64), name: NAME, state: 'running', rawState: 'running', labels: { [LABEL_DEVSPACE_ID]: ENV }, image: `${NAME}:1`, created: '2026-10-03T10:00:00Z', ...overrides };
@@ -199,16 +199,16 @@ describe('the Docker of the pipeline over the port', () => {
         filters.push(given);
         const reference = given.reference?.[0];
         if (reference === 'p-*') return [image(['p-app:latest'], { [LABEL_DEVSPACE_ID]: ENV }), image(['p-db:latest'], { [LABEL_DEVSPACE_ID]: 'other' })];
-        if (reference === 'devspace-*') return [image(['devspace-a:1', 'devspace-a:2']), image([])];
-        return [image(['devspace-a:10', 'devspace-a:2', 'devspace-ab:1'])];
+        if (reference === 'devspaces-*') return [image(['devspaces-a:1', 'devspaces-a:2']), image([])];
+        return [image(['devspaces-a:10', 'devspaces-a:2', 'devspaces-ab:1'])];
       },
     };
     const docker = new EngineDocker(engine);
     expect(await docker.listProjectImages('p', ENV)).toEqual(['p-app:latest']);
     expect(await docker.listProjectImages('p')).toEqual(['p-app:latest', 'p-db:latest']);
-    expect(await docker.listDevspaceImages()).toEqual([{ id: 'sha256:devspace-a:1,devspace-a:2', tags: ['devspace-a:1', 'devspace-a:2'], createdAt: '2026-10-03T10:00:00.000Z' }]);
-    expect(await docker.listImageTags('devspace-a')).toEqual(['devspace-a:2', 'devspace-a:10']);
-    expect(filters).toContainEqual({ reference: ['devspace-a'] });
+    expect(await docker.listDevspaceImages()).toEqual([{ id: 'sha256:devspaces-a:1,devspaces-a:2', tags: ['devspaces-a:1', 'devspaces-a:2'], createdAt: '2026-10-03T10:00:00.000Z' }]);
+    expect(await docker.listImageTags('devspaces-a')).toEqual(['devspaces-a:2', 'devspaces-a:10']);
+    expect(filters).toContainEqual({ reference: ['devspaces-a'] });
   });
 
   it('exec: the input or the secret input as standard input, never both', async () => {

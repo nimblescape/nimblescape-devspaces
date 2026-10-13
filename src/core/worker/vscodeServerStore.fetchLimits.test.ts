@@ -22,7 +22,7 @@ const SERVER = { commit: '0123456789abcdef0123456789abcdef01234567', quality: 's
 const temps: string[] = [];
 const servers: http.Server[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-store-r1-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-store-r1-'));
   temps.push(dir);
   return dir;
 }

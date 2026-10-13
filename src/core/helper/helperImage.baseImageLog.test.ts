@@ -50,7 +50,7 @@ afterEach(() => {
 
 describe('the log of a check of the base image', () => {
   it('names the next maintaining ensure for an image that was built from the local base image', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-phr1-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-phr1-'));
     dirs.push(dir);
     const file = path.join(dir, 'Dockerfile');
     fs.writeFileSync(file, DOCKERFILE);

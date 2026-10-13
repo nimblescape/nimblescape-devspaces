@@ -24,7 +24,7 @@ const SIX_SEVEN = Date.parse('2026-10-11T04:07:00Z');
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-11k6-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-11k6-'));
 });
 
 afterEach(() => {

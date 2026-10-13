@@ -16,13 +16,13 @@ import { dockerEngine } from './engineClient';
 const READY = 'Monitor started';
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
 const SPEC: MonitorRunSpec = {
-  name: 'devspace-monitor',
+  name: 'devspaces-monitor',
   image: 'sha256:' + 'a'.repeat(64),
-  labels: { 'nimblescape.devspace.monitor': 'label' },
+  labels: { 'nimblescape.devspaces.monitor': 'label' },
   restartPolicy: 'on-failure',
   network: 'none',
   log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
-  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-monitor', volumeTarget: '/state' },
+  mounts: { socket: '/var/run/docker.sock', volume: 'devspaces-monitor', volumeTarget: '/state' },
   env: {},
   command: ['node'],
 };
@@ -51,7 +51,7 @@ describe('createAttached in detail', () => {
 
   /** An engine: `create` and `start` answer those requests; `onInput` writes on the attach once the input line came. */
   async function serve(create: Answer, start: Answer = { status: 204 }, onInput: (socket: net.Socket) => void = () => {}) {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-attach-r1-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-attach-r1-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     const urls: string[] = [];
@@ -94,7 +94,7 @@ describe('createAttached in detail', () => {
   };
 
   it('the conflict is only that of the status 409', async () => {
-    const { engine } = await serve({ status: 500, json: { message: 'Conflict. The container name "/devspace-monitor" is already in use by container "abc".' } });
+    const { engine } = await serve({ status: 500, json: { message: 'Conflict. The container name "/devspaces-monitor" is already in use by container "abc".' } });
     expect(await engine.createAttached(SPEC, options())).toMatchObject({ kind: 'exited', conflict: false });
   });
 

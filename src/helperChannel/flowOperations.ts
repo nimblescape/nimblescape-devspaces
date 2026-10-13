@@ -474,7 +474,7 @@ export function recordGitStateOperation(engineOf: EngineOfOperation, ownHelperOf
 
 /**
  * The image of the monitor container: the worker's own image (the pinned helper image) by its monitor tag
- * `devspace-monitor:<hash>`, tagged here, with the ID that the create checks; by the ID itself when the tag of the
+ * `devspaces-monitor:<hash>`, tagged here, with the ID that the create checks; by the ID itself when the tag of the
  * worker is no helper tag or the tag fails (the name in the Containers view only).
  */
 export async function monitorImage(engine: DockerEngine, own: { tag: string; id?: string }, logger: Logger, signal: AbortSignal): Promise<{ reference: string; id?: string }> {

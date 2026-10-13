@@ -35,7 +35,7 @@ const OTHER = 'fedcba9876543210fedcba9876543210fedcba98';
 
 const temps: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-11h2-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-11h2-'));
   temps.push(dir);
   return dir;
 }

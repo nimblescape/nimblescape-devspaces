@@ -17,13 +17,13 @@ import { dockerEngine } from './engineClient';
 const READY = 'Monitor started';
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
 const SPEC: MonitorRunSpec = {
-  name: 'devspace-monitor',
+  name: 'devspaces-monitor',
   image: 'sha256:' + 'a'.repeat(64),
-  labels: { 'nimblescape.devspace.monitor': 'label' },
+  labels: { 'nimblescape.devspaces.monitor': 'label' },
   restartPolicy: 'on-failure',
   network: 'none',
   log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
-  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-monitor', volumeTarget: '/state' },
+  mounts: { socket: '/var/run/docker.sock', volume: 'devspaces-monitor', volumeTarget: '/state' },
   env: {},
   command: ['node'],
 };
@@ -52,7 +52,7 @@ describe('createAttached: the readable end of the error output', () => {
 
   /** An engine: `create` and `start` answer those requests; `onInput` writes on the attach once the input line came. */
   async function serve(create: Answer, start: Answer = { status: 204 }, onInput: (socket: net.Socket) => void = () => {}) {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-attach-pc4r1-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-attach-pc4r1-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     const urls: string[] = [];

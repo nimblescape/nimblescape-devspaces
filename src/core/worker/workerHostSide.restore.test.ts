@@ -8,7 +8,7 @@ import { parseRestoreAnswer } from './workerHostSide';
 
 describe('the answer of record restore in the worker', () => {
   it('takes the number of added entries and the volumes left out', () => {
-    expect(parseRestoreAnswer({ added: 2, skipped: ['devspace-a'] })).toEqual({ added: 2, skipped: ['devspace-a'] });
+    expect(parseRestoreAnswer({ added: 2, skipped: ['devspaces-a'] })).toEqual({ added: 2, skipped: ['devspaces-a'] });
     expect(parseRestoreAnswer({ added: 0, skipped: [] })).toEqual({ added: 0, skipped: [] });
   });
 

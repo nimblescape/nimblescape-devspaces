@@ -13,7 +13,7 @@ import { ensureHelperImageUse, helperImageTag, type HelperImageDocker } from './
 import type { HelperState } from './helperState';
 
 const BASE = 'node:24-trixie-slim';
-const DOCKERFILE = `ARG BASE_IMAGE=${BASE}\nFROM \${BASE_IMAGE}\nLABEL nimblescape.devspace.helper=true\n`;
+const DOCKERFILE = `ARG BASE_IMAGE=${BASE}\nFROM \${BASE_IMAGE}\nLABEL nimblescape.devspaces.helper=true\n`;
 const DIGEST = `sha256:${'a'.repeat(64)}`;
 const NOW = Date.parse('2026-09-24T12:00:00Z');
 
@@ -24,7 +24,7 @@ afterEach(() => {
 
 /** Helper images in listing order; removeImage records and untags. */
 function setup(images: Array<{ id: string; tags: string[] }>) {
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-tagR1-'));
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-tagR1-'));
   folders.push(folder);
   const file = path.join(folder, 'Dockerfile');
   fs.writeFileSync(file, DOCKERFILE);
@@ -60,7 +60,7 @@ function setup(images: Array<{ id: string; tags: string[] }>) {
   return { tag, removals, lines, ensure };
 }
 
-const monitorOf = (helperTag: string) => helperTag.replace('devspace-helper:', 'devspace-monitor:');
+const monitorOf = (helperTag: string) => helperTag.replace('devspaces-helper:', 'devspaces-monitor:');
 const CURRENT_ID = `sha256:${'1'.repeat(64)}`;
 const OLD_ID = `sha256:${'2'.repeat(64)}`;
 
@@ -80,11 +80,11 @@ describe('the cleanup of monitor tags', () => {
 
   it('leaves a monitor tag of the current image alone, without a log line', async () => {
     const tag = helperImageTag(DOCKERFILE);
-    const images = [{ id: CURRENT_ID, tags: [tag, 'devspace-monitor:fedcba987654'] }];
+    const images = [{ id: CURRENT_ID, tags: [tag, 'devspaces-monitor:fedcba987654'] }];
     const s = setup(images);
     expect(await s.ensure()).toBe(tag);
     expect(s.removals).toEqual([]);
-    expect(images[0].tags).toEqual([tag, 'devspace-monitor:fedcba987654']);
-    expect(s.lines.filter((line) => line.includes('devspace-monitor:'))).toEqual([]);
+    expect(images[0].tags).toEqual([tag, 'devspaces-monitor:fedcba987654']);
+    expect(s.lines.filter((line) => line.includes('devspaces-monitor:'))).toEqual([]);
   });
 });

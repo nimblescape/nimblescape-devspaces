@@ -836,7 +836,7 @@ export function runArgsProblems(runArgs: readonly unknown[], ownVolume: string, 
 }
 
 /**
- * The label nimblescape.devspace.config-path of the override configuration, with a configuration path.
+ * The label nimblescape.devspaces.config-path of the override configuration, with a configuration path.
  */
 function isOwnConfigPathLabel(value: string): boolean {
   const prefix = `${LABEL_CONFIG_PATH}=`;
@@ -845,7 +845,7 @@ function isOwnConfigPathLabel(value: string): boolean {
 
 /**
  * `cleared`: the labels of Docker Compose with empty values that the override configuration adds
- * (COMPOSE_CLEARED_LABELS) are allowed, exactly as written there, the label nimblescape.devspace.config-path of the
+ * (COMPOSE_CLEARED_LABELS) are allowed, exactly as written there, the label nimblescape.devspaces.config-path of the
  * override configuration, and its `--tmpfs TOKEN_TMPFS`. `storeMount`, the value of the `--mount` of the shared VS Code
  * server store that the override configuration adds (vscodeStoreMount), allowed exactly as written there (the caller
  * gives it only where it gives `cleared`: the override and the merged configuration).
@@ -861,7 +861,7 @@ function runArgsFindings(runArgs: readonly unknown[], volumes: VolumeContext, cl
     } else if (cleared && (flag.name === '--label' || flag.name === '-l') && flag.value !== undefined && COMPOSE_CLEARED_LABELS.includes(flag.value)) {
       continue;
     } else if (cleared && (flag.name === '--label' || flag.name === '-l') && flag.value !== undefined && isOwnConfigPathLabel(flag.value)) {
-      // The label nimblescape.devspace.config-path that the override configuration adds.
+      // The label nimblescape.devspaces.config-path that the override configuration adds.
       continue;
     } else if (cleared && flag.name === '--tmpfs' && flag.value === TOKEN_TMPFS) {
       // The tmpfs of the token that the override configuration adds, exactly as written there.

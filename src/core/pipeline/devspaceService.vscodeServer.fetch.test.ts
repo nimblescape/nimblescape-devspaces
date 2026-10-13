@@ -5,7 +5,7 @@
 // Probes of the open with the shared VS Code server: the fetch starts before Docker is started, one fetch per open also
 // when openFirst hands over to openExisting, a Cancel ends the wait for a fetch that does not end by itself, the link
 // script runs with the signal and the time limit of the open (the dev container is untrusted: its `ldd` or `uname` may
-// never end), and the fixed name devspace-vscode stays excluded when the worker's store has another name.
+// never end), and the fixed name devspaces-vscode stays excluded when the worker's store has another name.
 import { afterEach, describe, expect, it } from 'vitest';
 import { LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, LABEL_VOLUME, VOLUME_KIND_ADDITIONAL, VSCODE_STORE_TARGET, VSCODE_STORE_VOLUME, devspaceImageName, resourceName } from '../names';
 import type { VscodePlatform } from '../helperChannel/protocol';
@@ -104,10 +104,10 @@ describe('the open with the shared VS Code server, probes', () => {
     expect(seen[0].timeoutMs).toBeLessThanOrEqual(60_000);
   });
 
-  it('devspace-vscode is never recorded, also when the worker mounts a store of another name', async () => {
-    const t = harness({ vscodeServer: { server: SERVER, fetch: async () => 'linux-x64' }, vscodeStoreVolume: 'devspace-test-vscode-x' });
-    t.helper.containerMounts = [{ ...STORE_MOUNT, volume: 'devspace-test-vscode-x' }];
-    // devspace-vscode with the labels of an additional volume of another devspace of this account, mounted by the container.
+  it('devspaces-vscode is never recorded, also when the worker mounts a store of another name', async () => {
+    const t = harness({ vscodeServer: { server: SERVER, fetch: async () => 'linux-x64' }, vscodeStoreVolume: 'devspaces-test-vscode-x' });
+    t.helper.containerMounts = [{ ...STORE_MOUNT, volume: 'devspaces-test-vscode-x' }];
+    // devspaces-vscode with the labels of an additional volume of another devspace of this account, mounted by the container.
     t.docker.volumes.set(VSCODE_STORE_VOLUME, { [LABEL_DEVSPACE_ID]: 'e0000001-0000-4000-8000-000000000009', [LABEL_OWNER_ID]: ACCOUNT.id, [LABEL_VOLUME]: VOLUME_KIND_ADDITIONAL });
     t.helper.containerVolumes = [VSCODE_STORE_VOLUME];
     await t.service.open(TARGET, { progress: t.progress });

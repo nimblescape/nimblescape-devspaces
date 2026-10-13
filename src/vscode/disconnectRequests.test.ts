@@ -33,7 +33,7 @@ let root: string;
 let requests: DisconnectRequests;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   requests = new DisconnectRequests(root);
 });
 

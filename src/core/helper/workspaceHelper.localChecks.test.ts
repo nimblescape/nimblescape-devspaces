@@ -17,7 +17,7 @@ import { runWithBatchScope } from './batchScope';
 import { batchStepCommand } from './batchSteps';
 import { WorkspaceHelper } from './workspaceHelper';
 
-const OWN = { tag: 'devspace-helper:own', id: `sha256:${'b'.repeat(64)}` };
+const OWN = { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` };
 const REPO = 'acme/api';
 const BAD_REPO = 'acme/a b';
 const CONFIG = '.devcontainer/devcontainer.json';
@@ -134,8 +134,8 @@ describe('the local checks of WorkspaceHelper before a step', () => {
 
   // Mutants WH-build-repo and WH-build-cfg: build without checkRepository / checkConfigPath.
   it('build refuses an invalid repository name and an invalid configuration path before its step', async () => {
-    expectLocalRefusal(await refusedInScope((h) => h.build({ volumeName: 'vol', repository: BAD_REPO, configPath: CONFIG, imageName: 'devspace-api', image: OWN })), REPOSITORY_REFUSED);
-    expectLocalRefusal(await refusedInScope((h) => h.build({ volumeName: 'vol', repository: REPO, configPath: BAD_CONFIG, imageName: 'devspace-api', image: OWN })), CONFIG_REFUSED);
+    expectLocalRefusal(await refusedInScope((h) => h.build({ volumeName: 'vol', repository: BAD_REPO, configPath: CONFIG, imageName: 'devspaces-api', image: OWN })), REPOSITORY_REFUSED);
+    expectLocalRefusal(await refusedInScope((h) => h.build({ volumeName: 'vol', repository: REPO, configPath: BAD_CONFIG, imageName: 'devspaces-api', image: OWN })), CONFIG_REFUSED);
   });
 
   // Mutants WH-up-repo and WH-ruc-repo: up / runUserCommands without checkRepository.
@@ -194,7 +194,7 @@ describe('the local check of the helper files before a step', () => {
       await refusedInScope((h) => h.readConfiguration({ volumeName: 'vol', repository: REPO, configPath: CONFIG, devspaceId: ENV_ID, merged: true, files, image: OWN })),
       refused,
     );
-    expectLocalRefusal(await refusedInScope((h) => h.build({ volumeName: 'vol', repository: REPO, configPath: CONFIG, imageName: 'devspace-api', files, image: OWN })), refused);
+    expectLocalRefusal(await refusedInScope((h) => h.build({ volumeName: 'vol', repository: REPO, configPath: CONFIG, imageName: 'devspaces-api', files, image: OWN })), refused);
     expectLocalRefusal(
       await refusedInScope((h) => h.up({ volumeName: 'vol', repository: REPO, override: {}, devspaceId: ENV_ID, removeExistingContainer: false, files, image: OWN })),
       refused,

@@ -36,7 +36,7 @@ describe('the worker lock and the monitor stop lock on the same lock file (real 
     holderScript ||= (
       await esbuild.build({ entryPoints: [path.resolve(__dirname, '../../test/docker/lockHolder.ts')], bundle: true, platform: 'node', format: 'cjs', target: 'node24', write: false, logLevel: 'silent' })
     ).outputFiles[0].text;
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-11i1-lock-'));
+    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-11i1-lock-'));
   });
 
   afterEach(() => {

@@ -14,8 +14,8 @@ import { HELPER_PREBUILD_TIMEOUT_MS } from '../helper/helperPrebuild';
 import { heartbeatHelperImage } from './heartbeatHelperImage';
 import { HeartbeatPreparation } from './heartbeatPreparation';
 
-const REMOTE: DockerTarget = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'devspace-remote-11111111' };
-const IMAGE: HelperImageUse = { tag: 'devspace-helper:0123456789ab', id: 'sha256:1111' };
+const REMOTE: DockerTarget = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'devspaces-remote-11111111' };
+const IMAGE: HelperImageUse = { tag: 'devspaces-helper:0123456789ab', id: 'sha256:1111' };
 
 describe('the preparation of the worker for an open runs on its target', () => {
   it('calls the maintaining ensure as an operation on the target of the worker, as the ensure of the others', async () => {

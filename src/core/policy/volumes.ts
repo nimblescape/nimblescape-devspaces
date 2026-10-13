@@ -51,7 +51,7 @@ export interface VolumeInput {
    * The devspace that is checked (its ID and the GitHub user ID of its owner): an existing volume whose labels of
    * Devspace name it is its own (isOwnVolume) and may be mounted, and so may an additional volume of another
    * devspace of the same owner (isSameOwnerAdditionalVolume). Without it, every volume with
-   * nimblescape.devspace.id is refused.
+   * nimblescape.devspaces.id is refused.
    */
   devspace?: { id: string; ownerId: string };
   /**
@@ -70,7 +70,7 @@ export interface NetworkState {
   name?: string;
   /** The labels of the network (`docker network inspect`). */
   labels: Readonly<Record<string, string>>;
-  /** The label nimblescape.devspace.id of each container attached to the network that has it. */
+  /** The label nimblescape.devspaces.id of each container attached to the network that has it. */
   devspaces: readonly string[];
   /**
    * Of `devspaces`, those of registry entries of the owner of the checked devspace: the devspaces of one
@@ -129,7 +129,7 @@ export function foreignVolumeName(name: string): string | undefined {
 
 /**
  * True when the labels of a volume make it the own volume of the devspace `devspaceId`:
- * nimblescape.devspace.id is that ID, and nimblescape.devspace.owner-id is the owner of the devspace. The
+ * nimblescape.devspaces.id is that ID, and nimblescape.devspaces.owner-id is the owner of the devspace. The
  * only rule by which the pipeline records an additional volume and Delete removes one: a volume without these labels
  * (for example one named with `${devcontainerId}`, which Docker creates at `up`, or one of another program) is never
  * the devspace's.
@@ -142,7 +142,7 @@ export function isOwnVolume(labels: Readonly<Record<string, string>>, devspaceId
  * The program that created an existing volume, by its labels, for a volume that a repository did not create by its
  * mounts (Docker gives such a volume no labels): Docker Compose (the volume of a project, for example the data of a
  * database), the Dev Containers extension (hasDevContainersVolumeLabel), Docker itself (an anonymous volume of another
- * container), or Devspaces (a volume of a devspace, nimblescape.devspace.id). `undefined` for a
+ * container), or Devspaces (a volume of a devspace, nimblescape.devspaces.id). `undefined` for a
  * volume without such labels.
  */
 export function volumeLabelOwner(labels: Readonly<Record<string, string>>): string | undefined {
@@ -160,12 +160,12 @@ export function volumeLabelOwner(labels: Readonly<Record<string, string>>): stri
 }
 
 /**
- * True when the labels of a volume make it an additional volume (nimblescape.devspace.volume=additional) of a
- * devspace of the GitHub user `ownerId`: nimblescape.devspace.id is set, and nimblescape.devspace.owner-id
+ * True when the labels of a volume make it an additional volume (nimblescape.devspaces.volume=additional) of a
+ * devspace of the GitHub user `ownerId`: nimblescape.devspaces.id is set, and nimblescape.devspaces.owner-id
  * is set and is that user. The devspaces of one account share such a volume, for example
  * `${localWorkspaceFolderBasename}-node_modules` of a fork and its upstream repository, or a fixed cache name: each may
  * mount it (mayMountDevspaceVolume) and records it, so that the Delete of one keeps it while another records it. A
- * volume without the owner label and a workspace volume (no nimblescape.devspace.volume) are not.
+ * volume without the owner label and a workspace volume (no nimblescape.devspaces.volume) are not.
  */
 export function isSameOwnerAdditionalVolume(labels: Readonly<Record<string, string>>, ownerId: string): boolean {
   return (
@@ -278,7 +278,7 @@ export function resolveNetworkReference<T extends { name: string; id: string }>(
  * The item of a network that belongs to another devspace, perhaps of another account (HostAccessClass `protected`):
  * named like the Compose project of another devspace (isOtherDevspaceProjectName), labelled by Docker Compose for
  * the project of another devspace (isDevspaceResourceName), or with a container of another devspace attached
- * (label nimblescape.devspace.id) that is not a devspace of the same owner
+ * (label nimblescape.devspaces.id) that is not a devspace of the same owner
  * (NetworkState.sameOwnerDevspaces). The name rules apply to the written reference and to the name of the network
  * that it resolves to (NetworkState.name). `devspaceId`: the devspace that is checked (its own containers),
  * `project` its Compose project (composeProjectName, the same as its workspace volume); without them, every such

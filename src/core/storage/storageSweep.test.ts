@@ -29,7 +29,7 @@ let root: string;
 let paths: StoragePaths;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-sweep-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-sweep-'));
   paths = new StoragePaths(root);
   paths.ensureDirectoriesSync();
   fs.mkdirSync(paths.disconnectDir, { recursive: true });
@@ -213,7 +213,7 @@ describe('sweepStorage', () => {
 
   it('never removes a link or what it points to, nor a folder, and does not enter a folder that is a link', async () => {
     const old = T0 - 48 * 60 * MINUTE;
-    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-sweep-outside-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-sweep-outside-'));
     try {
       const target = path.join(outside, 'target.json');
       write(target, pending(ENV_A, 0), old);

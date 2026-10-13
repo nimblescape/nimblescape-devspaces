@@ -27,7 +27,7 @@ const DB_ID = 'b'.repeat(64);
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-11k4-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-11k4-'));
 });
 
 afterEach(() => {
@@ -76,8 +76,8 @@ describe('RemoteMonitorLoop with a stopNow record', () => {
   let loop: RemoteMonitorLoop;
 
   const listed = (): EngineContainerSummary[] => [
-    { id: DB_ID, name: 'devspace-api-db-1', state, labels: { [LABEL_DEVSPACE_ID]: A, [LABEL_COMPOSE_SERVICE]: 'db' } },
-    { id: DEV_ID, name: 'devspace-api', state, labels: { [LABEL_DEVSPACE_ID]: A } },
+    { id: DB_ID, name: 'devspaces-api-db-1', state, labels: { [LABEL_DEVSPACE_ID]: A, [LABEL_COMPOSE_SERVICE]: 'db' } },
+    { id: DEV_ID, name: 'devspaces-api', state, labels: { [LABEL_DEVSPACE_ID]: A } },
   ];
 
   beforeEach(() => {

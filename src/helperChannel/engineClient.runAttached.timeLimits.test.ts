@@ -14,7 +14,7 @@ import type { EngineAnswer, EngineHijackRequest, EngineRequest, EngineStream } f
 import { RUN_CLEANUP_TIMEOUT_MS, dockerEngine } from './engineClient';
 
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
-const SPEC = batchRunSpec({ session: '0a1b2c3d4e5f60718293a4b5', volume: 'devspace-v', image: `sha256:${'a'.repeat(64)}`, socket: '/run/user/1000/docker.sock', scriptHash: 'f'.repeat(64) });
+const SPEC = batchRunSpec({ session: '0a1b2c3d4e5f60718293a4b5', volume: 'devspaces-v', image: `sha256:${'a'.repeat(64)}`, socket: '/run/user/1000/docker.sock', scriptHash: 'f'.repeat(64) });
 
 const aborted = () => Object.assign(new Error('aborted'), { name: 'AbortError' });
 

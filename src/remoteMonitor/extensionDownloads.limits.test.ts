@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 function store(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ext-run-pH3R1-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ext-run-pH3R1-'));
   temps.push(root);
   return root;
 }
@@ -281,7 +281,7 @@ describe('the wiring into the background run', () => {
   function vscodeDeps(root: string, f: Fake): VscodeBackgroundDeps {
     return {
       store: { root, transport: f.deps.transport },
-      storeVolume: 'devspace-vscode',
+      storeVolume: 'devspaces-vscode',
       engine: { architecture: async () => 'x86_64', containerSummaries: async () => [] },
       tryLock: async () => ({ kind: 'busy' }) as StoreLockAttempt,
       ensure: async () => true,

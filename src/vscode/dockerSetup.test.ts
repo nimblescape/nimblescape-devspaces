@@ -79,7 +79,7 @@ function setup(installed: boolean, options: SetupOptions = {}) {
     onDidChangeInstalled: changed,
     remoteDockerHostConfigured: () => options.remoteDockerHost ?? false,
     planInput: async () => ({ platform, arch: 'arm64', has: (tool: SetupTool) => tools.includes(tool), userName: 'octo', ...options.input }),
-    downloadFolder: path.join(os.tmpdir(), 'devspace-downloads-test'),
+    downloadFolder: path.join(os.tmpdir(), 'devspaces-downloads-test'),
     download,
     launch,
     startDocker: options.startDocker ?? (async () => {}),
@@ -426,7 +426,7 @@ describe('DockerSetup: Install Docker (sidebar button Install Docker)', () => {
     runner.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
     confirmWith(DockerSetupTexts.download);
     await dockerSetup.install();
-    const target = path.join(os.tmpdir(), 'devspace-downloads-test', 'Docker.dmg');
+    const target = path.join(os.tmpdir(), 'devspaces-downloads-test', 'Docker.dmg');
     expect(modalCalls()[0][0]).toBe(DockerSetupTexts.confirmDownload);
     expect(modalCalls()[0][1].detail).toContain(DOCKER_DESKTOP_DOWNLOADS.macArm64);
     expect(modalCalls()[0][1].detail).toContain(target);
@@ -451,7 +451,7 @@ describe('DockerSetup: Install Docker (sidebar button Install Docker)', () => {
     runner.run.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'Operation not permitted', timedOut: false });
     confirmWith(DockerSetupTexts.download);
     await dockerSetup.install();
-    const target = path.join(os.tmpdir(), 'devspace-downloads-test', 'Docker.dmg');
+    const target = path.join(os.tmpdir(), 'devspaces-downloads-test', 'Docker.dmg');
     expect(launch).not.toHaveBeenCalled();
     expect(fakeVscode.window.showErrorMessage).toHaveBeenCalledWith(DockerSetupUiTexts.notMarked(target), DockerSetupUiTexts.showDetails);
     dockerSetup.dispose();
@@ -459,7 +459,7 @@ describe('DockerSetup: Install Docker (sidebar button Install Docker)', () => {
 
   it('starts the downloaded installer on Windows through the shell of the system', async () => {
     const { dockerSetup, launch } = setup(false, { platform: 'win32', input: { arch: 'x64' } });
-    fs.mkdirSync(path.join(os.tmpdir(), 'devspace-downloads-test'), { recursive: true });
+    fs.mkdirSync(path.join(os.tmpdir(), 'devspaces-downloads-test'), { recursive: true });
     fakeVscode.window.withProgress.mockImplementation(async (_options: unknown, task: (...args: unknown[]) => Promise<unknown>) =>
       task({ report: () => {} }, { onCancellationRequested: () => ({ dispose() {} }) }),
     );
@@ -468,7 +468,7 @@ describe('DockerSetup: Install Docker (sidebar button Install Docker)', () => {
     expect(launch).not.toHaveBeenCalled();
     const opened = fakeVscode.env.openExternal.mock.calls[0][0] as { scheme: string; fsPath: string };
     expect(opened.scheme).toBe('file');
-    expect(opened.fsPath).toBe(path.join(os.tmpdir(), 'devspace-downloads-test', 'Docker Desktop Installer.exe'));
+    expect(opened.fsPath).toBe(path.join(os.tmpdir(), 'devspaces-downloads-test', 'Docker Desktop Installer.exe'));
     // Marked as downloaded from the internet (zone 3), so that Windows checks it.
     const zone = `${opened.fsPath}:Zone.Identifier`;
     expect(fs.readFileSync(zone, 'utf8')).toContain('ZoneId=3');

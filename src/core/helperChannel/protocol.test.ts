@@ -169,7 +169,7 @@ describe('the protocol of the helper channel', () => {
     expect(isCleanupLabel(newCleanupLabel())).toBe(true);
     expect(newCleanupLabel()).not.toBe(newCleanupLabel());
     expect(isCleanupLabel('a'.repeat(65))).toBe(false);
-    expect(channelStepLabel('0a1b2c3d')).toBe('nimblescape.devspace.channel-step=0a1b2c3d');
+    expect(channelStepLabel('0a1b2c3d')).toBe('nimblescape.devspaces.channel-step=0a1b2c3d');
   });
 
   it('channelLabelValue names the protocol, the script and the loader', () => {
@@ -261,7 +261,7 @@ describe('the protocol of the helper channel', () => {
 describe('the helper containers that the sweep removes when they are stopped', () => {
   it('the channels and the batch helpers carry the label of the sweep (any value); the batch helpers also their session label', () => {
     // The volume of the shared VS Code server store is required.
-    const run = channelRunArgs({ tag: 't', socketPath: '/var/run/docker.sock', stateVolume: 'devspace-monitor', vscodeVolume: 'devspace-vscode', containerName: 'devspace-worker-x', label: 'l', scriptHash: 'h' });
+    const run = channelRunArgs({ tag: 't', socketPath: '/var/run/docker.sock', stateVolume: 'devspaces-monitor', vscodeVolume: 'devspaces-vscode', containerName: 'devspaces-worker-x', label: 'l', scriptHash: 'h' });
     const labels = run.flatMap((arg, index) => (run[index - 1] === '--label' ? [arg] : []));
     expect(labels).toContain(`${LABEL_HELPER_RUN}=true`);
     expect(labels).toContain(`${LABEL_HELPER_CHANNEL}=l`);
@@ -274,7 +274,7 @@ describe('the helper containers that the sweep removes when they are stopped', (
 });
 
 describe('the refresh operation', () => {
-  const env: StateDevspace = { id: ENV_API, containerName: 'devspace-api', volumeName: 'devspace-api-vol', folder: '/workspaces/api', branch: true };
+  const env: StateDevspace = { id: ENV_API, containerName: 'devspaces-api', volumeName: 'devspaces-api-vol', folder: '/workspaces/api', branch: true };
 
   it('accepts at most MAX_REFRESH_DEVSPACES devspaces of the strict shape', () => {
     expect(parseRefreshParams({ devspaces: REFRESH_DEVSPACES })).toEqual({ devspaces: REFRESH_DEVSPACES });
@@ -478,7 +478,7 @@ describe('delete: its parameters and its answer', () => {
     devspaceId: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d',
     dockerHost: 'build-box',
     owner: { windowId: 'window-1', pid: 42 },
-    additionalVolumesToRemove: ['api-db', 'devspace-acme-api_data'],
+    additionalVolumesToRemove: ['api-db', 'devspaces-acme-api_data'],
     monitorSource: '0123456789abcdef0123456789abcdef',
   };
   it('takes its parameters only within their limits', () => {

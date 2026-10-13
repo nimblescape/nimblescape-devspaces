@@ -86,7 +86,7 @@ describe('the parameters of the open', () => {
 });
 
 describe('the value of the open', () => {
-  const OPENED = { devspaceId: ID, containerName: 'devspace-acme-app-brave-noether', remoteWorkspaceFolder: '/workspaces/app' };
+  const OPENED = { devspaceId: ID, containerName: 'devspaces-acme-app-brave-noether', remoteWorkspaceFolder: '/workspaces/app' };
 
   // The value carries no `imageListSent`.
   it('what the window needs to connect, or the refusal', () => {

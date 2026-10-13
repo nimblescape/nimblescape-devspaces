@@ -71,7 +71,7 @@ describe('Sign in with GitHub replaces a token that GitHub rejected', () => {
   beforeEach(() => {
     resetFakeVscode();
     fakeVscode.window.withProgress.mockImplementation(async (_options: unknown, task: () => Promise<unknown>) => task());
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-signin-'));
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-signin-'));
     current = REJECTED;
     // VS Code: `silent` and `createIfNone` return the stored session, also when GitHub rejects its token. Only
     // `forceNewSession` makes a new one.

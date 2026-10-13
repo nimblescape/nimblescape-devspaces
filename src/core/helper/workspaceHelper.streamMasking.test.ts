@@ -38,7 +38,7 @@ function lockOf(script: Script): HeldDevspaceLock {
 }
 
 function helper(): WorkspaceHelper {
-  return new WorkspaceHelper({ logger: silent, ownImage: { tag: 'devspace-helper:own', id: `sha256:${'b'.repeat(64)}` }, socket: '/var/run/docker.sock', containerRuns: async () => true });
+  return new WorkspaceHelper({ logger: silent, ownImage: { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` }, socket: '/var/run/docker.sock', containerRuns: async () => true });
 }
 
 /** The clone with the batch helper running `script`, its output into `output`. */

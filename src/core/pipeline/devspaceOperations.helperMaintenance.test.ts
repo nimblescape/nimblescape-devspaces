@@ -13,7 +13,7 @@ import type { OperationFlow } from './devspaceOperations';
 import { PipelineTexts } from './operationBase';
 import { ENV_ID, REPO, createHarness, seedDevspace } from './devspaceService.testkit';
 
-const OPENED = { devspaceId: ENV_ID, containerName: 'devspace-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
+const OPENED = { devspaceId: ENV_ID, containerName: 'devspaces-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
 const IMAGES = { schedule: '7 6 * * *', timeZone: 'UTC' };
 
 type FlowOptions = Parameters<OperationFlow>[2];

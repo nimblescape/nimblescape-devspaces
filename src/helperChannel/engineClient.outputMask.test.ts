@@ -38,7 +38,7 @@ describe('the mask of the output of an exec', () => {
 
   /** An engine whose exec runs `write` once its input ended; `masked` is read at each call, as maskedValues. */
   async function serve(write: (socket: net.Socket) => void, masked: string[]) {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-mask2-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-mask2-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     const server = http.createServer((req, res) => {

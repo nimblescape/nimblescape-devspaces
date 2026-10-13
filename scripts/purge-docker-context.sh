@@ -7,7 +7,7 @@
 # images, unused networks and build cache, so that the next open of a devspace starts from a clean engine (a
 # fresh install: helper image, Monitor, shared VS Code server store, extension cache, devspaces).
 #
-# It deletes everything on that engine, not only what Devspaces created. The volumes `devspace-*` hold the
+# It deletes everything on that engine, not only what Devspaces created. The volumes `devspaces-*` hold the
 # repositories of the devspaces: changes that are not pushed are lost. Close the VS Code windows that use the
 # engine first (their worker and their containers go too).
 #
@@ -66,7 +66,9 @@ echo "== Everything on $ctx (docker system df -v)"
 d system df -v
 echo
 echo "It removes: $(count "$containers") container(s) ($(count "$running") running), $(count "$volumes") volume(s), $(count "$images") image(s), the unused networks and the build cache."
-envs=$(printf '%s\n' "$volumes" | grep '^devspace-' | grep -v '^devspace-vscode$' || true)
+# The volumes of devspaces are named devspaces-<owner>-<repo>-<pair>; the other volumes of Devspaces are named
+# devspaces-vscode, devspaces-helper-cache and devspaces-monitor.
+envs=$(printf '%s\n' "$volumes" | grep '^devspaces-' | grep -v -x -e devspaces-vscode -e devspaces-helper-cache -e devspaces-monitor || true)
 if [ -n "$envs" ]; then
   echo
   echo 'Volumes of Devspaces (repositories; changes that are not pushed are lost):'

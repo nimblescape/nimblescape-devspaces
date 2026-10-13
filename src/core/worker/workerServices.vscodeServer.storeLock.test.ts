@@ -21,7 +21,7 @@ afterEach(() => {
 
 describe('the store of the worker, probes', () => {
   it('its lock is the flock of the server version: a second holder waits and gives up', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-wiring-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-wiring-'));
     temps.push(root);
     const store = workerVscodeStore({ engine: unusedEngine(), logger: silentLogger });
     const first = await store.lock(root, NAME, 5, new AbortController().signal);

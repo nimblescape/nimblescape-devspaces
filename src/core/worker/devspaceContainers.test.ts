@@ -10,10 +10,10 @@ import { LABEL_COMPOSE_SERVICE, LABEL_DEVSPACE_ID } from '../names';
 import { devContainerOf, runningDevContainers, runningServices } from './devspaceContainers';
 
 const DEVSPACE_ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-const NAME = 'devspace-acme-api-brave-noether';
+const NAME = 'devspaces-acme-api-brave-noether';
 
 function container(id: string, overrides: Partial<ListedContainer> = {}): ListedContainer {
-  return { id: id.repeat(64), name: `devspace-${id}`, state: 'running', rawState: 'running', labels: { [LABEL_DEVSPACE_ID]: DEVSPACE_ID }, image: 'img:1', ...overrides };
+  return { id: id.repeat(64), name: `devspaces-${id}`, state: 'running', rawState: 'running', labels: { [LABEL_DEVSPACE_ID]: DEVSPACE_ID }, image: 'img:1', ...overrides };
 }
 
 const stopped = { state: 'stopped', rawState: 'exited' } as const;
@@ -37,7 +37,7 @@ describe('the dev container of a devspace: one rule', () => {
     const newestStopped = container('c', { ...stopped, created: '2026-10-08T10:00:00Z' });
     const lines: string[] = [];
     expect(devContainerOf([older, newestStopped, newer], NAME, (line) => lines.push(line))).toBe(newer);
-    expect(lines).toEqual([`There is no container ${NAME}; the running container devspace-b of the devspace is used.`]);
+    expect(lines).toEqual([`There is no container ${NAME}; the running container devspaces-b of the devspace is used.`]);
   });
 
   it('takes the newest one when none runs, and the log names it', () => {
@@ -46,7 +46,7 @@ describe('the dev container of a devspace: one rule', () => {
     const lines: string[] = [];
     expect(devContainerOf([newer, older], NAME, (line) => lines.push(line))).toBe(newer);
     expect(devContainerOf([older, newer], NAME)).toBe(newer);
-    expect(lines).toEqual([`There is no container ${NAME}; the container devspace-b of the devspace is used.`]);
+    expect(lines).toEqual([`There is no container ${NAME}; the container devspaces-b of the devspace is used.`]);
   });
 
   it('takes the newest by the time of the create, never by its text; an unreadable time is the oldest', () => {
@@ -88,7 +88,7 @@ describe('the running dev containers in the order of the rule', () => {
     const newer = container('b', { created: '2026-10-08T10:00:00Z' });
     const lines: string[] = [];
     expect(runningDevContainers([older, named, newer], NAME, (line) => lines.push(line))).toEqual([newer, older]);
-    expect(lines).toEqual([`The container ${NAME} does not run; the running container devspace-b of the devspace is used.`]);
+    expect(lines).toEqual([`The container ${NAME} does not run; the running container devspaces-b of the devspace is used.`]);
     expect(runningDevContainers([named, service('s')], NAME, (line) => lines.push(line))).toEqual([]);
     expect(lines).toHaveLength(1);
   });

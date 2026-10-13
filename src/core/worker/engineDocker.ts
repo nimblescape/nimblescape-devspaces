@@ -401,7 +401,7 @@ export class EngineDocker implements DevspaceDocker {
   }
 
   /**
-   * DevspaceDocker.listDevspaceImages: the named images `devspace-*` (RESOURCE_NAME_PREFIX), each once with its
+   * DevspaceDocker.listDevspaceImages: the named images `devspaces-*` (RESOURCE_NAME_PREFIX), each once with its
    * references.
    */
   async listDevspaceImages(signal?: AbortSignal): Promise<ImageInfo[]> {

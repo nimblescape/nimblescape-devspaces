@@ -28,7 +28,7 @@ import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import { contextSecrets } from './operationContext.testkit';
 
 const TOKEN = 'ghp_secret_token_of_the_test';
-const VOLUME = 'devspace-vol-1';
+const VOLUME = 'devspaces-vol-1';
 const IMAGE = `sha256:${'a'.repeat(64)}`;
 const SOCKET = '/var/run/docker.sock';
 const HELPER_SCRIPT = 'the script of the worker and its helper';
@@ -292,7 +292,7 @@ function setup(options: SetupOptions = {}) {
       await new Promise((resolve) => setTimeout(resolve, 1));
       if (reference === VOLUME) return { Name: VOLUME };
       // An answer without the name of the volume counts as missing too.
-      if (reference === 'devspace-unnamed') return {};
+      if (reference === 'devspaces-unnamed') return {};
       return undefined;
     },
     runAttached: async (spec, runOptions = {}) => {
@@ -381,7 +381,7 @@ describe('the batch helper of the worker', () => {
     // and without a variable (the spec has no field for one), and the run ends with the cancel of the operation.
     expect(t.calls[0]).toEqual(['inspect', 'volume', VOLUME]);
     const runs = t.calls.filter((call) => call[0] === 'run');
-    expect(runs).toEqual([['run', `devspace-batch-${session.session}`]]);
+    expect(runs).toEqual([['run', `devspaces-batch-${session.session}`]]);
     expect(t.runs.map((run) => run.spec)).toEqual([batchRunSpec({ session: session.session, volume: VOLUME, image: IMAGE, socket: SOCKET, scriptHash: bundleHash(HELPER_SCRIPT) })]);
     expect(t.runs[0].spec.labels[channelStepLabel(session.session).split('=')[0]]).toBe(session.session);
     expect(Object.keys(t.runs[0].spec)).not.toContain('env');
@@ -396,13 +396,13 @@ describe('the batch helper of the worker', () => {
 
   it('refuses a missing volume and starts nothing (the volume is never created)', async () => {
     const t = tracked();
-    const failure = await t.open({ volume: 'devspace-missing', image: IMAGE, socket: SOCKET }).catch((error: unknown) => error);
+    const failure = await t.open({ volume: 'devspaces-missing', image: IMAGE, socket: SOCKET }).catch((error: unknown) => error);
     // The OperationError of the worker's own session.
     expect(failure).toBeInstanceOf(OperationError);
     expect((failure as OperationError).code).toBe(BATCH_MISSING_VOLUME_CODE);
     // The inspect of the port.
-    expect(t.calls).toEqual([['inspect', 'volume', 'devspace-missing']]);
-    await expect(t.open({ volume: 'devspace-unnamed', image: IMAGE, socket: SOCKET })).rejects.toMatchObject({ code: BATCH_MISSING_VOLUME_CODE });
+    expect(t.calls).toEqual([['inspect', 'volume', 'devspaces-missing']]);
+    await expect(t.open({ volume: 'devspaces-unnamed', image: IMAGE, socket: SOCKET })).rejects.toMatchObject({ code: BATCH_MISSING_VOLUME_CODE });
     expect(t.calls.filter((call) => call[0] === 'run')).toEqual([]);
   });
 
@@ -976,7 +976,7 @@ describe('the batch helper of the worker', () => {
     const t = tracked();
     for (const p of [
       { volume: '-v', image: IMAGE, socket: SOCKET },
-      { volume: VOLUME, image: 'devspace-helper:latest', socket: SOCKET },
+      { volume: VOLUME, image: 'devspaces-helper:latest', socket: SOCKET },
       { volume: VOLUME, image: IMAGE, socket: '/a,readonly=false' },
       { volume: VOLUME, image: IMAGE, socket: 'relative.sock' },
     ]) {
@@ -1063,7 +1063,7 @@ describe('the batch helper of the worker', () => {
     // By the label, with containerIds, and each listed ID removed by removeContainer; never by the name.
     for (const call of listed) expect(call).toEqual(['ps', channelStepLabel(session.session)]);
     expect(t.calls.filter((call) => call[0] === 'rm')).toEqual([['rm', id], ['rm', other]]);
-    expect(t.calls.some((call) => call.includes(`devspace-batch-${session.session}`) && call[0] !== 'run')).toBe(false);
+    expect(t.calls.some((call) => call.includes(`devspaces-batch-${session.session}`) && call[0] !== 'run')).toBe(false);
   });
 
   // The cancel of the open of the worker's own session; its outcome is the OperationError `cancelled` of the session.
@@ -1086,7 +1086,7 @@ describe('the batch helper of the worker', () => {
     expect(t.helperEvents.map((entry) => entry.event)).not.toContain('kill SIGKILL');
     // After the cancel, the session itself removed the containers of the session label over the port (the server
     // removes nothing for it: it started no Docker call).
-    const session = t.runs[0].spec.labels['nimblescape.devspace.channel-step'];
+    const session = t.runs[0].spec.labels['nimblescape.devspaces.channel-step'];
     expect(t.calls).toContainEqual(['ps', channelStepLabel(session)]);
     expect(t.calls).toContainEqual(['rm', '0123456789abcdef0123456789abcdef']);
   }, 30_000);

@@ -21,7 +21,7 @@ vi.mock('../core/worker/workerServices', async (importOriginal) => {
       seen.deps.push(deps);
       return {
         service: {
-          openDevspace: async (devspaceId: string) => ({ devspace: { id: devspaceId }, containerName: 'devspace-api-1', remoteWorkspaceFolder: '/workspaces/api' }),
+          openDevspace: async (devspaceId: string) => ({ devspace: { id: devspaceId }, containerName: 'devspaces-api-1', remoteWorkspaceFolder: '/workspaces/api' }),
         },
       };
     },
@@ -30,7 +30,7 @@ vi.mock('../core/worker/workerServices', async (importOriginal) => {
 
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
 const SERVER = { commit: '0123456789abcdef0123456789abcdef01234567', quality: 'stable' };
-const OWN: OwnHelper = { image: { tag: 'devspace-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock', vscodeStore: 'devspace-vscode' };
+const OWN: OwnHelper = { image: { tag: 'devspaces-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock', vscodeStore: 'devspaces-vscode' };
 const PARAMS = {
   dockerHost: '',
   owner: { windowId: 'window-1', pid: 4242 },

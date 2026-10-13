@@ -49,7 +49,7 @@ import {
 
 const ID = '3f2a9c1e-0000-4000-8000-000000000000';
 // One name per devspace (resourceName), so the project, the volume, and the container share it
-// (devspace-acme-api-wise-stallman).
+// (devspaces-acme-api-wise-stallman).
 const PROJECT = composeProjectName('acme/api', ID);
 const OWN = resourceName('acme/api', ID);
 /** The Compose project of a devspace of another repository and ID. */
@@ -109,7 +109,7 @@ describe('the parameters of the rewrite', () => {
 describe('names', () => {
   it('the project of a devspace is its resourceName, the repository part of the devspace image', () => {
     // composeProjectName(repository, id) = resourceName.
-    expect(composeProjectName('acme/api', ID)).toBe('devspace-acme-api-wise-stallman');
+    expect(composeProjectName('acme/api', ID)).toBe('devspaces-acme-api-wise-stallman');
     expect(composeProjectName('acme/api', ID)).toBe(devspaceImageRepository('acme/api', ID));
   });
 
@@ -132,8 +132,8 @@ describe('names', () => {
     [`${PROJECT}_my_data`, false],
     [`${PROJECT}_default`, false],
     [`${PROJECT.toUpperCase()}_default`, false],
-    ['devspace-tools_default', false],
-    ['devspace-11111111_default', false],
+    ['devspaces-tools_default', false],
+    ['devspaces-11111111_default', false],
     ['frontend', false],
   ])('isOtherDevspaceProjectName(%s)', (name, expected) => {
     expect(isOtherDevspaceProjectName(name, PROJECT)).toBe(expected);
@@ -422,8 +422,8 @@ describe('composeUpModel', () => {
           command: ['sleep', 'infinity'],
           networks: { default: null },
           environment: { POSTGRES_HOST: 'db' },
-          // nimblescape.devspace.host-access is set on every service.
-          labels: { 'nimblescape.devspace.id': ID, 'nimblescape.devspace.container-version': String(CONTAINER_VERSION), 'nimblescape.devspace.host-access': 'checked' },
+          // nimblescape.devspaces.host-access is set on every service.
+          labels: { 'nimblescape.devspaces.id': ID, 'nimblescape.devspaces.container-version': String(CONTAINER_VERSION), 'nimblescape.devspaces.host-access': 'checked' },
           volumes: [{ type: 'volume', source: WORKSPACE_VOLUME_KEY, target: '/workspaces' }],
           // The dev container is named after the repository, as a single container (containerHostname).
           hostname: 'api',
@@ -435,14 +435,14 @@ describe('composeUpModel', () => {
           pull_policy: 'missing',
           // `restart: unless-stopped` is rewritten to `no`.
           restart: 'no',
-          labels: { 'nimblescape.devspace.id': ID, 'nimblescape.devspace.compose-service': 'db', 'nimblescape.devspace.host-access': 'checked' },
+          labels: { 'nimblescape.devspaces.id': ID, 'nimblescape.devspaces.compose-service': 'db', 'nimblescape.devspaces.host-access': 'checked' },
           ports: [{ mode: 'ingress', target: 5432, published: '5432', protocol: 'tcp', host_ip: '127.0.0.1' }],
           volumes: [{ type: 'volume', source: 'pgdata', target: '/var/lib/postgresql/data', volume: {} }],
           networks: { default: null },
         },
       },
       // Every network that Compose creates carries the devspace ID.
-      networks: { default: { name: `${PROJECT}_default`, labels: { 'nimblescape.devspace.id': ID } } },
+      networks: { default: { name: `${PROJECT}_default`, labels: { 'nimblescape.devspaces.id': ID } } },
       volumes: {
         pgdata: { name: `${PROJECT}_pgdata`, external: true },
         [WORKSPACE_VOLUME_KEY]: { name: OWN, external: true },
@@ -460,16 +460,16 @@ describe('composeUpModel', () => {
 
   it('mounts the shared VS Code server store read-only into the dev service only, as an external volume', () => {
     const plain = up(templateModel()).model;
-    const { model } = up(templateModel(), { vscodeStoreVolume: 'devspace-vscode' });
+    const { model } = up(templateModel(), { vscodeStoreVolume: 'devspaces-vscode' });
     expect(model.services.app.volumes).toEqual([
       { type: 'volume', source: WORKSPACE_VOLUME_KEY, target: '/workspaces' },
       // `volume: { nocopy: true }`, so that Docker never copies the image's /opt/devspace/vscode into an empty store.
       { type: 'volume', source: VSCODE_STORE_KEY, target: '/opt/devspace/vscode', read_only: true, volume: { nocopy: true } },
     ]);
     expect(model.services.db.volumes).toEqual(plain.services.db.volumes);
-    expect(model.volumes).toEqual({ ...plain.volumes, [VSCODE_STORE_KEY]: { name: 'devspace-vscode', external: true } });
+    expect(model.volumes).toEqual({ ...plain.volumes, [VSCODE_STORE_KEY]: { name: 'devspaces-vscode', external: true } });
     // The store of the worker by its name (a volume of the Docker tests).
-    expect(up(templateModel(), { vscodeStoreVolume: 'devspace-test-vscode-x' }).model.volumes?.[VSCODE_STORE_KEY]).toEqual({ name: 'devspace-test-vscode-x', external: true });
+    expect(up(templateModel(), { vscodeStoreVolume: 'devspaces-test-vscode-x' }).model.volumes?.[VSCODE_STORE_KEY]).toEqual({ name: 'devspaces-test-vscode-x', external: true });
     // Without it: neither (the open of a window without a server).
     expect(plain.volumes).not.toHaveProperty(VSCODE_STORE_KEY);
     expect(JSON.stringify(plain)).not.toContain('/opt/devspace/vscode');
@@ -530,12 +530,12 @@ describe('composeUpModel', () => {
 
   it('keeps the labels of the repository, and replaces the values of the own labels', () => {
     const model = templateModel();
-    model.services.app.labels = { team: 'a', 'nimblescape.devspace.id': 'forged' };
-    model.services.db.labels = ['tier=data', 'nimblescape.devspace.compose-service=app'];
+    model.services.app.labels = { team: 'a', 'nimblescape.devspaces.id': 'forged' };
+    model.services.db.labels = ['tier=data', 'nimblescape.devspaces.compose-service=app'];
     const result = up(model).model;
-    // nimblescape.devspace.host-access is set on every service.
-    expect(result.services.app.labels).toEqual({ team: 'a', 'nimblescape.devspace.id': ID, 'nimblescape.devspace.container-version': String(CONTAINER_VERSION), 'nimblescape.devspace.host-access': 'checked' });
-    expect(result.services.db.labels).toEqual({ tier: 'data', 'nimblescape.devspace.id': ID, 'nimblescape.devspace.compose-service': 'db', 'nimblescape.devspace.host-access': 'checked' });
+    // nimblescape.devspaces.host-access is set on every service.
+    expect(result.services.app.labels).toEqual({ team: 'a', 'nimblescape.devspaces.id': ID, 'nimblescape.devspaces.container-version': String(CONTAINER_VERSION), 'nimblescape.devspaces.host-access': 'checked' });
+    expect(result.services.db.labels).toEqual({ tier: 'data', 'nimblescape.devspaces.id': ID, 'nimblescape.devspaces.compose-service': 'db', 'nimblescape.devspaces.host-access': 'checked' });
   });
 
   it('gives the dev container the name of the devspace, and logs a different name of the repository', () => {
@@ -684,21 +684,21 @@ describe('composeBuildModel', () => {
     const escaped = composeBuildModel(source, params());
     expect(escaped.devDockerfile).toBe('FROM alpine:3.22\nRUN echo $HOME\n');
     // Every built image carries the devspace ID (build.labels).
-    expect(escaped.model.services.app.build).toEqual({ context: REPO, dockerfile: COMPOSE_DEV_DOCKERFILE, labels: { 'nimblescape.devspace.id': ID } });
+    expect(escaped.model.services.app.build).toEqual({ context: REPO, dockerfile: COMPOSE_DEV_DOCKERFILE, labels: { 'nimblescape.devspaces.id': ID } });
   });
 
   // The images that Compose builds and the networks that it creates carry the devspace ID.
   it('labels every built service with the devspace ID, and keeps the build labels of the repository', () => {
     const source = templateModel();
-    source.services.app.build = { context: `${REPO}/.devcontainer`, dockerfile: 'Dockerfile', labels: { team: 'a', 'nimblescape.devspace.id': 'forged' } };
+    source.services.app.build = { context: `${REPO}/.devcontainer`, dockerfile: 'Dockerfile', labels: { team: 'a', 'nimblescape.devspaces.id': 'forged' } };
     source.services.worker = { build: { context: REPO, labels: ['tier=worker'] } };
     const { model } = composeBuildModel(source, params());
-    expect((model.services.app.build as Record<string, unknown>).labels).toEqual({ team: 'a', 'nimblescape.devspace.id': ID });
-    expect((model.services.worker.build as Record<string, unknown>).labels).toEqual({ tier: 'worker', 'nimblescape.devspace.id': ID });
+    expect((model.services.app.build as Record<string, unknown>).labels).toEqual({ team: 'a', 'nimblescape.devspaces.id': ID });
+    expect((model.services.worker.build as Record<string, unknown>).labels).toEqual({ tier: 'worker', 'nimblescape.devspaces.id': ID });
     expect(model.services.db.build).toBeUndefined();
     // The up model builds side services too.
     const up = composeUpModel(source, { ...params(), image: `${PROJECT}:7` }).model;
-    expect((up.services.worker.build as Record<string, unknown>).labels).toEqual({ tier: 'worker', 'nimblescape.devspace.id': ID });
+    expect((up.services.worker.build as Record<string, unknown>).labels).toEqual({ tier: 'worker', 'nimblescape.devspaces.id': ID });
   });
 
   it('labels every network of the project with the devspace ID, keeps its labels, and leaves an external network alone', () => {
@@ -711,8 +711,8 @@ describe('composeBuildModel', () => {
     };
     for (const model of [composeBuildModel(source, params()).model, composeUpModel(source, { ...params(), image: `${PROJECT}:7` }).model]) {
       expect(model.networks).toEqual({
-        default: { name: `${PROJECT}_default`, labels: { 'nimblescape.devspace.id': ID } },
-        back: { name: `${PROJECT}_back`, labels: { tier: 'back', 'nimblescape.devspace.id': ID } },
+        default: { name: `${PROJECT}_default`, labels: { 'nimblescape.devspaces.id': ID } },
+        back: { name: `${PROJECT}_back`, labels: { tier: 'back', 'nimblescape.devspaces.id': ID } },
         shared: { name: 'shared', external: true },
         old: { name: 'old', external: { name: 'old' } },
       });
@@ -725,7 +725,7 @@ describe('composeBuildModel', () => {
     const source = templateModel();
     source.networks = { backend: null };
     for (const model of [composeBuildModel(source, params()).model, composeUpModel(source, { ...params(), image: `${PROJECT}:7` }).model]) {
-      expect(model.networks).toEqual({ backend: { labels: { 'nimblescape.devspace.id': ID } } });
+      expect(model.networks).toEqual({ backend: { labels: { 'nimblescape.devspaces.id': ID } } });
     }
   });
 
@@ -789,25 +789,25 @@ describe('the label of the configuration path', () => {
   it('labels only the dev service with the configuration path, so the other services stay the same for another configuration', () => {
     const first = up('.devcontainer/devcontainer.json');
     const second = up('.devcontainer/other/devcontainer.json');
-    expect(first.services.app.labels).toMatchObject({ 'nimblescape.devspace.config-path': '.devcontainer/devcontainer.json' });
-    expect(second.services.app.labels).toMatchObject({ 'nimblescape.devspace.config-path': '.devcontainer/other/devcontainer.json' });
+    expect(first.services.app.labels).toMatchObject({ 'nimblescape.devspaces.config-path': '.devcontainer/devcontainer.json' });
+    expect(second.services.app.labels).toMatchObject({ 'nimblescape.devspaces.config-path': '.devcontainer/other/devcontainer.json' });
     const others = Object.keys(first.services).filter((name) => name !== 'app');
     expect(others.length).toBeGreaterThan(0);
     for (const name of others) {
-      expect(first.services[name].labels).not.toHaveProperty(['nimblescape.devspace.config-path']);
+      expect(first.services[name].labels).not.toHaveProperty(['nimblescape.devspaces.config-path']);
       expect(second.services[name]).toEqual(first.services[name]);
     }
   });
 
   it('labels the dev service with a folder that has a backslash or a space', () => {
     for (const configPath of ['.devcontainer/a\\b/devcontainer.json', '.devcontainer/ /devcontainer.json']) {
-      expect(up(configPath).services.app.labels).toMatchObject({ 'nimblescape.devspace.config-path': configPath });
+      expect(up(configPath).services.app.labels).toMatchObject({ 'nimblescape.devspaces.config-path': configPath });
     }
   });
 
   it('adds no label for a path that is no configuration path of the discovery', () => {
     for (const configPath of ['.devcontainer/a/b/devcontainer.json', '../x/devcontainer.json', '.devcontainer/../devcontainer.json']) {
-      expect(up(configPath).services.app.labels).not.toHaveProperty(['nimblescape.devspace.config-path']);
+      expect(up(configPath).services.app.labels).not.toHaveProperty(['nimblescape.devspaces.config-path']);
     }
   });
 });
@@ -950,7 +950,7 @@ describe('the bounds of the model in the extension host: services, mounts, and f
       devService: 'app',
       devspaceId: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d',
       containerName: 'c',
-      volumeName: 'devspace-x',
+      volumeName: 'devspaces-x',
       repositoryFolder: REPO_FOLDER,
       engineApiVersion: '1.47',
       realPaths: Object.fromEntries(volumes.map((v) => [v.source, null])),
@@ -1179,14 +1179,14 @@ describe('the Dockerfile of a local build of the dev service is always the check
     expect(built.devDockerfile).toBe(TEXT);
     // The context stays (escaped once, as every text); the Dockerfile is ours. Every built image carries the
     // devspace ID (build.labels).
-    expect(built.model.services.app.build).toEqual({ context: `${REPO}/c$$d`, dockerfile: COMPOSE_DEV_DOCKERFILE, args: { A: '1' }, labels: { 'nimblescape.devspace.id': ID } });
+    expect(built.model.services.app.build).toEqual({ context: `${REPO}/c$$d`, dockerfile: COMPOSE_DEV_DOCKERFILE, args: { A: '1' }, labels: { 'nimblescape.devspaces.id': ID } });
   });
 
   it('writes it for a plain Dockerfile too (no gap between the check and the read of the CLI and of BuildKit)', () => {
     const built = composeBuildModel(templateModel(), params({ dockerfiles: { app: TEXT, db: 'FROM x\n' } }));
     expect(built.devDockerfile).toBe(TEXT);
     // Every built image carries the devspace ID (build.labels).
-    expect(built.model.services.app.build).toEqual({ context: `${REPO}/.devcontainer`, dockerfile: COMPOSE_DEV_DOCKERFILE, labels: { 'nimblescape.devspace.id': ID } });
+    expect(built.model.services.app.build).toEqual({ context: `${REPO}/.devcontainer`, dockerfile: COMPOSE_DEV_DOCKERFILE, labels: { 'nimblescape.devspaces.id': ID } });
   });
 
   it('throws for a local build of the dev service whose Dockerfile the model run did not read (fail closed)', () => {

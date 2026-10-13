@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 function dockerfile(content: string): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   tempDirs.push(dir);
   const file = path.join(dir, 'Dockerfile');
   fs.writeFileSync(file, content);
@@ -52,7 +52,7 @@ type BuildOptions = Parameters<HelperImageDocker['buildImage']>[0];
 interface FakeImage {
   id: string;
   tags: string[];
-  /** Carries the label nimblescape.devspace.helper=true. */
+  /** Carries the label nimblescape.devspaces.helper=true. */
   helper: boolean;
 }
 
@@ -106,7 +106,7 @@ class FakeDocker implements HelperImageDocker {
     this.builds.push(options);
     // Docker moves the tag only after a successful build.
     await this.buildHandler(options);
-    const id = this.addImage([options.tag], { helper: options.labels?.['nimblescape.devspace.helper'] === 'true' });
+    const id = this.addImage([options.tag], { helper: options.labels?.['nimblescape.devspaces.helper'] === 'true' });
     this.afterBuild();
     return this.builtIdMissing ? undefined : id;
   }
@@ -115,7 +115,7 @@ class FakeDocker implements HelperImageDocker {
     this.labelQueries.push(label);
     if (this.listError) throw this.listError;
     return [...this.images.values()]
-      .filter((image) => label === 'nimblescape.devspace.helper=true' && image.helper)
+      .filter((image) => label === 'nimblescape.devspaces.helper=true' && image.helper)
       .map((image) => ({ id: image.id, tags: [...image.tags], createdAt: '2026-09-01 10:00:00 +0200 CEST' }));
   }
 
@@ -169,7 +169,7 @@ describe('DEVCONTAINER_CLI_VERSION', () => {
 
   it('must be pinned: devcontainerCliVersion refuses a missing entry and a range', () => {
     const manifest = (devDependencies?: Record<string, string>) => {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
       tempDirs.push(dir);
       const file = path.join(dir, 'package.json');
       fs.writeFileSync(file, JSON.stringify({ name: 'x', devDependencies }));
@@ -185,8 +185,8 @@ describe('DEVCONTAINER_CLI_VERSION', () => {
 });
 
 describe('helperImageTag', () => {
-  it('is devspace-helper:<12 hex characters>', () => {
-    expect(helperImageTag('FROM x\n')).toMatch(/^devspace-helper:[0-9a-f]{12}$/);
+  it('is devspaces-helper:<12 hex characters>', () => {
+    expect(helperImageTag('FROM x\n')).toMatch(/^devspaces-helper:[0-9a-f]{12}$/);
   });
 
   it('depends on the Dockerfile and the CLI version, not on line endings', () => {
@@ -200,7 +200,7 @@ describe('helperImageTag', () => {
 
   it('matches the hash of the file content plus the version plus the helper generation', () => {
     // The helper generation is part of the hash. sha256('abc' + '1' + '\ngeneration 1')
-    expect(helperImageTag('abc', '1', 1)).toBe('devspace-helper:cdcde07033de');
+    expect(helperImageTag('abc', '1', 1)).toBe('devspaces-helper:cdcde07033de');
     expect(helperImageTag('abc', '1')).toBe(helperImageTag('abc', '1', HELPER_GENERATION));
   });
 
@@ -222,7 +222,7 @@ describe('ensureHelperImageUse', () => {
       tag,
       dockerfile: file,
       context: path.dirname(file),
-      labels: { 'nimblescape.devspace.helper': 'true' },
+      labels: { 'nimblescape.devspaces.helper': 'true' },
       buildArgs: { DEVCONTAINER_CLI_VERSION },
     });
     expect(docker.builds[0].onOutput).toBeTypeOf('function');
@@ -245,7 +245,7 @@ describe('ensureHelperImageUse', () => {
     expect(content).toMatch(/^ARG BASE_IMAGE=node:24-trixie-slim$/m);
     expect(content).toMatch(/^FROM \$\{BASE_IMAGE\}$/m);
     expect(content).toMatch(/^ARG DEVCONTAINER_CLI_VERSION$/m);
-    expect(content).toMatch(/^LABEL nimblescape\.devspace\.helper=true$/m);
+    expect(content).toMatch(/^LABEL nimblescape\.devspaces\.helper=true$/m);
     // The Docker CLI with the buildx and the Compose plugins from download.docker.com (Compose configurations).
     expect(content).toMatch(/apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin docker-compose-plugin;/);
     expect(content).toMatch(/^\s*docker compose version; \\$/m);
@@ -259,14 +259,14 @@ describe('ensureHelperImageUse', () => {
 });
 
 const BASE = 'node:24-trixie-slim';
-const HELPER_DOCKERFILE = `ARG BASE_IMAGE=${BASE}\nFROM \${BASE_IMAGE}\nLABEL nimblescape.devspace.helper=true\n`;
+const HELPER_DOCKERFILE = `ARG BASE_IMAGE=${BASE}\nFROM \${BASE_IMAGE}\nLABEL nimblescape.devspaces.helper=true\n`;
 const DIGEST_A = `sha256:${'a'.repeat(64)}`;
 const DIGEST_B = `sha256:${'b'.repeat(64)}`;
 const START = Date.parse('2026-09-24T12:00:00Z');
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
-const OLD_TAG = 'devspace-helper:0123456789ab';
-const OTHER_TAG = 'devspace-helper:abcdef012345';
+const OLD_TAG = 'devspaces-helper:0123456789ab';
+const OTHER_TAG = 'devspaces-helper:abcdef012345';
 /** A time relative to START, as Harness.iso gives it before a harness exists. */
 const h0iso = (offsetMs: number): string => new Date(START + offsetMs).toISOString();
 
@@ -337,7 +337,7 @@ describe('ensureHelperImageUse with a state file: new helper image', () => {
     expect(await h.ensure()).toBe(h.tag);
     expect(h.lookups.map((lookup) => lookup.reference)).toEqual([BASE]);
     expect(h.docker.builds).toHaveLength(1);
-    expect(h.docker.builds[0]).toMatchObject({ tag: h.tag, pull: true, labels: { 'nimblescape.devspace.helper': 'true' } });
+    expect(h.docker.builds[0]).toMatchObject({ tag: h.tag, pull: true, labels: { 'nimblescape.devspaces.helper': 'true' } });
     expect(h.docker.builds[0].noCache).toBeUndefined();
     // The ID of the image that this build made, found by its build label (for diagnosis). The build records the helper
     // generation.
@@ -710,7 +710,7 @@ describe('ensureHelperImageUse with a state file: weekly check of the base image
     expect(await h.ensure({ onOutput: (text) => output.push(text), onBuild: (kind) => builds.push(kind) })).toBe(h.tag);
 
     expect(h.docker.builds).toHaveLength(1);
-    expect(h.docker.builds[0]).toMatchObject({ tag: h.tag, pull: true, noCache: true, labels: { 'nimblescape.devspace.helper': 'true' } });
+    expect(h.docker.builds[0]).toMatchObject({ tag: h.tag, pull: true, noCache: true, labels: { 'nimblescape.devspaces.helper': 'true' } });
     // The build output reaches onOutput, and onBuild tells that an existing helper is updated.
     expect(output).toEqual(['#1 building\n']);
     expect(builds).toEqual(['refresh']);
@@ -816,7 +816,7 @@ describe('ensureHelperImageUse with a state file: weekly check of the base image
 
   it('a rebuild removes the previous image whose only tag left is its monitor tag', async () => {
     const { h, oldId } = existing(8 * DAY);
-    const monitorTag = h.tag.replace('devspace-helper:', 'devspace-monitor:');
+    const monitorTag = h.tag.replace('devspaces-helper:', 'devspaces-monitor:');
     h.docker.images.get(oldId)!.tags.push(monitorTag);
     h.answer = async () => DIGEST_B;
     await h.ensure();
@@ -830,7 +830,7 @@ describe('ensureHelperImageUse with a state file: weekly check of the base image
 
   it('keeps a previous image with its monitor tag while the monitor runs, and removes it at a later cleanup', async () => {
     const { h, oldId } = existing(8 * DAY);
-    const monitorTag = h.tag.replace('devspace-helper:', 'devspace-monitor:');
+    const monitorTag = h.tag.replace('devspaces-helper:', 'devspaces-monitor:');
     h.docker.images.get(oldId)!.tags.push(monitorTag);
     h.docker.inUse.add(oldId);
     h.answer = async () => DIGEST_B;
@@ -850,14 +850,14 @@ describe('ensureHelperImageUse with a state file: weekly check of the base image
 
   it('a previous image with a monitor tag and another tag keeps both', async () => {
     const { h, oldId } = existing(8 * DAY);
-    h.docker.images.get(oldId)!.tags.push('devspace-monitor:fedcba987654', 'mine:backup');
+    h.docker.images.get(oldId)!.tags.push('devspaces-monitor:fedcba987654', 'mine:backup');
     h.answer = async () => DIGEST_B;
     await h.ensure();
     await h.settled();
     // The check asks the next ensure to rebuild.
     await h.ensure();
     expect(h.docker.removals).toEqual([]);
-    expect(h.docker.images.get(oldId)?.tags).toEqual(['devspace-monitor:fedcba987654', 'mine:backup']);
+    expect(h.docker.images.get(oldId)?.tags).toEqual(['devspaces-monitor:fedcba987654', 'mine:backup']);
   });
 
   it('keeps a previous image that a running helper uses, and removes it at the next cleanup', async () => {
@@ -1129,7 +1129,7 @@ describe('ensureHelperImageUse with a state file: cleanup of other helper images
     const oldId = h.docker.addImage([OLD_TAG]);
     const recentId = h.docker.addImage([OTHER_TAG]);
     const danglingId = h.docker.addImage([]);
-    const unlabeledId = h.docker.addImage(['devspace-helper:fedcba987654'], { helper: false });
+    const unlabeledId = h.docker.addImage(['devspaces-helper:fedcba987654'], { helper: false });
     const unlabeledDanglingId = h.docker.addImage([], { helper: false });
     // An image of another repository that inherited the label (built FROM a helper image).
     const derivedId = h.docker.addImage(['mine:1']);
@@ -1143,7 +1143,7 @@ describe('ensureHelperImageUse with a state file: cleanup of other helper images
     });
 
     expect(await h.ensure()).toBe(h.tag);
-    expect(h.docker.labelQueries).toEqual(['nimblescape.devspace.helper=true']);
+    expect(h.docker.labelQueries).toEqual(['nimblescape.devspaces.helper=true']);
     expect([...h.docker.removals].sort()).toEqual([OLD_TAG, danglingId].sort());
     expect(h.docker.images.has(oldId)).toBe(false);
     expect(h.docker.images.has(danglingId)).toBe(false);
@@ -1171,27 +1171,27 @@ describe('ensureHelperImageUse with a state file: cleanup of other helper images
 
   it('removes the monitor tag with its helper tag, and a monitor tag without its helper tag; keeps the others', async () => {
     const { h, currentId } = current({ [OLD_TAG]: { lastUsedAt: h0iso(-HELPER_UNUSED_LIMIT_MS) }, [OTHER_TAG]: { lastUsedAt: h0iso(-HOUR) } });
-    const oldMonitor = OLD_TAG.replace('devspace-helper:', 'devspace-monitor:');
-    const otherMonitor = OTHER_TAG.replace('devspace-helper:', 'devspace-monitor:');
+    const oldMonitor = OLD_TAG.replace('devspaces-helper:', 'devspaces-monitor:');
+    const otherMonitor = OTHER_TAG.replace('devspaces-helper:', 'devspaces-monitor:');
     const oldId = h.docker.addImage([OLD_TAG, oldMonitor]);
     const otherId = h.docker.addImage([OTHER_TAG, otherMonitor]);
-    const orphanId = h.docker.addImage(['devspace-monitor:fedcba987654', 'mine:keep']);
-    h.docker.images.get(currentId)!.tags.push(h.tag.replace('devspace-helper:', 'devspace-monitor:'));
+    const orphanId = h.docker.addImage(['devspaces-monitor:fedcba987654', 'mine:keep']);
+    h.docker.images.get(currentId)!.tags.push(h.tag.replace('devspaces-helper:', 'devspaces-monitor:'));
     await h.ensure();
     // The monitor tag first, then its helper tag.
-    expect(h.docker.removals).toEqual([oldMonitor, OLD_TAG, 'devspace-monitor:fedcba987654']);
+    expect(h.docker.removals).toEqual([oldMonitor, OLD_TAG, 'devspaces-monitor:fedcba987654']);
     expect(h.docker.images.has(oldId)).toBe(false);
     expect(h.docker.images.get(otherId)?.tags).toEqual([OTHER_TAG, otherMonitor]);
     expect(h.docker.images.get(orphanId)?.tags).toEqual(['mine:keep']);
-    expect(h.docker.images.get(currentId)?.tags).toEqual([h.tag, h.tag.replace('devspace-helper:', 'devspace-monitor:')]);
+    expect(h.docker.images.get(currentId)?.tags).toEqual([h.tag, h.tag.replace('devspaces-helper:', 'devspaces-monitor:')]);
     expect(h.state().images[OLD_TAG]).toEqual({ removedAt: h.iso() });
     // Monitor tags are no records of the state.
-    expect(Object.keys(h.state().images).some((tag) => tag.startsWith('devspace-monitor:'))).toBe(false);
+    expect(Object.keys(h.state().images).some((tag) => tag.startsWith('devspaces-monitor:'))).toBe(false);
   });
 
   it('a helper tag whose removal fails stays, without its monitor tag (only a name)', async () => {
     const { h } = current({ [OLD_TAG]: { lastUsedAt: h0iso(-HELPER_UNUSED_LIMIT_MS) } });
-    const oldMonitor = OLD_TAG.replace('devspace-helper:', 'devspace-monitor:');
+    const oldMonitor = OLD_TAG.replace('devspaces-helper:', 'devspaces-monitor:');
     const oldId = h.docker.addImage([OLD_TAG, oldMonitor]);
     h.docker.failingRemovals.add(OLD_TAG);
     await h.ensure();
@@ -1202,7 +1202,7 @@ describe('ensureHelperImageUse with a state file: cleanup of other helper images
 
   it('removes the monitor tag but keeps its helper tag while a container uses its image', async () => {
     const { h } = current({ [OLD_TAG]: { lastUsedAt: h0iso(-HELPER_UNUSED_LIMIT_MS) } });
-    const oldMonitor = OLD_TAG.replace('devspace-helper:', 'devspace-monitor:');
+    const oldMonitor = OLD_TAG.replace('devspaces-helper:', 'devspaces-monitor:');
     const oldId = h.docker.addImage([OLD_TAG, oldMonitor]);
     h.docker.inUse.add(oldId);
     await h.ensure();
@@ -1219,7 +1219,7 @@ describe('ensureHelperImageUse with a state file: cleanup of other helper images
 
   it('a monitor tag whose removal fails keeps its helper tag, without a tombstone, until a later cleanup', async () => {
     const { h } = current({ [OLD_TAG]: { lastUsedAt: h0iso(-HELPER_UNUSED_LIMIT_MS) } });
-    const oldMonitor = OLD_TAG.replace('devspace-helper:', 'devspace-monitor:');
+    const oldMonitor = OLD_TAG.replace('devspaces-helper:', 'devspaces-monitor:');
     const oldId = h.docker.addImage([OLD_TAG, oldMonitor]);
     h.docker.inUse.add(oldId);
     h.docker.failingRemovals.add(oldMonitor);
@@ -1237,11 +1237,11 @@ describe('ensureHelperImageUse with a state file: cleanup of other helper images
 
   it('an orphan monitor tag that is the only tag of an image in use stays, and goes at a later cleanup', async () => {
     const { h } = current();
-    const orphanId = h.docker.addImage(['devspace-monitor:fedcba987654']);
+    const orphanId = h.docker.addImage(['devspaces-monitor:fedcba987654']);
     h.docker.inUse.add(orphanId);
     await h.ensure();
-    expect(h.docker.removals).toEqual(['devspace-monitor:fedcba987654']);
-    expect(h.docker.images.get(orphanId)?.tags).toEqual(['devspace-monitor:fedcba987654']);
+    expect(h.docker.removals).toEqual(['devspaces-monitor:fedcba987654']);
+    expect(h.docker.images.get(orphanId)?.tags).toEqual(['devspaces-monitor:fedcba987654']);
     h.docker.inUse.clear();
     h.advance(HELPER_CLEANUP_INTERVAL_MS);
     await h.ensure();

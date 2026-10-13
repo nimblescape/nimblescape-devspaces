@@ -149,14 +149,14 @@ const TABLE: Array<[string, HostAccessInput, string, HostAccessClass]> = [
   // Account separation.
   ['the workspace volume of another devspace', input(mount(`source=${OTHER},target=/w,type=volume`)), `volume ${OTHER} of another devspace`, 'protected'],
   ['a volume of a devspace of another account (registry)', input(mount('source=data,target=/d'), { foreignVolumes: ['data'] }), 'volume data of another devspace', 'protected'],
-  ['a volume with the labels of another devspace', input(mount('source=data,target=/d'), { volumeLabels: { data: { 'nimblescape.devspace.id': 'other', 'nimblescape.devspace.owner-id': '2002' } } }), 'volume data of another devspace', 'protected'],
+  ['a volume with the labels of another devspace', input(mount('source=data,target=/d'), { volumeLabels: { data: { 'nimblescape.devspaces.id': 'other', 'nimblescape.devspaces.owner-id': '2002' } } }), 'volume data of another devspace', 'protected'],
   ['-v with the volume of another devspace', input(run('-v', `${OTHER}:/w`)), `volume ${OTHER} of another devspace`, 'protected'],
-  ['the cache volume of the workspace helper', input(mount('source=devspace-helper-cache,target=/c,type=volume')), 'volume devspace-helper-cache of the workspace helper', 'protected'],
+  ['the cache volume of the workspace helper', input(mount('source=devspaces-helper-cache,target=/c,type=volume')), 'volume devspaces-helper-cache of the workspace helper', 'protected'],
   // The heartbeat records of the Monitor on a remote Docker host.
-  ['the volume of the remote Monitor', input(mount('source=devspace-monitor,target=/s,type=volume')), 'volume devspace-monitor of the Monitor', 'protected'],
-  ['-v with the volume of the remote Monitor', input(run('-v', 'devspace-monitor:/s')), 'volume devspace-monitor of the Monitor', 'protected'],
+  ['the volume of the remote Monitor', input(mount('source=devspaces-monitor,target=/s,type=volume')), 'volume devspaces-monitor of the Monitor', 'protected'],
+  ['-v with the volume of the remote Monitor', input(run('-v', 'devspaces-monitor:/s')), 'volume devspaces-monitor of the Monitor', 'protected'],
   ['--env-file outside the workspace volume (a file of the workspace helper)', input(run('--env-file', '/devspace-cache/x')), '--env-file=/devspace-cache/x', 'protected'],
-  ['volume-label (the labels that tell the volumes of the devspaces apart)', input(mount('type=volume,source=v,target=/x,volume-label=nimblescape.devspace.id=x')), 'volume options of the mount v', 'protected'],
+  ['volume-label (the labels that tell the volumes of the devspaces apart)', input(mount('type=volume,source=v,target=/x,volume-label=nimblescape.devspaces.id=x')), 'volume options of the mount v', 'protected'],
   ['volumeLabels in the object form', input(mount({ type: 'volume', source: 'v', target: '/x', volumeLabels: {} })), 'volume options of the mount v', 'protected'],
   ['volume-driver together with volume-label', input(mount('type=volume,source=v,target=/x,volume-driver=local,volume-label=a=b')), 'volume options of the mount v', 'protected'],
   // The identity of the owner account.
@@ -178,8 +178,8 @@ const TABLE: Array<[string, HostAccessInput, string, HostAccessClass]> = [
   ['a log driver that writes to the computer', input(run('--log-driver', 'syslog')), '--log-driver=syslog', 'protected'],
 
   // Options that the policy does not support.
-  ['a label of Devspaces', input(run('--label', 'nimblescape.devspace.id=x')), 'label nimblescape.devspace.id', 'unsupported'],
-  ['another value of the label nimblescape.devspace.host-access', input(run('--label', 'nimblescape.devspace.host-access=none')), 'label nimblescape.devspace.host-access', 'unsupported'],
+  ['a label of Devspaces', input(run('--label', 'nimblescape.devspaces.id=x')), 'label nimblescape.devspaces.id', 'unsupported'],
+  ['another value of the label nimblescape.devspaces.host-access', input(run('--label', 'nimblescape.devspaces.host-access=none')), 'label nimblescape.devspaces.host-access', 'unsupported'],
   ['an unknown flag', input(run('--pull=always')), '--pull', 'unsupported'],
   ['a stray argument', input(run('stray')), 'argument stray', 'unsupported'],
   ['a flag without its value at the end', input(run('--init', '-e')), '-e without a value', 'unsupported'],
@@ -209,7 +209,7 @@ const TABLE: Array<[string, HostAccessInput, string, HostAccessClass]> = [
   ['a Dockerfile that is a link out of the repository', input({ build: { dockerfile: 'Dockerfile' } }, { ...HELPER_PATHS, dockerfileUnreadable: 'Dockerfile' }), 'Dockerfile Dockerfile (the Dockerfile is a link out of the repository or could not be read)', 'protected'],
   // A size limit, not a check of the content.
   ['a Dockerfile longer than MAX_DOCKERFILE_LENGTH', input({ build: { dockerfile: 'Dockerfile' } }, { ...HELPER_PATHS, dockerfileLength: MAX_DOCKERFILE_LENGTH + 1 }), `the Dockerfile (longer than ${MAX_DOCKERFILE_LENGTH} characters; the Dockerfile is too large)`, 'unsupported'],
-  // Image IDs. (Images named `devspace-…` are allowed: see "what stays allowed" below.)
+  // Image IDs. (Images named `devspaces-…` are allowed: see "what stays allowed" below.)
   ['an image ID', input({ image: `sha256:${'c'.repeat(64)}` }), `image sha256:${'c'.repeat(64)} (an image ID; name the image)`, 'unsupported'],
   // The Compose network of another devspace, by its name (also the long form) or its labels.
   ['the Compose network of another devspace', input(run('--network', `${OTHER}_default`)), `network ${OTHER}_default of another devspace`, 'protected'],
@@ -244,21 +244,21 @@ describe('the switch of the host access checks: the class of every refused item'
   it('lifts everything of a configuration that only needs the computer, and nothing of the rest', () => {
     const config = {
       privileged: true,
-      mounts: ['source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind', 'source=devspace-helper-cache,target=/c,type=volume'],
+      mounts: ['source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind', 'source=devspaces-helper-cache,target=/c,type=volume'],
       runArgs: ['--gpus', 'all', '-p', '0.0.0.0:80:80', '--restart=always'],
       containerEnv: { GH_TOKEN: 'x' },
     };
     expect(hostAccessReport(input(config), false)).toEqual({
-      hostAccess: ['volume devspace-helper-cache of the workspace helper', `variable GH_TOKEN in containerEnv (${GITHUB_CLI_ACCOUNT_REASON})`],
+      hostAccess: ['volume devspaces-helper-cache of the workspace helper', `variable GH_TOKEN in containerEnv (${GITHUB_CLI_ACCOUNT_REASON})`],
       unsupported: ['--restart=always'],
     });
     expect(hostAccessReport(input({ privileged: true, runArgs: ['--pid=host', '-P'], appPort: '0.0.0.0:1:1' }), false)).toEqual({ hostAccess: [], unsupported: [] });
   });
 
   it('still checks the name of a volume whose driver options the switch lifts', () => {
-    const checked = input(mount('type=volume,source=devspace-helper-cache,target=/x,volume-driver=local'));
-    expect(hostAccessProblems(checked)).toEqual(['volume options of the mount devspace-helper-cache', 'volume devspace-helper-cache of the workspace helper']);
-    expect(hostAccessProblems(checked, false)).toEqual(['volume devspace-helper-cache of the workspace helper']);
+    const checked = input(mount('type=volume,source=devspaces-helper-cache,target=/x,volume-driver=local'));
+    expect(hostAccessProblems(checked)).toEqual(['volume options of the mount devspaces-helper-cache', 'volume devspaces-helper-cache of the workspace helper']);
+    expect(hostAccessProblems(checked, false)).toEqual(['volume devspaces-helper-cache of the workspace helper']);
   });
 
   it('keeps an item that two rules find refused when one of them is not lifted', () => {
@@ -290,7 +290,7 @@ describe('what stays allowed', () => {
     expect(analysis.references.images).toEqual([`${OTHER}:2`]);
   });
 
-  it('allows images named devspace-…, and still asks Docker about them', () => {
+  it('allows images named devspaces-…, and still asks Docker about them', () => {
     // The pipeline refuses an image of the devspaces of another account by its ID (otherAccountImageItems).
     const cases: Array<[Record<string, unknown>, string]> = [
       [{ image: `${OTHER}:2` }, `${OTHER}:2`],
@@ -322,7 +322,7 @@ describe('the override configuration with the checks off', () => {
     expect(overrideRunArgs(runArgs, false)).toEqual(['-p', '8080:80', '--publish=9000']);
   });
 
-  it('adds the label nimblescape.devspace.host-access=unrestricted and keeps appPort as the configuration writes it', () => {
+  it('adds the label nimblescape.devspaces.host-access=unrestricted and keeps appPort as the configuration writes it', () => {
     const common = { devspaceImage: `${OWN}:1`, volumeName: OWN, repositoryName: 'api', containerName: OWN, runArgs: ['-p', '80'] };
     const on = buildOverrideConfig({ ...common, appPort: [3000, '0.0.0.0:5000:5000'] as Array<number | string> });
     // The labels of Docker Compose set empty.
@@ -418,7 +418,7 @@ describe('build contexts, build arguments, Dockerfile references, and the files 
     'FROM devspace${TARGETVARIANT}-abcd1234:1\n',
     `FROM \${TARGETVARIANT}${OTHER}:1\n`,
     `FROM alpine\nCOPY --from=\${NOPE}${OTHER}:1 / /x\n`,
-    'FROM alpine\nRUN --mount=from=${NOPE}DevSpace-abcd1234:1,target=/m ls\n',
+    'FROM alpine\nRUN --mount=from=${NOPE}DevSpaces-abcd1234:1,target=/m ls\n',
   ])('allows the unresolved reference in %j that holds devspace', (text) => {
     expectAllowed(text);
     expect(single(text).references.images).toEqual(text.startsWith('FROM alpine') ? ['alpine'] : []);
@@ -473,7 +473,7 @@ describe('build arguments without a value, URL-like paths, pattern operators, fr
     [['--build-arg', 'BASE']],
     [['--build-arg=BASE']],
   ])('refuses --build-arg without a value in %j, whatever the switch says', (options) => {
-    // buildx drops the argument when the helper has no variable BASE: the default of the ARG (devspace-…) applies.
+    // buildx drops the argument when the helper has no variable BASE: the default of the ARG (devspaces-…) applies.
     const checked = dockerfile(`ARG BASE=${OTHER}:1\nFROM $BASE\n`, { args: { BASE: 'alpine' }, options });
     expect(classes(checked)).toContain(WITHOUT_VALUE('BASE'));
     expect(hostAccessReport(checked, false).unsupported).toContain(WITHOUT_VALUE('BASE').replace('unsupported: ', ''));
@@ -508,8 +508,8 @@ describe('build arguments without a value, URL-like paths, pattern operators, fr
     `ARG A=${OTHER}:1xyx\nFROM \${A%%x*}\n`,
     `ARG A=x${OTHER}:1\nFROM \${A#x}\n`,
     `ARG A=a/b/${OTHER}:1\nFROM \${A##*/}\n`,
-    'ARG A=zzzspace-abcd1234:1\nFROM ${A/zzz/dev}\n',
-    'ARG A=zspace-abcd1234:1\nFROM ${A//z/dev}\n',
+    'ARG A=zzzspaces-abcd1234:1\nFROM ${A/zzz/dev}\n',
+    'ARG A=zspaces-abcd1234:1\nFROM ${A//z/dev}\n',
     `ARG A=${OTHER}:1?\nFROM \${A%\\?}\n`,
     `FROM alpine\nARG A=${OTHER}:1x\nCOPY --from=\${A%x} / /x\n`,
     `FROM alpine\nARG A=${OTHER}:1x\nRUN --mount=from=\${A%x},target=/x ls\n`,
@@ -590,19 +590,19 @@ describe('build arguments without a value, URL-like paths, pattern operators, fr
   });
 
   it.each([
-    'FROM ghcr.io/example/devspace-base:${TARGETARCH}\n',
+    'FROM ghcr.io/example/devspaces-base:${TARGETARCH}\n',
     'FROM --platform=$BUILDPLATFORM ghcr.io/cachix/devspace:v1-$TARGETARCH\n',
-    'FROM localhost:5000/devspace-tools:${TARGETARCH}\n',
+    'FROM localhost:5000/devspaces-tools:${TARGETARCH}\n',
     'FROM registry.example.com:443/team/devspace${TARGETVARIANT}\n',
   ])('allows the registry image in %j', (text) => {
     expectAllowed(text);
   });
 
   it.each([
-    'FROM docker.io/example/devspace-base:${TARGETARCH}\n',
+    'FROM docker.io/example/devspaces-base:${TARGETARCH}\n',
     'FROM index.docker.io/x/devspace${TARGETVARIANT}\n',
-    'FROM example/devspace-base:${TARGETARCH}\n',
-    'FROM localhost/devspace-base:${TARGETARCH}\n',
+    'FROM example/devspaces-base:${TARGETARCH}\n',
+    'FROM localhost/devspaces-base:${TARGETARCH}\n',
     `FROM \${TARGETVARIANT}ghcr.io/${OTHER}:1\n`,
     `FROM ghcr.io\${TARGETVARIANT}/${OTHER}:1\n`,
   ])('allows %j, and the update check reads it with a platform build argument', (text) => {
@@ -612,19 +612,19 @@ describe('build arguments without a value, URL-like paths, pattern operators, fr
   });
 });
 
-describe('the label nimblescape.devspace.config-path', () => {
+describe('the label nimblescape.devspaces.config-path', () => {
   it('allows the label of the override configuration with a configuration path', () => {
     for (const configPath of ['.devcontainer/devcontainer.json', '.devcontainer.json', '.devcontainer/python/devcontainer.json']) {
       const runArgs = buildOverrideConfig({ devspaceImage: 'img', volumeName: OWN, repositoryName: 'api', containerName: OWN, configPath }).runArgs as string[];
-      expect(runArgs).toEqual(expect.arrayContaining(['--label', `nimblescape.devspace.config-path=${configPath}`]));
+      expect(runArgs).toEqual(expect.arrayContaining(['--label', `nimblescape.devspaces.config-path=${configPath}`]));
       expect(hostAccessProblems({ config: { runArgs }, ownVolume: OWN, overrideConfiguration: true })).toEqual([]);
     }
   });
 
   it('refuses the label in the runArgs of the repository, and another value in the override configuration', () => {
-    expect(hostAccessProblems(input(run('--label', 'nimblescape.devspace.config-path=.devcontainer/devcontainer.json')))).toEqual(['label nimblescape.devspace.config-path']);
-    expect(hostAccessProblems({ config: { runArgs: ['--label', 'nimblescape.devspace.config-path=../x/devcontainer.json'] }, ownVolume: OWN, overrideConfiguration: true })).toEqual([
-      'label nimblescape.devspace.config-path',
+    expect(hostAccessProblems(input(run('--label', 'nimblescape.devspaces.config-path=.devcontainer/devcontainer.json')))).toEqual(['label nimblescape.devspaces.config-path']);
+    expect(hostAccessProblems({ config: { runArgs: ['--label', 'nimblescape.devspaces.config-path=../x/devcontainer.json'] }, ownVolume: OWN, overrideConfiguration: true })).toEqual([
+      'label nimblescape.devspaces.config-path',
     ]);
   });
 });
@@ -637,23 +637,23 @@ describe('variables as BuildKit reads them, the values of build.args, frontends,
 
   it.each([
     // A positional parameter, a special parameter, and a name of Unicode letters: not set, so empty, as in BuildKit.
-    ['FROM dev$1space-abcd1234:1\n', ['devspace-abcd1234:1']],
-    ['FROM dev$12space-abcd1234:1\n', ['devspace-abcd1234:1']],
-    ['FROM dev$@space-abcd1234:1\n', ['devspace-abcd1234:1']],
-    ['FROM dev$$space-abcd1234:1\n', ['devspace-abcd1234:1']],
-    ['FROM dev${1}space-abcd1234:1\n', ['devspace-abcd1234:1']],
-    ['FROM dev$é\\space-abcd1234:1\n', ['devspace-abcd1234:1']],
+    ['FROM dev$1spaces-abcd1234:1\n', ['devspaces-abcd1234:1']],
+    ['FROM dev$12spaces-abcd1234:1\n', ['devspaces-abcd1234:1']],
+    ['FROM dev$@spaces-abcd1234:1\n', ['devspaces-abcd1234:1']],
+    ['FROM dev$$spaces-abcd1234:1\n', ['devspaces-abcd1234:1']],
+    ['FROM dev${1}spaces-abcd1234:1\n', ['devspaces-abcd1234:1']],
+    ['FROM dev$é\\spaces-abcd1234:1\n', ['devspaces-abcd1234:1']],
     [`ARG é=${OTHER}:1\nFROM $é\n`, [`${OTHER}:1`]],
-    ['FROM alpine\nCOPY --from=dev$1space-abcd1234:1 / /x\n', ['alpine']],
-    ['FROM alpine\nCOPY --from=dev$@space-abcd1234:1 / /x\n', ['alpine']],
-    ['FROM alpine\nENV X=dev$é\\space-abcd1234:1\nCOPY --from=$X / /x\n', ['alpine']],
+    ['FROM alpine\nCOPY --from=dev$1spaces-abcd1234:1 / /x\n', ['alpine']],
+    ['FROM alpine\nCOPY --from=dev$@spaces-abcd1234:1 / /x\n', ['alpine']],
+    ['FROM alpine\nENV X=dev$é\\spaces-abcd1234:1\nCOPY --from=$X / /x\n', ['alpine']],
     ['FROM alpine\nENV X=dev$1"e"nv-abcd1234:1\nCOPY --from=$X / /x\n', ['alpine']],
     // A platform ARG that is not resolved: the update check skips the reference.
-    ['FROM dev${TARGETVARIANT}space-abcd1234:1\n', []],
-    ['FROM dev$TARGETVARIANT\\space-abcd1234:1\n', []],
-    ['FROM dev${TARGETVARIANT:+x}space-abcd1234:1\n', []],
-    ['FROM ${TARGETVARIANT:-dev}space-abcd1234:1\n', []],
-    ['FROM ${TARGETVARIANT+d${TARGETARCH}ev}space-abcd1234:1\n', []],
+    ['FROM dev${TARGETVARIANT}spaces-abcd1234:1\n', []],
+    ['FROM dev$TARGETVARIANT\\spaces-abcd1234:1\n', []],
+    ['FROM dev${TARGETVARIANT:+x}spaces-abcd1234:1\n', []],
+    ['FROM ${TARGETVARIANT:-dev}spaces-abcd1234:1\n', []],
+    ['FROM ${TARGETVARIANT+d${TARGETARCH}ev}spaces-abcd1234:1\n', []],
     ['FROM ${TARGETVARIANT}sha256:0123abcd\n', []],
     ['FROM ${TARGETVARIANT}0123abcd\n', []],
     ['FROM alpine\nCOPY --from=${TARGETARCH:+0123}abcd / /x\n', ['alpine']],
@@ -664,8 +664,8 @@ describe('variables as BuildKit reads them, the values of build.args, frontends,
 
   it('expands a name of Unicode letters that is not set to the empty text, as BuildKit does', () => {
     // The FROM images are references of the update check only, not of the question of image IDs.
-    expect(single('FROM dev$éspace-abcd1234:1\n').references.images).toEqual(['dev-abcd1234:1']);
-    expect(single('FROM dev$éspace-abcd1234:1\n').imageReferences).toEqual([]);
+    expect(single('FROM dev$éspaces-abcd1234:1\n').references.images).toEqual(['dev-abcd1234:1']);
+    expect(single('FROM dev$éspaces-abcd1234:1\n').imageReferences).toEqual([]);
     // A pattern form is not evaluated.
     expect(single('ARG A=alpine\nFROM ${A/p/$0}\n').references.images).toEqual([]);
   });
@@ -676,7 +676,7 @@ describe('variables as BuildKit reads them, the values of build.args, frontends,
     'FROM alpine\nCOPY --from=build-${TARGETARCH} / /x\n',
     'FROM ${TARGETVARIANT:-alpine}\n',
     // `$éenv` is one name: `dev-abcd1234:1` when it is empty.
-    'FROM alpine\nCOPY --from=dev$éspace-abcd1234:1 / /x\n',
+    'FROM alpine\nCOPY --from=dev$éspaces-abcd1234:1 / /x\n',
   ])('allows the reference with a variable that is not resolved in %j', (text) => {
     expectAllowed(text);
   });
@@ -722,18 +722,18 @@ describe('variables as BuildKit reads them, the values of build.args, frontends,
     expectAllowed('FROM alpine\n', { args: { BUILDKIT_SYNTAX: 'evil/frontend:1 docker/dockerfile:1' } });
   });
 
-  it('allows the label nimblescape.devspace.config-path of the override configuration for a folder that the discovery finds', () => {
+  it('allows the label nimblescape.devspaces.config-path of the override configuration for a folder that the discovery finds', () => {
     for (const configPath of ['.devcontainer/a\\b/devcontainer.json', '.devcontainer/ /devcontainer.json', '.devcontainer/my config/devcontainer.json']) {
       const runArgs = buildOverrideConfig({ devspaceImage: 'img', volumeName: OWN, repositoryName: 'api', containerName: OWN, configPath }).runArgs as string[];
-      expect(runArgs).toEqual(expect.arrayContaining(['--label', `nimblescape.devspace.config-path=${configPath}`]));
+      expect(runArgs).toEqual(expect.arrayContaining(['--label', `nimblescape.devspaces.config-path=${configPath}`]));
       expect(hostAccessProblems({ config: { runArgs }, ownVolume: OWN, overrideConfiguration: true })).toEqual([]);
     }
   });
 
-  it('adds no label nimblescape.devspace.config-path for a path that is no configuration path of the discovery', () => {
+  it('adds no label nimblescape.devspaces.config-path for a path that is no configuration path of the discovery', () => {
     for (const configPath of ['.devcontainer/a/b/devcontainer.json', '.devcontainer/../devcontainer.json', '.devcontainer//devcontainer.json', '../x/devcontainer.json']) {
       const runArgs = buildOverrideConfig({ devspaceImage: 'img', volumeName: OWN, repositoryName: 'api', containerName: OWN, configPath }).runArgs as string[];
-      expect(runArgs.some((arg) => arg.startsWith('nimblescape.devspace.config-path'))).toBe(false);
+      expect(runArgs.some((arg) => arg.startsWith('nimblescape.devspaces.config-path'))).toBe(false);
       expect(hostAccessProblems({ config: { runArgs }, ownVolume: OWN, overrideConfiguration: true })).toEqual([]);
     }
   });

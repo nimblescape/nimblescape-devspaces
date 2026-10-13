@@ -43,11 +43,11 @@ describe('namePair', () => {
 
 describe('trailingPair', () => {
   it('gives the pair at the end of a name', () => {
-    expect(trailingPair('devspace-acme-api-tidy-berners')).toBe('tidy-berners');
+    expect(trailingPair('devspaces-acme-api-tidy-berners')).toBe('tidy-berners');
     expect(trailingPair(`x-${namePair('seed')}`)).toBe(namePair('seed'));
   });
 
-  it.each(['devspace-acme-api', 'tidy-berners', 'devspace-acme-api-tidy-nobody', 'devspace-acme-api-nobody-berners', 'devspace-acme-api-tidy-berners-', 'devspace-acme-api-Tidy-berners', 'devspace-x-tidy-berners_1'])(
+  it.each(['devspaces-acme-api', 'tidy-berners', 'devspaces-acme-api-tidy-nobody', 'devspaces-acme-api-nobody-berners', 'devspaces-acme-api-tidy-berners-', 'devspaces-acme-api-Tidy-berners', 'devspaces-x-tidy-berners_1'])(
     'gives undefined for %j',
     (name) => {
       expect(trailingPair(name)).toBeUndefined();

@@ -20,7 +20,7 @@ const URL_ = 'https://vscode.download.prss.microsoft.com/dbazure/download/stable
 
 const temps: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-stall-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-stall-'));
   temps.push(dir);
   return dir;
 }

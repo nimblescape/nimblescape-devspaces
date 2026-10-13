@@ -27,7 +27,7 @@ const T0 = Date.parse('2026-09-27T12:00:00.000Z');
 const MINUTE = 60_000;
 
 function container(devspaceId: string, state = 'running', extra: Partial<RemoteContainer> = {}): RemoteContainer {
-  return { id: `${devspaceId.slice(0, 8)}${extra.composeService ?? ''}`, state, name: `devspace-${devspaceId.slice(0, 8)}`, devspaceId, composeService: '', ...extra };
+  return { id: `${devspaceId.slice(0, 8)}${extra.composeService ?? ''}`, state, name: `devspaces-${devspaceId.slice(0, 8)}`, devspaceId, composeService: '', ...extra };
 }
 
 function record(devspaceId: string, at: number, extra: Partial<RemoteRecord> = {}): RemoteRecord {

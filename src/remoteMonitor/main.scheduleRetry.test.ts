@@ -20,7 +20,7 @@ const DAILY = { DEVSPACE_IMAGE_SCHEDULE: '7 6 * * *', DEVSPACE_IMAGE_TZ: 'UTC' }
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-monitor-retry-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-monitor-retry-'));
 });
 
 afterEach(() => {

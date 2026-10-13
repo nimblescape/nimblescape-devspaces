@@ -11,7 +11,7 @@ import { HelperOperationError } from '../helperChannel/helperChannel';
 import type { BusyMark } from '../types';
 import { ENV_ID, OTHER_ACCOUNT, PID, WINDOW_ID, createHarness, seedDevspace } from './devspaceService.testkit';
 
-const OPENED = { devspaceId: ENV_ID, containerName: 'devspace-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
+const OPENED = { devspaceId: ENV_ID, containerName: 'devspaces-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
 
 function harness(answer: () => Promise<unknown>) {
   const sent: string[] = [];

@@ -140,7 +140,7 @@ describe('the flows through a real worker', () => {
   /** A running dev container of a new devspace with the tmpfs of the token and a token in it; `args` add rights. */
   function devContainer(args: string[] = []): { id: string; name: string } {
     const id = newDevspaceId();
-    const name = `devspace-test-flow-${crypto.randomBytes(4).toString('hex')}`;
+    const name = `devspaces-test-flow-${crypto.randomBytes(4).toString('hex')}`;
     cli.ok(['run', '-d', '--name', name, '--network', 'none', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`, ...args, '--tmpfs', TOKEN_TMPFS, TEST_BASE_IMAGE, 'sleep', '600']);
     cli.ok(['exec', '-u', 'root', name, 'sh', '-c', `printf %s '${DUMMY_TOKEN}' > ${GITHUB_TOKEN_FILE}`]);
     return { id, name };
@@ -166,7 +166,7 @@ describe('the flows through a real worker', () => {
   });
 
   it('answers notRunning for a devspace without a running dev container', async () => {
-    const { value, requests } = await removal(newDevspaceId(), 'devspace-test-flow-missing');
+    const { value, requests } = await removal(newDevspaceId(), 'devspaces-test-flow-missing');
     expect(value).toEqual({ outcome: 'notRunning' });
     expect(requests).toEqual([]);
   });
@@ -175,7 +175,7 @@ describe('the flows through a real worker', () => {
   // and the running service of Docker Compose; no request to this computer.
   it('stops the dev container and its running service through the worker, with the Git state', async () => {
     const id = newDevspaceId();
-    const name = `devspace-test-stop-${crypto.randomBytes(4).toString('hex')}`;
+    const name = `devspaces-test-stop-${crypto.randomBytes(4).toString('hex')}`;
     const common = ['--network', 'none', '--init', '--stop-timeout', '2', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`];
     cli.ok(['run', '-d', '--name', name, ...common, helperTag, 'sleep', '600']);
     cli.ok(['exec', name, 'git', 'init', '-q', '-b', 'feature/stop', '/workspaces/stop']);
@@ -203,7 +203,7 @@ describe('the flows through a real worker', () => {
   // its branch; no request to this computer.
   it('reads the state, the version and the branch of a dev container through the worker', async () => {
     const id = newDevspaceId();
-    const name = `devspace-test-window-${crypto.randomBytes(4).toString('hex')}`;
+    const name = `devspaces-test-window-${crypto.randomBytes(4).toString('hex')}`;
     cli.ok(['run', '-d', '--name', name, '--network', 'none', '--init', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`, helperTag, 'sleep', '600']);
     cli.ok(['exec', name, 'git', 'init', '-q', '-b', 'feature/window', '/workspaces/window']);
     const requests: string[] = [];
@@ -221,7 +221,7 @@ describe('the flows through a real worker', () => {
     expect(requests).toEqual([]);
     cli.ok(['stop', '-t', '0', name]);
     expect(await read(name, true)).toEqual({ state: 'stopped', outdated: 'version' });
-    expect(await read('devspace-test-window-missing', false)).toEqual({ state: 'missing' });
+    expect(await read('devspaces-test-window-missing', false)).toEqual({ state: 'missing' });
   });
 
   // The listing of Select configuration by the worker's own pipeline: the record and the account from this computer,
@@ -230,8 +230,8 @@ describe('the flows through a real worker', () => {
   // the wait for the lock.
   it('lists the configurations through the worker in a batch helper of its own image, and refuses while the lock is held elsewhere', async () => {
     const id = newDevspaceId();
-    const volume = `devspace-test-list-${crypto.randomBytes(4).toString('hex')}`;
-    const repository = 'devspace-test/worker-list';
+    const volume = `devspaces-test-list-${crypto.randomBytes(4).toString('hex')}`;
+    const repository = 'devspaces-test/worker-list';
     cli.ok(['volume', 'create', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`, volume]);
     cli.ok([
       'run', '--rm', '--label', runLabel, '--mount', `type=volume,source=${volume},target=/workspaces`, TEST_BASE_IMAGE, 'sh', '-c',
@@ -275,9 +275,9 @@ describe('the flows through a real worker', () => {
   // workspace volume removed over the port of the engine. With an additional volume that the user confirmed.
   it('deletes a devspace through the worker: its dev container, its volume and a confirmed additional volume, with the requests of Delete only', async () => {
     const id = newDevspaceId();
-    const name = `devspace-test-delete-${crypto.randomBytes(4).toString('hex')}`;
+    const name = `devspaces-test-delete-${crypto.randomBytes(4).toString('hex')}`;
     const extra = `${name}-cache`;
-    const repository = 'devspace-test/worker-delete';
+    const repository = 'devspaces-test/worker-delete';
     cli.ok(['volume', 'create', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`, name]);
     cli.ok(['volume', 'create', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`, '--label', `${LABEL_OWNER_ID}=42`, extra]);
     cli.ok(['run', '-d', '--init', '--name', name, '--network', 'none', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`, '--mount', `type=volume,source=${name},target=/workspaces`, TEST_BASE_IMAGE, 'sleep', '600']);
@@ -326,10 +326,10 @@ describe('the flows through a real worker', () => {
   // the engine, and the confirmation asked as a request of the worker, whose answer is the decision.
   it('checks a Delete through the worker and asks the confirmation as its request', async () => {
     const id = newDevspaceId();
-    const name = `devspace-test-check-${crypto.randomBytes(4).toString('hex')}`;
+    const name = `devspaces-test-check-${crypto.randomBytes(4).toString('hex')}`;
     cli.ok(['volume', 'create', '--label', runLabel, '--label', `${LABEL_DEVSPACE_ID}=${id}`, name]);
     const requests: string[] = [];
-    const devspace = { id, repository: 'devspace-test/worker-check', owner: { id: '42', login: 'octo' }, volumeName: name, containerName: name } as unknown as Devspace;
+    const devspace = { id, repository: 'devspaces-test/worker-check', owner: { id: '42', login: 'octo' }, volumeName: name, containerName: name } as unknown as Devspace;
     const base = hostWith(undefined, requests);
     const host = {
       ...base,
@@ -343,14 +343,14 @@ describe('the flows through a real worker', () => {
       },
     } as unknown as HostSide;
     const target = await targets.current();
-    const params = { devspaceId: id, dockerHost: target.host, owner: { windowId: 'window-1', pid: process.pid }, repository: 'devspace-test/worker-check', otherWindow: false };
+    const params = { devspaceId: id, dockerHost: target.host, owner: { windowId: 'window-1', pid: process.pid }, repository: 'devspaces-test/worker-check', otherWindow: false };
     const value = parseDeleteCheckValue(
       await channels.flow(target, OP_DELETE_CHECK, params, { timeoutMs: 120_000, onAsk: hostSideHandler(host, log, FLOW_REQUESTS[OP_DELETE_CHECK], { devspaceId: id }) }),
     );
     expect(value).toEqual({ decision: 'delete', additionalVolumesToRemove: [] });
     // Nothing was removed by the check.
     expect(cli.lines(['volume', 'ls', '--filter', `name=^${name}$`, '--format', '{{.Name}}'])).toEqual([name]);
-    expect(requests).toContain('confirmDelete devspace-test/worker-check null false');
+    expect(requests).toContain('confirmDelete devspaces-test/worker-check null false');
     // Only the record, the account and the confirmation were asked for (any other call of this computer is refused).
     expect(requests.filter((request) => !/^(get |account |confirmDelete )/.test(request))).toEqual([]);
   }, 240_000);

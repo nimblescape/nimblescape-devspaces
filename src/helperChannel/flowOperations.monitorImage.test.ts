@@ -9,7 +9,7 @@ import type { DockerEngine } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import { monitorImage } from './flowOperations';
 
-const OWN = { tag: 'devspace-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` };
+const OWN = { tag: 'devspaces-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` };
 
 function recordingLogger() {
   const lines: string[] = [];
@@ -31,7 +31,7 @@ describe('monitorImage', () => {
     const { logger, lines } = recordingLogger();
     const engine: DockerEngine = { ...unusedEngine(), tagImage: async () => Promise.reject(new Error('no such image')) };
     expect(await monitorImage(engine, OWN, logger, new AbortController().signal)).toEqual({ reference: OWN.id });
-    expect(lines).toEqual([`warn The image of the Monitor could not be tagged as devspace-monitor:0123456789ab; it runs from ${OWN.id}: no such image`]);
+    expect(lines).toEqual([`warn The image of the Monitor could not be tagged as devspaces-monitor:0123456789ab; it runs from ${OWN.id}: no such image`]);
   });
 
   it('a tag without an answer ends at REMOTE_MONITOR_DOCKER_TIMEOUT_MS; the monitor runs from the ID', async () => {

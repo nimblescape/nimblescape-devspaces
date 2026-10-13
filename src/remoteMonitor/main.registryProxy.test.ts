@@ -19,7 +19,7 @@ const T0 = Date.parse('2026-10-10T10:00:00Z');
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-pc5r1-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-pc5r1-'));
 });
 afterEach(() => {
   vi.useRealTimers();
