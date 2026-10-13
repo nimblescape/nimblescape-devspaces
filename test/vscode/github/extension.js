@@ -6,13 +6,18 @@
 // --disable-extension vscode.github-authentication). Every request gets a session of the test account of the Docker
 // tests (test/docker/harness.ts TEST_ACCOUNT) with a dummy token, for exactly the scopes that it asks for, without a
 // dialog. GitHub rejects the token, so every question to GitHub fails.
+// Each answer has a new session ID. The extension asks for a new sign-in (forceNewSession, a dialog that VS Code
+// refuses in tests) only while the session whose token GitHub rejected is still the current one (src/vscode/auth.ts,
+// isRejected); with a new ID the open of the window does not depend on whether a 401 arrives before it asks.
 const vscode = require('vscode');
 
 const ACCOUNT = { id: '4242', label: 'devspaces-test' };
 const TOKEN = 'dummy-token-of-the-vscode-attach-tests';
+let sessions = 0;
 
 function session(scopes) {
-  return { id: `test-${[...scopes].sort().join(' ')}`, accessToken: TOKEN, account: ACCOUNT, scopes: [...scopes] };
+  sessions += 1;
+  return { id: `test-${sessions}`, accessToken: TOKEN, account: ACCOUNT, scopes: [...scopes] };
 }
 
 exports.activate = (context) => {
