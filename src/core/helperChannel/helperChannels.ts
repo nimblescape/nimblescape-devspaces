@@ -205,9 +205,11 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
       if (result.exitCode === 0) return result.stdout.split(/[\n,]/).map((line) => line.trim());
       detail = result.timedOut ? 'no answer in time' : result.stderr.trim().slice(-500) || `exit code ${result.exitCode}`;
     } catch (error) {
-      detail = (error as Error).message;
+      detail = errorMessage(error);
     }
-    deps.logger.info(`The containers on ${name} could not be listed for the name of the worker (${detail}), so the worker takes the next number.`);
+    deps.logger.info(
+      `The containers on ${name} could not be listed for the name of the worker (${detail}), so the worker takes the lowest number that Docker did not refuse and that no earlier list showed.`,
+    );
     return undefined;
   };
   // The numbers whose names Docker refused in this open (at most WORKER_NAME_ATTEMPTS), and the last list of the
