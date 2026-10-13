@@ -12,7 +12,9 @@
 # tests again as root; the job "test" runs them as a user without root, as some
 # tests need. The job "every test ran" fails when a test is skipped in both
 # runs, so no test stops running unseen. The job "docker" runs the integration
-# tests against the Docker Engine of the runner. The VSIX stays a workflow
+# tests against the Docker Engine of the runner. The job "vscode" runs the
+# tests in a real VS Code (stable) with the Dev Containers extension, under a
+# virtual display (xvfb). The VSIX stays a workflow
 # artifact for inspection. This workflow publishes nothing: the release workflow calls it for
 # the commit of a version and publishes the VSIX of that call.
 
@@ -171,3 +173,26 @@ jobs:
 
       - name: Run the integration tests against Docker
         run: npm run test:docker
+
+  vscode:
+    # The tests in a real VS Code (npm run test:vscode, .vscode-test.mjs). The runner has no display, so xvfb-run gives
+    # VS Code a virtual one; xvfb is preinstalled on ubuntu-latest.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up the pinned Node release
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Install the locked development tools without install scripts
+        run: npm ci --ignore-scripts
+
+      - name: Run the tests in VS Code
+        run: xvfb-run -a npm run test:vscode

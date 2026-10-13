@@ -9,3 +9,5 @@ dist/
 coverage/
 .DS_Store
 test-results/
+.vscode-test/
+out/
