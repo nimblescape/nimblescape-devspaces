@@ -17,7 +17,7 @@ import { heartbeatWiring } from './heartbeatWiring';
 
 const T0 = Date.parse('2026-10-09T10:00:00.000Z');
 const LOCAL: DockerTarget = { kind: 'local', host: '', endpoint: 'unix:///var/run/docker.sock', context: 'default' };
-const IMAGE: HelperImageUse = { tag: 'devspaces-helper:0123456789ab', id: 'sha256:1111' };
+const IMAGE: HelperImageUse = { tag: 'devspaces-worker:0123456789ab', id: 'sha256:1111' };
 
 type Call = { kind: 'present'; options: PresentImageOptions } | { kind: 'maintain'; options: EnsureImageOptions } | { kind: 'check' };
 

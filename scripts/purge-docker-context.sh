@@ -67,8 +67,9 @@ d system df -v
 echo
 echo "It removes: $(count "$containers") container(s) ($(count "$running") running), $(count "$volumes") volume(s), $(count "$images") image(s), the unused networks and the build cache."
 # The volumes of devspaces are named devspaces-<owner>-<repo>-<pair>; the other volumes of Devspaces are named
-# devspaces-vscode, devspaces-helper-cache and devspaces-monitor. Up to version 0.2.1 all of them began with devspace-.
-envs=$(printf '%s\n' "$volumes" | grep -E '^devspaces?-' | grep -v -x -E 'devspaces?-(vscode|helper-cache|monitor)' || true)
+# devspaces-vscode, devspaces-worker-cache and devspaces-monitor. Up to version 0.4.0 the cache volume was
+# devspaces-helper-cache, and up to version 0.2.1 all of them began with devspace-.
+envs=$(printf '%s\n' "$volumes" | grep -E '^devspaces?-' | grep -v -x -E 'devspaces?-(vscode|worker-cache|helper-cache|monitor)' || true)
 if [ -n "$envs" ]; then
   echo
   echo 'Volumes of Devspaces (repositories; changes that are not pushed are lost):'

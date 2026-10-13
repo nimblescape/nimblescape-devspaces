@@ -27,7 +27,7 @@ const IMAGE_ID = `sha256:${'c'.repeat(64)}`;
 function inspect(overrides: Record<string, unknown> = {}) {
   return {
     Image: IMAGE_ID,
-    Config: { Image: 'devspaces-helper:abc' },
+    Config: { Image: 'devspaces-worker:abc' },
     Mounts: [
       { Type: 'volume', Name: 'devspaces-monitor', Destination: '/state' },
       { Type: 'bind', Source: '/run/user/1000/docker.sock', Destination: HELPER_DOCKER_SOCKET },
@@ -102,9 +102,9 @@ function fakeHost(answers: Record<string, unknown> = {}) {
 
 describe("the worker's own helper image", () => {
   it('reads the image ID, its reference, and the source of the socket mount of the worker', async () => {
-    expect(ownHelperOf(inspect())).toEqual({ image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/run/user/1000/docker.sock' });
+    expect(ownHelperOf(inspect())).toEqual({ image: { tag: 'devspaces-worker:abc', id: IMAGE_ID }, socket: '/run/user/1000/docker.sock' });
     for (const odd of [
-      inspect({ Image: 'devspaces-helper:abc' }),
+      inspect({ Image: 'devspaces-worker:abc' }),
       inspect({ Config: {} }),
       inspect({ Mounts: [{ Type: 'volume', Source: 'x', Destination: HELPER_DOCKER_SOCKET }] }),
       inspect({ Mounts: [{ Type: 'bind', Source: '', Destination: HELPER_DOCKER_SOCKET }] }),
@@ -213,7 +213,7 @@ describe('the core services in the worker', () => {
       secretOf: () => undefined,
       forgetSecret: () => undefined,
       logger: silentLogger,
-      ownHelper: { image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/s.sock' },
+      ownHelper: { image: { tag: 'devspaces-worker:abc', id: IMAGE_ID }, socket: '/s.sock' },
       dockerHost: 'build-box',
       owner: { windowId: 'w', pid: 1 },
       devspaceLock: async () => {
@@ -221,7 +221,7 @@ describe('the core services in the worker', () => {
       },
     });
     // The pipeline reads the own image with one call (ownImageUse).
-    expect(await helper.ownImageUse()).toEqual({ tag: 'devspaces-helper:abc', id: IMAGE_ID });
+    expect(await helper.ownImageUse()).toEqual({ tag: 'devspaces-worker:abc', id: IMAGE_ID });
     // The worker's helper has no other image call (the helper image code of the extension is not in the worker's
     // bundle).
     expect((helper as unknown as Record<string, unknown>).presentImage).toBeUndefined();
@@ -241,7 +241,7 @@ describe('the deps of the pipeline in the worker', () => {
       secretOf: (name) => (name === SECRET_TOKEN ? 'ghp_x' : undefined),
       forgetSecret: () => undefined,
       logger: silentLogger,
-      ownHelper: { image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/s.sock' },
+      ownHelper: { image: { tag: 'devspaces-worker:abc', id: IMAGE_ID }, socket: '/s.sock' },
       dockerHost: 'build-box',
       owner: { windowId: 'w', pid: 1 },
       devspaceLock: async () => {
@@ -348,7 +348,7 @@ describe('the deps of the pipeline in the worker', () => {
     await withExec.docker.exec('c', ['cat'], { secretInputName: SECRET_TOKEN });
     expect(execs).toEqual([{ secretInputName: SECRET_TOKEN }]);
     // The image call of the pipeline: ownImageUse, the one read of the own image.
-    await expect(all.helper.ownImageUse()).resolves.toEqual({ tag: 'devspaces-helper:abc', id: IMAGE_ID });
+    await expect(all.helper.ownImageUse()).resolves.toEqual({ tag: 'devspaces-worker:abc', id: IMAGE_ID });
   });
 });
 
@@ -476,7 +476,7 @@ describe("the worker's Monitor for Delete", () => {
           secretOf: () => undefined,
           forgetSecret: () => undefined,
           logger: silentLogger,
-          ownHelper: { image: { tag: 'devspaces-helper:abc', id: `sha256:${'e'.repeat(64)}` }, socket: '/s.sock' },
+          ownHelper: { image: { tag: 'devspaces-worker:abc', id: `sha256:${'e'.repeat(64)}` }, socket: '/s.sock' },
           dockerHost: '',
           owner: { windowId: 'w', pid: 1 },
           devspaceLock: async () => Promise.reject(new Error('no lock in this test')),
@@ -613,7 +613,7 @@ describe("the worker's Monitor for Delete", () => {
           slot = undefined;
         },
         logger: silentLogger,
-        ownHelper: { image: { tag: 'devspaces-helper:abc', id: `sha256:${'e'.repeat(64)}` }, socket: '/s.sock' },
+        ownHelper: { image: { tag: 'devspaces-worker:abc', id: `sha256:${'e'.repeat(64)}` }, socket: '/s.sock' },
         dockerHost: '',
         owner: { windowId: 'w', pid: 1 },
         devspaceLock: async () => Promise.reject(new Error('no lock in this test')),
@@ -680,7 +680,7 @@ describe("the worker's Monitor for Delete", () => {
         secretOf: () => undefined,
         forgetSecret: () => undefined,
         logger: silentLogger,
-        ownHelper: { image: { tag: 'devspaces-helper:abc', id: `sha256:${'e'.repeat(64)}` }, socket: '/s.sock' },
+        ownHelper: { image: { tag: 'devspaces-worker:abc', id: `sha256:${'e'.repeat(64)}` }, socket: '/s.sock' },
         dockerHost: '',
         owner: { windowId: 'w', pid: 1 },
         devspaceLock: async () => Promise.reject(new Error('no lock in this test')),

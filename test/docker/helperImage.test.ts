@@ -36,9 +36,9 @@ function ago(ms: number): string {
   return new Date(Date.now() - ms).toISOString();
 }
 
-/** A helper tag of another extension version: `devspaces-helper:<12 hex characters>`, random, so no image has it yet. */
+/** A helper tag of another extension version: `devspaces-worker:<12 hex characters>`, random, so no image has it yet. */
 function otherHelperTag(): string {
-  return `devspaces-helper:${crypto.randomBytes(6).toString('hex')}`;
+  return `devspaces-worker:${crypto.randomBytes(6).toString('hex')}`;
 }
 
 /**

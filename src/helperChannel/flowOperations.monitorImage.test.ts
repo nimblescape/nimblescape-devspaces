@@ -9,7 +9,7 @@ import type { DockerEngine } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import { monitorImage } from './flowOperations';
 
-const OWN = { tag: 'devspaces-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` };
+const OWN = { tag: 'devspaces-worker:0123456789ab', id: `sha256:${'a'.repeat(64)}` };
 
 function recordingLogger() {
   const lines: string[] = [];

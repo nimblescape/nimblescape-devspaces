@@ -21,7 +21,7 @@ const T0 = Date.parse('2026-10-02T10:00:00.000Z');
 const LOCAL: DockerTarget = { kind: 'local', host: '', endpoint: 'unix:///var/run/docker.sock', context: 'default' };
 const REMOTE: DockerTarget = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'devspaces-remote-11111111' };
 const OTHER: DockerTarget = { kind: 'remote', host: 'other-box', endpoint: 'ssh://other-box', context: 'devspaces-remote-22222222' };
-const IMAGE: HelperImageUse = { tag: 'devspaces-helper:0123456789ab', id: 'sha256:1111' };
+const IMAGE: HelperImageUse = { tag: 'devspaces-worker:0123456789ab', id: 'sha256:1111' };
 
 /**
  * The maintaining ensure, which only the preparation for an operation `open` calls; the preparations of the heartbeats

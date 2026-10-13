@@ -189,10 +189,6 @@ describe('EXTENSION_LABEL_KEYS', () => {
       'config-path',
       'container-config',
       'container-version',
-      'helper',
-      // The label of the container of a helper channel.
-      'helper-channel',
-      'helper-run',
       'host-access',
       // The ID label of a devspace.
       'id',
@@ -209,6 +205,12 @@ describe('EXTENSION_LABEL_KEYS', () => {
       'repository',
       'service-data',
       'volume',
+      // The label of the helper image.
+      'worker',
+      // The label of the container of a helper channel.
+      'worker-channel',
+      // The label of every container of the helper image but the Monitor.
+      'worker-run',
     ]);
   });
 
@@ -292,7 +294,7 @@ describe('isDevspaceResourceName', () => {
     'devspaces-tools-node_modules',
     'devspaces-tools',
     'devspaces-cache',
-    'devspaces-helper-cache',
+    'devspaces-worker-cache',
     'devspaces-acme-api',
     'devspaces-acme-api-3f2a9c1e',
     'devspaces-acme-api-tidy',

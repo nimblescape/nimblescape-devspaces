@@ -1159,7 +1159,7 @@ describe('existing Docker Compose devspace', () => {
     await h.service.openDevspace(ENV_ID, options());
     // The HelperImageUse names the image ID `id`: the current tag with its image ID (there is no previous helper
     // image).
-    const previous = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
+    const previous = { tag: 'devspaces-worker:test', id: h.helper.currentHelperImageId };
     expect(h.helper.helperImages.map((entry) => entry.call)).toEqual(expect.arrayContaining(['readConfiguration', 'composeModel', 'up']));
     expect(h.helper.helperImages.filter((entry) => JSON.stringify(entry.image) !== JSON.stringify(previous))).toEqual([]);
   });
@@ -2724,7 +2724,7 @@ describe('a bind mount of a repository folder that does not exist yet', () => {
     await h.service.open(TARGET, options());
     expect(h.helper.createdFolders).toEqual([[SOURCE]]);
     // There is no previous helper image: the current tag with its image ID.
-    const previous = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
+    const previous = { tag: 'devspaces-worker:test', id: h.helper.currentHelperImageId };
     expect(h.helper.helperImages.filter((entry) => entry.call === 'createRepositoryFolders')).toEqual([{ call: 'createRepositoryFolders', image: previous }]);
   });
 
@@ -4886,7 +4886,7 @@ describe('recreate offer: Docker Compose', () => {
       h.helper.currentHelperImageId = `sha256:${'5'.repeat(64)}`;
       h.helper.helperImages.length = 0;
       await h.service.openDevspace(ENV_ID, options());
-      const previous = { tag: 'devspaces-helper:test', id: `sha256:${'5'.repeat(64)}` };
+      const previous = { tag: 'devspaces-worker:test', id: `sha256:${'5'.repeat(64)}` };
       const hashes = h.helper.helperImages.filter((entry) => entry.call === 'composeServiceHashes');
       expect(hashes.length).toBeGreaterThan(0);
       expect(hashes.filter((entry) => JSON.stringify(entry.image) !== JSON.stringify(previous))).toEqual([]);

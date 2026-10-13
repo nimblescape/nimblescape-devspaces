@@ -151,7 +151,7 @@ const TABLE: Array<[string, HostAccessInput, string, HostAccessClass]> = [
   ['a volume of a devspace of another account (registry)', input(mount('source=data,target=/d'), { foreignVolumes: ['data'] }), 'volume data of another devspace', 'protected'],
   ['a volume with the labels of another devspace', input(mount('source=data,target=/d'), { volumeLabels: { data: { 'nimblescape.devspaces.id': 'other', 'nimblescape.devspaces.owner-id': '2002' } } }), 'volume data of another devspace', 'protected'],
   ['-v with the volume of another devspace', input(run('-v', `${OTHER}:/w`)), `volume ${OTHER} of another devspace`, 'protected'],
-  ['the cache volume of the workspace helper', input(mount('source=devspaces-helper-cache,target=/c,type=volume')), 'volume devspaces-helper-cache of the workspace helper', 'protected'],
+  ['the cache volume of the workspace helper', input(mount('source=devspaces-worker-cache,target=/c,type=volume')), 'volume devspaces-worker-cache of the workspace helper', 'protected'],
   // The heartbeat records of the Monitor on a remote Docker host.
   ['the volume of the remote Monitor', input(mount('source=devspaces-monitor,target=/s,type=volume')), 'volume devspaces-monitor of the Monitor', 'protected'],
   ['-v with the volume of the remote Monitor', input(run('-v', 'devspaces-monitor:/s')), 'volume devspaces-monitor of the Monitor', 'protected'],
@@ -244,21 +244,21 @@ describe('the switch of the host access checks: the class of every refused item'
   it('lifts everything of a configuration that only needs the computer, and nothing of the rest', () => {
     const config = {
       privileged: true,
-      mounts: ['source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind', 'source=devspaces-helper-cache,target=/c,type=volume'],
+      mounts: ['source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind', 'source=devspaces-worker-cache,target=/c,type=volume'],
       runArgs: ['--gpus', 'all', '-p', '0.0.0.0:80:80', '--restart=always'],
       containerEnv: { GH_TOKEN: 'x' },
     };
     expect(hostAccessReport(input(config), false)).toEqual({
-      hostAccess: ['volume devspaces-helper-cache of the workspace helper', `variable GH_TOKEN in containerEnv (${GITHUB_CLI_ACCOUNT_REASON})`],
+      hostAccess: ['volume devspaces-worker-cache of the workspace helper', `variable GH_TOKEN in containerEnv (${GITHUB_CLI_ACCOUNT_REASON})`],
       unsupported: ['--restart=always'],
     });
     expect(hostAccessReport(input({ privileged: true, runArgs: ['--pid=host', '-P'], appPort: '0.0.0.0:1:1' }), false)).toEqual({ hostAccess: [], unsupported: [] });
   });
 
   it('still checks the name of a volume whose driver options the switch lifts', () => {
-    const checked = input(mount('type=volume,source=devspaces-helper-cache,target=/x,volume-driver=local'));
-    expect(hostAccessProblems(checked)).toEqual(['volume options of the mount devspaces-helper-cache', 'volume devspaces-helper-cache of the workspace helper']);
-    expect(hostAccessProblems(checked, false)).toEqual(['volume devspaces-helper-cache of the workspace helper']);
+    const checked = input(mount('type=volume,source=devspaces-worker-cache,target=/x,volume-driver=local'));
+    expect(hostAccessProblems(checked)).toEqual(['volume options of the mount devspaces-worker-cache', 'volume devspaces-worker-cache of the workspace helper']);
+    expect(hostAccessProblems(checked, false)).toEqual(['volume devspaces-worker-cache of the workspace helper']);
   });
 
   it('keeps an item that two rules find refused when one of them is not lifted', () => {

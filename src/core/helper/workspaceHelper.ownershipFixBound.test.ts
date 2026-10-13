@@ -13,7 +13,7 @@ import { runWithBatchScope } from './batchScope';
 import { batchStepCommand } from './batchSteps';
 import { WorkspaceHelper } from './workspaceHelper';
 
-const OWN = { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` };
+const OWN = { tag: 'devspaces-worker:own', id: `sha256:${'b'.repeat(64)}` };
 const REPO = 'octo/hello';
 const FOLDER = '/workspaces/hello';
 

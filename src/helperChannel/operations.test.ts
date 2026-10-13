@@ -132,9 +132,9 @@ describe('the sweep operation', () => {
     // Every stopped helper container (the label of the helper runs, which the channels carry too), never the Session
     // Monitor.
     expect(requests).toEqual([{ filters: { label: [LABEL_HELPER_RUN], 'label!': [LABEL_MONITOR], until: ['10m'] }, signal: ctx.signal }]);
-    expect(LABEL_HELPER_RUN).toBe('nimblescape.devspaces.helper-run');
+    expect(LABEL_HELPER_RUN).toBe('nimblescape.devspaces.worker-run');
     expect(LABEL_MONITOR).toBe('nimblescape.devspaces.monitor');
-    expect(LABEL_HELPER_CHANNEL).toBe('nimblescape.devspaces.helper-channel');
+    expect(LABEL_HELPER_CHANNEL).toBe('nimblescape.devspaces.worker-channel');
     // The log line names the helper containers.
     expect(logs).toContain('info The sweep removed 2 stopped helper container(s) older than 10 minutes.');
     const none = sweepEngine(async () => []);

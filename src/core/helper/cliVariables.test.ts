@@ -90,7 +90,7 @@ function cliUp(value: unknown, context: { localWorkspaceFolder?: string; contain
 
 const CASES: Array<[string, unknown]> = [
   ['a default for an unset variable (M1)', 'source=${localEnv:NOPE:devspaces-other-abcdef12},target=/x,type=volume'],
-  ['env as an alias of localEnv (M1)', 'source=${env:NOPE:devspaces-helper-cache},target=/c,type=volume'],
+  ['env as an alias of localEnv (M1)', 'source=${env:NOPE:devspaces-worker-cache},target=/c,type=volume'],
   ['the object form (M1)', { source: '${localEnv:NOPE:devspaces-other-abcdef12}', target: '/x', type: 'volume' }],
   ['a foreign name built from the basename (M1)', 'source=devspaces-${localWorkspaceFolderBasename}-abcdef12,target=/x,type=volume'],
   ['node_modules of the repository', 'source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume'],
@@ -152,7 +152,7 @@ describe(`cliVariables: as Dev Container CLI ${CLI_VERSION} substitutes`, () => 
   it('the concrete results of the M1 vectors and of the common patterns', () => {
     const variables = helperCliVariables('acme/api');
     expect(substituteCliVariables('source=${localEnv:NOPE:devspaces-other-abcdef12},target=/x', variables)).toBe('source=devspaces-other-abcdef12,target=/x');
-    expect(substituteCliVariables('${env:NOPE:devspaces-helper-cache}', variables)).toBe('devspaces-helper-cache');
+    expect(substituteCliVariables('${env:NOPE:devspaces-worker-cache}', variables)).toBe('devspaces-worker-cache');
     expect(substituteCliVariables('devspaces-${localWorkspaceFolderBasename}-abcdef12', variables)).toBe('devspaces-api-abcdef12');
     expect(substituteCliVariables('source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules', variables)).toBe(
       'source=api-node_modules,target=/workspaces/api/node_modules',

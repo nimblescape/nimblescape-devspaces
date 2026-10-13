@@ -403,7 +403,7 @@ export class BootstrapDocker {
 
   /**
    * Local images with a label (`docker image ls --filter label=<label> --no-trunc`, then the same with `--filter
-   * dangling=true`), for example `nimblescape.devspaces.helper=true`. Dangling images are included, with no tags. One
+   * dangling=true`), for example `nimblescape.devspaces.worker=true`. Dangling images are included, with no tags. One
    * entry per image ID, with all its tags. Throws CommandError.
    */
   async listImagesByLabel(label: string): Promise<ImageInfo[]> {

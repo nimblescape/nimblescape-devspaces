@@ -699,7 +699,7 @@ export class FakeHelper implements DevspaceHelper {
    * not.
    */
   tagPresent = false;
-  /** The ID of the image of the current tag `devspaces-helper:test`, which the open pins. */
+  /** The ID of the image of the current tag `devspaces-worker:test`, which the open pins. */
   currentHelperImageId = `sha256:${'4'.repeat(64)}`;
   cloneError: Maybe<Error>;
   readConfigurationError: Maybe<Error>;
@@ -835,7 +835,7 @@ export class FakeHelper implements DevspaceHelper {
   async ownImageUse(_signal?: AbortSignal): Promise<HelperImageUse> {
     this.calls.push('ensureImage');
     if (this.ensureImageError) throw this.ensureImageError;
-    return { tag: 'devspaces-helper:test', id: this.currentHelperImageId };
+    return { tag: 'devspaces-worker:test', id: this.currentHelperImageId };
   }
 
   /**
@@ -847,7 +847,7 @@ export class FakeHelper implements DevspaceHelper {
   async ensureImagePresent(_options: { onOutput?: (text: string) => void; signal?: AbortSignal } = {}): Promise<HelperImageUse> {
     this.calls.push('ensureImagePresent');
     if (this.ensureImageError && !this.tagPresent) throw this.ensureImageError;
-    return { tag: 'devspaces-helper:test', id: this.currentHelperImageId };
+    return { tag: 'devspaces-worker:test', id: this.currentHelperImageId };
   }
 
   async clone(p: { volumeName: string; repository: string; branch?: string; token: string; image?: HelperImageUse; signal?: AbortSignal }): Promise<void> {

@@ -61,7 +61,7 @@ describe('the deps of a headless prepare (headlessServiceDeps)', () => {
   const deps = headlessServiceDeps({
     engine: unusedEngine(),
     logger: silentLogger,
-    ownHelper: { image: { tag: 'devspaces-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/var/run/docker.sock' },
+    ownHelper: { image: { tag: 'devspaces-worker:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/var/run/docker.sock' },
     analyzer: { analyze: async () => Promise.reject(new Error('no analysis')) },
   });
 

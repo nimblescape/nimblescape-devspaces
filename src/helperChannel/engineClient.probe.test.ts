@@ -118,7 +118,7 @@ describe('the identity and the prune of the port over the Engine API', () => {
       // The filters of the sweep, exactly (no other filter): the label of every helper container, the guard of the
       // Monitor (`label!`), and the age, each key as given, in the JSON map that the Engine API takes.
       expect(decodeURIComponent(calls[0].url)).toBe(
-        '/containers/prune?filters={"label":["nimblescape.devspaces.helper-run"],"label!":["nimblescape.devspaces.monitor"],"until":["10m"]}',
+        '/containers/prune?filters={"label":["nimblescape.devspaces.worker-run"],"label!":["nimblescape.devspaces.monitor"],"until":["10m"]}',
       );
       const none = await serve(() => ({ status: 200, json: { ContainersDeleted: null, SpaceReclaimed: 0 } }));
       expect(await none.engine.pruneContainers({ label: ['x=y'] })).toEqual([]);

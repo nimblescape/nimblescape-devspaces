@@ -114,7 +114,7 @@ describe('HelperChannel', () => {
     const early = fakeProcess();
     const { logger } = recordingLogger();
     const opening = HelperChannel.open(early.process, 'SCRIPT', { logger, name: 'build-box' });
-    early.stderr('Unable to find image devspaces-helper:abc locally\n');
+    early.stderr('Unable to find image devspaces-worker:abc locally\n');
     early.exit(125);
     await expect(opening).rejects.toThrow(/could not be opened: the helper ended \(Unable to find image/);
 

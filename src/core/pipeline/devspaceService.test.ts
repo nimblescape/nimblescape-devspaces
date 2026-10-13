@@ -397,7 +397,7 @@ describe('open: first open', () => {
     // A new clone: no service has run on the files yet, so no path of a service is left out.
     expect(fix.serviceFolders).toBeUndefined();
     expect(h.helper.helperImages.filter((entry) => entry.call === 'fixRepositoryOwnership')).toEqual([
-      { call: 'fixRepositoryOwnership', image: { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId } },
+      { call: 'fixRepositoryOwnership', image: { tag: 'devspaces-worker:test', id: h.helper.currentHelperImageId } },
     ]);
     // No container of the devspace image runs for it.
     expect(h.docker.log.filter((line) => line.startsWith('run '))).toEqual([]);
@@ -602,7 +602,7 @@ describe('open: first open', () => {
     await h.service.open(TARGET, options());
     expect(h.ui.infos).toEqual([Messages.configurationNotFound(DEFAULT_CONFIG_PATH, 'python')]);
     // There is no previous helper image: the helper image of the open is the current tag with its image ID.
-    const previous = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
+    const previous = { tag: 'devspaces-worker:test', id: h.helper.currentHelperImageId };
     const used = h.helper.helperImages.filter((entry) => entry.call === 'listConfigurations' || entry.call === 'readConfigFiles');
     expect(used.filter((entry) => entry.call === 'listConfigurations')).toHaveLength(1);
     // The read of the missing configuration and the read of the fallback.
@@ -1478,7 +1478,7 @@ describe('open: existing devspace', () => {
     const firstId = `sha256:${'5'.repeat(64)}`;
     h.helper.currentHelperImageId = firstId;
     await h.service.open(TARGET, options());
-    const previous = { tag: 'devspaces-helper:test', id: firstId };
+    const previous = { tag: 'devspaces-worker:test', id: firstId };
     const calls = h.helper.helperImages.map((entry) => entry.call);
     expect(calls).toEqual(expect.arrayContaining(['clone', 'readConfigFiles', 'readConfiguration', 'build', 'up', 'runUserCommands', 'prepareGit']));
     expect(h.helper.helperImages.filter((entry) => JSON.stringify(entry.image) !== JSON.stringify(previous))).toEqual([]);
@@ -1489,7 +1489,7 @@ describe('open: existing devspace', () => {
     await h.service.open(TARGET, options());
     expect(h.helper.helperImages.length).toBeGreaterThan(0);
     // The current tag is pinned by the ID of its image, too.
-    const current = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
+    const current = { tag: 'devspaces-worker:test', id: h.helper.currentHelperImageId };
     expect(h.helper.helperImages.filter((entry) => JSON.stringify(entry.image) !== JSON.stringify(current))).toEqual([]);
   });
 
@@ -4251,7 +4251,7 @@ describe('reconcileFromVolumes', () => {
     const name = resourceName(REPO, OTHER_ID);
     h.docker.volumes.set(name, { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id });
     h.docker.volumes.set('api-node_modules', additionalVolumeLabels(OTHER_ID, ACCOUNT));
-    const foreign = ['vscode', 'vsc-remote-containers', `api-${'0f'.repeat(16)}`, 'devspaces-helper-cache', 'devspaces-monitor', resourceName('acme/web', '12345678-0000-4000-8000-000000000012')];
+    const foreign = ['vscode', 'vsc-remote-containers', `api-${'0f'.repeat(16)}`, 'devspaces-worker-cache', 'devspaces-monitor', resourceName('acme/web', '12345678-0000-4000-8000-000000000012')];
     const container = h.docker.addContainer({ devspaceId: OTHER_ID, name, state: 'stopped', image: devspaceImageName(REPO, OTHER_ID, 1) });
     h.docker.containers.set(container.id, { ...container, volumes: [name, ...foreign, 'api-node_modules'] });
     expect(await h.service.reconcileFromVolumes()).toBe(1);
@@ -4915,7 +4915,7 @@ describe('single containers: build contexts, images, Dockerfiles and labels', ()
     await h.service.open(TARGET, options());
     expect(h.helper.dockerfileReads).toEqual(['Dockerfile']);
     // There is no previous helper image: the helper image of the open is the current tag with its image ID.
-    const previous = { tag: 'devspaces-helper:test', id: h.helper.currentHelperImageId };
+    const previous = { tag: 'devspaces-worker:test', id: h.helper.currentHelperImageId };
     const reads = h.helper.helperImages.filter((entry) => entry.call === 'readConfigFiles');
     // The read of the configuration and the read of the Dockerfile.
     expect(reads.length).toBeGreaterThanOrEqual(2);

@@ -306,10 +306,10 @@ describe('images', () => {
       return ok();
     });
     await docker.buildImage({
-      tag: 'devspaces-helper:abc',
+      tag: 'devspaces-worker:abc',
       dockerfile: '/ext/resources/helper/Dockerfile',
       context: '/ext/resources/helper',
-      labels: { 'nimblescape.devspaces.helper': 'true' },
+      labels: { 'nimblescape.devspaces.worker': 'true' },
       buildArgs: { DEVCONTAINER_CLI_VERSION: '0.89.0' },
       onOutput: (text) => output.push(text),
     });
@@ -317,11 +317,11 @@ describe('images', () => {
     expect(withoutBuildLabel(runner.calls[0].args)).toEqual([
       'build',
       '-t',
-      'devspaces-helper:abc',
+      'devspaces-worker:abc',
       '-f',
       '/ext/resources/helper/Dockerfile',
       '--label',
-      'nimblescape.devspaces.helper=true',
+      'nimblescape.devspaces.worker=true',
       '--build-arg',
       'DEVCONTAINER_CLI_VERSION=0.89.0',
       '/ext/resources/helper',
@@ -364,25 +364,25 @@ describe('images', () => {
     const id2 = `sha256:${'2'.repeat(64)}`;
     const id3 = `sha256:${'3'.repeat(64)}`;
     const lines = [
-      { ID: id1, Repository: 'devspaces-helper', Tag: '76fa66d93464', CreatedAt: '2026-09-25 02:31:55 +0200 CEST', Digest: '<none>' },
+      { ID: id1, Repository: 'devspaces-worker', Tag: '76fa66d93464', CreatedAt: '2026-09-25 02:31:55 +0200 CEST', Digest: '<none>' },
       { ID: id1, Repository: 'mine', Tag: 'backup', CreatedAt: '2026-09-25 02:31:55 +0200 CEST' },
-      { ID: id1, Repository: 'devspaces-helper', Tag: '76fa66d93464', CreatedAt: '2026-09-25 02:31:55 +0200 CEST' },
+      { ID: id1, Repository: 'devspaces-worker', Tag: '76fa66d93464', CreatedAt: '2026-09-25 02:31:55 +0200 CEST' },
       { ID: id2, Repository: '<none>', Tag: '<none>', CreatedAt: '2026-09-24 22:37:12 +0200 CEST' },
-      { ID: id3, Repository: 'devspaces-helper', Tag: '<none>' },
+      { ID: id3, Repository: 'devspaces-worker', Tag: '<none>' },
       { ID: '', Repository: 'x', Tag: '1' },
       { Repository: 'x', Tag: '1' },
     ];
     const all = `${lines.map((line) => JSON.stringify(line)).join('\n')}\nWARNING: not JSON\n`;
     // The classic image store lists a dangling image in both listings.
     const { docker, runner } = adapter((call) => ok(call.args.includes('dangling=true') ? `${JSON.stringify(lines[3])}\n` : all));
-    expect(await docker.listImagesByLabel('nimblescape.devspaces.helper=true')).toEqual([
-      { id: id1, tags: ['devspaces-helper:76fa66d93464', 'mine:backup'], createdAt: '2026-09-25 02:31:55 +0200 CEST' },
+    expect(await docker.listImagesByLabel('nimblescape.devspaces.worker=true')).toEqual([
+      { id: id1, tags: ['devspaces-worker:76fa66d93464', 'mine:backup'], createdAt: '2026-09-25 02:31:55 +0200 CEST' },
       { id: id2, tags: [], createdAt: '2026-09-24 22:37:12 +0200 CEST' },
       { id: id3, tags: [], createdAt: '' },
     ]);
     expect(runner.calls.map((call) => call.args)).toEqual([
-      ['image', 'ls', '--filter', 'label=nimblescape.devspaces.helper=true', '--no-trunc', '--format', '{{json .}}'],
-      ['image', 'ls', '--filter', 'label=nimblescape.devspaces.helper=true', '--filter', 'dangling=true', '--no-trunc', '--format', '{{json .}}'],
+      ['image', 'ls', '--filter', 'label=nimblescape.devspaces.worker=true', '--no-trunc', '--format', '{{json .}}'],
+      ['image', 'ls', '--filter', 'label=nimblescape.devspaces.worker=true', '--filter', 'dangling=true', '--no-trunc', '--format', '{{json .}}'],
     ]);
   });
 
@@ -394,18 +394,18 @@ describe('images', () => {
       ok(
         call.args.includes('dangling=true')
           ? `${JSON.stringify({ ID: dangling, Repository: '<none>', Tag: '<none>', CreatedAt: 'b' })}\n`
-          : `${JSON.stringify({ ID: tagged, Repository: 'devspaces-helper', Tag: '0123456789ab', CreatedAt: 'a' })}\n`,
+          : `${JSON.stringify({ ID: tagged, Repository: 'devspaces-worker', Tag: '0123456789ab', CreatedAt: 'a' })}\n`,
       ),
     );
-    expect(await docker.listImagesByLabel('nimblescape.devspaces.helper=true')).toEqual([
-      { id: tagged, tags: ['devspaces-helper:0123456789ab'], createdAt: 'a' },
+    expect(await docker.listImagesByLabel('nimblescape.devspaces.worker=true')).toEqual([
+      { id: tagged, tags: ['devspaces-worker:0123456789ab'], createdAt: 'a' },
       { id: dangling, tags: [], createdAt: 'b' },
     ]);
   });
 
   it('listImagesByLabel throws CommandError', async () => {
     const { docker } = adapter(() => fail('Cannot connect to the Docker daemon'));
-    await expect(docker.listImagesByLabel('nimblescape.devspaces.helper=true')).rejects.toBeInstanceOf(CommandError);
+    await expect(docker.listImagesByLabel('nimblescape.devspaces.worker=true')).rejects.toBeInstanceOf(CommandError);
   });
 
   it('buildImage returns the ID of the image that its build label lists, never one read by the tag', async () => {
@@ -622,7 +622,7 @@ describe('BootstrapDocker: an SSH server that closes the connection before the l
     const warnings: string[] = [];
     let calls = 0;
     const { docker, runner } = droppingAdapter(() => (++calls === 1 ? dropped() : ok('"sha256:abc"\n')), warnings);
-    await expect(docker.run(['image', 'inspect', '--format', '{{json .Id}}', 'devspaces-helper:1'])).resolves.toMatchObject({ exitCode: 0 });
+    await expect(docker.run(['image', 'inspect', '--format', '{{json .Id}}', 'devspaces-worker:1'])).resolves.toMatchObject({ exitCode: 0 });
     expect(runner.calls).toHaveLength(2);
     expect(runner.calls[1].args).toEqual(runner.calls[0].args);
     expect(warnings).toEqual([expect.stringContaining('docker image inspect: the SSH server of the Docker host closed the connection before the login')]);
@@ -675,8 +675,8 @@ describe('BootstrapDocker: an SSH server that closes the connection before the l
   });
 
   it('does not repeat a read that failed on the engine, or ran out of time', async () => {
-    const engine = droppingAdapter(() => fail('Error: No such image: devspaces-helper:1'));
-    expect((await engine.docker.run(['image', 'inspect', 'devspaces-helper:1'])).exitCode).toBe(1);
+    const engine = droppingAdapter(() => fail('Error: No such image: devspaces-worker:1'));
+    expect((await engine.docker.run(['image', 'inspect', 'devspaces-worker:1'])).exitCode).toBe(1);
     expect(engine.runner.calls).toHaveLength(1);
     const late = droppingAdapter(() => ({ ...dropped(), exitCode: null, timedOut: true }));
     expect((await late.docker.run(['info'])).timedOut).toBe(true);

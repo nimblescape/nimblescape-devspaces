@@ -385,7 +385,7 @@ describe('composeAccessReport: the top level', () => {
     ['the key of the workspace volume', (m) => (m.volumes = { ...m.volumes, 'devspaces-workspace': { name: `${PROJECT}_devspace-workspace` } }), U('volume key devspaces-workspace (Devspaces uses it)')],
     ['a volume of the project of another devspace', (m) => (m.volumes = { ...m.volumes, data: { name: `${OTHER}_pgdata`, external: true } }), A(`volume ${OTHER}_pgdata of another devspace`)],
     ['the workspace volume of another devspace', (m) => (m.volumes = { ...m.volumes, data: { name: OTHER, external: true } }), A(`volume ${OTHER} of another devspace`)],
-    ['the cache volume of the helper', (m) => (m.volumes = { ...m.volumes, data: { name: 'devspaces-helper-cache', external: true } }), A('volume devspaces-helper-cache of the workspace helper')],
+    ['the cache volume of the helper', (m) => (m.volumes = { ...m.volumes, data: { name: 'devspaces-worker-cache', external: true } }), A('volume devspaces-worker-cache of the workspace helper')],
     ['a volume of the Dev Containers extension', (m) => (m.volumes = { ...m.volumes, data: { name: 'vscode', external: true } }), A('volume vscode of the Dev Containers extension')],
     // networks
     ['a bridge network', (m) => (m.networks = { front: { driver: 'bridge', internal: true, attachable: true, enable_ipv6: false, ipam: { config: [] }, labels: { a: 'b' } } }), NONE],

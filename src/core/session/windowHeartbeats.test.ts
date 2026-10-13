@@ -1481,7 +1481,7 @@ describe('WindowHeartbeats rules found by mutation: deadlines, engines and the p
   // The wait exists only to avoid repeated builds of the helper image; it never holds back a heartbeat that needs no
   // build.
   describe('only a failed build backs off, and never a heartbeat whose image is present', () => {
-    const IMAGE = { tag: 'devspaces-helper:0123456789ab', id: 'sha256:1111' };
+    const IMAGE = { tag: 'devspaces-worker:0123456789ab', id: 'sha256:1111' };
     type Image = typeof IMAGE;
 
     /** A heartbeat's send that prepares the worker like extension.ts does (ensureImagePresent, presentImage in the wait). */

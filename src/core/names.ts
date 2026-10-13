@@ -13,7 +13,7 @@ import { LABEL_MONITOR_CREATE, LABEL_MONITOR_OWNER, LABEL_MONITOR } from './remo
  * command line of `docker run`).
  */
 /** Label of the container of a channel (its value: channelLabelValue). */
-export const LABEL_HELPER_CHANNEL = 'nimblescape.devspaces.helper-channel';
+export const LABEL_HELPER_CHANNEL = 'nimblescape.devspaces.worker-channel';
 /**
  * The label of the containers that an operation starts and removes by it, never by a name: the session label of a batch
  * helper (`nimblescape.devspaces.channel-step=<session>`, channelStepLabel), which the worker removes by that label
@@ -136,8 +136,8 @@ export const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
  * container.
  */
 export const COMPOSE_CLEARED_LABELS: readonly string[] = ['com.docker.compose.project=', 'com.docker.compose.service='];
-export const LABEL_HELPER = 'nimblescape.devspaces.helper';
-export const LABEL_HELPER_RUN = 'nimblescape.devspaces.helper-run';
+export const LABEL_HELPER = 'nimblescape.devspaces.worker';
+export const LABEL_HELPER_RUN = 'nimblescape.devspaces.worker-run';
 /**
  * A label with a random nonce per build of BootstrapDocker.buildImage, by which it finds the ID of the image that the
  * build made (`docker image ls --filter label=…`).
@@ -189,7 +189,7 @@ export const EXTENSION_LABEL_KEYS: ReadonlySet<string> = new Set([
   LABEL_HELPER_CHANNEL,
   LABEL_CHANNEL_STEP,
 ]);
-export const HELPER_CACHE_VOLUME = 'devspaces-helper-cache';
+export const HELPER_CACHE_VOLUME = 'devspaces-worker-cache';
 /**
  * Mount point of the cache volume HELPER_CACHE_VOLUME in the workspace helper (`--user-data-folder` of the CLI).
  * Assumption: the CLI keeps data there that is useful across helper runs. CLI 0.89.0 downloads Features into a new

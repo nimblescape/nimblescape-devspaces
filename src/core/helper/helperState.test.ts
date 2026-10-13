@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { helperImageTag } from './helperImage';
 import { emptyHelperState, isHelperImageTag, isMonitorImageTag, monitorImageTag, parseHelperState, readHelperState, updateHelperState } from './helperState';
 
-const TAG = 'devspaces-helper:0123456789ab';
+const TAG = 'devspaces-worker:0123456789ab';
 const TIME = '2026-09-24T12:00:00.000Z';
 
 let dir: string;
@@ -28,7 +28,7 @@ describe('isHelperImageTag', () => {
   it('accepts the tags of helperImageTag only', () => {
     expect(isHelperImageTag(helperImageTag('FROM x\n'))).toBe(true);
     expect(isHelperImageTag(TAG)).toBe(true);
-    for (const tag of ['devspaces-helper:latest', 'devspaces-helper:0123456789AB', 'devspaces-helper:0123456789a', 'mine:1', '__proto__', '']) {
+    for (const tag of ['devspaces-worker:latest', 'devspaces-worker:0123456789AB', 'devspaces-worker:0123456789a', 'mine:1', '__proto__', '']) {
       expect(isHelperImageTag(tag)).toBe(false);
     }
   });
@@ -36,11 +36,11 @@ describe('isHelperImageTag', () => {
 
 describe('monitorImageTag and isMonitorImageTag', () => {
   it('the monitor tag of a helper tag has its hash; nothing for another tag', () => {
-    expect(monitorImageTag(TAG)).toBe(TAG.replace('devspaces-helper:', 'devspaces-monitor:'));
-    expect(monitorImageTag('devspaces-helper:0123456789ab')).toBe('devspaces-monitor:0123456789ab');
-    for (const tag of ['devspaces-helper:latest', 'devspaces-monitor:0123456789ab', 'x-devspace-helper:0123456789ab', 'mine:1', '']) expect(monitorImageTag(tag)).toBeUndefined();
+    expect(monitorImageTag(TAG)).toBe(TAG.replace('devspaces-worker:', 'devspaces-monitor:'));
+    expect(monitorImageTag('devspaces-worker:0123456789ab')).toBe('devspaces-monitor:0123456789ab');
+    for (const tag of ['devspaces-worker:latest', 'devspaces-monitor:0123456789ab', 'x-devspace-helper:0123456789ab', 'mine:1', '']) expect(monitorImageTag(tag)).toBeUndefined();
     expect(isMonitorImageTag('devspaces-monitor:0123456789ab')).toBe(true);
-    for (const tag of ['devspaces-monitor:latest', 'devspaces-monitor:0123456789AB', 'devspaces-monitor:0123456789a', 'devspaces-monitor:0123456789abc', 'x-devspace-monitor:0123456789ab', 'devspaces-helper:0123456789ab', '']) {
+    for (const tag of ['devspaces-monitor:latest', 'devspaces-monitor:0123456789AB', 'devspaces-monitor:0123456789a', 'devspaces-monitor:0123456789abc', 'x-devspace-monitor:0123456789ab', 'devspaces-worker:0123456789ab', '']) {
       expect(isMonitorImageTag(tag)).toBe(false);
     }
   });
@@ -62,7 +62,7 @@ describe('parseHelperState', () => {
     const id = `sha256:${'0123456789abcdef'.repeat(4)}`;
     expect(parseHelperState({ version: 1, images: { [TAG]: { imageId: id } } })).toEqual({ version: 1, images: { [TAG]: { imageId: id } } });
     for (const imageId of [
-      'id:devspaces-helper:0123456789ab',
+      'id:devspaces-worker:0123456789ab',
       'sha256:0123',
       `sha256:${'A'.repeat(64)}`,
       `sha256:${'0'.repeat(65)}`,
@@ -70,7 +70,7 @@ describe('parseHelperState', () => {
       `sha512:${'0'.repeat(64)}`,
       ` sha256:${'0'.repeat(64)}`,
       `sha256:${'0'.repeat(64)}\n`,
-      'devspaces-helper:0123456789ab',
+      'devspaces-worker:0123456789ab',
       '--privileged',
     ]) {
       expect(parseHelperState({ version: 1, images: { [TAG]: { builtAt: TIME, imageId } } })).toEqual({ version: 1, images: { [TAG]: { builtAt: TIME } } });
@@ -102,8 +102,8 @@ describe('parseHelperState', () => {
       version: 1,
       images: {
         [TAG]: { builtAt: TIME, builtWithoutPull: TIME, attemptedAt: TIME, latestBaseDigest: 'sha256:def', lastUsedAt: TIME },
-        'devspaces-helper:0123456789ac': { foreignSince: TIME, lastUsedAt: TIME },
-        'devspaces-helper:0123456789ad': { removedAt: TIME },
+        'devspaces-worker:0123456789ac': { foreignSince: TIME, lastUsedAt: TIME },
+        'devspaces-worker:0123456789ad': { removedAt: TIME },
       },
     };
     expect(parseHelperState(state)).toEqual(state);
@@ -123,7 +123,7 @@ describe('parseHelperState', () => {
         version: 1,
         images: {
           [TAG]: { baseImage: 7, baseDigest: '', builtAt: 'yesterday', checkedAt: TIME, lastUsedAt: null, extra: 'x' },
-          'devspaces-helper:0123456789ac': 'not a record',
+          'devspaces-worker:0123456789ac': 'not a record',
           'mine:1': { lastUsedAt: TIME },
         },
         lastCleanupAt: 'soon',
@@ -147,7 +147,7 @@ describe('readHelperState / updateHelperState', () => {
       state.images[TAG] = { lastUsedAt: TIME };
     });
     // Another window writes in between.
-    const other = { version: 1, images: { [TAG]: { lastUsedAt: TIME }, 'devspaces-helper:0123456789ac': { lastUsedAt: TIME } } };
+    const other = { version: 1, images: { [TAG]: { lastUsedAt: TIME }, 'devspaces-worker:0123456789ac': { lastUsedAt: TIME } } };
     fs.writeFileSync(file, JSON.stringify(other));
     const written = await updateHelperState(file, (state) => {
       state.lastCleanupAt = TIME;

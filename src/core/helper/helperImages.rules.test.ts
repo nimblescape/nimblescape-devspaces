@@ -567,7 +567,7 @@ describe('HelperImages keeps the helper image of each engine apart for overlappi
 
 describe('HelperImages without a previous helper image', () => {
   /** A helper image of an older extension version that this installation built. It is never used. */
-  const OLDER = 'devspaces-helper:0123456789ab';
+  const OLDER = 'devspaces-worker:0123456789ab';
   const START = Date.parse('2026-09-24T12:00:00Z');
 
   function setup() {

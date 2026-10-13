@@ -35,7 +35,7 @@ import {
 import { parseDockerTime, type MonitorEngine } from './monitorEngine';
 
 const SCRIPT = 'console.log("monitor")';
-const TAG = 'devspaces-helper:0123456789ab';
+const TAG = 'devspaces-worker:0123456789ab';
 const SOCKET = '/var/run/docker.sock';
 const LABEL = remoteMonitorLabelValue(SCRIPT, TAG);
 
