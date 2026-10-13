@@ -3,6 +3,14 @@
 Each section lists the changes of one released version. The release workflow
 takes the section of a version as the notes of its GitHub release.
 
+## 0.4.0
+
+**Default image:** the new setting devspaces.defaultImage names an image that Start can use in place of the Dev Container configuration of a repository. The setting devspaces.startWithDefaultImage (on by default) decides what a plain Start uses while a default image is set; the context menu of a row and the command palette offer the other source with Start with Configuration and Start with Default Image. A devspace built from the other source is built again from the selected one: its container is created again, and the files of its workspace volume stay. When a default image is set, the sidebar, Search and the switcher also list the repositories without a Dev Container configuration; their devspaces always start from the default image.
+
+The worker container of a devspace window is now named after the devspace, <devspace>-worker<number>, for example devspaces-majikmate-module-html-css-2-sturdy-kahn-worker1. Other windows keep devspaces-worker-<window>-<number>.
+
+CI now also runs tests in the VS Code window of a devspace container (attach tests): the security settings of Dev Containers, the shared VS Code server, postAttachCommand, forwarded ports, and a re-attach after a restart of VS Code.
+
 ## 0.3.0
 
 **Breaking change, without migration:** Devspaces now uses the name of the extension everywhere. Settings, commands and keybindings are devspaces.<key> (was devspace.<key>); settings and keybindings with the old IDs are not read any more, so rename them by hand. The Docker objects are devspaces-... (was devspace-...) and their labels nimblescape.devspaces.... (was nimblescape.devspace....). This version does not show or use the devspaces of version 0.2.1 and older: push the changes in each devspace before the update, and after the update remove the old devspace-... containers, volumes, images and networks on each Docker engine before you start a devspace. A start of a repository then creates a new devspace and clones the repository again. All computers that use one Docker engine need the same version. The steps are in the user guide, section [Update from version 0.2.1 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-021-or-older).
