@@ -43,6 +43,24 @@ export class ConnectionAdapter {
   }
 
   /**
+   * The name of this window in the names of its workers (workerContainerName): the container of an attached window
+   * (currentContainerName, the name of its devspace), else the name of its saved workspace file without
+   * `.code-workspace`, else the name of its first folder (also of a remote folder, for example over SSH), and empty for
+   * a window without a folder. Not `vscode.workspace.name`, which adds the remote to the name of a remote window and
+   * `(Workspace)` to the name of a workspace.
+   */
+  windowName(): string {
+    const container = this.currentContainerName();
+    if (container !== undefined) return container;
+    const workspaceFile = vscode.workspace.workspaceFile;
+    // An untitled workspace (`untitled:<number>`) has no name of its own.
+    if (workspaceFile !== undefined && workspaceFile.scheme !== 'untitled') {
+      return workspaceFile.path.slice(workspaceFile.path.lastIndexOf('/') + 1).replace(/\.code-workspace$/i, '');
+    }
+    return vscode.workspace.workspaceFolders?.[0]?.name ?? '';
+  }
+
+  /**
    * The Docker context named in the authority of this window (`settings.context`, authority.ts), or `undefined` for a
    * window without one (the local Docker, DOCKER_HOST, or no attached container).
    */

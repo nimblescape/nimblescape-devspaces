@@ -14,6 +14,7 @@ import {
   devspaceImageRepository,
   isDevspaceResourceName,
   resourceName,
+  workerContainerName,
 } from './names';
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -299,6 +300,52 @@ describe('isDevspaceResourceName', () => {
   it('ignores the case', () => {
     expect(isDevspaceResourceName('DEVSPACE-ACME-API-TIDY-BERNERS')).toBe(true);
     expect(isDevspaceResourceName(resourceName('acme/api', ID).toUpperCase())).toBe(true);
+  });
+});
+
+describe('workerContainerName', () => {
+  const ID = '11111111-2222-4333-8444-555555555555';
+  /** The names that Docker takes for a container. */
+  const DOCKER_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/;
+
+  it('is devspace-worker-<window>-<random>, the window without the devspace- of the name of a devspace', () => {
+    const devspace = resourceName('acme/api', ID);
+    expect(workerContainerName(devspace, '3f9a')).toBe(`devspace-worker-acme-api-${namePair(ID)}-3f9a`);
+    expect(workerContainerName('my-project', '3f9a')).toBe('devspace-worker-my-project-3f9a');
+    // Another name that starts with devspace- keeps it.
+    expect(workerContainerName('devspace-tools', '3f9a')).toBe('devspace-worker-devspace-tools-3f9a');
+  });
+
+  it('is in lower case, letters without accents, each run of other characters than [a-z0-9] one -', () => {
+    expect(workerContainerName('My Project (2)', '3f9a')).toBe('devspace-worker-my-project-2-3f9a');
+    expect(workerContainerName('Übung_Café.Web', '3f9a')).toBe('devspace-worker-ubung-cafe-web-3f9a');
+    expect(workerContainerName('--a..b--', '3f9a')).toBe('devspace-worker-a-b-3f9a');
+  });
+
+  it('names a window without a name, or with a name of no [a-z0-9], window', () => {
+    for (const name of ['', '---', '工作区', ' ']) expect(workerContainerName(name, '3f9a')).toBe('devspace-worker-window-3f9a');
+  });
+
+  it('keeps the whole name of every devspace, and shortens a longer window name to 54 characters', () => {
+    const devspace = resourceName(`${'a'.repeat(40)}/${'b'.repeat(40)}`, ID);
+    expect(workerContainerName(devspace, '3f9a')).toBe(`devspace-worker-${devspace.slice('devspace-'.length)}-3f9a`);
+    expect(workerContainerName('x'.repeat(80), '3f9a')).toBe(`devspace-worker-${'x'.repeat(54)}-3f9a`);
+    // A cut that ends in a separator drops it.
+    expect(workerContainerName(`${'x'.repeat(53)}-yz`, '3f9a')).toBe(`devspace-worker-${'x'.repeat(53)}-3f9a`);
+  });
+
+  it('draws 4 new hex characters for each worker, and never has the shape of a name of a devspace', () => {
+    const devspace = resourceName('acme/api', ID);
+    const names = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      const name = workerContainerName(devspace);
+      expect(name).toMatch(new RegExp(`^devspace-worker-acme-api-${namePair(ID)}-[0-9a-f]{4}$`));
+      expect(name).toMatch(DOCKER_NAME);
+      expect(isDevspaceResourceName(name)).toBe(false);
+      names.add(name);
+    }
+    expect(names.size).toBeGreaterThan(1);
+    for (const random of ['beef', 'cafe', 'dead', 'face', 'abcd']) expect(isDevspaceResourceName(workerContainerName(devspace, random))).toBe(false);
   });
 });
 

@@ -9,12 +9,11 @@
 // the open in full, also within that wait); when it cannot, the call is refused, never taken a way without it. The
 // worker runs the whole pipeline itself; the extension relays no Docker calls, pulls, starts or locks through it. No
 // `vscode`.
-import * as crypto from 'crypto';
 import { runWithDockerTarget } from '../docker/dockerTargets';
 import type { DockerTarget } from '../docker/dockerHost';
 import type { HelperMaintenance } from '../helper/helperImages';
 import { bundleHash, loaderCommand } from '../loader/pipeLoader';
-import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR } from '../names';
+import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR, workerContainerName } from '../names';
 import { errorMessage, isUserFacingError } from '../errors';
 import { abortError, isAbortError, type Logger, type RunOptions, type RunResult, type StartedProcess } from '../ports';
 import { HelperChannel, HelperChannelError } from './helperChannel';
@@ -144,6 +143,11 @@ export interface ChannelOpenDeps {
    * volume of their own, so that the store of the engine is never created or touched).
    */
   vscodeVolume: string;
+  /**
+   * The name of the window, read at each start of a worker for the name of its container (workerContainerName;
+   * ConnectionAdapter.windowName). Without it, the worker is named as a window without a name.
+   */
+  windowName?(): string;
 }
 
 /** Docker's refusal of `--network bridge` on a daemon without it. */
@@ -172,7 +176,7 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
   const [script, tag, socketPath] = await Promise.all([deps.script(), deps.helperTag(), deps.socketPath(target)]);
   const name = engineName(target);
   const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
-    const containerName = `devspace-worker-${crypto.randomBytes(6).toString('hex')}`;
+    const containerName = workerContainerName(deps.windowName?.() ?? '');
     const args = channelRunArgs({ tag, socketPath, stateVolume: deps.stateVolume, vscodeVolume: deps.vscodeVolume, containerName, label: channelLabelValue(script), scriptHash: bundleHash(script), network });
     const process = await runWithDockerTarget(target, async () => deps.start(args));
     if (process === undefined) throw new HelperChannelError('open', 'The Docker CLI cannot be started.');

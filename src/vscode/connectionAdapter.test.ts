@@ -18,7 +18,7 @@ const fake = vi.hoisted(() => {
   const state = {
     remoteName: undefined as string | undefined,
     workspaceFile: undefined as FakeUri | undefined,
-    workspaceFolders: undefined as Array<{ uri: FakeUri }> | undefined,
+    workspaceFolders: undefined as Array<{ uri: FakeUri; name?: string }> | undefined,
     commands: [] as unknown[][],
   };
   const uri = (parts: { scheme: string; authority?: string; path?: string }): FakeUri => ({
@@ -223,5 +223,31 @@ describe('ConnectionAdapter', () => {
     }
     fake.state.remoteName = undefined;
     expect(adapter.isEmptyWindow()).toBe(true);
+  });
+
+  it('names the window by its container, else its saved workspace file, else its first folder', () => {
+    const adapter = new ConnectionAdapter();
+    expect(adapter.windowName()).toBe('');
+    fake.state.workspaceFolders = [{ uri: fake.uri({ scheme: 'file', path: '/Users/me/My Project' }), name: 'My Project' }];
+    expect(adapter.windowName()).toBe('My Project');
+    // A remote folder, for example over SSH, by its name too.
+    fake.state.remoteName = 'ssh-remote';
+    fake.state.workspaceFolders = [{ uri: fake.uri({ scheme: 'vscode-remote', authority: 'ssh-remote+box', path: '/srv/api' }), name: 'api' }];
+    expect(adapter.windowName()).toBe('api');
+    // A saved workspace file by its name without `.code-workspace`; an untitled one by its first folder.
+    fake.state.remoteName = undefined;
+    fake.state.workspaceFile = fake.uri({ scheme: 'file', path: '/Users/me/course.code-workspace' });
+    expect(adapter.windowName()).toBe('course');
+    fake.state.workspaceFile = fake.uri({ scheme: 'untitled', path: '1555503116870' });
+    expect(adapter.windowName()).toBe('api');
+    // An attached window by its container, also under a saved workspace file.
+    fake.state.remoteName = 'attached-container';
+    fake.state.workspaceFile = fake.uri({ scheme: 'file', path: '/Users/me/course.code-workspace' });
+    fake.state.workspaceFolders = [{ ...remoteFolder(NAME), name: 'api' }];
+    expect(adapter.windowName()).toBe(NAME);
+    // An attached window without a folder has no name.
+    fake.state.workspaceFile = undefined;
+    fake.state.workspaceFolders = [];
+    expect(adapter.windowName()).toBe('');
   });
 });

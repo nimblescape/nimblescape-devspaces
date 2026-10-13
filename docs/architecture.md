@@ -59,10 +59,10 @@ Its parts:
 
 ### The worker and the helper channel
 
-The worker is a container per window and Docker engine, `devspace-worker-<12 hex>`. The helper channel is its connection to the extension: the standard input and output of the `docker run` with which the extension starts it, with the Docker CLI over the engine's Docker context:
+The worker is a container per window and Docker engine, `devspace-worker-<window>-<4 hex>`, so that `docker ps` shows which window it belongs to. `<window>` is the name of the window: the name of its devspace without `devspace-` (or of another attached container), else the name of its workspace file, else the name of its first folder, else `window`; in lower case with only letters, digits, and `-`, at most 54 characters. The 4 random hex characters are new for each worker; they tell apart the workers of windows with the same name on one engine (two windows of one folder, or the windows of two computers that use one remote engine). The helper channel is its connection to the extension: the standard input and output of the `docker run` with which the extension starts it, with the Docker CLI over the engine's Docker context:
 
 ```text
-docker run --rm -i --pull never --name devspace-worker-<12 hex>
+docker run --rm -i --pull never --name devspace-worker-<window>-<4 hex>
   --label nimblescape.devspace.helper-run=true --label nimblescape.devspace.helper-channel=<protocol>-<hash>
   --network bridge --log-driver none --cap-drop ALL --security-opt no-new-privileges
   --mount type=bind,source=<engine socket>,target=/var/run/docker.sock
@@ -239,7 +239,7 @@ VS Code restores the windows of the last session; a restored window that was con
 
 - **Devspace ID**: a random UUID, which appears only in labels. Its *pair* `<adjective>-<scientist>` comes from the SHA-256 of the ID (`src/core/namePairs.ts`); an ID whose pair is in use on the engine is not taken.
 - **Resource name**: `devspace-<owner>-<repo>-<adjective>-<scientist>`, lower case, at most 63 characters. It names the workspace volume, the dev container, the repository of the devspace's images (`:<build number>`, `:prepared`, `:prepared-<service>`), and the Docker Compose project (and so the names that Compose derives from it).
-- **Own objects of Devspaces**: the helper image `devspace-helper:<12 hex>` with its second tag `devspace-monitor:<12 hex>`, the worker containers `devspace-worker-<12 hex>`, the batch helpers `devspace-batch-<session>`, the container and volume `devspace-monitor`, and the volumes `devspace-vscode` and `devspace-helper-cache`.
+- **Own objects of Devspaces**: the helper image `devspace-helper:<12 hex>` with its second tag `devspace-monitor:<12 hex>`, the worker containers `devspace-worker-<window>-<4 hex>` (for example `devspace-worker-acme-api-tidy-berners-3f9a` for the window of the devspace `devspace-acme-api-tidy-berners`), the batch helpers `devspace-batch-<session>`, the container and volume `devspace-monitor`, and the volumes `devspace-vscode` and `devspace-helper-cache`.
 - **Docker context of a remote host**: the SSH alias or host name, with `-<adjective>-<scientist>` of the host only when that name is taken by another context.
 - **Container host name**: the repository name in lower case, so that the shell prompt shows it.
 

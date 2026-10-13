@@ -144,6 +144,7 @@ All devspaces of a Docker engine are Docker objects of the same engine. The sepa
 - On a remote host, the token goes into the memory of the container on that host, never onto its disk: the extension sends it over SSH to its worker there, which writes it into the container through the Docker Engine API.
 - Devspaces never asks for an SSH password or accepts a host key: every SSH connection runs with `BatchMode=yes`, so an unknown host key or a key that is not loaded fails at once, with a message.
 - A Docker context that points to another computer without SSH (for example `tcp://…`) is refused.
+- The name of a worker container carries the name of its window (see [architecture.md](architecture.md#the-worker-and-the-helper-channel)): the name of its devspace, or the name of the workspace file or the first folder of a window on your computer. Everyone who can use the engine sees it, for example with `docker ps`.
 - **A shared engine is for a group that trusts each other.** Root and every member of the group `docker` on the engine can reach every container and every volume on it, including the token in the memory of another person's running devspace. The account separation of Devspaces does not protect against them. For people who must not see each other's work, each person needs an engine of their own, for example in a virtual machine.
 
 ## Known limits
