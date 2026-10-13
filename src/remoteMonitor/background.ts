@@ -56,6 +56,7 @@ import {
   cleanupDue,
   commitsInProcesses,
   fetchRetryDue,
+  isNetworkFailure,
   qualitiesToFetch,
   serverUnused,
   serversToRemove,
@@ -98,7 +99,7 @@ export interface VscodeBackgroundDeps {
 }
 
 /** What the part "extensions" and its cleanup use, from the VS Code part of the run. */
-export function extensionRunDeps(vscode: VscodeBackgroundDeps, deps: Pick<BackgroundRunDeps, 'log' | 'now'>): ExtensionRunDeps {
+export function extensionRunDeps(vscode: VscodeBackgroundDeps, deps: Pick<BackgroundRunDeps, 'log' | 'now'>, networkFailure?: (error: unknown) => boolean): ExtensionRunDeps {
   return {
     root: vscode.store.root,
     stateDir: vscode.extensionStateDir ?? REMOTE_MONITOR_STATE_DIR,
@@ -107,14 +108,18 @@ export function extensionRunDeps(vscode: VscodeBackgroundDeps, deps: Pick<Backgr
     ...vscode.extensionLocks,
     log: deps.log,
     now: deps.now,
+    ...(networkFailure !== undefined ? { networkFailure } : {}),
   };
 }
 
 export interface BackgroundRunDeps {
   log: (message: string) => void;
   now: () => number;
-  /** Part a: one pass of the image maintenance (ImageMaintenance.pass: nothing without images in use). */
-  images: () => Promise<void>;
+  /**
+   * Part a: one pass of the image maintenance (ImageMaintenance.pass: nothing without images in use); false when it
+   * did not reach the network.
+   */
+  images: () => Promise<boolean | void>;
   /**
    * Parts b to d, made afresh for each run (its HTTPS reads the proxy of the daemon once, so a failed read or a changed
    * proxy counts only for that run); undefined when the monitor mounts no store (the run then leaves them out, logged).
@@ -139,14 +144,23 @@ interface ServerFindings {
 export class BackgroundRun {
   /** The run never ends; a fetch has its own time limit (ensureServer). */
   private readonly signal = new AbortController().signal;
+  /** A part of the current run did not reach the network (isNetworkFailure). */
+  private offline = false;
 
   constructor(private readonly deps: BackgroundRunDeps) {}
 
-  /** Parts a to d, each on its own, then the prepares. Never throws. */
-  async run(): Promise<void> {
+  /**
+   * Parts a to d, each on its own, then the prepares. Never throws. Resolves false when a part did not reach the network
+   * (a failure of isNetworkFailure: the image pass, the update service, the fetch of a server or an extension), so the
+   * schedule tries the run again (CacheSchedule); a failure of anything else does not count.
+   */
+  async run(): Promise<boolean> {
     const { log } = this.deps;
+    this.offline = false;
     log('The background run starts.');
-    await this.part('the images', () => this.deps.images());
+    await this.part('the images', async () => {
+      if ((await this.deps.images()) === false) this.offline = true;
+    });
     const vscode = this.deps.vscode();
     if (vscode === undefined) {
       log('The Monitor mounts no shared VS Code server store; the background run leaves the VS Code server out.');
@@ -156,19 +170,28 @@ export class BackgroundRun {
         found = await this.newestServers(vscode);
       });
       // The part "extensions", after the part of the server.
-      await this.part('the VS Code extensions', () => downloadExtensions(extensionRunDeps(vscode, this.deps)));
+      await this.part('the VS Code extensions', () => downloadExtensions(extensionRunDeps(vscode, this.deps, this.networkFailure)));
       await this.part('the cleanup of the VS Code server store', () => this.cleanupWhenDue(vscode, found));
     }
     const prepares = this.deps.prepares;
     if (prepares !== undefined) await this.part('the prepares of the devspace images', prepares);
-    log('The background run ended.');
+    log(this.offline ? 'The background run ended without reaching the network.' : 'The background run ended.');
+    return !this.offline;
   }
+
+  /** Whether `error` is a failure of the network (isNetworkFailure); if so, the current run did not reach it. */
+  private readonly networkFailure = (error: unknown): boolean => {
+    if (!isNetworkFailure(error)) return false;
+    this.offline = true;
+    return true;
+  };
 
   /** One part: a failure is one line of the log, and the run goes on. */
   private async part(what: string, work: () => Promise<void>): Promise<void> {
     try {
       await work();
     } catch (error) {
+      this.networkFailure(error);
       this.deps.log(`The background run could not do ${what}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -214,9 +237,12 @@ export class BackgroundRun {
       }
       log(`The newest VS Code server ${server.commit} (${quality}) is not in the shared store yet.`);
       // A success needs no entry removed: a version is fetched only once its failure does not wait anymore, and such
-      // entries are not kept (storeFailedFetches).
-      if (await (vscode.ensure ?? ensureServer)(vscode.store, server, platform, this.signal)) await this.linkIntoContainers(vscode, server, platform);
-      else failed[version] = this.deps.now();
+      // entries are not kept (storeFailedFetches). A fetch that failed for the network does not wait a day: the retry
+      // of the run fetches it.
+      let cause: unknown;
+      const store = { ...vscode.store, onFailure: (error: unknown) => void (cause = error) };
+      if (await (vscode.ensure ?? ensureServer)(store, server, platform, this.signal)) await this.linkIntoContainers(vscode, server, platform);
+      else if (!this.networkFailure(cause)) failed[version] = this.deps.now();
     }
     await this.storeFailedFetches(stored, failed);
     return { platform, released, asked };
@@ -227,6 +253,7 @@ export class BackgroundRun {
     try {
       return await serverCommits(vscode.store.transport, quality, platform, AbortSignal.timeout(UPDATE_SERVICE_TIMEOUT_MS));
     } catch (error) {
+      this.networkFailure(error);
       this.deps.log(`The newest VS Code server (${quality}, ${platform}) could not be read from the update service: ${error instanceof Error ? error.message : String(error)}`);
       return undefined;
     }

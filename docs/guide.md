@@ -142,7 +142,7 @@ Devspaces keeps your devspaces current in two places: in the background on each 
 
 ### The background run
 
-A small container on each Docker engine, the **Monitor** (`devspace-monitor`), does the background work at the times of `devspace.cacheUpdateSchedule` (by default daily at 06:07 in your time zone). A time that was missed, for example while the engine was off, runs once when the monitor runs again. Each run:
+A small container on each Docker engine, the **Monitor** (`devspace-monitor`), does the background work at the times of `devspace.cacheUpdateSchedule` (by default daily at 06:07 in your time zone). A time that was missed, for example while the engine was off, runs once when the monitor runs again. A run that cannot reach the network, for example right after the computer wakes up and before its Wi-Fi or VPN is back, does not count as a run: the monitor tries it again after 2, 5, 10, 20 and 30 minutes, then every hour, until a run reaches the network. A failure of one image or extension itself, such as an image that its registry no longer has, does not cause a retry. Each run:
 
 1. **Pulls the newer versions of the images that the devspaces on that engine use**, for example `node:20` or `mcr.microsoft.com/devcontainers/base:ubuntu`, and removes the older versions of those images that nothing uses any more. It pulls without a sign-in, so private images are not updated in the background; an image pinned by a digest never changes.
 2. **Downloads the newest VS Code server** into a store that all dev containers of the engine share, and links it into the running dev containers, so that a window that VS Code restores after its own update finds its server.

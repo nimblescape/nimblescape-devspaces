@@ -113,7 +113,7 @@ function registry(options: { tags?: Record<string, string>; unknown?: string[]; 
 async function pass(
   engine: ImageEngine,
   references: string[] | (() => Promise<ReferencesInUse>),
-  options: { log?: string[]; registryTransport?: () => HttpTransport; replaced?: ReplacedImages; passes?: number } = {},
+  options: { log?: string[]; registryTransport?: () => HttpTransport; replaced?: ReplacedImages; passes?: number; reached?: boolean[] } = {},
 ): Promise<ReplacedImages> {
   let stored: ReplacedImages = options.replaced ?? {};
   const maintenance = new ImageMaintenance({
@@ -124,7 +124,11 @@ async function pass(
     replaced: { read: async () => stored, write: async (value) => void (stored = JSON.parse(JSON.stringify(value)) as ReplacedImages) },
   });
   // `passes` of one monitor (an untagged image goes at the pass after the first).
-  for (let index = 0; index < (options.passes ?? 1); index++) await maintenance.pass();
+  // Each pass's answer whether it reached the network goes to `reached`.
+  for (let index = 0; index < (options.passes ?? 1); index++) {
+    const reached = await maintenance.pass();
+    options.reached?.push(reached);
+  }
   return stored;
 }
 
@@ -151,6 +155,50 @@ describe('the images in use of the Monitor', () => {
     expect(log).toEqual([]);
     expect(referenceText({ repository: 'node' })).toBe('node:latest');
     expect(referenceText({ repository: 'node', tag: '20', digest: DIGEST })).toBe(`node@${DIGEST}`);
+  });
+
+  it('a pass that did not reach the network resolves false: a registry that did not answer, or a pull without network', async () => {
+    const { engine } = engineOf([listed('sha256:n20', ['node:20'])]);
+    const silent: boolean[] = [];
+    await pass(engine, ['node:20'], { registryTransport: registry({ fails: true }).transport, passes: 2, reached: silent });
+    expect(silent).toEqual([false, false]);
+    const offline: ImageEngine = { ...engineOf([]).engine, pull: async () => Promise.reject(new EngineError('Get "https://ghcr.io/v2/": dial tcp: lookup ghcr.io: no such host', 500)) };
+    const pulled: boolean[] = [];
+    await pass(offline, ['ghcr.io/acme/app:1'], { reached: pulled });
+    expect(pulled).toEqual([false]);
+  });
+
+  it('a pass that reached its registries resolves true, also with a pull that the registry refused, and without images in use', async () => {
+    const { engine } = engineOf([]);
+    const refused: ImageEngine = { ...engine, pull: async () => Promise.reject(new EngineError('pull access denied for ghcr.io/private/x, repository does not exist or may require authorization', 404)) };
+    const reached: boolean[] = [];
+    await pass(refused, ['ghcr.io/private/x:1'], { reached });
+    await pass(engine, ['node:20'], { reached });
+    await pass(engine, [], { reached });
+    expect(reached).toEqual([true, true, true]);
+  });
+
+  it('a pass without images in use after one that did not reach the network resolves true (nothing of the pass before counts)', async () => {
+    const { engine } = engineOf([listed('sha256:n20', ['node:20'])]);
+    let references = ['node:20'];
+    const reached: boolean[] = [];
+    await pass(engine, async () => ({ references, complete: true }), {
+      registryTransport: registry({ fails: true }).transport,
+      passes: 1,
+      reached,
+    });
+    references = [];
+    const maintenance = new ImageMaintenance({
+      engine,
+      registryTransport: registry({ fails: true }).transport,
+      log: () => {},
+      referencesInUse: async () => ({ references, complete: true }),
+    });
+    references = ['node:20'];
+    reached.push(await maintenance.pass());
+    references = [];
+    reached.push(await maintenance.pass());
+    expect(reached).toEqual([false, false, true]);
   });
 
   it('a failed pull (a private image) is one line of the log per pass', async () => {

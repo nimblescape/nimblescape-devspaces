@@ -3,7 +3,8 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The pure rules of the Monitor's background run (background.ts does the I/O): its stored state in the volume
-// (the end of the last run, the last cleanup), when the cleanup of the shared VS Code server store is due (at most once
+// (the end of the last run, the last cleanup, the retry of a run that did not reach the network), which failures are
+// failures of the network, when the cleanup of the shared VS Code server store is due (at most once
 // a day), which qualities of the server it keeps new, and which server versions the cleanup removes. Pure; no I/O.
 import type { VscodeQuality } from '../core/helperChannel/protocol';
 
@@ -25,6 +26,71 @@ export interface CacheRunState {
    * tries such a version again only after FETCH_RETRY_MS (fetchRetryDue).
    */
   failedFetches?: Record<string, number>;
+  /**
+   * When the run is tried again: the last run did not reach the network (a failure of isNetworkFailure), so it did not
+   * count as a run (`lastEndAt` stays). Undefined: no retry waits.
+   */
+  retryAt?: number;
+  /** How many runs in a row did not reach the network (runRetryDelay); undefined with `retryAt`. */
+  retries?: number;
+}
+
+/**
+ * The waits before the retries of a run that did not reach the network, the first after the first such run; the last
+ * one repeats until a run reaches it. So a computer that wakes up before its network is back (Wi-Fi, a VPN) gets its run
+ * minutes later, and one that stays offline costs one run an hour.
+ */
+export const RUN_RETRY_DELAYS_MS: readonly number[] = [2, 5, 10, 20, 30, 60].map((minutes) => minutes * 60_000);
+
+/** The wait before the retry after `retries` runs in a row that did not reach the network (1 or more). */
+export function runRetryDelay(retries: number): number {
+  return RUN_RETRY_DELAYS_MS[Math.min(Math.max(retries, 1), RUN_RETRY_DELAYS_MS.length) - 1];
+}
+
+/**
+ * Whether the retry at `retryAt` is due at `now`: at or after that time, or when it lies more than the longest wait plus
+ * CLOCK_RESET_MS ahead of `now` (a clock that was corrected).
+ */
+export function runRetryDue(retryAt: number, now: number): boolean {
+  return now >= retryAt || retryAt - now > RUN_RETRY_DELAYS_MS[RUN_RETRY_DELAYS_MS.length - 1] + CLOCK_RESET_MS;
+}
+
+/** The codes of Node.js for a connection that could not be made, broke off, or got no answer in time. */
+const NETWORK_ERROR_CODES = new Set([
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ENETUNREACH',
+  'ENETDOWN',
+  'EHOSTUNREACH',
+  'EHOSTDOWN',
+  'EPIPE',
+]);
+
+/**
+ * The same failures as the daemon (a pull), a proxy, the update service and the time limits of the monitor word them:
+ * no name resolution, no connection, no answer in time, and a server that answered 5xx or 429 (it is there, but not
+ * now). A refusal of a reachable server (404, 401, 403: an image or a version that is gone, a private image) is none.
+ */
+const NETWORK_ERROR_TEXT =
+  /\b(?:no such host|i\/o timeout|connection refused|connection reset|network is unreachable|no route to host|TLS handshake timeout|Client\.Timeout exceeded|context deadline exceeded|temporary failure in name resolution|did not answer within|no answer in time|HTTP (?:5\d\d|429))\b/i;
+
+/**
+ * Whether `error` is a failure of the network, not of the thing asked for: an abort or a time limit, a code of
+ * NETWORK_ERROR_CODES, or a message of NETWORK_ERROR_TEXT, also in its causes (at most 4 deep). A run with such a failure
+ * did not reach the network, so it is tried again (runRetryDelay), and the item does not wait a day (FETCH_RETRY_MS).
+ */
+export function isNetworkFailure(error: unknown, depth = 0): boolean {
+  if (typeof error === 'string') return NETWORK_ERROR_TEXT.test(error);
+  if (typeof error !== 'object' || error === null || depth > 4) return false;
+  const { name, code, message, cause } = error as { name?: unknown; code?: unknown; message?: unknown; cause?: unknown };
+  if (name === 'AbortError' || name === 'TimeoutError') return true;
+  if (typeof code === 'string' && NETWORK_ERROR_CODES.has(code)) return true;
+  if (typeof message === 'string' && NETWORK_ERROR_TEXT.test(message)) return true;
+  return cause !== undefined && isNetworkFailure(cause, depth + 1);
 }
 
 /** A version whose fetch by the run failed is tried again after this long (a day). */
@@ -44,10 +110,15 @@ export function parseCacheRunState(text: string): CacheRunState {
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
   const time = (field: unknown) => (typeof field === 'number' && Number.isSafeInteger(field) && field >= 0 ? field : undefined);
-  const { lastEndAt, lastCleanupAt, failedFetches } = value as { lastEndAt?: unknown; lastCleanupAt?: unknown; failedFetches?: unknown };
+  const { lastEndAt, lastCleanupAt, failedFetches, retryAt, retries } = value as { lastEndAt?: unknown; lastCleanupAt?: unknown; failedFetches?: unknown; retryAt?: unknown; retries?: unknown };
   const state: CacheRunState = {};
   if (time(lastEndAt) !== undefined) state.lastEndAt = time(lastEndAt);
   if (time(lastCleanupAt) !== undefined) state.lastCleanupAt = time(lastCleanupAt);
+  // A retry only with its count (at least 1).
+  if (time(retryAt) !== undefined && typeof retries === 'number' && Number.isSafeInteger(retries) && retries >= 1) {
+    state.retryAt = time(retryAt);
+    state.retries = retries;
+  }
   // Only names of server versions with a time, at most MAX_FAILED_FETCHES; else none.
   if (typeof failedFetches === 'object' && failedFetches !== null && !Array.isArray(failedFetches)) {
     const entries = Object.entries(failedFetches as Record<string, unknown>);
