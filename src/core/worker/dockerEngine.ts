@@ -271,6 +271,15 @@ export interface DockerEngine {
    * EngineError for a missing image and the other failures.
    */
   imageFile(image: string, path: string, signal?: AbortSignal): Promise<string | undefined>;
+  /**
+   * The bytes of the regular file at the absolute path `path` of the container `container` (its name or ID), read
+   * through `GET /containers/<id>/archive` as `docker cp` does: nothing runs in the container, so the read works in any
+   * of its states (running, restarting, exited). `missing` when the engine answers that the container or the path does
+   * not exist (404 with the message of a missing container or file). Undefined when the path is no regular file (a
+   * link, a folder), the file is larger than `maxBytes`, or the answer is longer than can be read; rejects with an
+   * EngineError for every other failure, also for a 404 without such a message.
+   */
+  containerFile(container: string, path: string, maxBytes: number, signal?: AbortSignal): Promise<Buffer | 'missing' | undefined>;
   /** The clock of the daemon (`GET /info`, its SystemTime as Docker writes it). */
   systemTime(signal?: AbortSignal): Promise<string>;
   /**
@@ -331,15 +340,14 @@ export function isMissing(error: unknown): boolean {
 
 /**
  * True when the engine refused an exec because its container does not exist (404 "No such container") or does not run
- * (409 "is not running"); with `restarting`, also because it restarts (409 "is restarting"). Not for a paused
- * container, another 404 (for example "No such exec instance"), or another status. One rule for the token removal
- * (tokenRemoveFlow), the commands in the Monitor container (monitorFlow) and the check of its stored script
- * (engineMonitor, with `restarting`).
+ * (409 "is not running"). Not for a restarting or paused container, another 404 (for example "No such exec instance"),
+ * or another status. One rule for the token removal (tokenRemoveFlow) and the commands in the Monitor container
+ * (monitorFlow).
  */
-export function isNotRunning(error: unknown, options: { restarting?: boolean } = {}): boolean {
+export function isNotRunning(error: unknown): boolean {
   if (!(error instanceof EngineError)) return false;
   if (error.status === 404) return /no such container/i.test(error.message);
-  return error.status === 409 && (options.restarting === true ? /is (?:not running|restarting)\b/i : /is not running/i).test(error.message);
+  return error.status === 409 && /is not running/i.test(error.message);
 }
 
 /**

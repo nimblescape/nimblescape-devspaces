@@ -40,6 +40,7 @@ export function unusedEngine(): DockerEngine {
     pull: unused('pull'),
     labelImage: unused('labelImage'),
     imageFile: unused('imageFile'),
+    containerFile: unused('containerFile'),
     systemTime: unused('systemTime'),
     proxy: unused('proxy'),
     architecture: unused('architecture'),

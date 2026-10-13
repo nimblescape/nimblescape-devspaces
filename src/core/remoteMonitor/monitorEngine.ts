@@ -22,9 +22,10 @@ export type MonitorInspected =
   | { exists: true; status: string; exitCode: number | undefined; label: string; restartCount: number; id: string | undefined; createdAt: number | undefined; owner?: string };
 
 /**
- * What the check of the stored script of the running container found (`sha256sum` of REMOTE_MONITOR_SCRIPT_PATH in it):
- * its hash (as printed; the caller checks it), `none` (definite evidence that no script is stored or that the container
- * does not run), or `unknown` (the check itself failed: no answer in time, a transport error, an unexpected answer).
+ * What the check of the stored script of the container found (REMOTE_MONITOR_SCRIPT_PATH, read through the archive
+ * endpoint of the engine, DockerEngine.containerFile): the SHA-256 of its bytes (64 hex digits; the caller checks it),
+ * `none` (definite evidence: the engine answers that the script or the container does not exist), or `unknown` (the
+ * check itself failed: no answer in time, a transport error, no regular file, a file too large to read).
  */
 export type MonitorStoredScript = { hash: string } | 'none' | 'unknown';
 
@@ -41,7 +42,7 @@ export interface MonitorEngine {
   remove(id: string, signal?: AbortSignal): Promise<void>;
   /** Starts the container `id`; rejects with the cause. */
   start(id: string, signal?: AbortSignal): Promise<void>;
-  /** The check of the stored script of the container `name` (MonitorStoredScript). A cancel passes. */
+  /** The check of the stored script of the container `name` (MonitorStoredScript), in any state. A cancel passes. */
   storedScript(name: string, signal?: AbortSignal): Promise<MonitorStoredScript>;
   /** The IDs of the containers with the label `label` (`key=value`), stopped ones included; undefined when the list fails. */
   idsWithLabel(label: string, signal?: AbortSignal): Promise<string[] | undefined>;
@@ -53,19 +54,6 @@ export interface MonitorEngine {
    */
   create(spec: MonitorRunSpec, scriptLine: string, readyText: string, signal?: AbortSignal): Promise<MonitorCreated>;
 }
-
-/**
- * A failed `sha256sum` that shows that no script is stored, or that the container does not run (in its output or the
- * engine's message). Each alternative is tied to the start of a line of its source (`sha256sum`, the OCI runtime), so
- * an unrelated line of a transport failure that also says "No such file or directory" is no evidence. A stored script
- * that cannot be read (`Permission denied`) is no evidence either. The runtime's refusal of an exec in a container that
- * stopped between two restarts is evidence that it does not run (the wording of newer runc and the older one), which
- * the daemon writes to the output of the exec. The engine's refusal of the exec itself comes as its status
- * (engineMonitor). Over the Engine API the exec's output carries only what the process and the daemon write to it,
- * never the prefixes of the Docker CLI (`Error response from daemon: `, `Error: `), so the pattern has none of them.
- */
-export const NO_STORED_SCRIPT =
-  /^sha256sum: .*No such file or directory|^OCI runtime exec failed: exec failed: cannot exec (?:in a stopped container|a container that has stopped)\b/im;
 
 /** Another window removes the same container right now; its removal goes on. */
 export const REMOVAL_IN_PROGRESS = /removal of container .* is already in progress/i;

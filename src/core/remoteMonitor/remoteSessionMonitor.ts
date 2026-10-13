@@ -38,8 +38,6 @@ import {
 
 /** Time limit of each Docker call of ensure (an SSH connection plus the call). */
 export const REMOTE_MONITOR_DOCKER_TIMEOUT_MS = 60_000;
-/** Time limit of the check of the stored script (a process in the container). */
-export const REMOTE_MONITOR_EXEC_TIMEOUT_MS = 20_000;
 
 /**
  * The log of the monitor container, `docker logs` of at most about 2 MB. Not part of the label (remoteMonitorLabelValue
@@ -96,9 +94,9 @@ export type EnsureOutcome = 'running' | 'started' | 'created' | 'failed';
 type Inspected = MonitorInspected;
 
 /**
- * What `docker exec <name> sha256sum REMOTE_MONITOR_SCRIPT_PATH` tells about the stored script: `same` (its hash),
- * `other` (definite evidence of another or no stored script, or a container that does not run it), `unknown` (the check
- * itself failed: no answer in time, a transport error, an unexpected answer).
+ * What the read of REMOTE_MONITOR_SCRIPT_PATH of the container (MonitorEngine.storedScript, the archive endpoint of the
+ * engine) tells about the stored script: `same` (its hash), `other` (definite evidence of another or no stored script,
+ * or of no container), `unknown` (the check itself failed: no answer in time, a transport error, an unexpected answer).
  */
 type StoredScript = 'same' | 'other' | 'unknown';
 
@@ -115,13 +113,6 @@ export const REMOTE_MONITOR_CONFLICT_WAITS_MS: readonly number[] = [250, 500, 1_
  * several seconds). 12.75 s in all.
  */
 export const REMOTE_MONITOR_CREATED_WAITS_MS: readonly number[] = [250, 500, 1_000, 1_000, 2_000, 2_000, 2_000, 2_000, 2_000];
-
-/**
- * The waits (ms) between the looks at a restarted container whose stored-script check failed twice while the container
- * still ran with the same RestartCount (checkAgain): the daemon may record the exit of a loader that exits 3 at once
- * only after the failed checks (a busy host). 3.75 s in all.
- */
-export const REMOTE_MONITOR_RESTART_WAITS_MS: readonly number[] = [250, 500, 1_000, 1_000, 1_000];
 
 /**
  * The most waits of one look after a name conflict (resolveConflict), whatever the status of the container between
@@ -156,15 +147,14 @@ export class RemoteSessionMonitor {
    * Makes sure that the monitor container runs the current script with the helper image `helperTag`, by the state of the
    * container with the name (pipe loading):
    * - the matching label and running or paused → nothing; when Docker restarted a running one (RestartCount > 0),
-   *   `docker exec … sha256sum` checks the stored script (a restarted container whose first load was cut off has none:
+   *   a read of the stored script through the archive endpoint checks it (works in every state of the container, so
+   *   the exit of the loader cannot cut it off; a restarted container whose first load was cut off has none:
    *   its loader exits 3 again and again; only in the rare case of a first run that was killed before it wrote its
    *   marker does it wait up to 60 s for an input, as `running`, and this check catches it); only definite evidence of
    *   another or no stored script (storedScript `other`) → `docker rm -f`, then create; a check that fails keeps it
-   *   (logged), and a paused one is kept without a check (Docker refuses `docker exec` in a paused container); a check
-   *   that fails is followed by checkAgain (an inspect by the same ID: restarting, exited with LOADER_EXIT_CODE or a
-   *   grown RestartCount → replaced; still running → one more check; when it fails too, more inspects with the waits of
-   *   REMOTE_MONITOR_RESTART_WAITS_MS), so a check cut off by the exit of the loader does not keep a monitor in an
-   *   exit-3 loop;
+   *   (logged), and a paused one is kept without a check (it goes on when it is unpaused); a check that fails is
+   *   followed by checkAgain (an inspect by the same ID: restarting, exited with LOADER_EXIT_CODE or a grown
+   *   RestartCount → replaced; still running → one more check);
    * - the matching label and exited with an exit code other than LOADER_EXIT_CODE → `docker start <ID>` (the loader
    *   resumes from the stored script); then the stored script is checked as for a restarted one: `same` → started;
    *   definite evidence of another or no stored script (`other`: a first run killed before its script was stored exits
@@ -324,11 +314,10 @@ export class RemoteSessionMonitor {
     if (isRunning(current.status)) {
       // A container that Docker restarted runs its stored script only when it has one; one whose first load was cut off
       // gets a new input without a writer and never its script. RestartCount 0 (a normal open, or the create of another
-      // window that is still loading) needs no extra call. A paused one is kept without a check (Docker refuses
-      // `docker exec` in it).
+      // window that is still loading) needs no extra call. A paused one is kept without a check (it goes on when it is
+      // unpaused).
       if (current.restartCount === 0 || current.status === 'paused') return 'running';
-      // Only definite evidence replaces it; a check that fails keeps it. A check cut off by the exit of the loader is
-      // followed by checkAgain.
+      // Only definite evidence replaces it; a check that fails keeps it, after checkAgain.
       let stored = await this.storedScript(script, signal);
       if (stored === 'unknown') stored = await this.checkAgain(current, script, signal);
       if (stored === 'same') return 'running';
@@ -367,38 +356,15 @@ export class RemoteSessionMonitor {
   }
 
   /**
-   * After a stored-script check of the container `current` that gave `unknown` (the `docker exec` may be cut off when
-   * the loader exits 3 at once, between two restarts by the policy), the container of the name is inspected again
-   * (restartEvidence). Evidence that it exits at once without its script → `other` (replaced by its ID). The same ID
-   * still `running` with the same RestartCount → the stored script is checked once more (its answer counts). When that
-   * check gives `unknown` too, the container is inspected again after each wait of REMOTE_MONITOR_RESTART_WAITS_MS:
-   * on a busy host the daemon may record the exit of the loader only after both checks failed. Evidence → `other`;
-   * still `running` with the same RestartCount after the last wait → `unknown` (kept: a monitor that runs is never
-   * removed because its check fails). Any other look without evidence → `unknown` (kept). Only inspects and execs; a
-   * cancellation passes (AbortError).
+   * After a stored-script check of the container `current` that gave `unknown` (the read failed: no answer in time, a
+   * transport error), the container of the name is inspected again. The same ID found `restarting`, exited with
+   * LOADER_EXIT_CODE, or with a RestartCount above that of `current` is definite evidence that it exits at once without
+   * its script → `other` (replaced by its ID). The same ID still
+   * `running` with the same RestartCount → the stored script is checked once more (its answer counts; `unknown` again
+   * keeps it). An inspect that fails, a missing container, another ID or an ID that cannot be read, or any other state
+   * → `unknown` (no evidence: kept). Only inspects and reads; a cancellation passes (AbortError).
    */
   private async checkAgain(current: Inspected & { exists: true }, script: string, signal: AbortSignal | undefined): Promise<StoredScript> {
-    const found = await this.restartEvidence(current, signal);
-    if (found !== 'running') return found;
-    const stored = await this.storedScript(script, signal);
-    if (stored !== 'unknown') return stored;
-    for (const wait of REMOTE_MONITOR_RESTART_WAITS_MS) {
-      // The wait of ports.ts (a cancellation ends it with an AbortError).
-      await sleep(wait, signal);
-      const later = await this.restartEvidence(current, signal);
-      if (later !== 'running') return later;
-    }
-    return 'unknown';
-  }
-
-  /**
-   * One inspect of the container of the name for checkAgain. The same ID as `current` found `restarting`, exited with
-   * LOADER_EXIT_CODE, or with a RestartCount above that of `current` is definite evidence that it exits at once without
-   * its script → `other`. The same ID `running` with the same RestartCount → `running` (no evidence yet). An inspect
-   * that fails, a missing container, another ID or an ID that cannot be read, or any other state → `unknown` (no
-   * evidence). A cancellation passes (AbortError).
-   */
-  private async restartEvidence(current: Inspected & { exists: true }, signal: AbortSignal | undefined): Promise<'other' | 'running' | 'unknown'> {
     let again: Inspected;
     try {
       again = await this.inspect(signal);
@@ -410,7 +376,8 @@ export class RemoteSessionMonitor {
     if (again.status === 'restarting' || (again.status === 'exited' && again.exitCode === LOADER_EXIT_CODE) || again.restartCount > current.restartCount) {
       return 'other';
     }
-    return again.status === 'running' ? 'running' : 'unknown';
+    if (again.status !== 'running') return 'unknown';
+    return this.storedScript(script, signal);
   }
 
   /**
@@ -538,10 +505,10 @@ export class RemoteSessionMonitor {
   }
 
   /**
-   * Whether the running container holds the script (`sha256sum REMOTE_MONITOR_SCRIPT_PATH` in it,
-   * MonitorEngine.storedScript): its bundleHash → `same`; another hash of 64 hex digits → `other`; definite evidence
-   * that no script is stored or that the container does not run (`none`, NO_STORED_SCRIPT) → `other`. No answer in
-   * time, a failure, or another answer → `unknown`. A cancellation passes.
+   * Whether the container holds the script (the SHA-256 of REMOTE_MONITOR_SCRIPT_PATH in it, read through the archive
+   * endpoint, MonitorEngine.storedScript): its bundleHash → `same`; another hash of 64 hex digits → `other`; definite
+   * evidence that no script is stored or that the container does not exist (`none`) → `other`. No answer in time, a
+   * failure, or another answer → `unknown`. A cancellation passes.
    */
   private async storedScript(script: string, signal: AbortSignal | undefined): Promise<StoredScript> {
     const found = await this.options.engine.storedScript(this.containerName, signal);

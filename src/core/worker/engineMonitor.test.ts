@@ -4,9 +4,11 @@
 
 // The engine of the ensure of the Monitor over the port of the worker's engine (engineMonitor): how it reads
 // the answers of the Engine API as the ensure needs them.
+import { createHash } from 'crypto';
 import { describe, expect, it, vi } from 'vitest';
+import { MAX_BUNDLE_LINE_LENGTH } from '../loader/pipeLoader';
 import { LABEL_MONITOR, REMOTE_MONITOR_SCRIPT_PATH } from '../remoteMonitor/protocol';
-import { EngineError, type DockerEngine, type EngineExecResult } from './dockerEngine';
+import { EngineError, type DockerEngine } from './dockerEngine';
 import { unusedEngine } from './dockerEngine.testkit';
 import { engineMonitor, limited, monitorInspected } from './engineMonitor';
 
@@ -19,7 +21,6 @@ const INSPECT = {
   Config: { Labels: { [LABEL_MONITOR]: 'label-1', other: 'x' } },
 };
 const abortError = () => Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
-const result = (exitCode: number | null, stdout = '', stderr = '', timedOut = false): EngineExecResult => ({ exitCode, stdout, stderr, timedOut });
 
 function with_(methods: Partial<DockerEngine>) {
   return engineMonitor({ ...unusedEngine(), ...methods });
@@ -79,28 +80,26 @@ describe('the engine of the ensure of the Monitor over the Engine API', () => {
     await expect(with_({ start: async () => Promise.reject(new EngineError('no such file', 500)) }).start(ID)).rejects.toThrow('docker start failed: no such file');
   });
 
-  it('the stored script: its hash, definite evidence that there is none, or unknown', async () => {
-    const exec = vi.fn(async () => result(0, `${'a'.repeat(64)}  ${REMOTE_MONITOR_SCRIPT_PATH}\n`));
-    expect(await with_({ exec }).storedScript('devspace-monitor')).toEqual({ hash: `${'a'.repeat(64)}  ${REMOTE_MONITOR_SCRIPT_PATH}\n` });
-    expect(exec).toHaveBeenCalledWith('devspace-monitor', ['sha256sum', REMOTE_MONITOR_SCRIPT_PATH], { timeoutMs: 20_000 });
-    const answers: [string, EngineExecResult | Error, unknown][] = [
-      ['no stored file', result(1, '', `sha256sum: ${REMOTE_MONITOR_SCRIPT_PATH}: No such file or directory\n`), 'none'],
-      ['the runtime refuses an exec in a stopped container', result(126, 'OCI runtime exec failed: exec failed: cannot exec in a stopped container: unknown\r\n'), 'none'],
-      ['the container does not exist', new EngineError('No such container: devspace-monitor', 404), 'none'],
-      ['the container does not run', new EngineError(`Container ${ID} is not running`, 409), 'none'],
-      ['the container restarts', new EngineError(`Container ${ID} is restarting, wait until the container is running`, 409), 'none'],
-      ['the container is paused', new EngineError(`Container ${ID} is paused, unpause the container before exec`, 409), 'unknown'],
-      ['it cannot be read', result(1, '', `sha256sum: ${REMOTE_MONITOR_SCRIPT_PATH}: Permission denied\n`), 'unknown'],
-      ['no answer in time', result(null, '', '', true), 'unknown'],
+  it('the stored script: the SHA-256 of the file read through the archive endpoint, definite evidence that there is none, or unknown', async () => {
+    const script = Buffer.from('console.log("monitor")');
+    const containerFile = vi.fn(async () => script as Buffer | 'missing' | undefined);
+    expect(await with_({ containerFile }).storedScript('devspace-monitor')).toEqual({ hash: createHash('sha256').update(script).digest('hex') });
+    // Up to the longest script that the loader takes; within the time limit of a Docker call (60 s).
+    expect(containerFile).toHaveBeenCalledWith('devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH, MAX_BUNDLE_LINE_LENGTH, expect.any(AbortSignal));
+    const answers: [string, Buffer | 'missing' | undefined | Error, unknown][] = [
+      ['an empty file', Buffer.alloc(0), { hash: createHash('sha256').digest('hex') }],
+      ['no stored file, or no container', 'missing', 'none'],
+      ['no regular file, or too large to read', undefined, 'unknown'],
+      ['a failure of the engine', new EngineError('Could not find the file / in container m', 500), 'unknown'],
       ['a transport error', new Error('socket hang up'), 'unknown'],
     ];
     for (const [what, answer, expected] of answers) {
-      const engine = with_({ exec: async () => (answer instanceof Error ? Promise.reject(answer) : answer) });
+      const engine = with_({ containerFile: async () => (answer instanceof Error ? Promise.reject(answer) : answer) });
       expect(await engine.storedScript('devspace-monitor'), what).toEqual(expected);
     }
     const controller = new AbortController();
     controller.abort();
-    await expect(with_({ exec: async () => Promise.reject(abortError()) }).storedScript('m', controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(with_({ containerFile: async () => Promise.reject(abortError()) }).storedScript('m', controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('the IDs with a label, stopped ones included; undefined when the list fails', async () => {

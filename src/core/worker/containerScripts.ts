@@ -83,8 +83,6 @@ export const CONTAINER_SCRIPTS = {
   userId: { command: ['id', '-u'] },
   /** The numeric ID of the primary group of the user that it gets. */
   groupId: { command: ['id', '-g'] },
-  /** The hash of the script that the Monitor container stored (MonitorEngine.storedScript). */
-  monitorScriptHash: { command: ['sha256sum', REMOTE_MONITOR_SCRIPT_PATH] },
   /**
    * A heartbeat of a window, in the Monitor container (its argument: the heartbeat as one JSON argument), under
    * the lock of the records (underRecordsLock).

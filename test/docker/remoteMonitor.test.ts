@@ -347,8 +347,7 @@ describe('the Monitor container of a remote Docker host', () => {
   // The first, attached `docker run` is cut off before it wrote the script (the window reloaded, the SSH connection
   // dropped). The loader reads the end of its input and exits 3; the restart policy starts it again with an input that
   // never ends, and the marker of the first start makes it exit 3 at once, so ensure finds it restarting (or running
-  // with RestartCount ≥ 1 and no stored script) and replaces it. Two checks that the exit of the loader cut off are
-  // followed by more inspects (REMOTE_MONITOR_RESTART_WAITS_MS): on a busy runner the daemon may record that exit late.
+  // with RestartCount ≥ 1 and no stored script) and replaces it.
   it('replaces a monitor whose first load was cut off', { timeout: 240_000 }, async () => {
     cli.run(['rm', '-f', containerName]);
     const label = remoteMonitorLabelValue(script, helperTag, []);
