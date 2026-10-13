@@ -101,7 +101,7 @@ export interface CredentialPaths {
   sshAgentKeys: number | undefined;
 }
 
-/** Marker in the Git configuration of the runner (CI: `git config --global devspaces.marker …`). */
+/** Marker in the Git configuration of the runner (CI: `git config --global devspacestest.marker …`). */
 export const RUNNER_GIT_MARKER = 'devspaces-runner-git-configuration';
 
 /**
@@ -226,7 +226,7 @@ export async function effectiveCredentials(user: string): Promise<EffectiveCrede
     (await execInAsync(user, CREDENTIAL_HELPERS_SCRIPT, [host])).out.split('\n').filter((line) => line !== '');
   const githubHelpers = await helpers('github.com');
   const otherHostHelpers = await helpers('git.example.invalid');
-  const runnerGitConfig = execIn(user, 'git config --get devspaces.marker').code === 0;
+  const runnerGitConfig = execIn(user, 'git config --get devspacestest.marker').code === 0;
   const dockerConfigFile = execIn(user, 'printf %s "${DOCKER_CONFIG:-$HOME/.docker}/config.json"').out;
   const dockerHelperOfDevContainers = execIn(user, `grep -qs 'dev-containers' '${dockerConfigFile}'`).code === 0;
   const tokenVariables = [
