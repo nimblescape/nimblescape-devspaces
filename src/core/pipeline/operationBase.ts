@@ -120,7 +120,8 @@ export const TOKEN_REMOVE_FLOW_TIMEOUT_MS = 60_000;
 
 /**
  * The longest ensure of the Monitor in the worker: its looks and waits (a name conflict, a container that
- * another window creates: 25.5 s at most), the create and the wait for its ready line (60 s), each call of the engine
+ * another window creates: 25.5 s at most; a restarted container whose stored-script check failed twice: 3.75 s and five
+ * inspects, REMOTE_MONITOR_RESTART_WAITS_MS), the create and the wait for its ready line (60 s), each call of the engine
  * bounded by 60 s.
  */
 export const MONITOR_ENSURE_FLOW_TIMEOUT_MS = 5 * 60_000;
