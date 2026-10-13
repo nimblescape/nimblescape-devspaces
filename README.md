@@ -34,6 +34,7 @@ Switch between devspaces with **Devspaces: Switch Devspace…** (`Ctrl+Alt+E`, o
 
 | Setting | Default | |
 |---|---|---|
+| `devspaces.defaultImage` | `""` | An image that **Start** uses in place of the configuration of the repository; `devspaces.startWithDefaultImage` decides, and the context menu offers the other choice. |
 | `devspaces.stopOnClose` | `true` | Stop a devspace 5 minutes after its last window closes. |
 | `devspaces.updateContainer` | `notify` | At a start with a newer image: `notify` (Continue/Cancel) or `ask` (Update Now/Later). |
 | `devspaces.cacheUpdateSchedule` | `7 6 * * *` | When the background updates run: a cron expression in your time zone, or minutes. |

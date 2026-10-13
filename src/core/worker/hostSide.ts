@@ -25,7 +25,7 @@ export const VIEWER_TIMEOUT_MS = 5_000;
 /** The questions of a flow to the user (PipelineUi without the messages, which go as log lines and progress). */
 export interface HostQuestions {
   confirmUntrustedRepository(repository: string): Promise<boolean>;
-  configurationChanged(repository: string): Promise<'rebuildNow' | 'later'>;
+  configurationChanged(repository: string, what?: 'defaultImage'): Promise<'rebuildNow' | 'later'>;
   configurationKindChanged(repository: string, message: string): Promise<'rebuildNow' | 'later'>;
   filesMissing(repository: string): Promise<'cloneAgain' | 'deleteDevspace' | undefined>;
   recreateContainer(repository: string, question: { message: string; detail: string }): Promise<boolean>;

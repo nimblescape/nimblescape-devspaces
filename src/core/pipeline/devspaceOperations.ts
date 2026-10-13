@@ -263,6 +263,7 @@ export class DevspaceOperations extends OperationBase {
       ...what,
       ...(options.forceRebuild === true ? { forceRebuild: true } : {}),
       ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
+      ...(options.source !== undefined ? { source: options.source } : {}),
       ...(vscodeServer !== undefined ? { vscodeServer } : {}),
       ...(defaultExtensions !== undefined && defaultExtensions.length > 0 ? { defaultExtensions } : {}),
     });

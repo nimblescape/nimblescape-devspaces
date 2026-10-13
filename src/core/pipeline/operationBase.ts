@@ -29,7 +29,15 @@ import {
 import { isProcessAlive } from '../session/sessionRules';
 import { type DevspaceRegistry } from '../storage/registry';
 import type { SessionFiles } from '../storage/sessionFiles';
-import type { BusyMark, BusyOperation, Devspace, ExtensionSettings, GitHubAccount, WindowStatus } from '../types';
+import type {
+  BusyMark,
+  BusyOperation,
+  Devspace,
+  DevspaceSource,
+  ExtensionSettings,
+  GitHubAccount,
+  WindowStatus,
+} from '../types';
 import {
   otherWindowMarkIsLive,
   readLiveness,
@@ -178,6 +186,13 @@ export interface OpenOptions extends OperationOptions {
   forceRebuild?: boolean;
   /** "Select configuration…": change the configuration first. Implies a rebuild when a devspace exists. */
   configPath?: string;
+  /**
+   * What the open builds the devspace from (DevspaceSource): the configuration, or the default image of the setting.
+   * Missing: an existing devspace keeps the source of its last open (Devspace.defaultImage); a new devspace uses the
+   * configuration. With `configPath`, the configuration. A source that differs from the one of the build record of an
+   * existing devspace implies a rebuild.
+   */
+  source?: DevspaceSource;
 }
 
 export interface OpenResult {

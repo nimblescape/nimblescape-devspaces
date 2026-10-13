@@ -87,7 +87,7 @@ export function extensionHostSide(deps: HostSideDeps): HostSide {
   return {
     questions: {
       confirmUntrustedRepository: (repository) => deps.ui.confirmUntrustedRepository(repository),
-      configurationChanged: (repository) => deps.ui.configurationChanged(repository),
+      configurationChanged: (repository, what) => deps.ui.configurationChanged(repository, what),
       configurationKindChanged: (repository, message) => deps.ui.configurationKindChanged(repository, message),
       filesMissing: (repository) => deps.ui.filesMissing(repository),
       recreateContainer: (repository, question) => deps.ui.recreateContainer(repository, question),

@@ -179,8 +179,11 @@ export interface GitHubAuth {
 export interface PipelineUi {
   /** Security: first open of a repository of another owner. */
   confirmUntrustedRepository(repository: string): Promise<boolean>;
-  /** The devcontainer.json changed since the last build. */
-  configurationChanged(repository: string): Promise<'rebuildNow' | 'later'>;
+  /**
+   * The devcontainer.json changed since the last build; `what` `defaultImage`: the default image of the setting
+   * changed since the last build from one (the message names the default image).
+   */
+  configurationChanged(repository: string, what?: 'defaultImage'): Promise<'rebuildNow' | 'later'>;
   /**
    * The containers of a devspace without a build record are of another kind (Docker Compose or a single container)
    * than its configuration. `message`: Messages.configurationKindChanged. `later` keeps the kind.

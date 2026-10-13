@@ -26,6 +26,10 @@ export const TreeTexts = {
   branch: (branch: string) => `Branch: ${branch}`,
   defaultBranch: (branch: string) => `Default branch: ${branch}`,
   configuration: (name: string) => `Configuration: ${name}`,
+  /** Tooltip line of a devspace that was last opened with the default image of the setting (Devspace.defaultImage). */
+  defaultImage: (image: string) => `Default image: ${image}`,
+  /** The brackets of the description of such a devspace, in place of the configuration name. */
+  defaultImageShort: 'default image',
   lastUsed: (time: string) => `Last used: ${time}`,
   noDevspace: 'No devspace yet. Start creates it on the default branch.',
   notListedOnGitHub: 'GitHub does not list this repository.',
@@ -175,6 +179,8 @@ export interface RepositoryRow {
   branch?: string;
   /** Configuration name shown in brackets; only when the repository has more than one configuration. */
   configurationName?: string;
+  /** The default image that the last open of the devspace used in place of its configuration (Devspace.defaultImage). */
+  defaultImage?: string;
   /** The row has a devspace, and GitHub does not list its repository. */
   notOnGitHub: boolean;
   /**
@@ -715,6 +721,8 @@ function devspaceRow(
   const liveBranch = containerRuns(state) || state === 'updating' ? input.liveBranches.get(devspace.id) : undefined;
   const branch = nonEmpty(liveBranch) ?? nonEmpty(devspace.gitSummary?.branch ?? undefined);
   const configuration = actions.multiConfig ? configurationName(devspace.configPath) : undefined;
+  // The source of the last open: the default image shows in place of the configuration name.
+  const defaultImage = devspace.defaultImage;
   const notOnGitHub = input.signedIn && input.discovery !== undefined && info === undefined && confirmedMissing;
   // The change counts are recorded at each stop; while the container runs they are outdated, and with a missing volume
   // the changes are gone. Not while the state is unknown (the volume may be gone).
@@ -725,7 +733,9 @@ function devspaceRow(
   // registry name: the row shows the state of the switch under that name, as the pipeline applies it.
   const checks: HostAccessChecks = hostAccessChecks(devspace.repository, input.settings);
   const unrestricted = checks === 'off' ? StateTexts.hostAccessUnrestricted : undefined;
-  const left = [branch, configuration !== undefined ? `(${configuration})` : undefined].filter(isText).join(' ');
+  const left = [branch, defaultImage !== undefined ? `(${TreeTexts.defaultImageShort})` : configuration !== undefined ? `(${configuration})` : undefined]
+    .filter(isText)
+    .join(' ');
   const kept = devspace.keepRunning === true;
   // Close and Keep Running shows like a kept devspace; the menu keeps the switch of Keep Running When Closed.
   const keptOnce = !kept && devspace.keepRunningOnce === true;
@@ -756,7 +766,7 @@ function devspaceRow(
     keptBySettingText,
     servicesRunning ? TreeTexts.servicesRunning : undefined,
     branch !== undefined ? TreeTexts.branch(branch) : undefined,
-    configuration !== undefined ? TreeTexts.configuration(configuration) : undefined,
+    defaultImage !== undefined ? TreeTexts.defaultImage(defaultImage) : configuration !== undefined ? TreeTexts.configuration(configuration) : undefined,
     timeValue(devspace.lastUsedAt) > 0 ? TreeTexts.lastUsed(formatTime(devspace.lastUsedAt)) : undefined,
     notOnGitHub ? TreeTexts.notListedOnGitHub : undefined,
     info?.isArchived ? TreeTexts.archived : undefined,
@@ -777,6 +787,7 @@ function devspaceRow(
     ...(unknown !== undefined ? { stateUnknown: true as const } : {}),
     branch,
     configurationName: configuration,
+    ...(defaultImage !== undefined ? { defaultImage } : {}),
     notOnGitHub,
     hostAccessChecks: checks,
     actions,

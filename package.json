@@ -190,6 +190,16 @@
         "icon": "$(play)"
       },
       {
+        "command": "devspaces.startWithDefaultImage",
+        "title": "Start with Default Image",
+        "category": "Devspaces"
+      },
+      {
+        "command": "devspaces.startWithConfiguration",
+        "title": "Start with Configuration",
+        "category": "Devspaces"
+      },
+      {
         "command": "devspaces.stop",
         "title": "Stop",
         "category": "Devspaces",
@@ -387,6 +397,14 @@
           "when": "config.devspaces.openInNewWindow"
         },
         {
+          "command": "devspaces.startWithDefaultImage",
+          "when": "devspaces.hasDefaultImage && !config.devspaces.startWithDefaultImage"
+        },
+        {
+          "command": "devspaces.startWithConfiguration",
+          "when": "devspaces.hasDefaultImage && config.devspaces.startWithDefaultImage"
+        },
+        {
           "command": "devspaces.switchDevspaceInNewWindow",
           "when": "!config.devspaces.openInNewWindow"
         },
@@ -531,29 +549,39 @@
           "group": "1_actions@2"
         },
         {
+          "command": "devspaces.startWithConfiguration",
+          "when": "view == devspaces.repositories && viewItem =~ /canStart|canRebuild/ && devspaces.hasDefaultImage && config.devspaces.startWithDefaultImage",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "devspaces.startWithDefaultImage",
+          "when": "view == devspaces.repositories && viewItem =~ /canStart|canRebuild/ && devspaces.hasDefaultImage && !config.devspaces.startWithDefaultImage",
+          "group": "1_actions@3"
+        },
+        {
           "command": "devspaces.stop",
           "when": "view == devspaces.repositories && viewItem =~ /canStop/",
-          "group": "1_actions@3"
+          "group": "1_actions@4"
         },
         {
           "command": "devspaces.delete",
           "when": "view == devspaces.repositories && viewItem =~ /canDelete/",
-          "group": "1_actions@4"
+          "group": "1_actions@5"
         },
         {
           "command": "devspaces.keepRunning",
           "when": "view == devspaces.repositories && viewItem =~ /;canKeepRunning(;|$)/",
-          "group": "1_actions@5"
+          "group": "1_actions@6"
         },
         {
           "command": "devspaces.stopWhenClosed",
           "when": "view == devspaces.repositories && viewItem =~ /;kept(;|$)/",
-          "group": "1_actions@5"
+          "group": "1_actions@6"
         },
         {
           "command": "devspaces.closeAndKeepRunning",
           "when": "view == devspaces.repositories && viewItem =~ /;canCloseAndKeepRunning(;|$)/",
-          "group": "1_actions@6"
+          "group": "1_actions@7"
         },
         {
           "command": "devspaces.selectConfiguration",
@@ -591,6 +619,16 @@
           "command": "devspaces.startInCurrentWindow",
           "when": "viewItem =~ /canStart/ && config.devspaces.openInNewWindow",
           "group": "0_start@1"
+        },
+        {
+          "command": "devspaces.startWithConfiguration",
+          "when": "viewItem =~ /canStart|canRebuild/ && devspaces.hasDefaultImage && config.devspaces.startWithDefaultImage",
+          "group": "0_start@2"
+        },
+        {
+          "command": "devspaces.startWithDefaultImage",
+          "when": "viewItem =~ /canStart|canRebuild/ && devspaces.hasDefaultImage && !config.devspaces.startWithDefaultImage",
+          "group": "0_start@2"
         },
         {
           "command": "devspaces.keepRunning",
@@ -654,6 +692,18 @@
           "default": false,
           "scope": "application",
           "markdownDescription": "Where **Start** opens a devspace.\n\n- On: in a new window; the current window keeps its devspace (an empty window is used directly)\n- Off: in the current window\n\nThe context menu always offers the other choice. A devspace that is already open in a window is never opened twice: that window comes to the front."
+        },
+        "devspaces.defaultImage": {
+          "type": "string",
+          "scope": "application",
+          "default": "",
+          "markdownDescription": "An image that **Start** uses in place of the Dev Container configuration of the repository, for example `ghcr.io/majikmate/devcontainer-base:latest`.\n\nThe devspace is created from this image alone: the `devcontainer.json` of the repository (its Dockerfile, Features, lifecycle commands, mounts, ports and extensions) is not read; the metadata of the image applies. The repository is cloned as usual. Empty: every start uses the configuration of the repository.\n\nWith a default image, **Start With Default Image** decides what plain **Start** uses; the context menu of a row offers the other choice. Switching a devspace between the two creates its container again (the files in its workspace stay)."
+        },
+        "devspaces.startWithDefaultImage": {
+          "type": "boolean",
+          "scope": "application",
+          "default": true,
+          "markdownDescription": "Only with **Default Image** set.\n\n- On: **Start** uses the default image, and the context menu offers **Start with Configuration**\n- Off: **Start** uses the configuration of the repository, and the context menu offers **Start with Default Image**"
         },
         "devspaces.stopOnClose": {
           "type": "boolean",

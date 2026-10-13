@@ -296,7 +296,7 @@ export function hostUi(questions: HostSide['questions'], log: Logger): PipelineU
   };
   return {
     confirmUntrustedRepository: (repository) => questions.confirmUntrustedRepository(repository),
-    configurationChanged: (repository) => questions.configurationChanged(repository),
+    configurationChanged: (repository, what) => questions.configurationChanged(repository, what),
     configurationKindChanged: (repository, text) => questions.configurationKindChanged(repository, text),
     filesMissing: (repository) => questions.filesMissing(repository),
     recreateContainer: (repository, question) => questions.recreateContainer(repository, question),

@@ -15,6 +15,7 @@ import { HelperOperationError } from '../helperChannel/helperChannel';
 import { dockerHostField, isOnDockerHost } from '../docker/dockerHost';
 import { devspaceImageName, isConfigPathLabelValue, repositoryFolder, resourceName } from '../names';
 import { ownerOf } from '../ownership';
+import { parseImageReference } from '../remoteMonitor/protocol';
 import { isoTime } from '../ports';
 import type { BuildRecord, BusyMark, BusyOperation, ComposeBuildRecord, Devspace, GitHubAccount, GitSummary, RefusedUpdate, RegistryFile } from '../types';
 import { isBuildRecord, isDevspaceOf, type DevspaceRegistry } from '../storage/registry';
@@ -63,9 +64,9 @@ const FINISH_FIELDS = new Set(['lifecycleMarkRead', 'lifecycleRanFor', 'remoteUs
 /** The fields of the entry of a first open that the worker sends (CreateRequest). */
 const CREATE_FIELDS = new Set(['id', 'repository', 'configPath']);
 /** The fields of a change of the configuration (ConfigurationChange). */
-const CONFIGURATION_FIELDS = new Set(['select', 'shutdownActionNone', 'addVolumes', 'addServiceVolumes', 'keepRefusedFor', 'serviceFolders', 'cloned']);
+const CONFIGURATION_FIELDS = new Set(['select', 'defaultImage', 'shutdownActionNone', 'addVolumes', 'addServiceVolumes', 'keepRefusedFor', 'serviceFolders', 'cloned']);
 /** The fields of a build record (BuildRecord) and of its Docker Compose part (ComposeBuildRecord). */
-const BUILD_RECORD_FIELDS = new Set(['builtAt', 'devspaceImage', 'imageId', 'buildNumber', 'configPath', 'configHash', 'images', 'features', 'compose']);
+const BUILD_RECORD_FIELDS = new Set(['builtAt', 'devspaceImage', 'imageId', 'buildNumber', 'configPath', 'configHash', 'defaultImage', 'images', 'features', 'compose']);
 const COMPOSE_RECORD_FIELDS = new Set(['service', 'images', 'serviceImages', 'version', 'inputsHash']);
 /** The fields of a refused update (RefusedUpdate). */
 const REFUSED_FIELDS = new Set(['configPath', 'configHash', 'images', 'features', 'items', 'hostAccessChecks', 'reason']);
@@ -176,6 +177,11 @@ export interface CreateRequest {
 }
 
 /** The default configuration, or the path of a configuration of a repository (as its label takes it). */
+/** A default image of a request (DevspaceSource `defaultImage`): a valid image reference (parseImageReference), bounded. */
+function isDefaultImage(value: unknown): value is string {
+  return plainText(value, MAX_REFERENCE_LENGTH) && parseImageReference(value) !== undefined;
+}
+
 function isConfigPath(value: unknown): value is string {
   return typeof value === 'string' && (value === DEFAULT_CONFIG_PATH || isConfigPathLabelValue(value));
 }
@@ -211,8 +217,10 @@ export function checkedCreateRequest(value: unknown): CreateRequest {
  */
 export function checkedConfigurationChange(value: unknown): ConfigurationChange {
   if (!isRecord(value) || !hasOnlyFields(value, CONFIGURATION_FIELDS)) throw invalid('change of the configuration');
-  const { select, shutdownActionNone, addVolumes, addServiceVolumes, keepRefusedFor, serviceFolders, cloned } = value;
+  const { select, defaultImage, shutdownActionNone, addVolumes, addServiceVolumes, keepRefusedFor, serviceFolders, cloned } = value;
   if (select !== undefined && !isConfigPath(select)) throw invalid('selected configuration');
+  // The default image: a valid image reference, or `null` (the open uses the configuration).
+  if (defaultImage !== undefined && defaultImage !== null && !isDefaultImage(defaultImage)) throw invalid('default image');
   if (shutdownActionNone !== undefined && typeof shutdownActionNone !== 'boolean') throw invalid('shutdown action');
   let keep: ConfigurationChange['keepRefusedFor'];
   if (keepRefusedFor !== undefined) {
@@ -231,6 +239,7 @@ export function checkedConfigurationChange(value: unknown): ConfigurationChange 
   if (cloned !== undefined && cloned !== true) throw invalid('clone of the change');
   return {
     ...(select !== undefined ? { select } : {}),
+    ...(defaultImage !== undefined ? { defaultImage: defaultImage as string | null } : {}),
     ...(shutdownActionNone !== undefined ? { shutdownActionNone } : {}),
     ...(addVolumes !== undefined ? { addVolumes: volumeNames(addVolumes, 'additional volumes') } : {}),
     ...(addServiceVolumes !== undefined ? { addServiceVolumes: volumeNames(addServiceVolumes, 'volumes of the services') } : {}),
@@ -275,10 +284,11 @@ function imageList(value: unknown, what: string): string[] {
  */
 export function checkedBuildRecord(value: unknown): BuildRecord {
   if (!isRecord(value) || !hasOnlyFields(value, BUILD_RECORD_FIELDS)) throw invalid('build record');
-  const { builtAt, devspaceImage, imageId, buildNumber, configPath, configHash, images, features, compose } = value;
+  const { builtAt, devspaceImage, imageId, buildNumber, configPath, configHash, defaultImage, images, features, compose } = value;
   if (!isTime(builtAt) || !plainText(devspaceImage, MAX_REFERENCE_LENGTH) || devspaceImage === '') throw invalid('build record');
   if (imageId !== undefined && (typeof imageId !== 'string' || !SHA256.test(imageId))) throw invalid('image ID of the build record');
   if (!isConfigPath(configPath) || !plainText(configHash, MAX_HASH_LENGTH)) throw invalid('configuration of the build record');
+  if (defaultImage !== undefined && !isDefaultImage(defaultImage)) throw invalid('default image of the build record');
   let composeRecord: ComposeBuildRecord | undefined;
   if (compose !== undefined) {
     if (!isRecord(compose) || !hasOnlyFields(compose, COMPOSE_RECORD_FIELDS)) throw invalid('Docker Compose part of the build record');
@@ -295,6 +305,7 @@ export function checkedBuildRecord(value: unknown): BuildRecord {
     buildNumber: checkedBuildNumber(buildNumber),
     configPath,
     configHash,
+    ...(defaultImage !== undefined ? { defaultImage: defaultImage as string } : {}),
     images: digests(images, 'images of the build record'),
     features: digests(features, 'features of the build record'),
     ...(composeRecord !== undefined ? { compose: composeRecord } : {}),

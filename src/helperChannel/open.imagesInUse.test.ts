@@ -5,7 +5,7 @@
 // The open gives the Monitor the image references in use of its computer (`monitor.js images -` with `source`
 // and `references`), without a list of repositories.
 import { describe, expect, it } from 'vitest';
-import { parseOpenParams } from '../core/helperChannel/protocol';
+import { parseDevspaceSource, parseOpenParams } from '../core/helperChannel/protocol';
 import { MAX_IMAGE_REFERENCES, parseImagesInput } from '../core/remoteMonitor/protocol';
 import { silentLogger, type Logger } from '../core/ports';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
@@ -77,6 +77,14 @@ describe('the image references in use of an open, to the Monitor', () => {
       repository: 'acme/api',
       devspaceId: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d',
     };
+    // The source of the open (DevspaceSource), strictly.
+    expect(parseOpenParams({ ...base, source: { kind: 'configuration' } })?.source).toEqual({ kind: 'configuration' });
+    expect(parseOpenParams({ ...base, source: { kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' } })?.source).toEqual({ kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' });
+    expect(parseOpenParams(base)).not.toHaveProperty('source');
+    for (const odd of [{ kind: 'defaultImage' }, { kind: 'defaultImage', image: 'not an image' }, { kind: 'configuration', image: 'node:20' }, { kind: 'other' }, 'configuration', null]) {
+      expect(parseOpenParams({ ...base, source: odd }), JSON.stringify(odd)).toBeUndefined();
+      expect(parseDevspaceSource(odd), JSON.stringify(odd)).toBeUndefined();
+    }
     expect(parseOpenParams({ ...base, references: ['node:20', 'node:20', `ghcr.io/a/b@sha256:${'a'.repeat(64)}`] })?.references).toEqual(['node:20', `ghcr.io/a/b@sha256:${'a'.repeat(64)}`]);
     expect(parseOpenParams(base)).not.toHaveProperty('references');
     // The recorded digests, strictly, and only with the references.

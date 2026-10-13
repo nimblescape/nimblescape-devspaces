@@ -361,6 +361,13 @@ describe('validators', () => {
     expect(isPendingOperation({ ...operation(ENV_A), additionalVolumesToRemove: 'yes' })).toBe(false);
     expect(isPendingOperation({ ...operation(ENV_A), additionalVolumesToRemove: ['db', 3] })).toBe(false);
     expect(isPendingOperation({ ...operation(ENV_A), additionalVolumesToRemove: ['db'] })).toBe(true);
+    // The source of Start with Default Image and Start with Configuration (DevspaceSource), strictly.
+    expect(isPendingOperation({ ...operation(ENV_A), reason: 'sourceSelected', source: { kind: 'configuration' } })).toBe(true);
+    expect(isPendingOperation({ ...operation(ENV_A), reason: 'sourceSelected', source: { kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' } })).toBe(true);
+    expect(isPendingOperation({ ...operation(ENV_A), source: { kind: 'defaultImage' } })).toBe(false);
+    expect(isPendingOperation({ ...operation(ENV_A), source: { kind: 'defaultImage', image: 'not an image' } })).toBe(false);
+    expect(isPendingOperation({ ...operation(ENV_A), source: { kind: 'configuration', image: 'node:22' } })).toBe(false);
+    expect(isPendingOperation({ ...operation(ENV_A), source: 'configuration' })).toBe(false);
     expect(isReopenRecord({ devspaceId: ENV_A, closedAt: '2026-09-24T18:02:11Z' })).toBe(true);
     expect(isReopenRecord(null)).toBe(false);
   });

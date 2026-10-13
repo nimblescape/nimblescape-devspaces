@@ -195,6 +195,7 @@ import type {
   DevcontainerConfig,
   DevcontainerResult,
   Devspace,
+  DevspaceSource,
   GitHubAccount,
   GitSummary,
   PendingConnection,
@@ -222,6 +223,7 @@ import {
   liveServiceFolders,
   repositoryServiceDataFolders,
   configHash,
+  defaultImageConfiguration,
   containerIsCurrent,
   digestReference,
   errorDetail,
@@ -303,6 +305,20 @@ const VOLUME_REMOVE_DELAY_MS = 1_000;
 // About 15,000 pairs (namePair): an ID whose pair is in use on the engine is rare; a few attempts are enough.
 const DEVSPACE_ID_ATTEMPTS = 20;
 
+/**
+ * The source of an open for its PipelineContext (`source`): "Select configuration…" (OpenOptions.configPath) names the
+ * configuration; else the source that the open names, if any.
+ */
+function sourceField(options: Pick<OpenOptions, 'configPath' | 'source'>): { source?: DevspaceSource } {
+  if (options.configPath !== undefined) return { source: { kind: 'configuration' } };
+  return options.source !== undefined ? { source: options.source } : {};
+}
+
+/** A source for the log: the default image, or the configuration. */
+function sourceText(defaultImage: string | undefined, configPath: string): string {
+  return defaultImage !== undefined ? `the default image ${defaultImage}` : `the configuration ${configPath}`;
+}
+
 /** The values of the labels that the extension gives the images of `env` (imageLabelItems). */
 function ownImageLabels(env: Devspace): { id: string; repository: string; ownerId: string } {
   return { id: env.id, repository: env.repository, ownerId: env.owner.id };
@@ -320,6 +336,12 @@ interface LoadedConfiguration {
    */
   fallback: boolean;
   configHash: string;
+  /**
+   * The run reads the default image of the setting in place of the configuration of the repository
+   * (PipelineContext.defaultImage): `config` is the synthesized configuration (defaultImageConfiguration), and
+   * `configHash` the hash of its text. BuildRecord.defaultImage of the build.
+   */
+  defaultImage?: string;
   config: DevcontainerConfig;
   dockerfileText?: string;
   references: ConfigReferences;
@@ -376,6 +398,17 @@ interface PipelineContext {
   env: Devspace;
   /** Configuration to read. Kept apart from `env`, which is replaced by the registry entry after each change. */
   configPath: string;
+  /**
+   * The source that the open named (OpenOptions.source; "Select configuration…" names the configuration). Missing:
+   * the devspace keeps the source of its last open. decideSource turns it into `defaultImage`.
+   */
+  source?: DevspaceSource;
+  /**
+   * The default image that this run reads and builds in place of the configuration of the repository (DevspaceSource
+   * `defaultImage`); missing: the configuration `configPath`. Set by decideSource (runPipeline), once the build record
+   * is known; a prepare takes the one of its approved record.
+   */
+  defaultImage?: string;
   firstOpen: boolean;
   forced: boolean;
   steps: StepReporter;
@@ -1081,6 +1114,7 @@ export class DevspaceService extends OperationBase {
     const ctx: PipelineContext = {
       env: devspace,
       configPath: devspace.configPath,
+      ...sourceField(options),
       firstOpen: true,
       forced: false,
       steps,
@@ -1193,6 +1227,7 @@ export class DevspaceService extends OperationBase {
         const opened: PipelineContext = {
           env,
           configPath,
+          ...sourceField(options),
           firstOpen: false,
           forced,
           steps,
@@ -1333,6 +1368,7 @@ export class DevspaceService extends OperationBase {
     // An entry without a build record (restored from its volume after a lost registry, or a devspace that another
     // computer created) takes the record of its newest image (adoptImageRecord).
     const record = ctx.env.buildRecord ?? (await this.adoptImageRecord(ctx));
+    this.decideSource(ctx, record);
     const imagePresent = record !== undefined && (await this.pinnedImagePresent(record));
     this.logger.info(
       `State of ${ctx.env.repository}: container ${container ? container.state : 'missing'}, devspace image ` +
@@ -1427,6 +1463,7 @@ export class DevspaceService extends OperationBase {
     }
     if (loaded) {
       const previousConfigPath = ctx.env.configPath;
+      const previousDefaultImage = ctx.env.defaultImage;
       await this.saveConfiguration(ctx, loaded, record);
       // A container of an older setup is created again; it does not count as a working container.
       const currentContainer = container !== undefined && containerIsCurrent(container.labels, true, ctx.hostAccessChecks);
@@ -1436,11 +1473,13 @@ export class DevspaceService extends OperationBase {
         if (plan.build) outcome = await this.buildAndReplace(ctx, loaded, plan, record, imagePresent, container);
       } catch (error) {
         // A selected configuration that could not start does not stay selected, so the next open starts the devspace
-        // with the configuration that it had (its containers are of that one).
-        if (ctx.env.configPath !== previousConfigPath) {
-          this.logger.info(`The configuration ${ctx.env.configPath} of ${ctx.env.repository} could not be started; ${previousConfigPath} stays selected.`);
+        // with the configuration that it had (its containers are of that one). The same for a selected source.
+        if (ctx.env.configPath !== previousConfigPath || ctx.env.defaultImage !== previousDefaultImage) {
+          this.logger.info(
+            `${sourceText(ctx.env.defaultImage, ctx.env.configPath)} of ${ctx.env.repository} could not be started; ${sourceText(previousDefaultImage, previousConfigPath)} stays selected.`,
+          );
           await this.quietly('restore the configuration path', async () =>
-            this.entryUpdated(ctx, await this.openRecords.configuration(ctx.env.id, { select: previousConfigPath })),
+            this.entryUpdated(ctx, await this.openRecords.configuration(ctx.env.id, { select: previousConfigPath, defaultImage: previousDefaultImage ?? null })),
           );
         }
         throw error;
@@ -1448,6 +1487,27 @@ export class DevspaceService extends OperationBase {
     }
     outcome ??= await this.startContainer(ctx, container, record, imagePresent, this.configurationOfKind(ctx, loaded, container, record));
     return this.finish(ctx, outcome, loaded);
+  }
+
+  /**
+   * The source of this run (PipelineContext.defaultImage): the one that the open named (`source`), else the one of the
+   * last open of the devspace (Devspace.defaultImage), else the one of its build record (an entry restored from its
+   * volume takes the record of its newest image). A devspace built from the other source (its record, else the entry
+   * without one) is built again from this one, whatever the digests say: the container is created again from the
+   * other image; the files of the workspace volume stay. A changed default image of the same kind is a changed
+   * configuration (planUpdate asks Rebuild now or Later).
+   */
+  private decideSource(ctx: PipelineContext, record: BuildRecord | undefined): void {
+    const env = ctx.env;
+    const built = record !== undefined ? record.defaultImage : env.defaultImage;
+    const kept = env.defaultImage ?? record?.defaultImage;
+    const next = ctx.source === undefined ? kept : ctx.source.kind === 'defaultImage' ? ctx.source.image : undefined;
+    ctx.defaultImage = next;
+    if (next !== undefined) this.logger.info(`${env.repository} opens with the default image ${next} in place of its configuration.`);
+    if ((record !== undefined || env.defaultImage !== undefined) && (built !== undefined) !== (next !== undefined)) {
+      this.logger.info(`Source of ${env.repository}: ${sourceText(built, record?.configPath ?? env.configPath)} → ${sourceText(next, ctx.configPath)}. The devspace is built again.`);
+      ctx.forced = true;
+    }
   }
 
   /**
@@ -1514,9 +1574,17 @@ export class DevspaceService extends OperationBase {
     }
     await this.prepareHelper(ctx);
 
-    const resolved = await this.resolveConfigFiles(env, ctx.configPath, ctx.signal, ctx.helperImage);
+    // The default image: the synthesized configuration in place of the files of the repository (whatever the branch
+    // has), read and built under the configuration path of the devspace, which the CLI gets as `--config` while it
+    // reads our configuration (`--override-config`, like our copy of a Docker Compose configuration).
+    const synthesized = ctx.defaultImage !== undefined ? defaultImageConfiguration(ctx.defaultImage) : undefined;
+    const resolved =
+      synthesized !== undefined
+        ? { configPath: ctx.configPath, files: { configText: synthesized.text } as ConfigFiles, fallback: false }
+        : await this.resolveConfigFiles(env, ctx.configPath, ctx.signal, ctx.helperImage);
     if (!resolved) throw new UserFacingError('noConfiguration', Messages.noConfiguration(env.repository));
     const { configPath, files, fallback } = resolved;
+    const override = synthesized !== undefined ? { override: synthesized.config } : {};
     // A prepare builds only the configuration of its build record.
     if (ctx.prepare !== undefined && fallback) throw new PrepareSkipped(`its configuration ${ctx.configPath} is not on the checked-out branch`);
     if (fallback) {
@@ -1546,6 +1614,7 @@ export class DevspaceService extends OperationBase {
         configPath,
         devspaceId: env.id,
         merged: false,
+        ...override,
         onOutput: this.output,
         image: ctx.helperImage,
         signal: ctx.signal,
@@ -1628,6 +1697,7 @@ export class DevspaceService extends OperationBase {
           repository: env.repository,
           configPath,
           devspaceId: env.id,
+          ...override,
           onOutput: this.output,
           image: ctx.helperImage,
           signal: ctx.signal,
@@ -1686,6 +1756,7 @@ export class DevspaceService extends OperationBase {
       fallback,
       // The Dockerfile at the resolved path.
       configHash: configHash(files.configText, dockerfile.text),
+      ...(ctx.defaultImage !== undefined ? { defaultImage: ctx.defaultImage } : {}),
       config,
       dockerfileText: dockerfile.text,
       references: analysis.references,
@@ -2277,6 +2348,8 @@ export class DevspaceService extends OperationBase {
     const serviceVolumes = loaded.compose ? composeServiceVolumeNames(loaded.compose.output.model, loaded.compose.project, loaded.compose.service) : undefined;
     const updated = await this.openRecords.configuration(ctx.env.id, {
       select: configPath,
+      // The source of this open (DevspaceSource), which the next open keeps unless it names another one.
+      defaultImage: loaded.defaultImage ?? null,
       shutdownActionNone: loaded.config.shutdownAction === 'none',
       // Volumes recorded before stay: the pipeline adds those that it creates before `up` (createAdditionalVolumes), and
       // a volume that the devspace used may still hold its data.
@@ -2326,8 +2399,14 @@ export class DevspaceService extends OperationBase {
     let skipUpdate = false;
     const changed = record !== undefined && (record.configPath !== loaded.configPath || (await this.configHashChanged(ctx, record, loaded)));
     if (changed && !forced) {
-      this.logger.info(`The configuration of ${ctx.env.repository} changed since the last build.`);
-      const answer = await this.deps.ui.configurationChanged(ctx.env.repository);
+      // A changed default image (the setting) of a devspace built from one: the question names it.
+      const defaultImageChanged = record.defaultImage !== undefined && loaded.defaultImage !== undefined && record.defaultImage !== loaded.defaultImage;
+      this.logger.info(
+        defaultImageChanged
+          ? `The default image of ${ctx.env.repository} changed since the last build: ${record.defaultImage} → ${loaded.defaultImage}.`
+          : `The configuration of ${ctx.env.repository} changed since the last build.`,
+      );
+      const answer = await this.deps.ui.configurationChanged(ctx.env.repository, defaultImageChanged ? 'defaultImage' : undefined);
       this.throwIfCancelled(ctx.signal);
       if (answer === 'rebuildNow') forced = true;
       else skipUpdate = true;
@@ -2637,6 +2716,7 @@ export class DevspaceService extends OperationBase {
       buildNumber,
       configPath: loaded.configPath,
       configHash: loaded.configHash,
+      ...(loaded.defaultImage !== undefined ? { defaultImage: loaded.defaultImage } : {}),
       images: recordDigests(loaded.references.images, current?.images, record?.images, stale),
       features: recordDigests(loaded.references.features, current?.features, record?.features),
       ...(loaded.compose
@@ -2879,7 +2959,8 @@ export class DevspaceService extends OperationBase {
       repository: env.repository,
       configPath: loaded.configPath,
       imageName,
-      ...(loaded.compose ? this.composeBuildOptions(env, loaded.compose) : {}),
+      // Docker Compose builds our copy of the configuration; the default image its synthesized configuration.
+      ...(loaded.compose ? this.composeBuildOptions(env, loaded.compose) : this.defaultImageBuildOptions(loaded)),
       // Only masked in the build's output, like for `up`.
       token: ctx.session.token,
       onOutput: this.output,
@@ -3113,6 +3194,8 @@ export class DevspaceService extends OperationBase {
     const ctx: PipelineContext = {
       env: { ...env, configPath: record.configPath, buildRecord: record },
       configPath: record.configPath,
+      // The source of the approved record.
+      ...(record.defaultImage !== undefined ? { defaultImage: record.defaultImage } : {}),
       firstOpen: false,
       forced: false,
       steps: new StepReporter(silentProgress, this.logger),
@@ -3183,23 +3266,32 @@ export class DevspaceService extends OperationBase {
     // devcontainer.json, next to which WRITE_AND_RUN_SCRIPT writes a copy of the lockfile (the CLI writes only there,
     // in the helper), as at the open; the batch step takes `--frozen-lockfile` only without that copy. The build model
     // names the images of a prepare (composeBuildOptions): the dev service builds `name` itself.
+    // The default image builds its synthesized configuration (our copy, like Docker Compose: the lockfile copy next to
+    // it, without `--frozen-lockfile`).
     await this.deps.helper.build({
       volumeName: env.volumeName,
       repository: env.repository,
       configPath: loaded.configPath,
       imageName: name,
-      ...(compose !== undefined ? this.composeBuildOptions(env, compose, true) : { frozenLockfile: true as const }),
+      ...(compose !== undefined
+        ? this.composeBuildOptions(env, compose, true)
+        : loaded.defaultImage !== undefined
+          ? this.defaultImageBuildOptions(loaded)
+          : { frozenLockfile: true as const }),
       onOutput: this.output,
       image: ctx.helperImage,
       signal,
     });
     if (!(await docker.imageExists(name))) throw new Error(`The prepared image ${name} is missing after the build.`);
     // The devspace may be deleted meanwhile (a Delete that did not wait for the end of the prepare), and the
-    // configuration may change in the volume during the build: then the image goes (the catch of prepare).
+    // configuration may change in the volume during the build: then the image goes (the catch of prepare). The
+    // synthesized configuration of the default image is not in the volume: it cannot change there.
     if ((await this.workspaceVolumeOwnership(env)) !== 'own') throw new PrepareSkipped('its workspace volume is gone (the devspace was deleted)');
-    const after = await this.resolveConfigFiles(env, loaded.configPath, signal, ctx.helperImage);
-    if (after === undefined || after.fallback || (await this.configHashAfterPrepare(ctx, loaded, after.files)) !== loaded.configHash) {
-      throw new PrepareSkipped('its configuration changed during the prepare');
+    if (loaded.defaultImage === undefined) {
+      const after = await this.resolveConfigFiles(env, loaded.configPath, signal, ctx.helperImage);
+      if (after === undefined || after.fallback || (await this.configHashAfterPrepare(ctx, loaded, after.files)) !== loaded.configHash) {
+        throw new PrepareSkipped('its configuration changed during the prepare');
+      }
     }
     this.throwIfCancelled(signal);
     await docker.labelImage(name, preparedImageLabels(env, { key, helperImage }), signal);
@@ -3258,6 +3350,15 @@ export class DevspaceService extends OperationBase {
       signal: ctx.signal,
     });
     return 'error' in output ? undefined : composeConfigHash(files.configText, output.model, output.dockerfiles);
+  }
+
+  /**
+   * `devcontainer build` with the default image: the synthesized configuration (defaultImageConfiguration) as our
+   * copy of the configuration (`--config` names it in the helper, as for Docker Compose; the repository's lockfile, if
+   * any, is copied next to it). Nothing for a run with the configuration of the repository.
+   */
+  private defaultImageBuildOptions(loaded: LoadedConfiguration): { override?: Record<string, unknown> } {
+    return loaded.defaultImage !== undefined ? { override: defaultImageConfiguration(loaded.defaultImage).config } : {};
   }
 
   /**

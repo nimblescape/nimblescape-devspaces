@@ -9,6 +9,11 @@ export const Commands = {
   // Start in a new window, or (while the setting openInNewWindow is on) in the current window.
   startInNewWindow: 'devspaces.startInNewWindow',
   startInCurrentWindow: 'devspaces.startInCurrentWindow',
+  // Start with the other source than the setting startWithDefaultImage gives plain Start: the default image of the
+  // setting defaultImage, or the configuration of the repository. The menus show one of the two, only with a default
+  // image (context key devspaces.hasDefaultImage).
+  startWithDefaultImage: 'devspaces.startWithDefaultImage',
+  startWithConfiguration: 'devspaces.startWithConfiguration',
   stop: 'devspaces.stop',
   delete: 'devspaces.delete',
   selectConfiguration: 'devspaces.selectConfiguration',

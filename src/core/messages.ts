@@ -47,6 +47,8 @@ export const Messages = {
   containerUpdateCancelled: (repository: string) => `${repository} was not opened, and its container was not updated.`,
   filesMissing: 'The files of this devspace are missing.',
   configurationChanged: 'The devspace configuration changed.',
+  /** The default image of the setting changed since the devspace was built from one. */
+  defaultImageChanged: 'The default image of the devspace changed.',
   /**
    * A devspace without a build record (restored after a lost registry) whose containers are of another kind than
    * its configuration. Rebuild now switches the kind; Later keeps it (the non-destructive answer). No docker start
@@ -223,6 +225,9 @@ export const Messages = {
   hostAccessUnrestrictedTooltip:
     'Warning: the host access checks are off for this repository. Its configuration can use the files, devices, and Docker of your computer.',
   /** Entries of the setting devspaces.hostAccessChecksOff that are no repository name (`owner/name`). */
+  /** The setting defaultImage is no image reference: it is ignored (no default image). */
+  defaultImageInvalid: (value: string) =>
+    `The setting devspaces.defaultImage is not an image reference like ghcr.io/owner/image:tag. It is ignored: ${value}`,
   hostAccessChecksOffInvalid: (entries: string) =>
     `The setting devspaces.hostAccessChecksOff has entries that are not a repository name like owner/name. They are ignored: ${entries}`,
   /** Git before 2.9 does not remove the forwarding credential helper with an empty helper. */

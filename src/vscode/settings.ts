@@ -10,6 +10,7 @@ import { Messages } from '../core/messages';
 import type { Logger } from '../core/ports';
 import type { ExtensionSettings } from '../core/types';
 import { DEFAULT_CACHE_UPDATE_SCHEDULE, normalizeCacheSchedule } from '../core/remoteMonitor/cacheSettings';
+import { parseImageReference } from '../core/remoteMonitor/protocol';
 import { normalizeListOpenMode, type ListOpenMode } from './rowActivation';
 
 export const SETTINGS_SECTION = 'devspaces';
@@ -32,6 +33,8 @@ export const DEFAULT_SETTINGS: Readonly<ExtensionSettings> = Object.freeze({
   cacheUpdateSchedule: DEFAULT_CACHE_UPDATE_SCHEDULE,
   stopMonitorWhenIdle: false,
   updateContainer: 'notify',
+  defaultImage: '',
+  startWithDefaultImage: true,
 });
 
 /**
@@ -72,6 +75,40 @@ export function readSettings(): ExtensionSettings {
  */
 export function hostAccessChecksOffValue(configuration: Pick<vscode.WorkspaceConfiguration, 'inspect'>): unknown {
   return configuration.inspect<unknown>(HOST_ACCESS_CHECKS_OFF_SETTING)?.globalValue;
+}
+
+/**
+ * The value of devspaces.defaultImage that is no image reference (parseImageReference, after trimming), for one
+ * warning; `''` when the setting is empty or valid. The setting has the scope `application`: only the user value.
+ */
+export function invalidDefaultImageValue(): string {
+  const value = vscode.workspace.getConfiguration(SETTINGS_SECTION).get<unknown>('defaultImage');
+  return normalizeDefaultImage(value) === undefined && typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
+}
+
+/**
+ * One warning (a message and a log line) that names the invalid value of devspaces.defaultImage, which is ignored (no
+ * default image). `warned`: the value of the last warning (`''` for none); the same value is not named again. Returns
+ * the value of this call, for the next one.
+ */
+export function warnInvalidDefaultImage(logger: Logger, warned: string): string {
+  const invalid = invalidDefaultImageValue();
+  if (invalid === '' || invalid === warned) return invalid;
+  logger.warn(Messages.defaultImageInvalid(invalid));
+  Promise.resolve(vscode.window.showWarningMessage(Messages.defaultImageInvalid(invalid))).catch((error: unknown) =>
+    logger.warn(`The warning about the setting defaultImage could not be shown: ${errorMessage(error)}`),
+  );
+  return invalid;
+}
+
+/**
+ * The setting `defaultImage` as the extension uses it: the trimmed image reference when it is one (parseImageReference,
+ * as the Monitor and the worker check references), else `undefined` (an empty or invalid value: no default image).
+ */
+export function normalizeDefaultImage(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed !== '' && parseImageReference(trimmed) !== undefined ? trimmed : undefined;
 }
 
 /** The entries of devspaces.hostAccessChecksOff (user settings) that are no repository name, for one warning. */
@@ -157,5 +194,8 @@ export function normalizeSettings(get: (key: keyof ExtensionSettings) => unknown
     stopMonitorWhenIdle: bool('stopMonitorWhenIdle', DEFAULT_SETTINGS.stopMonitorWhenIdle ?? false),
     // `ask`, or else the default `notify`.
     updateContainer: get('updateContainer') === 'ask' ? 'ask' : 'notify',
+    // The image reference, or '' (none; an invalid value is ignored, warnInvalidDefaultImage names it).
+    defaultImage: normalizeDefaultImage(get('defaultImage')) ?? '',
+    startWithDefaultImage: bool('startWithDefaultImage', DEFAULT_SETTINGS.startWithDefaultImage ?? true),
   };
 }

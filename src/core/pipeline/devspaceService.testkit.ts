@@ -926,10 +926,18 @@ export class FakeHelper implements DevspaceHelper {
       ...(p.env !== undefined ? { env: p.env } : {}),
     });
     if (this.readConfigurationError) throw this.readConfigurationError;
-    // A Docker Compose configuration resolves to its own text (the fake resolves no variables); any other one to `config`.
+    // A Docker Compose configuration resolves to its own text (the fake resolves no variables); the synthesized
+    // configuration of a default image (an override with `image`, which the CLI reads in place of the file) to itself;
+    // any other one to `config`.
     const text = Object.prototype.hasOwnProperty.call(this.files, p.configPath) ? this.files[p.configPath].configText : undefined;
     const compose = text !== undefined && checkConfiguration(text).compose;
-    const config = (compose && text !== undefined ? parseJsonc(text) : JSON.parse(JSON.stringify(this.config))) as DevcontainerConfig;
+    const config = (
+      p.override !== undefined && typeof p.override.image === 'string'
+        ? JSON.parse(JSON.stringify(p.override))
+        : compose && text !== undefined
+          ? parseJsonc(text)
+          : JSON.parse(JSON.stringify(this.config))
+    ) as DevcontainerConfig;
     if (p.merged === false) return { config };
     return this.merged === undefined ? { config } : { config, merged: { ...config, ...this.merged } };
   }
@@ -1347,8 +1355,8 @@ export class FakeUi implements PipelineUi {
     return this.trust;
   }
 
-  async configurationChanged(repository: string): Promise<'rebuildNow' | 'later'> {
-    this.prompts.push(`configurationChanged ${repository}`);
+  async configurationChanged(repository: string, what?: 'defaultImage'): Promise<'rebuildNow' | 'later'> {
+    this.prompts.push(`configurationChanged ${repository}${what !== undefined ? ` ${what}` : ''}`);
     return this.configurationChangedAnswer;
   }
 

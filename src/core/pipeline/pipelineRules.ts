@@ -94,6 +94,18 @@ export function configHash(configText: string, dockerfileText?: string): string 
   return `sha256:${crypto.createHash('sha256').update(configText + (dockerfileText ?? '')).digest('hex')}`;
 }
 
+/**
+ * The configuration that an open with the default image `image` (DevspaceSource `defaultImage`) reads and builds in
+ * place of the configuration of the repository: `{ "image": "<image>" }` as the Dev Container CLI gets it
+ * (`--override-config` of `read-configuration`, `--config` of `build`), and its text, whose hash is the
+ * `configHash` of the build record (no Dockerfile). The same text for the same image, so the hash tells a changed
+ * default image from the one of the record.
+ */
+export function defaultImageConfiguration(image: string): { config: { image: string }; text: string } {
+  const config = { image };
+  return { config, text: `${JSON.stringify(config, null, 2)}\n` };
+}
+
 export interface UpdateInput {
   /** The devspace has a build record. */
   hasRecord: boolean;

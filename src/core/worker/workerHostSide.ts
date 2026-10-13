@@ -139,7 +139,8 @@ export function workerHostSide(ask: AskHost, secretOf: SecretOf): HostSide {
   return {
     questions: {
       confirmUntrustedRepository: async (repository) => (await call('question', 'confirmUntrustedRepository', repository)) === true,
-      configurationChanged: async (repository) => ((await call('question', 'configurationChanged', repository)) === 'rebuildNow' ? 'rebuildNow' : 'later'),
+      configurationChanged: async (repository, what) =>
+        (await call('question', 'configurationChanged', repository, ...(what !== undefined ? [what] : []))) === 'rebuildNow' ? 'rebuildNow' : 'later',
       configurationKindChanged: async (repository, message) =>
         (await call('question', 'configurationKindChanged', repository, message)) === 'rebuildNow' ? 'rebuildNow' : 'later',
       filesMissing: async (repository) => {

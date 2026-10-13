@@ -29,7 +29,7 @@ import { LABEL_CHANNEL_STEP, LABEL_HELPER_RUN, WORKSPACES_ROOT } from '../names'
 import type { DevspaceStates, StateDevspace } from '../pipeline/refreshStates';
 import { isStorageId } from '../storage/paths';
 import { LABEL_MONITOR, isSourceId, parseHeartbeatInput, MAX_IMAGE_REFERENCES, parseImageReference, parseMonitorSettings, parseReferenceDigests, type HeartbeatInput, type MonitorSettings } from '../remoteMonitor/protocol';
-import type { ContainerState, GitSummary } from '../types';
+import type { ContainerState, DevspaceSource, GitSummary } from '../types';
 import { isGitSummary } from '../git/gitSummary';
 import { isUserErrorCode, type UserErrorCode } from '../errors';
 import { parseExtensionList } from '../vscodeExtensions';
@@ -1530,6 +1530,8 @@ export interface OpenParams {
   forceRebuild?: true;
   /** Select configuration (OpenOptions.configPath). */
   configPath?: string;
+  /** The source of the open (OpenOptions.source): the configuration, or the default image of the setting. */
+  source?: DevspaceSource;
   /**
    * The shared VS Code server store (docs/architecture.md "The shared VS Code server and extension store"): the VS Code
    * of the window that sends the open (its `product.json`), only for a build of the Microsoft update service
@@ -1611,6 +1613,19 @@ function plainOpenText(value: unknown, max: number): value is string {
   return typeof value === 'string' && value !== '' && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
+/**
+ * The strict check of DevspaceSource (both sides of the open, and the records that the worker sends): `configuration`,
+ * or `defaultImage` with a valid image reference (parseImageReference).
+ */
+export function parseDevspaceSource(value: unknown): DevspaceSource | undefined {
+  if (!isRecord(value)) return undefined;
+  if (hasOnlyKeys(value, ['kind']) && value.kind === 'configuration') return { kind: 'configuration' };
+  if (hasOnlyKeys(value, ['kind', 'image']) && value.kind === 'defaultImage' && parseImageReference(value.image) !== undefined) {
+    return { kind: 'defaultImage', image: value.image as string };
+  }
+  return undefined;
+}
+
 /** The strict check of OpenSettings. */
 function parseOpenSettings(value: unknown): OpenSettings | undefined {
   if (!isRecord(value) || !hasOnlyKeys(value, ['updateImagesOnConnect', 'hostAccessChecks', 'stopOnClose', 'respectShutdownActionNone'], ['stopAfterMinutes'])) return undefined;
@@ -1634,7 +1649,7 @@ function parseOpenSettings(value: unknown): OpenSettings | undefined {
 export function parseOpenParams(value: unknown): OpenParams | undefined {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ['dockerHost', 'owner', 'monitorSource', 'settings', 'images', 'repository'], ['references', 'referenceDigests', 'devspaceId', 'target', 'forceRebuild', 'configPath', 'vscodeServer', 'defaultExtensions'])
+    !hasOnlyKeys(value, ['dockerHost', 'owner', 'monitorSource', 'settings', 'images', 'repository'], ['references', 'referenceDigests', 'devspaceId', 'target', 'forceRebuild', 'configPath', 'source', 'vscodeServer', 'defaultExtensions'])
   ) {
     return undefined;
   }
@@ -1674,6 +1689,12 @@ export function parseOpenParams(value: unknown): OpenParams | undefined {
   }
   if (forceRebuild !== undefined && forceRebuild !== true) return undefined;
   if (configPath !== undefined && !plainOpenText(configPath, MAX_CONFIGURATION_PATH_LENGTH)) return undefined;
+  // Exactly a DevspaceSource when it is given.
+  let source: DevspaceSource | undefined;
+  if (value.source !== undefined) {
+    source = parseDevspaceSource(value.source);
+    if (source === undefined) return undefined;
+  }
   // Exactly a VscodeServerRef when it is given.
   let vscodeServer: VscodeServerRef | undefined;
   if (value.vscodeServer !== undefined) {
@@ -1698,6 +1719,7 @@ export function parseOpenParams(value: unknown): OpenParams | undefined {
     ...(checkedTarget !== undefined ? { target: checkedTarget } : {}),
     ...(forceRebuild === true ? { forceRebuild } : {}),
     ...(configPath !== undefined ? { configPath } : {}),
+    ...(source !== undefined ? { source } : {}),
     ...(vscodeServer !== undefined ? { vscodeServer } : {}),
     ...(defaultExtensions !== undefined ? { defaultExtensions } : {}),
   };

@@ -50,7 +50,7 @@ The title bar has **Select Organizations…** (limits the list and the scan to t
 
 ### What a row shows
 
-A row shows the repository name, the branch that is checked out in the devspace, the configuration in brackets when the repository has several, and the state of its devspace. Uncommitted changes and unpushed commits show as numbers, for example `Stopped · 3 unpushed`. The tooltip shows more, for example the time of the last use.
+A row shows the repository name, the branch that is checked out in the devspace, the configuration in brackets when the repository has several (or `(default image)` when the devspace was last started from the default image, see [Default image](#default-image)), and the state of its devspace. Uncommitted changes and unpushed commits show as numbers, for example `Stopped · 3 unpushed`. The tooltip shows more, for example the time of the last use.
 
 | State | Meaning |
 |---|---|
@@ -78,6 +78,7 @@ More markers in a row:
 |---|---|
 | **Start** (or a double-click) | Starts the devspace and connects the current window. Creates the devspace on the first start. If another window is connected to it, that window comes to the front: a devspace is never open in two windows. |
 | **Start in New Window** | The same, but a new window connects, and the current window keeps its devspace. With the setting `devspaces.openInNewWindow` on, the menu offers **Start in Current Window** instead. |
+| **Start with Configuration** / **Start with Default Image** | Only with the setting `devspaces.defaultImage` set: starts the devspace from the other source than plain **Start** uses (see [Default image](#default-image)). A devspace that was last started from the other source is built again, and its container is created again; the files in its workspace stay. |
 | **Stop** | Stops the container at once. Your files stay. If a window is connected, the connection closes first. The Monitor on the Docker engine is told first, so the devspace stops even when you quit VS Code right after the click. A notification shows the progress until `owner/name stopped.` |
 | **Delete** | Removes the containers, the images, and the volume with the repository, after you confirm it. The confirmation shows uncommitted changes, unpushed commits, and stashes as far as Devspaces recorded them, and offers **Open devspace**. Additional volumes of the configuration, for example of a database, are removed only when you tick them. |
 | **Keep Running When Closed** | The devspace keeps running when no window uses it, for example for a server or an agent. Only **Stop** or **Delete** stops it. **Stop When Closed** switches back. The choice is stored with the devspace. |
@@ -88,6 +89,21 @@ More markers in a row:
 | **Turn Off Host Access Checks…** / **Turn On Host Access Checks** | Switches the host access checks of this repository (see [Security](#security)). |
 
 The actions after **Delete** are in the context menu of a row and in its **⋯** button.
+
+### Default image
+
+By default, a devspace is built from the Dev Container configuration of its repository (`devcontainer.json`). With the setting `devspaces.defaultImage` you name one image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that **Start** uses instead for every repository. This is useful when the repositories of a course or a team have no configuration, or when one shared image should be used for all of them.
+
+A devspace started from the default image is created from that image alone, as if the configuration of the repository were `{ "image": "<default image>" }`: the `devcontainer.json` of the repository, its Dockerfile, Features, lifecycle commands, mounts, ports and extensions are not read. The metadata of the image (its user, its settings and extensions) applies, as for any image. The repository is cloned into the workspace volume as usual, and a repository without any Dev Container configuration can be started this way.
+
+The setting `devspaces.startWithDefaultImage` (on by default) decides what plain **Start** uses while a default image is set:
+
+- On: **Start** uses the default image. The context menu of a row offers **Start with Configuration**.
+- Off: **Start** uses the configuration of the repository. The context menu offers **Start with Default Image**.
+
+Without a default image, every start uses the configuration, and the menu offers nothing else.
+
+Every start that you ask for (**Start**, the switcher, **Search**, a double-click) follows the setting. A devspace keeps the source of its last start until a start names the other one: a restored window and the reopen at startup keep it. When a start names the other source, the devspace is built again from it and its container is created again; the files in its workspace stay. **Select Configuration…** always starts with the configuration that you select. When you change the default image in the settings, the next start of a devspace built from the old one asks **Rebuild now** or **Later**, as after a change of `devcontainer.json`. The row of such a devspace shows `(default image)`, and its tooltip names the image.
 
 ### Status bar and switcher
 
@@ -102,6 +118,7 @@ All commands are in the category **Devspaces** of the Command Palette. A command
 | Command | What it does |
 |---|---|
 | Start, Start in New Window, Start in Current Window | Start a devspace (see [Actions of a row](#actions-of-a-row)). |
+| Start with Default Image, Start with Configuration | Start a devspace from the other source than plain Start uses (see [Default image](#default-image)). Only with the setting `defaultImage`. |
 | Stop, Delete, Rebuild, Select Configuration…, Show on GitHub | The actions of a row. |
 | Keep Running When Closed, Stop When Closed | Whether a devspace keeps running when no window uses it. |
 | Close and Keep Running | Closes this window; its devspace keeps running this time. Only in a connected window. |
@@ -129,6 +146,8 @@ Up to version 0.2.1 the prefix was `devspace.`. Settings with the old prefix are
 |---|---|---|
 | `reopenLastOnStartup` | `true` | When VS Code starts with an empty window, open the devspace that you used last, unless you stopped it with **Stop**. |
 | `openInNewWindow` | `false` | *User only.* On: **Start** and **Switch Devspace…** open a devspace in a new window, and the current window keeps its devspace (an empty window is used directly). The context menu always offers the other choice. |
+| `defaultImage` | `""` | *User only.* An image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that **Start** uses in place of the Dev Container configuration of the repository (see [Default image](#default-image)). Empty: every start uses the configuration. A value that is not an image reference is ignored, with a warning. |
+| `startWithDefaultImage` | `true` | *User only.* Only with `defaultImage`. On: **Start** uses the default image, and the context menu offers **Start with Configuration**. Off: **Start** uses the configuration, and the context menu offers **Start with Default Image**. |
 | `stopOnClose` | `true` | *User only.* Stop a devspace 5 minutes after its last window closes; the 5 minutes are enough for a window reload. Off: every devspace keeps running until you stop it, and its row shows `· kept`. To keep only some devspaces running, use **Keep Running When Closed** on them. |
 | `stopAfterMinutes` | `10` | *User only.* Minutes without any sign from a window before the Monitor stops the container anyway (5 to 1440). This covers a window that cannot say goodbye: the computer sleeps or goes offline, or VS Code crashes. Devspaces that keep running when closed are never stopped. |
 | `updateImagesOnConnect` | `true` | At each start, check whether the base image or the Features of the devspace have a newer version, and update the devspace if so (your files stay). Off: the devspace keeps its image until you choose **Rebuild**. |
