@@ -320,6 +320,8 @@ describe('workerContainerName', () => {
     expect(workerContainerName('My Project (2)', '3f9a')).toBe('devspace-worker-my-project-2-3f9a');
     expect(workerContainerName('Übung_Café.Web', '3f9a')).toBe('devspace-worker-ubung-cafe-web-3f9a');
     expect(workerContainerName('--a..b--', '3f9a')).toBe('devspace-worker-a-b-3f9a');
+    // Letters without an accent to remove get plain letters.
+    expect(workerContainerName('Straße Øresund Łódź Æble Œuvre Đakovo Ðe', '3f9a')).toBe('devspace-worker-strasse-oresund-lodz-aeble-oeuvre-dakovo-de-3f9a');
   });
 
   it('names a window without a name, or with a name of no [a-z0-9], window', () => {
