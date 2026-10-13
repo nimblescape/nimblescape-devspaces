@@ -81,7 +81,7 @@ export interface CredentialPaths {
   gitCredentialHelper: boolean;
   dockerCredentialHelper: boolean;
   githubCli: boolean;
-  /** The number of keys that the forwarded SSH agent offers, or undefined without a forwarded agent. */
+  /** The number of keys that the forwarded SSH agent offers, or undefined when no agent answers in the container. */
   sshAgentKeys: number | undefined;
 }
 
@@ -92,15 +92,16 @@ export const RUNNER_GIT_MARKER = 'devspaces-runner-git-configuration';
  * Asks the SSH agent at the socket $SOCKET for its keys (SSH_AGENTC_REQUEST_IDENTITIES, answer
  * SSH_AGENT_IDENTITIES_ANSWER) and prints their number, or -1.
  */
-const SSH_AGENT_KEYS = `const s = require('net').connect(process.env.SOCKET);
+const SSH_AGENT_KEYS = `const end = (keys) => { console.log(keys); process.exit(0); };
+const s = require('net').connect(process.env.SOCKET);
 let b = Buffer.alloc(0);
 s.on('connect', () => s.write(Buffer.from([0, 0, 0, 1, 11])));
 s.on('data', (d) => {
   b = Buffer.concat([b, d]);
-  if (b.length >= 9 && b.length >= 4 + b.readUInt32BE(0)) { console.log(b[4] === 12 ? b.readUInt32BE(5) : -1); s.end(); }
+  if (b.length >= 9 && b.length >= 4 + b.readUInt32BE(0)) end(b[4] === 12 ? b.readUInt32BE(5) : -1);
 });
-s.on('error', () => console.log(-1));
-setTimeout(() => { console.log(-1); process.exit(0); }, 5000).unref();
+s.on('error', () => end(-1));
+setTimeout(() => end(-1), 5000);
 `;
 
 /** Node.js in the container as `user` with `script` on its standard input and the variables `env`. */
@@ -128,8 +129,10 @@ export function credentialPaths(user: string): CredentialPaths {
   );
   let sshAgentKeys: number | undefined;
   for (const socket of sockets) {
-    const keys = Number(nodeIn('root', SSH_AGENT_KEYS, { SOCKET: socket }));
-    console.log(`    SSH agent socket ${socket}: ${keys} keys`);
+    const exists = execIn('root', `test -S '${socket}'`).code === 0;
+    const answer = exists ? Number.parseInt(nodeIn('root', SSH_AGENT_KEYS, { SOCKET: socket }), 10) : -1;
+    const keys = Number.isNaN(answer) ? -1 : answer;
+    console.log(`    SSH_AUTH_SOCK ${socket}: ${exists ? `a socket, ${keys < 0 ? 'no answer' : `${keys} keys`}` : 'no socket'}`);
     if (keys >= 0) sshAgentKeys = Math.max(sshAgentKeys ?? 0, keys);
   }
   return { gitConfigOfRunner, gitCredentialHelper, dockerCredentialHelper, githubCli, sshAgentKeys };

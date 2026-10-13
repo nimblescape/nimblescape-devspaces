@@ -16,6 +16,8 @@ const source = path.join(root, 'test', 'vscode');
 const outdir = path.join(root, 'out', 'test', 'vscode');
 
 const attach = path.join(source, 'attach');
+// The compile-time constants of esbuild.mjs: the attach tests bundle modules of src/core.
+const define = { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(devcontainerCliVersion()) };
 const tests = (folder) => fs.readdirSync(folder).filter((name) => name.endsWith('.test.ts')).map((name) => path.join(folder, name));
 
 fs.rmSync(outdir, { recursive: true, force: true });
@@ -29,6 +31,7 @@ await esbuild.build({
   target: 'node24',
   sourcemap: true,
   external: ['vscode', 'mocha'],
+  define,
   logLevel: 'info',
 });
 
@@ -41,6 +44,6 @@ await esbuild.build({
   target: 'node24',
   sourcemap: true,
   external: ['@vscode/test-electron'],
-  define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(devcontainerCliVersion()) },
+  define,
   logLevel: 'info',
 });
