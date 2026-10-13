@@ -13,7 +13,7 @@ import { runWithDockerTarget } from '../docker/dockerTargets';
 import type { DockerTarget } from '../docker/dockerHost';
 import type { HelperMaintenance } from '../helper/helperImages';
 import { bundleHash, loaderCommand } from '../loader/pipeLoader';
-import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR, workerContainerName } from '../names';
+import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR, WORKER_NAME_PREFIX, freeWorkerNumber, workerContainerName } from '../names';
 import { errorMessage, isUserFacingError } from '../errors';
 import { abortError, isAbortError, type Logger, type RunOptions, type RunResult, type StartedProcess } from '../ports';
 import { HelperChannel, HelperChannelError } from './helperChannel';
@@ -154,6 +154,11 @@ export interface ChannelOpenDeps {
 const NO_BRIDGE = /network "?bridge"? not found/i;
 /** Docker's refusal of a container name that another container on the engine has. */
 const NAME_IN_USE = /container name "?[^"\s]*"? is already in use/i;
+/**
+ * The most starts of one worker with names that Docker refused (workerContainerName): enough for that many windows with
+ * the same name that start their workers on one engine at the same moment.
+ */
+const WORKER_NAME_ATTEMPTS = 10;
 
 /** The name of the engine of `target` in the log. */
 function engineName(target: DockerTarget): string {
@@ -179,22 +184,40 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
   const name = engineName(target);
   const label = channelLabelValue(script);
   const scriptHash = bundleHash(script);
-  const startNamed = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
-    const containerName = workerContainerName(deps.windowName?.() ?? '');
+  const startNamed = async (network: 'bridge' | 'none', containerName: string): Promise<HelperChannel> => {
     const args = channelRunArgs({ tag, socketPath, stateVolume: deps.stateVolume, vscodeVolume: deps.vscodeVolume, containerName, label, scriptHash, network });
     const process = await runWithDockerTarget(target, async () => deps.start(args));
     if (process === undefined) throw new HelperChannelError('open', 'The Docker CLI cannot be started.');
     return HelperChannel.open(process, script, { logger: deps.logger, name });
   };
-  const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
+  // The names of the containers of the engine that contain WORKER_NAME_PREFIX, with one call without the worker; none
+  // when the list fails (the next number is tried then).
+  const workerNames = async (): Promise<string[]> => {
     try {
-      return await startNamed(network);
-    } catch (error) {
-      // Another container on the engine has the name (a worker of a window with the same name and the same random
-      // characters, workerContainerName; Docker created nothing): once more with new random characters.
-      if (!(error instanceof HelperChannelError) || !NAME_IN_USE.test(error.message)) throw error;
-      deps.logger.info(`The name of the worker on ${name} was in use, so the worker starts again with another name.`);
-      return startNamed(network);
+      const result = await runWithDockerTarget(target, () =>
+        deps.runDirect(['ps', '--all', '--filter', `name=${WORKER_NAME_PREFIX}`, '--format', '{{.Names}}'], { timeoutMs: CHANNEL_PROBE_TIMEOUT_MS }),
+      );
+      return result.exitCode === 0 ? result.stdout.split('\n').map((line) => line.trim()) : [];
+    } catch {
+      return [];
+    }
+  };
+  // The worker with the number 1 (workerContainerName). When another container on the engine has the name (a worker
+  // of another window with the same name, or the last worker of this window while Docker removes it; Docker created
+  // nothing), the lowest number that no container has, at most WORKER_NAME_ATTEMPTS times.
+  const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
+    const windowName = deps.windowName?.() ?? '';
+    const tried = new Set<number>();
+    for (let number = 1; ; ) {
+      tried.add(number);
+      const containerName = workerContainerName(windowName, number);
+      try {
+        return await startNamed(network, containerName);
+      } catch (error) {
+        if (!(error instanceof HelperChannelError) || !NAME_IN_USE.test(error.message) || tried.size >= WORKER_NAME_ATTEMPTS) throw error;
+        number = freeWorkerNumber(windowName, await workerNames(), tried);
+        deps.logger.info(`The worker name ${containerName} is in use on ${name}, so the worker starts as ${workerContainerName(windowName, number)}.`);
+      }
     }
   };
   let channel: HelperChannel;

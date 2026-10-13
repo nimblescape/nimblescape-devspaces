@@ -312,12 +312,15 @@ export function isDevspaceResourceName(name: string): boolean {
   return lower.startsWith(RESOURCE_NAME_PREFIX) && /^[a-z0-9-]+$/.test(lower.slice(RESOURCE_NAME_PREFIX.length)) && trailingPair(lower) !== undefined;
 }
 
-/** The start of the name of a worker container (workerContainerName): `devspace-worker-`. */
-const WORKER_NAME_PREFIX = `${RESOURCE_NAME_PREFIX}worker-`;
+/**
+ * The start of the name of a worker container (workerContainerName): `devspace-worker-`. openHelperChannel lists the
+ * containers whose name contains it when a worker name is in use.
+ */
+export const WORKER_NAME_PREFIX = `${RESOURCE_NAME_PREFIX}worker-`;
 
 /**
- * The longest window part of a worker name (workerContainerName), so that a worker name has at most 45 characters
- * (`devspace-worker-` 16, the window part, `-` and 4 random characters).
+ * The longest window part of a worker name (workerContainerName), so that a worker name is short: at most 43
+ * characters up to a number of two digits (`devspace-worker-` 16, the window part, `-` and the number).
  */
 const WORKER_WINDOW_LENGTH = 24;
 
@@ -338,20 +341,14 @@ const PLAIN_LETTERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The short name of a worker container, `devspace-worker-<window>-<random>`, so that `docker ps` tells which VS Code
- * window a worker belongs to. `<window>` is `windowName` (ConnectionAdapter.windowName: the name of the saved workspace
- * file of the window, else of its first folder; the repository folder in a devspace): lower case, letters without their
- * accents (PLAIN_LETTERS for those that have none to remove), each run of other characters than `[a-z0-9]` as one `-`,
- * without `-` at the ends, and `window` when nothing is left. A longer name is cut to WORKER_WINDOW_LENGTH characters
- * at the end of a word (its last `-` before the cut), or within a word when the words before the cut would keep less
- * than half of the room. `<random>` (4 hex characters by default) is new for each worker: it keeps the workers of
- * windows with the same name on one engine apart (two windows of one folder, two devspaces of one repository, windows
- * of two computers on one remote engine, and the next worker of a window while Docker still removes the last one;
- * openHelperChannel draws once more when the name is in use), and, as no word of a name pair is only hex characters
- * (namePairs.ts), it keeps a worker name off the shape of a name of a devspace. Nothing finds a worker by its name (the
- * labels do), and the worker never reads it (readOwnHelper reads its container ID).
+ * The window part of a worker name (workerContainerName): `windowName` (ConnectionAdapter.windowName: the name of the
+ * saved workspace file of the window, else of its first folder; the repository folder in a devspace) in lower case,
+ * letters without their accents (PLAIN_LETTERS for those that have none to remove), each run of other characters than
+ * `[a-z0-9]` as one `-`, without `-` at the ends, and `window` when nothing is left. A longer name is cut to
+ * WORKER_WINDOW_LENGTH characters at the end of a word (its last `-` before the cut), or within a word when the words
+ * before the cut would keep less than half of the room.
  */
-export function workerContainerName(windowName: string, random = crypto.randomBytes(2).toString('hex')): string {
+function workerWindow(windowName: string): string {
   const words = windowName
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
@@ -367,7 +364,32 @@ export function workerContainerName(windowName: string, random = crypto.randomBy
       : end >= WORKER_WINDOW_LENGTH / 2
         ? words.slice(0, end)
         : words.slice(0, WORKER_WINDOW_LENGTH).replace(/-+$/, '');
-  return `${WORKER_NAME_PREFIX}${window === '' ? 'window' : window}-${random}`;
+  return window === '' ? 'window' : window;
+}
+
+/**
+ * The short name of a worker container, `devspace-worker-<window>-<number>`, so that `docker ps` tells which VS Code
+ * window a worker belongs to: `<window>` is workerWindow of `windowName`, and `<number>` (from 1) keeps the workers of
+ * windows with the same name on one engine apart (two windows of one folder, two devspaces of one repository, windows
+ * of two computers on one remote engine, and the next worker of a window while Docker still removes the last one).
+ * openHelperChannel starts with 1 and takes the lowest free number (freeWorkerNumber) when Docker refuses a name that
+ * another container has. As the name ends in digits, it never has the shape of a name of a devspace
+ * (isDevspaceResourceName, whose pair is letters only). Nothing finds a worker by its name (the labels do), and the
+ * worker never reads it (readOwnHelper reads its container ID).
+ */
+export function workerContainerName(windowName: string, number: number): string {
+  return `${WORKER_NAME_PREFIX}${workerWindow(windowName)}-${number}`;
+}
+
+/**
+ * The lowest number from 1 whose worker name for `windowName` (workerContainerName) is not in `names` (the names of
+ * containers of the engine) and not in `tried` (the numbers that Docker refused already).
+ */
+export function freeWorkerNumber(windowName: string, names: readonly string[], tried: ReadonlySet<number>): number {
+  const taken = new Set(names);
+  let number = 1;
+  while (tried.has(number) || taken.has(workerContainerName(windowName, number))) number++;
+  return number;
 }
 
 /** Repository part of the devspace image name: resourceName. */
