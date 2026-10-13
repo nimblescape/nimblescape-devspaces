@@ -102,7 +102,6 @@ function attachConfiguration(kind, index) {
   const seed = JSON.parse(fs.readFileSync(new URL('out/test/vscode/attach/seed.json', import.meta.url), 'utf8'))[kind];
   if (!seed) throw new Error(`out/test/vscode/attach/seed.json has no container "${kind}".`);
   const base = configuration('attach', index, {});
-  if (!listsOnly) confirmAttach(base.env.DEVSPACE_TEST_USER_DATA_DIR);
   return {
     ...base,
     files: 'out/test/vscode/attach/*.test.js',
@@ -117,27 +116,7 @@ function attachConfiguration(kind, index) {
   };
 }
 
-/**
- * Dev Containers asks once per user, in a modal dialog, before its first attach ("Attaching to a container may execute
- * arbitrary code.", Got It), and VS Code refuses dialogs in tests. Got It stores
- * userConfirmedAttachToContainerRequiresTrust in the global state of Dev Containers (0.469.0), which VS Code keeps in
- * the SQLite table ItemTable of User/globalStorage/state.vscdb, under the extension ID, as JSON. The empty user data
- * folder gets that state, as after Got It.
- */
-function confirmAttach(userDataDir) {
-  const folder = path.join(userDataDir, 'User', 'globalStorage');
-  fs.mkdirSync(folder, { recursive: true });
-  const database = new DatabaseSync(path.join(folder, 'state.vscdb'));
-  database.exec('CREATE TABLE IF NOT EXISTS ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)');
-  database
-    .prepare('INSERT INTO ItemTable (key, value) VALUES (?, ?)')
-    .run('ms-vscode-remote.remote-containers', JSON.stringify({ userConfirmedAttachToContainerRequiresTrust: true }));
-  database.close();
-}
-
 const attachKind = process.env.DEVSPACE_TEST_ATTACH;
-// node:sqlite only for the configuration attach: it prints a warning that it is experimental.
-const { DatabaseSync } = attachKind ? await import('node:sqlite') : {};
 
 export default defineConfig([
   configuration('vscode', 0, {}),
