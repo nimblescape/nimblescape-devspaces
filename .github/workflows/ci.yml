@@ -189,7 +189,8 @@ jobs:
 
   vscode:
     # The tests in a real VS Code (.vscode-test.mjs) on the three systems of the users: against the VSIX of the job
-    # "test", as users install it, and on Linux also against the development build (npm run test:vscode). The Linux runner has no
+    # "test", as users install it, and on Linux also against the development build (npm run test:vscode). The job
+    # waits for the job "test" and its VSIX, so it does not run when a unit test fails. The Linux runner has no
     # display, so xvfb-run gives VS Code a virtual one; xvfb is preinstalled on ubuntu-latest.
     name: vscode (${{ matrix.os }})
     needs: test

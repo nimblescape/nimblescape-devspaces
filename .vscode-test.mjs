@@ -30,10 +30,20 @@ const dockerHost =
     ? 'npipe:////./pipe/nimblescape-devspaces-vscode-test'
     : 'unix:///nonexistent/nimblescape-devspaces-vscode-test.sock';
 
-/** The label that `vscode-test --label <label>` runs; undefined without --label (then every configuration runs). */
-const labelIndex = process.argv.indexOf('--label');
-const selectedLabel =
-  labelIndex >= 0 ? process.argv[labelIndex + 1] : process.argv.find((arg) => arg.startsWith('--label='))?.slice(8);
+/**
+ * The labels that `vscode-test --label <label>` (also `-l`, `--label=`, several times) runs; empty without a label
+ * (then every configuration runs). `--list-configuration` (the Extension Test Runner of VS Code calls it) runs
+ * nothing, so it removes no folder.
+ */
+const args = process.argv.slice(2);
+const listsOnly = args.includes('--list-configuration');
+const selectedLabels = args.flatMap((arg, index) =>
+  arg === '--label' || arg === '-l'
+    ? [args[index + 1]]
+    : arg.startsWith('--label=')
+      ? [arg.slice('--label='.length)]
+      : [],
+);
 /** Tells the user data folders of two checkouts on one computer apart. */
 const checkout = fileURLToPath(new URL('.', import.meta.url));
 const checkoutId = crypto.createHash('sha256').update(checkout).digest('hex').slice(0, 6);
@@ -48,7 +58,9 @@ const checkoutId = crypto.createHash('sha256').update(checkout).digest('hex').sl
  */
 function configuration(label, options) {
   const userDataDir = path.join(os.tmpdir(), `devspaces ${label} ü ${checkoutId}`);
-  if (selectedLabel === undefined || selectedLabel === label) fs.rmSync(userDataDir, { recursive: true, force: true });
+  if (!listsOnly && (selectedLabels.length === 0 || selectedLabels.includes(label))) {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
   return {
     label,
     files: 'out/test/vscode/**/*.test.js',
