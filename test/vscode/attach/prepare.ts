@@ -2,9 +2,10 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Spike of the attach tests (plan step 2a): prepares the Docker engine of this computer and the test VS Code for the
-// configuration `attach` of .vscode-test.mjs, and writes what it made to out/test/vscode/attach/seed.json. It uses the
-// real Docker engine, so it runs only on CI (npm run test:vscode:attach:prepare).
+// Prepares the Docker engine of this computer and the test VS Code for the attach tests (configuration `attach` of
+// .vscode-test.mjs), and writes what it made to out/test/vscode/attach/seed.json (npm run test:vscode:attach:prepare).
+// It uses the real Docker engine, where the extension then creates its own objects (Monitor, workers, volumes) with the
+// names of a real installation, so it runs only on CI, on a runner of its own.
 // - The test VS Code (downloaded to .vscode-test/ as @vscode/test-cli does) trusts the Devspaces extension with the
 //   sessions of the sign-in provider `github` (trustedExtensionAuthAccess in its product.json), so that the
 //   extension gets the session of the fake provider (test/vscode/github) without the dialog that asks for access.
@@ -12,8 +13,11 @@
 //   (passive: it builds no image) finds the devspace.
 // - A devspace without container: its workspace volume with the labels of the extension (the test account owns it)
 //   and a repository with a devcontainer.json. VS Code starts with a fresh user data folder, so the registry of the
-//   extension is empty, and the window restores the devspace from the volume labels, as on a new computer.
-// - A plain container that is no devspace.
+//   extension is empty, and the window restores the devspace from the volume labels, as on a new computer. The
+//   configuration sets the old key "remote.containers.copyGitConfig": true and a postAttachCommand that counts the
+//   attaches.
+// - A plain container that is no devspace, of the same dev image (with Git, so that Dev Containers configures Git
+//   there).
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -34,7 +38,12 @@ const EXTENSION_ID = 'nimblescape.nimblescape-devspaces';
 const TEST_ACCOUNT_ID = '4242';
 const REPOSITORY = 'devspaces-test/attach';
 /** A glibc image with a user `node`: the Dev Containers extension installs its server there. */
-const DEV_IMAGE = 'mirror.gcr.io/library/node:24-trixie-slim';
+const BASE_IMAGE = 'mirror.gcr.io/library/node:24-trixie-slim';
+/** The dev image of the devspace and of the plain container: the base image with Git. */
+const DOCKERFILE = `FROM ${BASE_IMAGE}
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+`;
+const PLAIN_IMAGE = 'devspaces-attach-test-plain:1';
 
 const log: Logger = {
   info: (message) => console.log(`INFO  ${message}`),
@@ -46,6 +55,7 @@ const log: Logger = {
 const SEED_SCRIPT = `set -eu
 mkdir -p "$1/.devcontainer"
 printf '%s\\n' "$2" > "$1/.devcontainer/devcontainer.json"
+printf '%s' "$3" > "$1/.devcontainer/Dockerfile"
 printf '# Attach test\\n' > "$1/README.md"
 cd "$1"
 git init -q -b main
@@ -100,6 +110,7 @@ function folderUri(containerName: string, folder: string): string {
 }
 
 async function main(): Promise<void> {
+  if (process.env.CI !== 'true') throw new Error('The attach tests use the Docker engine as a real installation does. They run only on CI (CI=true).');
   const started = Date.now();
   await trustExtension();
   const dockerPath = findDockerCli(process.env, process.platform);
@@ -112,17 +123,26 @@ async function main(): Promise<void> {
   const name = resourceName(REPOSITORY, devspaceId);
   const folder = repositoryFolder(REPOSITORY);
   await docker.runChecked(['volume', 'create', '--label', `${LABEL_DEVSPACE_ID}=${devspaceId}`, '--label', `${LABEL_REPOSITORY}=${REPOSITORY}`, '--label', `${LABEL_OWNER_ID}=${TEST_ACCOUNT_ID}`, name]);
-  const devcontainerJson = JSON.stringify({ name: 'Attach test', image: DEV_IMAGE, remoteUser: 'node' }, null, 2);
-  await docker.runChecked(['run', '--rm', '--pull', 'never', '--network', 'none', '--mount', `type=volume,source=${name},target=${WORKSPACES_ROOT}`, '--entrypoint', 'sh', helper.tag, '-c', SEED_SCRIPT, 'sh', folder, devcontainerJson]);
-  // The dev image is pulled here, so that its pull is not part of the time of the first window.
-  await docker.runChecked(['pull', DEV_IMAGE], { timeoutMs: 300_000 });
-
+  const devcontainerJson = JSON.stringify(
+    {
+      name: 'Attach test',
+      build: { dockerfile: 'Dockerfile' },
+      remoteUser: 'node',
+      postAttachCommand: 'echo attach >> /tmp/attach-count',
+      customizations: { vscode: { settings: { 'remote.containers.copyGitConfig': true } } },
+    },
+    null,
+    2,
+  );
+  await docker.runChecked(['run', '--rm', '--pull', 'never', '--network', 'none', '--mount', `type=volume,source=${name},target=${WORKSPACES_ROOT}`, '--entrypoint', 'sh', helper.tag, '-c', SEED_SCRIPT, 'sh', folder, devcontainerJson, DOCKERFILE]);
+  // The plain container has the dev image, built here; the build of the devspace finds its layers in the cache.
+  await docker.runChecked(['build', '-t', PLAIN_IMAGE, '-'], { input: DOCKERFILE, timeoutMs: 300_000 });
   const plain = `attach-test-plain-${crypto.randomBytes(3).toString('hex')}`;
-  await docker.runChecked(['run', '-d', '--name', plain, DEV_IMAGE, 'sleep', 'infinity']);
+  await docker.runChecked(['run', '-d', '--name', plain, PLAIN_IMAGE, 'sleep', 'infinity']);
 
   const seed = {
-    devspace: { containerName: name, folder, folderUri: folderUri(name, folder), devspaceId },
-    plain: { containerName: plain, folder: '/tmp', folderUri: folderUri(plain, '/tmp') },
+    devspace: { containerName: name, folder, folderUri: folderUri(name, folder), user: 'node', devspaceId },
+    plain: { containerName: plain, folder: '/tmp', folderUri: folderUri(plain, '/tmp'), user: 'root' },
   };
   const file = path.join(ROOT, 'out', 'test', 'vscode', 'attach', 'seed.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });

@@ -9,9 +9,10 @@
 // - "vsix" (npm run test:vscode:vsix, after npm run package): the packaged VSIX of the version in package.json, as
 //   users install it. VS Code loads only the small folder test/vscode/host as development extension, because a
 //   development extension with the ID of the installed VSIX would be loaded in its place.
-// - "attach" (spike of plan step 2a, CI only): VS Code starts in the window of a container that
-//   test/vscode/attach/prepare.ts made on the real Docker engine. It exists only when DEVSPACE_TEST_ATTACH names the
-//   container (devspace or plain), so that no local run reaches the Docker engine of this computer.
+// - "attach" (CI only, npm run test:vscode:attach after npm run test:vscode:attach:prepare): VS Code starts in the
+//   window of a container that test/vscode/attach/prepare.ts made on the real Docker engine, and runs the tests of
+//   test/vscode/attach/<container>.test.ts there. It exists only when DEVSPACE_TEST_ATTACH names the container
+//   (devspace or plain), so that no local run reaches the Docker engine of this computer.
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
 import * as crypto from 'crypto';
@@ -104,7 +105,7 @@ function attachConfiguration(kind, index) {
   const base = configuration('attach', index, {});
   return {
     ...base,
-    files: 'out/test/vscode/attach/*.test.js',
+    files: `out/test/vscode/attach/${kind}.test.js`,
     extensionDevelopmentPath: [fileURLToPath(new URL('.', import.meta.url)), fileURLToPath(new URL('test/vscode/github', import.meta.url))],
     launchArgs: [...base.launchArgs, `--folder-uri=${seed.folderUri}`, '--disable-extension=vscode.github-authentication'],
     env: {
