@@ -99,9 +99,8 @@ async function openWith(
         windowReads++;
         return 'api';
       },
-      devspaceName: async (target) => {
+      devspaceName: async () => {
         devspaceReads++;
-        expect(target).toBe(REMOTE);
         if (engine.devspace instanceof Error) throw engine.devspace;
         return engine.devspace;
       },
@@ -172,17 +171,18 @@ describe('the number of a worker name in use', () => {
     expect(linked.names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-3']);
   });
 
-  it('names the worker of a window of a devspace after it, also next to the containers of a service worker of Docker Compose', async () => {
+  it('names the worker of a window of a devspace after it, apart from the containers of a service worker of Docker Compose', async () => {
     const devspace = 'devspaces-acme-api-tidy-berners';
-    const { names, lists } = await openWith({ devspace, containers: [`${devspace}-worker-1`, `${devspace}-app-1`] }, () => refused(IN_USE));
-    expect(names).toEqual([`${devspace}-worker-1`, `${devspace}-worker-2`]);
-    expect(lists).toEqual([['ps', '--all', '--filter', `name=${devspace}-worker-`, '--format', '{{.Names}}']]);
+    expect((await openWith({ devspace, containers: [`${devspace}-worker-1`, `${devspace}-app-1`] })).names).toEqual([`${devspace}-worker1`]);
+    const { names, lists } = await openWith({ devspace, containers: [`${devspace}-worker1`, `${devspace}-worker-1`] }, () => refused(IN_USE));
+    expect(names).toEqual([`${devspace}-worker1`, `${devspace}-worker2`]);
+    expect(lists).toEqual([['ps', '--all', '--filter', `name=${devspace}-worker`, '--format', '{{.Names}}']]);
   });
 
   it('names the worker after the window when the devspace of the window cannot be found, and the log says why', async () => {
-    const { names, infos } = await openWith({ devspace: new Error('EISDIR: illegal operation on a directory') });
+    const { names, warnings } = await openWith({ devspace: new Error('EISDIR: illegal operation on a directory') });
     expect(names).toEqual(['devspaces-worker-api-1']);
-    expect(infos.join('\n')).toContain('The devspace of this window could not be found for the name of its worker (EISDIR: illegal operation on a directory)');
+    expect(warnings.join('\n')).toContain('The devspace of this window could not be found for the name of its worker (EISDIR: illegal operation on a directory)');
   });
 
   it('takes the next number when the list fails, and never a number that Docker refused', async () => {
