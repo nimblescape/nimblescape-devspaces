@@ -117,6 +117,13 @@ export const REMOTE_MONITOR_CONFLICT_WAITS_MS: readonly number[] = [250, 500, 1_
 export const REMOTE_MONITOR_CREATED_WAITS_MS: readonly number[] = [250, 500, 1_000, 1_000, 2_000, 2_000, 2_000, 2_000, 2_000];
 
 /**
+ * The waits (ms) between the looks at a restarted container whose stored-script check failed twice while the container
+ * still ran with the same RestartCount (checkAgain): the daemon may record the exit of a loader that exits 3 at once
+ * only after the failed checks (a busy host). 3.75 s in all.
+ */
+export const REMOTE_MONITOR_RESTART_WAITS_MS: readonly number[] = [250, 500, 1_000, 1_000, 1_000];
+
+/**
  * The most waits of one look after a name conflict (resolveConflict), whatever the status of the container between
  * them: that of the longer list.
  */
@@ -155,8 +162,9 @@ export class RemoteSessionMonitor {
    *   another or no stored script (storedScript `other`) → `docker rm -f`, then create; a check that fails keeps it
    *   (logged), and a paused one is kept without a check (Docker refuses `docker exec` in a paused container); a check
    *   that fails is followed by checkAgain (an inspect by the same ID: restarting, exited with LOADER_EXIT_CODE or a
-   *   grown RestartCount → replaced; still running → one more check), so a check cut off by the exit of the loader does
-   *   not keep a monitor in an exit-3 loop;
+   *   grown RestartCount → replaced; still running → one more check; when it fails too, more inspects with the waits of
+   *   REMOTE_MONITOR_RESTART_WAITS_MS), so a check cut off by the exit of the loader does not keep a monitor in an
+   *   exit-3 loop;
    * - the matching label and exited with an exit code other than LOADER_EXIT_CODE → `docker start <ID>` (the loader
    *   resumes from the stored script); then the stored script is checked as for a restarted one: `same` → started;
    *   definite evidence of another or no stored script (`other`: a first run killed before its script was stored exits
@@ -360,14 +368,37 @@ export class RemoteSessionMonitor {
 
   /**
    * After a stored-script check of the container `current` that gave `unknown` (the `docker exec` may be cut off when
-   * the loader exits 3 at once, between two restarts by the policy), the container of the name is inspected again. The
-   * same ID found `restarting`, exited with LOADER_EXIT_CODE, or with a RestartCount above that of `current` is
-   * definite evidence that it exits at once without its script → `other` (replaced by its ID). The same ID still
-   * `running` with the same RestartCount → the stored script is checked once more (its answer counts; `unknown` again
-   * keeps it). An inspect that fails, a missing container, another ID or an ID that cannot be read, or any other state
-   * → `unknown` (no evidence: kept). Only inspects and execs; a cancellation passes (AbortError).
+   * the loader exits 3 at once, between two restarts by the policy), the container of the name is inspected again
+   * (restartEvidence). Evidence that it exits at once without its script → `other` (replaced by its ID). The same ID
+   * still `running` with the same RestartCount → the stored script is checked once more (its answer counts). When that
+   * check gives `unknown` too, the container is inspected again after each wait of REMOTE_MONITOR_RESTART_WAITS_MS:
+   * on a busy host the daemon may record the exit of the loader only after both checks failed. Evidence → `other`;
+   * still `running` with the same RestartCount after the last wait → `unknown` (kept: a monitor that runs is never
+   * removed because its check fails). Any other look without evidence → `unknown` (kept). Only inspects and execs; a
+   * cancellation passes (AbortError).
    */
   private async checkAgain(current: Inspected & { exists: true }, script: string, signal: AbortSignal | undefined): Promise<StoredScript> {
+    const found = await this.restartEvidence(current, signal);
+    if (found !== 'running') return found;
+    const stored = await this.storedScript(script, signal);
+    if (stored !== 'unknown') return stored;
+    for (const wait of REMOTE_MONITOR_RESTART_WAITS_MS) {
+      // The wait of ports.ts (a cancellation ends it with an AbortError).
+      await sleep(wait, signal);
+      const later = await this.restartEvidence(current, signal);
+      if (later !== 'running') return later;
+    }
+    return 'unknown';
+  }
+
+  /**
+   * One inspect of the container of the name for checkAgain. The same ID as `current` found `restarting`, exited with
+   * LOADER_EXIT_CODE, or with a RestartCount above that of `current` is definite evidence that it exits at once without
+   * its script → `other`. The same ID `running` with the same RestartCount → `running` (no evidence yet). An inspect
+   * that fails, a missing container, another ID or an ID that cannot be read, or any other state → `unknown` (no
+   * evidence). A cancellation passes (AbortError).
+   */
+  private async restartEvidence(current: Inspected & { exists: true }, signal: AbortSignal | undefined): Promise<'other' | 'running' | 'unknown'> {
     let again: Inspected;
     try {
       again = await this.inspect(signal);
@@ -379,8 +410,7 @@ export class RemoteSessionMonitor {
     if (again.status === 'restarting' || (again.status === 'exited' && again.exitCode === LOADER_EXIT_CODE) || again.restartCount > current.restartCount) {
       return 'other';
     }
-    if (again.status !== 'running') return 'unknown';
-    return this.storedScript(script, signal);
+    return again.status === 'running' ? 'running' : 'unknown';
   }
 
   /**
