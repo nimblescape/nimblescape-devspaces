@@ -177,9 +177,11 @@ function identityText(identity: EngineIdentity): string {
 export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTarget): Promise<HelperChannel> {
   const [script, tag, socketPath] = await Promise.all([deps.script(), deps.helperTag(), deps.socketPath(target)]);
   const name = engineName(target);
+  const label = channelLabelValue(script);
+  const scriptHash = bundleHash(script);
   const startNamed = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
     const containerName = workerContainerName(deps.windowName?.() ?? '');
-    const args = channelRunArgs({ tag, socketPath, stateVolume: deps.stateVolume, vscodeVolume: deps.vscodeVolume, containerName, label: channelLabelValue(script), scriptHash: bundleHash(script), network });
+    const args = channelRunArgs({ tag, socketPath, stateVolume: deps.stateVolume, vscodeVolume: deps.vscodeVolume, containerName, label, scriptHash, network });
     const process = await runWithDockerTarget(target, async () => deps.start(args));
     if (process === undefined) throw new HelperChannelError('open', 'The Docker CLI cannot be started.');
     return HelperChannel.open(process, script, { logger: deps.logger, name });
