@@ -45,6 +45,8 @@ function harness(options: {
   ensure: boolean | { cause: unknown };
   /** Part a (default: nothing to do). */
   images?: () => Promise<NetworkContact | void>;
+  /** The prepares (default: none). */
+  prepares?: () => Promise<void>;
   state?: CacheRunState;
   containerIds?: (signal: AbortSignal | undefined) => void;
   /** The processes of the containers that mount the store (each container: its process lines); default none. */
@@ -113,6 +115,7 @@ function harness(options: {
     log: (message) => log.push(message),
     now: () => NOW,
     images: options.images ?? (async () => {}),
+    ...(options.prepares !== undefined ? { prepares: options.prepares } : {}),
     vscode: () => vscode,
     state: { read: async () => state, update: async (change) => void (state = { ...state, ...change }) },
   });
@@ -188,6 +191,13 @@ describe('a run that did not reach the network', () => {
     // A part that throws for another cause, and nothing else that failed: true.
     const unused = Object.assign(new Error('a bug'));
     expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => Promise.reject(unused) }).run.run()).toBe(true);
+  });
+
+  it('the prepares that fail with a code of the socket of the engine (ECONNREFUSED) are no failure of the network', async () => {
+    const socket = Object.assign(new Error('connect ECONNREFUSED /var/run/docker.sock'), { code: 'ECONNREFUSED' });
+    const h = harness({ commits: { stable: new Error('the update service answered HTTP 404') }, ensure: true, prepares: async () => Promise.reject(socket) });
+    expect(await h.run.run()).toBe(true);
+    expect(h.log).toContain('The background run could not do the prepares of the devspace images: connect ECONNREFUSED /var/run/docker.sock');
   });
 
   it('each run starts without what the run before found', async () => {
