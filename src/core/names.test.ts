@@ -406,6 +406,10 @@ describe('freeWorkerNumber', () => {
     expect(freeWorkerNumber(workerNameStart('My API'), ['devspaces-my-api-worker1'], new Set())).toBe(2);
     expect(freeWorkerNumber(workerNameStart(''), ['devspaces-window-worker1', 'devspaces-window-worker2'], new Set())).toBe(3);
   });
+
+  it('counts only exact names, not the longer names that the filter of Docker also lists (a part of a name)', () => {
+    expect(freeWorkerNumber(workerNameStart('api'), ['devspaces-api-worker12', 'devspaces-api-worker1-x', 'x-devspaces-api-worker1'], new Set())).toBe(1);
+  });
 });
 
 describe('the names derived from resourceName', () => {
