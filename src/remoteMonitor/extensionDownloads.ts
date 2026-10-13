@@ -55,7 +55,7 @@ import {
 } from '../core/vscodeExtensions';
 import { STORE_SERVER_FOLDER, isServerReady, serverPlatform, storeLock, storeTryLock, type StoreLockAttempt } from '../core/worker/vscodeServerStore';
 import type { RunNetwork } from './backgroundRules';
-import { isNetworkError } from '../core/networkFailure';
+import { isNetworkError, isServerAnswer } from '../core/networkFailure';
 import { engineFailure } from './engine';
 
 /** The time limit of one query of the Marketplace. */
@@ -217,7 +217,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
     } catch (error) {
       // An answer that refuses (HTTP 4xx) or that cannot be read still came from the Marketplace.
       if (isNetworkError(error)) deps.network?.failed(error);
-      else deps.network?.reached();
+      else if (isServerAnswer(error)) deps.network?.reached();
       log(queryFailure(unpinned.length, error));
     }
     let fallbacks = 0;
@@ -252,7 +252,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
       },
       (error: unknown) => {
         // A refusal (HTTP 4xx) or an answer that cannot be read still came from the Marketplace.
-        if (!isNetworkError(error)) deps.network?.reached();
+        if (isServerAnswer(error)) deps.network?.reached();
         return { error };
       },
     );
@@ -308,7 +308,8 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
       inStore(ref, chosen);
       if (outcome === 'downloaded') log(`Downloaded the extension ${chosen.cacheName} into the shared extension cache.`);
     } catch (error) {
-      fail(ref, error instanceof Error ? error.message : String(error), error);
+      // After an answer of the Marketplace (the run reached the network): a failed download waits a day.
+      fail(ref, error instanceof Error ? error.message : String(error));
     }
   }
   if (deferred > 0) log(`This run downloaded ${downloadedBytes} bytes, its bound; ${deferred} extension(s) are left for the next run.`);

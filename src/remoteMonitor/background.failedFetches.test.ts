@@ -169,6 +169,19 @@ describe('a run that did not reach the network', () => {
     expect(await harness({ commits: { stable: new Error('the update service answered HTTP 404') }, ensure: true, images: async () => 'offline' }).run.run()).toBe(true);
   });
 
+  it('a failure without an answer (a TLS error of a captive portal) reaches no server', async () => {
+    const tls = Object.assign(new Error('Hostname/IP does not match certificate'), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' });
+    expect(await harness({ commits: { stable: tls }, ensure: true, images: async () => 'offline' }).run.run()).toBe(false);
+  });
+
+  it('the releases that the cleanup asks for do not decide whether the run reached the network', async () => {
+    const h = harness({ commits: { stable: offline, insider: [commit(5)] }, ensure: true, images: async () => 'offline' });
+    await readyServer(h.root, { commit: commit(4), quality: 'insider' });
+    expect(await h.run.run()).toBe(false);
+    // The cleanup asked the update service for Insiders, and it answered.
+    expect(h.requests.filter((request) => request.url === serverCommitsUrl('insider', 'linux-x64'))).toHaveLength(1);
+  });
+
   it('a part that throws for the network counts only while nothing answered', async () => {
     expect(await harness({ commits: { stable: offline }, ensure: true, images: async () => Promise.reject(offline) }).run.run()).toBe(false);
     expect(await harness({ commits: { stable: offline }, ensure: true, images: async () => Promise.reject(new Error('a bug')) }).run.run()).toBe(false);

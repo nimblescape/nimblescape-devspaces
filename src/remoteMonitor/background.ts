@@ -64,7 +64,7 @@ import {
   type RunNetwork,
   type StoredServer,
 } from './backgroundRules';
-import { isNetworkError } from '../core/networkFailure';
+import { isNetworkError, isServerAnswer } from '../core/networkFailure';
 import { engineFailure, type VscodeEngine } from './engine';
 import { cleanupExtensions, downloadExtensions, type ExtensionRunDeps } from './extensionDownloads';
 import { REMOTE_MONITOR_STATE_DIR } from '../core/remoteMonitor/protocol';
@@ -263,16 +263,19 @@ export class BackgroundRun {
     return { platform, released, asked };
   }
 
-  /** The released commits of `quality` on `platform`, newest first (serverCommits), or undefined after one line. */
-  private async releasedCommits(vscode: VscodeBackgroundDeps, quality: VscodeQuality, platform: VscodePlatform): Promise<string[] | undefined> {
+  /**
+   * The released commits of `quality` on `platform`, newest first (serverCommits), or undefined after one line. Part b
+   * tells the run what it found of the network (`network`); the cleanup does not (part: it never means offline).
+   */
+  private async releasedCommits(vscode: VscodeBackgroundDeps, quality: VscodeQuality, platform: VscodePlatform, network = true): Promise<string[] | undefined> {
     try {
       const commits = await serverCommits(vscode.store.transport, quality, platform, AbortSignal.timeout(UPDATE_SERVICE_TIMEOUT_MS));
-      this.network.reached();
+      if (network) this.network.reached();
       return commits;
     } catch (error) {
       // An answer that refuses (HTTP 404) or that is no release list still came from the server.
-      if (isNetworkError(error)) this.network.failed(error);
-      else this.network.reached();
+      if (network && isNetworkError(error)) this.network.failed(error);
+      else if (network && isServerAnswer(error)) this.network.reached();
       this.deps.log(`The newest VS Code server (${quality}, ${platform}) could not be read from the update service: ${error instanceof Error ? error.message : String(error)}`);
       return undefined;
     }
@@ -399,7 +402,7 @@ export class BackgroundRun {
       if (stored.length === 0) continue;
       // A quality that part b did not ask for (Insiders that no open used for 14 days) is asked for here, once a day,
       // so that its old versions go too.
-      const commits = released.get(quality) ?? (asked.has(quality) ? undefined : await this.releasedCommits(vscode, quality, platform));
+      const commits = released.get(quality) ?? (asked.has(quality) ? undefined : await this.releasedCommits(vscode, quality, platform, false));
       if (commits === undefined) {
         log(`The VS Code servers (${quality}, ${platform}) of the shared store are not cleaned up: the update service did not name its releases.`);
         continue;

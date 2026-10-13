@@ -57,3 +57,13 @@ export function isNetworkError(error: unknown, depth = 0): boolean {
   if (typeof message === 'string' && (isNetworkFailure(message) || MORE_NETWORK_TEXT.test(message))) return true;
   return cause !== undefined && isNetworkError(cause, depth + 1);
 }
+
+/**
+ * Whether `error` is a failure that an answer of a server caused: its text says that the server answered (a refusal
+ * such as `the update service answered HTTP 404`, or an answer that cannot be read), and it is no failure of the
+ * network (isNetworkError: a 5xx is one). A failure without an answer (a TLS error of a captive portal, a proxy that
+ * could not be read) is neither: it says nothing of the network.
+ */
+export function isServerAnswer(error: unknown): boolean {
+  return error instanceof Error && /\banswered\b/i.test(error.message) && !isNetworkError(error);
+}
