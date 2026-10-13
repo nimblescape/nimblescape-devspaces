@@ -25,20 +25,22 @@ describe('the configuration hash of Docker Compose (recreate offer)', () => {
   /** Anonymous volumes of removed containers, which `down -v` does not see. */
   const leftoverVolumes: string[] = [];
 
+  // `init: true`: `sleep` as process 1 ignores SIGTERM, so the `down` of afterAll would wait 10 s for the stop.
   function model(hostAccess: string): string {
     const labels = { [TEST_RUN_LABEL]: run.runId };
     return JSON.stringify({
       name: project,
       services: {
-        app: { image: TEST_BASE_IMAGE, command: ['sleep', '600'], labels, volumes: [{ type: 'volume', target: '/cache' }] },
+        app: { image: TEST_BASE_IMAGE, init: true, command: ['sleep', '600'], labels, volumes: [{ type: 'volume', target: '/cache' }] },
         db: {
           image: TEST_BASE_IMAGE,
+          init: true,
           command: ['sleep', '601'],
           labels: { ...labels, 'nimblescape.devspace.host-access': hostAccess },
           volumes: [{ type: 'volume', source: 'data', target: '/data' }],
         },
         // A service of a profile (started through runServices).
-        tools: { image: TEST_BASE_IMAGE, command: ['sleep', '602'], labels, profiles: ['debug'] },
+        tools: { image: TEST_BASE_IMAGE, init: true, command: ['sleep', '602'], labels, profiles: ['debug'] },
       },
       volumes: { data: { name: `${project}_data`, labels } },
     });

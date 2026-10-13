@@ -3,7 +3,8 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The open pipeline for a Docker Compose configuration against the real Docker engine: an app service built from a
-// one-line Dockerfile and a db service from an image, both from the test base image with `sleep infinity`. Open: both
+// one-line Dockerfile and a db service from an image, both from the test base image with `sleep infinity` under an
+// init process (`init: true`: `sleep` as process 1 ignores SIGTERM, so each stop would wait 10 s). Open: both
 // containers with the labels of the devspace, the dev container with the name of the devspace and the workspace
 // volume, the published port of db on 127.0.0.1 only, the repository files that db mounts (a folder and a single file)
 // from the workspace volume (volume.subpath), the volumes of the project and of `mounts` with our labels; the refusal
@@ -145,6 +146,7 @@ describe('open pipeline for a Docker Compose configuration', () => {
       context: .
       dockerfile: Dockerfile
     command: sleep infinity
+    init: true
     volumes:
       - ../..:/workspaces:cached
     labels:
@@ -152,6 +154,7 @@ describe('open pipeline for a Docker Compose configuration', () => {
   db:
     image: ${TEST_BASE_IMAGE}
     command: sleep infinity
+    init: true
     # As the templates (Python & PostgreSQL); rewritten to no.
     restart: unless-stopped
     ports:
