@@ -149,8 +149,8 @@ describe('the helper channel with the real Docker engine', () => {
 
   it('opens: the container has outbound network only, no capability, --rm, and the labels; an operation and its value come back', async () => {
     const { channel, name } = await timings.measure('open a channel', () => open());
-    // The short name of the worker: its window, cut at the end of a word, and 4 random hex characters.
-    expect(name).toMatch(/^devspace-worker-docker-test-of-the-[0-9a-f]{4}$/);
+    // The short name of the worker: its window, cut at the end of a word, and its number.
+    expect(name).toMatch(/^devspace-worker-docker-test-of-the-[0-9]+$/);
     const details = cli.container(name)!;
     expect(details.State.Running).toBe(true);
     expect(details.HostConfig.AutoRemove).toBe(true);
