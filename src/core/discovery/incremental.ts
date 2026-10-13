@@ -5,7 +5,7 @@
 // Incremental detection: a refresh reads the configurations only of repositories that are new or that
 // changed since the stored list. No `vscode` import.
 import type { GraphQLError } from './githubApi';
-import type { CheckedRepository, DiscoveryData, RepositoryInfo } from '../types';
+import type { DiscoveryData, RepositoryInfo } from '../types';
 
 /** The stored detection result of a repository: its configurations, and the state of GitHub it was read from. */
 export interface StoredDetection {
@@ -49,11 +49,6 @@ export function needsConfigurationLookup(
 ): boolean {
   if (!stored) return true;
   return listed.pushedAt !== stored.pushedAt || listed.defaultBranch !== stored.defaultBranch;
-}
-
-/** The entry of `DiscoveryData.withoutConfiguration` for a repository without configuration. */
-export function checkedRepository(info: Pick<RepositoryInfo, 'nameWithOwner' | 'pushedAt' | 'defaultBranch'>): CheckedRepository {
-  return { nameWithOwner: info.nameWithOwner, pushedAt: info.pushedAt, defaultBranch: info.defaultBranch };
 }
 
 /**

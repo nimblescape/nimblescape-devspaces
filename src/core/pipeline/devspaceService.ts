@@ -177,13 +177,7 @@ import {
   type NamedImageReference,
   type NetworkState,
 } from '../policy';
-import {
-  abortError,
-  isAbortError,
-  isoTime,
-  silentProgress,
-  type ProgressReporter,
-} from '../ports';
+import { abortError, isAbortError, isoTime, silentProgress, type ProgressReporter, type ConfigurationChangeKind } from '../ports';
 import { isStorageId } from '../storage/paths';
 import { answerTimeText, freshRegistryDigests } from '../remoteMonitor/registryAnswers';
 import { analysisJobHash, configCheckKey } from './configCheck';
@@ -1492,10 +1486,11 @@ export class DevspaceService extends OperationBase {
   /**
    * The source of this run (PipelineContext.defaultImage): the one that the open named (`source`), else the one of the
    * last open of the devspace (Devspace.defaultImage), else the one of its build record (an entry restored from its
-   * volume takes the record of its newest image). A devspace built from the other source (its record, else the entry
-   * without one) is built again from this one, whatever the digests say: the container is created again from the
-   * other image; the files of the workspace volume stay. A changed default image of the same kind is a changed
-   * configuration (planUpdate asks Rebuild now or Later).
+   * volume takes the record of its newest image). An open that names the other source than the devspace was built
+   * from (its record, else the entry without one) builds it again from this one, whatever the digests say: the
+   * container is created again from the other image; the files of the workspace volume stay. A kept source that the
+   * devspace was not built from (a switch whose build failed and fell back to the old devspace) and a changed default
+   * image of the same kind are a changed configuration: planUpdate asks Rebuild now or Later.
    */
   private decideSource(ctx: PipelineContext, record: BuildRecord | undefined): void {
     const env = ctx.env;
@@ -1504,7 +1499,7 @@ export class DevspaceService extends OperationBase {
     const next = ctx.source === undefined ? kept : ctx.source.kind === 'defaultImage' ? ctx.source.image : undefined;
     ctx.defaultImage = next;
     if (next !== undefined) this.logger.info(`${env.repository} opens with the default image ${next} in place of its configuration.`);
-    if ((record !== undefined || env.defaultImage !== undefined) && (built !== undefined) !== (next !== undefined)) {
+    if (ctx.source !== undefined && (record !== undefined || env.defaultImage !== undefined) && (built !== undefined) !== (next !== undefined)) {
       this.logger.info(`Source of ${env.repository}: ${sourceText(built, record?.configPath ?? env.configPath)} → ${sourceText(next, ctx.configPath)}. The devspace is built again.`);
       ctx.forced = true;
     }
@@ -2399,14 +2394,18 @@ export class DevspaceService extends OperationBase {
     let skipUpdate = false;
     const changed = record !== undefined && (record.configPath !== loaded.configPath || (await this.configHashChanged(ctx, record, loaded)));
     if (changed && !forced) {
-      // A changed default image (the setting) of a devspace built from one: the question names it.
-      const defaultImageChanged = record.defaultImage !== undefined && loaded.defaultImage !== undefined && record.defaultImage !== loaded.defaultImage;
+      // A changed default image (the setting) of a devspace built from one, or a selected source that the devspace
+      // was not built from (decideSource): the question names it.
+      const what: ConfigurationChangeKind | undefined =
+        record.defaultImage === loaded.defaultImage ? undefined : record.defaultImage !== undefined && loaded.defaultImage !== undefined ? 'defaultImage' : 'source';
       this.logger.info(
-        defaultImageChanged
+        what === 'defaultImage'
           ? `The default image of ${ctx.env.repository} changed since the last build: ${record.defaultImage} → ${loaded.defaultImage}.`
-          : `The configuration of ${ctx.env.repository} changed since the last build.`,
+          : what === 'source'
+            ? `Source of ${ctx.env.repository}: built from ${sourceText(record.defaultImage, record.configPath)}, selected ${sourceText(loaded.defaultImage, loaded.configPath)}.`
+            : `The configuration of ${ctx.env.repository} changed since the last build.`,
       );
-      const answer = await this.deps.ui.configurationChanged(ctx.env.repository, defaultImageChanged ? 'defaultImage' : undefined);
+      const answer = await this.deps.ui.configurationChanged(ctx.env.repository, what);
       this.throwIfCancelled(ctx.signal);
       if (answer === 'rebuildNow') forced = true;
       else skipUpdate = true;

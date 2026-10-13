@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { Actions, MAX_LISTED_NAMES, Messages, formatChanges, listSome, recordedStateNote } from '../core/messages';
 import type { DeleteConfirmation } from '../core/pipeline/deleteCheck';
 import { ControllerTexts } from './controllerTexts';
-import { systemClock, type Clock, type Logger, type PipelineUi } from '../core/ports';
+import { systemClock, type Clock, type Logger, type PipelineUi, type ConfigurationChangeKind } from '../core/ports';
 import type { VsCodeGitHubAuth } from './auth';
 import { GITHUB_PACKAGES_REGISTRY } from '../core/imageCheck/credentials';
 import type { UpdateContainer } from '../core/types';
@@ -39,11 +39,11 @@ export class VsCodePipelineUi implements PipelineUi {
     return choice === Actions.open;
   }
 
-  async configurationChanged(repository: string, what?: 'defaultImage'): Promise<'rebuildNow' | 'later'> {
+  async configurationChanged(repository: string, what?: ConfigurationChangeKind): Promise<'rebuildNow' | 'later'> {
     const rebuildNow: vscode.MessageItem = { title: Actions.rebuildNow };
     const later: vscode.MessageItem = { title: Actions.later, isCloseAffordance: true };
     const choice = await vscode.window.showInformationMessage(
-      what === 'defaultImage' ? Messages.defaultImageChanged : Messages.configurationChanged,
+      what === 'defaultImage' ? Messages.defaultImageChanged : what === 'source' ? Messages.sourceChanged : Messages.configurationChanged,
       { modal: true, detail: repository },
       rebuildNow,
       later,

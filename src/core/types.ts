@@ -262,16 +262,6 @@ export interface OrganizationHint {
   url: string;
 }
 
-/**
- * A repository of the last discovery without a Dev Container configuration, with the state of GitHub its detection was
- * read from (incremental detection).
- */
-export interface CheckedRepository {
-  nameWithOwner: string;
-  pushedAt: string | null;
-  defaultBranch: string | null;
-}
-
 /** Content of repositories-<account ID>.json. */
 export interface DiscoveryData {
   version: 1;
@@ -287,10 +277,12 @@ export interface DiscoveryData {
    */
   scope: string[];
   /**
-   * The repositories of the scan that have no configuration, so that a later refresh reads the configurations only of
-   * new and changed repositories.
+   * The repositories of the scan that have no configuration (`configPaths` empty), with the state of GitHub their
+   * detection was read from: a later refresh reads the configurations only of new and changed repositories
+   * (incremental detection). With a default image (the setting `defaultImage`), the sidebar lists them too: their
+   * devspaces start from that image.
    */
-  withoutConfiguration: CheckedRepository[];
+  withoutConfiguration: RepositoryInfo[];
   /**
    * Repositories with a configuration whose lookup was not complete (a GraphQL error in its part of the answer), by
    * `owner/name`: the next refresh reads their configurations again. Missing when there are none.

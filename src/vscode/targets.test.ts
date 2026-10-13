@@ -6,18 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { DiscoveryData, Devspace, RepositoryInfo } from '../core/types';
 import { ControllerTexts } from './controllerTexts';
 import { dockerStoppedRuntime, devspaceIdsOf, liveBusyDevspaceIds } from './sidebarData';
-import {
-  configurationChoices,
-  findRepositoryInfo,
-  gitHubUrl,
-  ownerTrust,
-  parseCommandArgument,
-  pickerRepositories,
-  placeholderRepositoryInfo,
-  repositoriesToLookUp,
-  repositoryKey,
-  repositoryTarget,
-} from './targets';
+import { configurationChoices, findRepositoryInfo, gitHubUrl, listedRepositories, ownerTrust, parseCommandArgument, pickerRepositories, placeholderRepositoryInfo, repositoriesToLookUp, repositoryKey, repositoryTarget } from './targets';
 import { buildTreeModel, type RepositoryRow } from './treeModel';
 
 const NOW = Date.parse('2026-09-25T08:00:00.000Z');
@@ -147,8 +136,13 @@ describe('repository lists', () => {
       ['acme/old', looked],
       ['acme/gone', null],
     ]);
+    const empty = repo('acme/empty', { configPaths: [] });
     expect(findRepositoryInfo('acme/api', discovery([listed]), lookups)).toBe(listed);
     expect(findRepositoryInfo('ACME/old', discovery([listed]), lookups)).toBe(looked);
+    // Also the repositories without a configuration that the discovery stores.
+    expect(findRepositoryInfo('acme/EMPTY', discovery([listed], { withoutConfiguration: [empty] }), lookups)).toBe(empty);
+    expect(listedRepositories(discovery([listed], { withoutConfiguration: [empty] }))).toEqual([listed, empty]);
+    expect(listedRepositories(undefined)).toEqual([]);
     expect(findRepositoryInfo('acme/gone', discovery([listed]), lookups)).toBeUndefined();
     expect(findRepositoryInfo('acme/api', undefined, new Map())).toBeUndefined();
   });
@@ -169,6 +163,17 @@ describe('repository lists', () => {
     expect(result[3].defaultBranch).toBeNull();
   });
 
+  it('lists the repositories without a configuration only with a default image (they start from it)', () => {
+    const data = discovery([repo('acme/api')], { withoutConfiguration: [repo('acme/empty', { configPaths: [] }), repo('acme/fork', { configPaths: [], isFork: true })] });
+    const names = (result: RepositoryInfo[]) => result.map((info) => info.nameWithOwner);
+    expect(names(pickerRepositories({ data, settings, devspaces: [], lookups: new Map() }))).toEqual(['acme/api']);
+    const withImage = { ...settings, includeForks: false, defaultImage: 'ghcr.io/majikmate/devcontainer-base:latest' };
+    expect(names(pickerRepositories({ data, settings: withImage, devspaces: [], lookups: new Map() }))).toEqual(['acme/api', 'acme/empty']);
+    // The devspace of such a repository is listed either way, with its GitHub data.
+    const result = pickerRepositories({ data, settings, devspaces: [devspace('e1', 'acme/empty')], lookups: new Map() });
+    expect(result.map((info) => [info.nameWithOwner, info.defaultBranch])).toEqual([['acme/api', 'main'], ['acme/empty', 'main']]);
+  });
+
   it('looks up the repositories of devspaces that the discovery does not list, each once', () => {
     const devspaces = [
       devspace('e1', 'acme/api'),
@@ -177,6 +182,8 @@ describe('repository lists', () => {
       devspace('e4', 'lost/repo'),
     ];
     expect(repositoriesToLookUp(devspaces, [repo('Acme/Api')])).toEqual(['acme/old', 'lost/repo']);
+    // A repository that the discovery lists without a configuration needs no lookup.
+    expect(repositoriesToLookUp(devspaces, listedRepositories(discovery([repo('Acme/Api')], { withoutConfiguration: [repo('acme/old', { configPaths: [] })] })))).toEqual(['lost/repo']);
     expect(repositoriesToLookUp([], [repo('acme/api')])).toEqual([]);
   });
 

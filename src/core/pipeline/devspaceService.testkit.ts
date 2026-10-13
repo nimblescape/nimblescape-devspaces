@@ -51,7 +51,7 @@ import { EngineError, type DockerEngine, type EngineContainer } from '../worker/
 import { devContainerOf } from '../worker/devspaceContainers';
 import { unusedEngine } from '../worker/dockerEngine.testkit';
 import { stopFlow } from '../worker/stopFlow';
-import { abortError, type Clock, type Logger, type PipelineUi, type ProgressReporter, type RunResult } from '../ports';
+import { abortError, type Clock, type Logger, type PipelineUi, type ProgressReporter, type RunResult, type ConfigurationChangeKind } from '../ports';
 import { StoragePaths } from '../storage/paths';
 import { DevspaceRegistry } from '../storage/registry';
 import { SessionFiles } from '../storage/sessionFiles';
@@ -1355,7 +1355,7 @@ export class FakeUi implements PipelineUi {
     return this.trust;
   }
 
-  async configurationChanged(repository: string, what?: 'defaultImage'): Promise<'rebuildNow' | 'later'> {
+  async configurationChanged(repository: string, what?: ConfigurationChangeKind): Promise<'rebuildNow' | 'later'> {
     this.prompts.push(`configurationChanged ${repository}${what !== undefined ? ` ${what}` : ''}`);
     return this.configurationChangedAnswer;
   }

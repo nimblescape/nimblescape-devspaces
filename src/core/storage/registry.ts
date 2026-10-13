@@ -23,6 +23,7 @@ import { isGitSummary } from '../git/gitSummary';
 import { writeJsonAtomic } from './atomicJson';
 import { errorCode, isStorageId, isTransientFsError, parseJson, readTextFile, retryTransient, type StoragePaths } from './paths';
 import { isRecord } from '../valueChecks';
+import { parseImageReference } from '../remoteMonitor/protocol';
 import { DEFAULT_CONFIG_PATH } from '../pipeline/recordRules';
 
 /** The registry format that this version reads and writes. */
@@ -521,7 +522,7 @@ const OPTIONAL_FIELDS: ReadonlyArray<readonly [keyof Devspace, Check]> = [
   ['lastSeenInUseAt', isString],
   ['buildRecord', isBuildRecord],
   // The default image of the last open (DevspaceSource).
-  ['defaultImage', isNonEmptyString],
+  ['defaultImage', isImageReference],
   ['busy', isBusyMark],
   ['remoteUser', isString],
   ['remoteWorkspaceFolder', isString],
@@ -586,7 +587,7 @@ export function isBuildRecord(value: unknown): value is BuildRecord {
     isCount(value.buildNumber) &&
     isString(value.configPath) &&
     isString(value.configHash) &&
-    (value.defaultImage === undefined || isNonEmptyString(value.defaultImage)) &&
+    (value.defaultImage === undefined || isImageReference(value.defaultImage)) &&
     isStringRecord(value.images) &&
     isStringRecord(value.features)
   );
@@ -631,6 +632,11 @@ function isString(value: unknown): value is string {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+/** A default image (Devspace.defaultImage, BuildRecord.defaultImage): an image reference, as the worker checks it. */
+function isImageReference(value: unknown): value is string {
+  return isNonEmptyString(value) && parseImageReference(value) !== undefined;
 }
 
 function isCount(value: unknown): value is number {

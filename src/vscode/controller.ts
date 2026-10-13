@@ -38,13 +38,13 @@ import type {
   RepositoryInfo,
   WindowStatus,
 } from '../core/types';
+import { defaultImageOf, hasConfiguration, sourceDiffers, startSource } from '../core/defaultImage';
 import { isProcessAlive, stopAfterSeconds } from '../core/session/sessionRules';
 import { decideReopen, pipelineJustRan, sortPendingOperations } from './activationRules';
 import type { VsCodeGitHubAuth } from './auth';
 import { Commands, type CommandName } from './commands';
 import type { ConnectionAdapter } from './connectionAdapter';
 import { ControllerTexts } from './controllerTexts';
-import { defaultImageOf, sourceDiffers, startSource } from './defaultImage';
 import {
   DISCONNECT_REQUEST_MAX_AGE_MS,
   isFreshDisconnectRequest,
@@ -219,8 +219,11 @@ interface StartOptions {
    * What the open builds the devspace from (DevspaceSource): the default image of the settings, or the configuration.
    * Every Start of the user names it (startSource: the settings, or the other source from the context menu). Missing:
    * the devspace keeps the source of its last open (a restored window, the reopen at startup, Reconnect of a flow).
+   * A Start on the devspace of this window (Reconnect) keeps it too, whatever the options name.
    */
   source?: DevspaceSource;
+  /** The devspace is built again before it starts (Start with Default Image or Start with Configuration on another source). */
+  forceRebuild?: boolean;
 }
 
 /** The devspace that this window is attached to. A window changes its devspace only by reloading. */
@@ -666,15 +669,16 @@ export class Controller implements vscode.Disposable {
    */
   async start(argument: CommandArgument, window: WindowRequest = 'default'): Promise<void> {
     const target = await this.resolveTarget(argument, 'open', ControllerTexts.selectRepositoryToStart);
-    if (target) await this.startTarget(target, { window, source: this.startSource() });
+    if (target) await this.startTarget(target, { window, source: this.startSource(target) });
   }
 
   /**
    * Start with Default Image and Start with Configuration: Start with the source that the menu names (the other one
-   * than the setting startWithDefaultImage gives plain Start). A devspace that was last opened from the other source
-   * is built again from this one (the pipeline creates its container again; the files of the volume stay). A devspace
-   * connected here or in another window hands off for that, as Rebuild does; otherwise the window of the setting
-   * openInNewWindow connects.
+   * than the setting startWithDefaultImage gives plain Start). A devspace that was last opened from another source
+   * (the other kind, or another default image) is built again from this one (the pipeline creates its container
+   * again; the files of the volume stay). A devspace connected here or in another window hands off for that, as
+   * Rebuild does; otherwise the window of the setting openInNewWindow connects. A repository without a configuration
+   * has only the default image.
    */
   async startWithSource(argument: CommandArgument, kind: DevspaceSource['kind']): Promise<void> {
     const image = defaultImageOf(this.deps.settings());
@@ -684,18 +688,27 @@ export class Controller implements vscode.Disposable {
     }
     const target = await this.resolveTarget(argument, 'open', ControllerTexts.selectRepositoryToStart);
     if (!target) return;
+    if (kind === 'configuration' && !hasConfiguration(target.info)) {
+      this.inform(Messages.noConfiguration(this.displayName(target)));
+      return;
+    }
     const source: DevspaceSource = kind === 'defaultImage' && image !== undefined ? { kind: 'defaultImage', image } : { kind: 'configuration' };
     const devspace = target.devspace;
-    if (devspace && sourceDiffers(devspace, source) && (this.isConnectedHere(devspace) || (await this.connectedInOtherWindow(devspace.id)))) {
+    const differs = devspace !== undefined && sourceDiffers(devspace, source);
+    if (devspace && differs && (this.isConnectedHere(devspace) || (await this.connectedInOtherWindow(devspace.id)))) {
       await this.rebuildDevspace(target, devspace, { reason: 'sourceSelected', source });
       return;
     }
-    await this.startTarget(target, { source });
+    // Another source (also another default image): built again, without the question of a changed configuration.
+    await this.startTarget(target, { source, ...(differs ? { forceRebuild: true } : {}) });
   }
 
-  /** The source of a Start of the user (startSource): the settings defaultImage and startWithDefaultImage. */
-  private startSource(): DevspaceSource {
-    return startSource(this.deps.settings());
+  /**
+   * The source of a Start of the user (startSource): the settings defaultImage and startWithDefaultImage; a repository
+   * without a configuration starts from the default image.
+   */
+  private startSource(target: Pick<Target, 'info'>): DevspaceSource {
+    return startSource(this.deps.settings(), target.info);
   }
 
   /**
@@ -882,7 +895,10 @@ export class Controller implements vscode.Disposable {
     );
     if (openInstead) {
       const fresh = await this.deps.registry.get(devspace.id);
-      if (fresh) await this.startTarget(this.devspaceTarget(fresh), { source: this.startSource() });
+      if (fresh) {
+        const target = this.devspaceTarget(fresh);
+        await this.startTarget(target, { source: this.startSource(target) });
+      }
     }
   }
 
@@ -987,10 +1003,11 @@ export class Controller implements vscode.Disposable {
         return;
       }
       const target = await this.ownTarget(this.devspaceTarget(devspace));
-      if (target) await this.startTarget(target, { window, source: this.startSource() });
+      if (target) await this.startTarget(target, { window, source: this.startSource(target) });
       return;
     }
-    await this.startTarget(await this.repositoryTargetFor(choice.repository.nameWithOwner, 'token'), { window, source: this.startSource() });
+    const target = await this.repositoryTargetFor(choice.repository.nameWithOwner, 'token');
+    await this.startTarget(target, { window, source: this.startSource(target) });
   }
 
   /** Refresh: the repository list (sign-in first when needed), a lost registry, and the states. */
@@ -1030,7 +1047,8 @@ export class Controller implements vscode.Disposable {
     }
     const info = await pickRepository(repositories, ControllerTexts.selectRepositoryToStart);
     if (!info) return;
-    await this.startTarget(await this.repositoryTargetFor(info.nameWithOwner, 'token'), { source: this.startSource() });
+    const target = await this.repositoryTargetFor(info.nameWithOwner, 'token');
+    await this.startTarget(target, { source: this.startSource(target) });
   }
 
   /**
@@ -1152,6 +1170,8 @@ export class Controller implements vscode.Disposable {
     const { service, connection } = this.deps;
     const devspace = target.devspace;
     const repository = this.displayName(target);
+    // A Start on the devspace of this window is Reconnect (or already connected): the source of its last open stays.
+    const source = devspace !== undefined && this.isConnectedHere(devspace) ? undefined : options.source;
     let reconnecting = false;
     let otherWindow: WindowStatus | undefined;
     // The container of this window whose state is read again within the operation, and what that read found running.
@@ -1255,14 +1275,20 @@ export class Controller implements vscode.Disposable {
                 }
               }
               if (devspace) {
-                result = await service.openDevspaceInWorker(devspace.id, { progress, signal, configPath: options.configPath, source: options.source });
+                result = await service.openDevspaceInWorker(devspace.id, {
+                  progress,
+                  signal,
+                  configPath: options.configPath,
+                  source,
+                  ...(options.forceRebuild === true ? { forceRebuild: true } : {}),
+                });
               } else {
                 const trusted = await this.firstOpenTrust(repository);
                 result = await service.openInWorker(repositoryTarget(repository, target.info, trusted), {
                   progress,
                   signal,
                   configPath: options.configPath,
-                  source: options.source,
+                  source,
                 });
               }
               await this.connect(result, progress, request, signal);
@@ -1271,7 +1297,14 @@ export class Controller implements vscode.Disposable {
       // Try again is a Start: a repository takes the account of a session with a working token, as at the first try; it
       // opens in the same kind of window as the first try.
       {
-        retry: retry ?? (async () => this.startTarget(await this.refreshedTarget(target, 'token'), { window: options.window, source: options.source })),
+        retry:
+          retry ??
+          (async () =>
+            this.startTarget(await this.refreshedTarget(target, 'token'), {
+              window: options.window,
+              source: options.source,
+              ...(options.forceRebuild === true ? { forceRebuild: true } : {}),
+            })),
         refused: () => (refused = true),
       },
     );

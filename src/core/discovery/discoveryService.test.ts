@@ -574,7 +574,8 @@ describe('DiscoveryService.loadStored', () => {
         { organization: 'y', kind: 'other', url: 'https://evil.example' },
       ],
       scope: ['Acme'],
-      withoutConfiguration: [{ nameWithOwner: 'octo/c', pushedAt: null, defaultBranch: 'main' }, 3],
+      // An entry of a list of version 0.3.0 and older (the name and the state of GitHub only) is dropped.
+      withoutConfiguration: [{ ...valid, nameWithOwner: 'octo/c', configPaths: [] }, { ...valid, nameWithOwner: 'octo/d' }, { nameWithOwner: 'octo/e', pushedAt: null, defaultBranch: 'main' }, 3],
     });
     expect(data).toEqual({
       version: 1,
@@ -584,7 +585,7 @@ describe('DiscoveryService.loadStored', () => {
       repositories: [valid, { ...valid, nameWithOwner: 'octo/b' }],
       hints: [{ organization: 'acme', kind: 'saml', url: 'https://github.com/orgs/acme/sso' }],
       scope: ['acme'],
-      withoutConfiguration: [{ nameWithOwner: 'octo/c', pushedAt: null, defaultBranch: 'main' }],
+      withoutConfiguration: [{ ...valid, nameWithOwner: 'octo/c', configPaths: [] }],
     });
   });
 

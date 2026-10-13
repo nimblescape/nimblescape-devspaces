@@ -197,7 +197,8 @@ describe('incremental detection, empty scope', () => {
     expect(github.requests.map((request) => operation(request))).toEqual(['query Discover', 'query Configurations']);
     expect(github.lookups()[0].variables).toEqual({ o0: 'acme', n0: 'api', o1: 'acme', n1: 'empty' });
     expect(names(result.repositories)).toEqual(['acme/api']);
-    expect(result.withoutConfiguration).toEqual([{ nameWithOwner: 'acme/empty', pushedAt: '2026-09-20T10:00:00Z', defaultBranch: 'main' }]);
+    // With all its data: the sidebar lists it with a default image.
+    expect(result.withoutConfiguration).toEqual([expect.objectContaining({ nameWithOwner: 'acme/empty', owner: 'acme', name: 'empty', pushedAt: '2026-09-20T10:00:00Z', defaultBranch: 'main', configPaths: [] })]);
   });
 
   it('reads only the list when nothing changed: no configuration lookup, 100 repositories per request', async () => {

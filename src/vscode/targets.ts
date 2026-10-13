@@ -3,6 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // Targets of the commands and the choices of their Quick Picks. No `vscode` import, so the rules are unit-tested.
+import { defaultImageOf } from '../core/defaultImage';
 import { filterRepositories, isTrustedOwner } from '../core/discovery/discoveryService';
 import { isRepositoryInScope } from '../core/discovery/scope';
 import { configurationName } from '../core/names';
@@ -95,16 +96,22 @@ export function findRepositoryInfo(
   lookups: ReadonlyMap<string, RepositoryInfo | null>,
 ): RepositoryInfo | undefined {
   const key = repositoryKey(repository);
-  return data?.repositories.find((info) => repositoryKey(info.nameWithOwner) === key) ?? lookups.get(key) ?? undefined;
+  return listedRepositories(data).find((info) => repositoryKey(info.nameWithOwner) === key) ?? lookups.get(key) ?? undefined;
+}
+
+/** The repositories that the discovery knows: with a configuration, then without one. */
+export function listedRepositories(data: DiscoveryData | undefined): RepositoryInfo[] {
+  return data ? [...data.repositories, ...data.withoutConfiguration] : [];
 }
 
 /**
  * Repositories of the pickers (Search, "Open repository…" of the switcher): the discovered repositories that the
- * settings show, plus the repository of every devspace (like the sidebar), with the GitHub data when it is known.
+ * settings show (with a default image also those without a configuration), plus the repository of every devspace (like
+ * the sidebar), with the GitHub data when it is known.
  */
 export function pickerRepositories(input: {
   data: DiscoveryData | undefined;
-  settings: Pick<ExtensionSettings, 'owners' | 'includeArchived' | 'includeForks'>;
+  settings: Pick<ExtensionSettings, 'owners' | 'includeArchived' | 'includeForks'> & Partial<Pick<ExtensionSettings, 'defaultImage'>>;
   devspaces: readonly Devspace[];
   lookups: ReadonlyMap<string, RepositoryInfo | null>;
 }): RepositoryInfo[] {
@@ -116,7 +123,8 @@ export function pickerRepositories(input: {
     seen.add(key);
     result.push(info);
   };
-  for (const info of filterRepositories(input.data?.repositories ?? [], input.settings)) add(info);
+  const shown = defaultImageOf(input.settings) !== undefined ? listedRepositories(input.data) : (input.data?.repositories ?? []);
+  for (const info of filterRepositories(shown, input.settings)) add(info);
   for (const devspace of input.devspaces) {
     add(findRepositoryInfo(devspace.repository, input.data, input.lookups) ?? placeholderRepositoryInfo(devspace.repository));
   }
@@ -124,8 +132,9 @@ export function pickerRepositories(input: {
 }
 
 /**
- * Repositories of devspaces that the discovery does not list (it stores only repositories with a configuration on
- * the default branch): they are looked up one by one after a refresh, so that the sidebar does not show `not on GitHub`
+ * Repositories of devspaces that the discovery does not list (`listed`: with and without a configuration; a repository
+ * of the scan is only missing when the account cannot see it): they are looked up one by one after a refresh, so that
+ * the sidebar does not show `not on GitHub`
  * for a repository that exists. Each repository once, in the order of the registry. With a scan scope (`owners`), only
  * repositories of its owners: GitHub is not asked about any other one.
  */

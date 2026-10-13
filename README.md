@@ -25,7 +25,7 @@ Devspaces lists the GitHub repositories that you can access and that contain a D
 ## Getting started
 
 1. Select the **Devspaces** icon in the activity bar.
-2. Select **Sign in with GitHub**. Your repositories with a Dev Container configuration appear, grouped by owner.
+2. Select **Sign in with GitHub**. Your repositories with a Dev Container configuration appear, grouped by owner (with a default image, also those without one).
 3. Select **Start** on a repository, or double-click it. The first start takes a few minutes; later starts take seconds.
 
 Switch between devspaces with **Devspaces: Switch Devspace…** (`Ctrl+Alt+E`, on macOS `Cmd+Alt+E`) or the status bar.

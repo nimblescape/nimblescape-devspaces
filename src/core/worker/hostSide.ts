@@ -6,6 +6,7 @@
 // per kind of request (`question`, `local`, `record`, `secret`; no `connect`, the open answers with what the window
 // needs). The worker's side of them (workerHostSide) sends the requests; the extension's side (hostSideHandler,
 // src/vscode) answers them. Pure types, the check of a request, and the requests of each flow; no I/O, no `vscode`.
+import type { ConfigurationChangeKind } from '../ports';
 import { OP_DELETE, OP_DELETE_CHECK, OP_HEARTBEAT, OP_LIST_CONFIGURATIONS, OP_MONITOR_ENSURE, OP_MONITOR_RUN_NOW, OP_OPEN, OP_PREPARE, OP_RECONCILE, OP_RECORD_GIT_STATE, OP_STOP, OP_TOKEN_REMOVE, OP_WINDOW_STATE, SECRET_REGISTRY, SECRET_TOKEN, type AskKind } from '../helperChannel/protocol';
 import type { BusyMarkResult } from '../pipeline/busyMarks';
 import type { BusyMark, BusyOperation, Devspace, GitHubAccount, GitSummary, RegistryFile, WindowStatus } from '../types';
@@ -25,7 +26,7 @@ export const VIEWER_TIMEOUT_MS = 5_000;
 /** The questions of a flow to the user (PipelineUi without the messages, which go as log lines and progress). */
 export interface HostQuestions {
   confirmUntrustedRepository(repository: string): Promise<boolean>;
-  configurationChanged(repository: string, what?: 'defaultImage'): Promise<'rebuildNow' | 'later'>;
+  configurationChanged(repository: string, what?: ConfigurationChangeKind): Promise<'rebuildNow' | 'later'>;
   configurationKindChanged(repository: string, message: string): Promise<'rebuildNow' | 'later'>;
   filesMissing(repository: string): Promise<'cloneAgain' | 'deleteDevspace' | undefined>;
   recreateContainer(repository: string, question: { message: string; detail: string }): Promise<boolean>;
