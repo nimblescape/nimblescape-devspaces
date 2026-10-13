@@ -16,9 +16,14 @@ export default defineConfig({
   // No workspace trust prompt, no first-run pages, and on Linux secrets in a file instead of a keyring, which a CI
   // runner or a container does not have.
   launchArgs: ['--disable-workspace-trust', '--skip-welcome', '--skip-release-notes', '--password-store=basic'],
+  // The extension of the test window must never reach the Docker engine of this computer: with a fresh user data
+  // folder it would build the helper image in the background and restore devspaces from the volumes there. DOCKER_HOST
+  // decides over the Docker context (src/core/docker/dockerTargets.ts), and nothing listens on this socket, so the
+  // extension finds Docker not running.
+  env: { DOCKER_HOST: 'unix:///nonexistent/nimblescape-devspaces-vscode-test.sock' },
   mocha: {
     ui: 'bdd',
-    // The download of the Dev Containers extension and the first start of VS Code are slow on CI runners.
+    // The first activation of the extension in a fresh VS Code can be slow on CI runners.
     timeout: 60_000,
   },
 });
