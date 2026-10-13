@@ -21,6 +21,17 @@ code --install-extension nimblescape.nimblescape-devspaces
 
 VS Code installs the Dev Containers extension with it. To install a `.vsix` file instead, run **Extensions: Install from VSIX…** or `code --install-extension nimblescape-devspaces-<version>.vsix`; to create the file yourself, see [Build from source](#build-from-source).
 
+### Update from version 0.4.0 or older
+
+Version 0.4.0 and older named the image of the worker `devspaces-helper:<hash>` (with the second tag `devspaces-monitor:<hash>`), its cache volume `devspaces-helper-cache`, and its labels `nimblescape.devspaces.helper…`. Later versions name them `devspaces-worker:<hash>`, `devspaces-worker-cache`, and `nimblescape.devspaces.worker…`, build the new image at the first use, and do not use or remove the old objects. On each Docker engine, after the first start of a devspace with the new version (which replaces the Monitor), remove the old objects, because the host access checks of the new version do not protect the old volume:
+
+```sh
+for tag in $(docker image ls devspaces-helper --format '{{.Tag}}'); do docker image rm "devspaces-helper:$tag" "devspaces-monitor:$tag"; done
+docker volume rm devspaces-helper-cache
+```
+
+A `devspaces-monitor:<hash>` tag that does not exist gives an error for that tag only. All computers that use one Docker engine should have the same version, so that the worker of only one version runs there.
+
 ### Update from version 0.2.1 or older
 
 Version 0.2.1 and older named the Docker objects of Devspaces `devspace-…` and their labels `nimblescape.devspace.…`. Later versions name them `devspaces-…` and `nimblescape.devspaces.…`, and they do not use the objects of the older versions: the sidebar does not show a devspace of an older version, and a start of its repository creates a new devspace that clones the repository again.
