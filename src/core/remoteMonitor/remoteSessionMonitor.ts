@@ -168,9 +168,11 @@ export class RemoteSessionMonitor {
    *   `created` → `docker rm -f <ID>`, then create, only when the daemon created it more than
    *   REMOTE_MONITOR_STALE_CREATED_MS ago by the clock of the daemon (`.Created` and `docker info` SystemTime); younger,
    *   or an age that cannot be read → kept, `failed`;
-   * - the matching label and restarting → the stored script is read as for a restarted one: `same` → nothing (the
-   *   next start of the restart policy runs it); `other` or `unknown` → `docker rm -f <ID>`, then create (a container
-   *   between two failed starts is no healthy monitor to keep without evidence);
+   * - the matching label and restarting with RestartCount 0 or 1 (it failed once) → the stored script is read as for a
+   *   restarted one: `same` → nothing (the next start of the restart policy runs it); `other` or `unknown` →
+   *   `docker rm -f <ID>`, then create (a container between two failed starts is no healthy monitor to keep without
+   *   evidence); restarting with a higher RestartCount (it fails at each start, also with its script) → `docker rm -f
+   *   <ID>`, then create, whose ready check reports the cause;
    * - the matching label and dead, removing, or exited with LOADER_EXIT_CODE (the loader refused its stored script and
    *   its input), another label, or none → `docker rm -f <ID>`, then create;
    * - missing → create.
@@ -352,10 +354,11 @@ export class RemoteSessionMonitor {
       logger.info(`The Monitor on the Docker host was started again without its script; it is replaced (${this.containerName}).`);
       return 'replace';
     }
-    if (current.status === 'restarting' && (await this.storedScript(script, signal)) === 'same') {
-      // Between two starts of its restart policy (the loader or the script failed once): it holds the stored script of
-      // this version, so the next start runs it. Without that evidence (another or no stored script, or a read that
-      // fails) it is replaced as before.
+    if (current.status === 'restarting' && current.restartCount <= 1 && (await this.storedScript(script, signal)) === 'same') {
+      // Between the first two starts of its restart policy (the script failed once, after a run): it holds the stored
+      // script of this version, so the next start runs it. A container that has failed more often fails at each start
+      // (the loader already ran this script): it is replaced, so the create's ready check reports the cause. Without
+      // the evidence (another or no stored script, or a read that fails) it is replaced as before.
       logger.info(`The Monitor on the Docker host is restarting with its script; it is kept (${this.containerName}).`);
       return 'running';
     }
