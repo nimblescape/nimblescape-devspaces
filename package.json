@@ -798,6 +798,8 @@
     "test:docker": "vitest run --config vitest.docker.config.mts",
     "test:vscode": "node esbuild.mjs && node scripts/build-vscode-tests.mjs && vscode-test --label vscode",
     "test:vscode:vsix": "node scripts/build-vscode-tests.mjs && vscode-test --label vsix",
+    "test:vscode:attach:prepare": "node esbuild.mjs && node scripts/build-vscode-tests.mjs && node out/test/vscode/attach/prepare.js",
+    "test:vscode:attach": "vscode-test --label attach",
     "vscode:prepublish": "node esbuild.mjs --production",
     "package": "vsce package --no-dependencies --no-rewrite-relative-links",
     "install-local": "node scripts/install-local.mjs"
