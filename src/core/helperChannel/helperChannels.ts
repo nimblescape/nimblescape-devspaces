@@ -13,7 +13,7 @@ import { runWithDockerTarget } from '../docker/dockerTargets';
 import type { DockerTarget } from '../docker/dockerHost';
 import type { HelperMaintenance } from '../helper/helperImages';
 import { bundleHash, loaderCommand } from '../loader/pipeLoader';
-import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR, freeWorkerNumber, workerNameStart } from '../names';
+import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR, freeWorkerNumber, workerName, workerNameStart } from '../names';
 import { errorMessage, isUserFacingError } from '../errors';
 import { abortError, isAbortError, type Logger, type RunOptions, type RunResult, type StartedProcess } from '../ports';
 import { HelperChannel, HelperChannelError } from './helperChannel';
@@ -236,7 +236,7 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
   // after each refusal.
   const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
     for (let number = freeWorkerNumber(nameStart, listed, inUse); ; ) {
-      const containerName = `${nameStart}${number}`;
+      const containerName = workerName(nameStart, number);
       try {
         return await startNamed(network, containerName);
       } catch (error) {
@@ -247,7 +247,7 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
         }
         listed = (await workerNames()) ?? listed;
         number = freeWorkerNumber(nameStart, listed, inUse);
-        deps.logger.info(`The worker name ${containerName} is in use on ${name}, so the worker starts as ${nameStart}${number}.`);
+        deps.logger.info(`The worker name ${containerName} is in use on ${name}, so the worker starts as ${workerName(nameStart, number)}.`);
       }
     }
   };

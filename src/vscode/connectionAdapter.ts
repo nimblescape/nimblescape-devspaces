@@ -43,9 +43,10 @@ export class ConnectionAdapter {
   }
 
   /**
-   * The name of this window in the names of its workers (workerNameStart), the name that its title starts with: the
-   * name of its saved workspace file without `.code-workspace`, else the name of its first folder (also of a remote
-   * folder, for example over SSH, and the repository folder of a devspace; an untitled workspace, which the title calls
+   * The name of this window in the names of its workers (workerNameStart; not of the worker of a devspace window on the
+   * engine of the devspace, which is named after the devspace), the name that its title starts with: the name of its
+   * saved workspace file without `.code-workspace`, else the name of its first folder (also of a remote folder, for
+   * example over SSH, and the repository folder of a devspace; an untitled workspace, which the title calls
    * `Untitled (Workspace)`, too), and empty for a window without a folder. Not `vscode.workspace.name`, which adds the
    * remote to the name of a remote window and `(Workspace)` to the name of a workspace.
    */
