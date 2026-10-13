@@ -319,6 +319,7 @@ describe('workerContainerName', () => {
     // Letters without an accent to remove get plain letters.
     expect(workerContainerName('Straße Øl Łódź', '3f9a')).toBe('devspace-worker-strasse-ol-lodz-3f9a');
     expect(workerContainerName('Æ Œ Đ Ð', '3f9a')).toBe('devspace-worker-ae-oe-d-d-3f9a');
+    expect(workerContainerName('Işık Þór Ħ Ŧ Ŋ', '3f9a')).toBe('devspace-worker-isik-thor-h-t-n-3f9a');
   });
 
   it('names a window without a name, or with a name of no [a-z0-9], window', () => {
@@ -334,6 +335,12 @@ describe('workerContainerName', () => {
     // A first word longer than 24 characters is cut within it.
     expect(workerContainerName('x'.repeat(80), '3f9a')).toBe(`devspace-worker-${'x'.repeat(24)}-3f9a`);
     expect(workerContainerName(`${'x'.repeat(30)}-y`, '3f9a')).toHaveLength(45);
+    // So is a long word after words of less than half of the room, so that they are not all that is left.
+    expect(workerContainerName('a-verylongrepositorynames-service', '3f9a')).toBe('devspace-worker-a-verylongrepositoryname-3f9a');
+    expect(workerContainerName(`${'a'.repeat(11)}-${'b'.repeat(20)}`, '3f9a')).toBe(`devspace-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-3f9a`);
+    expect(workerContainerName(`${'a'.repeat(12)}-${'b'.repeat(20)}`, '3f9a')).toBe(`devspace-worker-${'a'.repeat(12)}-3f9a`);
+    // A cut within a word never ends in a separator.
+    expect(workerContainerName(`a-${'b'.repeat(21)}-cc`, '3f9a')).toBe(`devspace-worker-a-${'b'.repeat(21)}-3f9a`);
   });
 
   it('draws 4 new hex characters for each worker, and never has the shape of a name of a devspace', () => {

@@ -81,6 +81,8 @@ async function open(...first: Array<() => StartedProcess>) {
       socketPath: async () => '/var/run/docker.sock',
       stateVolume: 'devspace-monitor',
       vscodeVolume: 'devspace-vscode',
+      // Read at each start: the window name tells the starts apart.
+      windowName: () => `start ${names.length + 1}`,
     },
     REMOTE,
   ).catch((error: unknown) => {
@@ -125,11 +127,13 @@ describe('the second name of openHelperChannel for a worker name in use', () => 
   const IN_USE =
     'docker: Error response from daemon: Conflict. The container name "/devspace-worker-api-3f9a" is already in use by container "0123456789ab". You have to remove (or rename) that container to be able to reuse that name.\n';
 
-  it('starts again with the same network and new random characters, and the log says why', async () => {
+  it('starts again with the same network and a new name, and the log says why', async () => {
     const { networks, names, infos } = await open(() => refused(IN_USE));
     expect(networks).toEqual(['bridge', 'bridge']);
+    // The second start draws its name again (workerContainerName).
     expect(names).toHaveLength(2);
-    for (const name of names) expect(name).toMatch(/^devspace-worker-window-[0-9a-f]{4}$/);
+    expect(names[0]).toMatch(/^devspace-worker-start-1-[0-9a-f]{4}$/);
+    expect(names[1]).toMatch(/^devspace-worker-start-2-[0-9a-f]{4}$/);
     expect(infos.join('\n')).toContain('The name of the worker on build-box was in use');
   });
 

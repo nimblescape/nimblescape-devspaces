@@ -322,7 +322,20 @@ const WORKER_NAME_PREFIX = `${RESOURCE_NAME_PREFIX}worker-`;
 const WORKER_WINDOW_LENGTH = 24;
 
 /** Letters that NFKD does not split into a letter and an accent, with the plain letters that a worker name takes. */
-const PLAIN_LETTERS: Readonly<Record<string, string>> = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd' };
+const PLAIN_LETTERS: Readonly<Record<string, string>> = {
+  ß: 'ss',
+  æ: 'ae',
+  œ: 'oe',
+  ø: 'o',
+  ł: 'l',
+  đ: 'd',
+  ð: 'd',
+  þ: 'th',
+  ı: 'i',
+  ħ: 'h',
+  ŧ: 't',
+  ŋ: 'n',
+};
 
 /**
  * The short name of a worker container, `devspace-worker-<window>-<random>`, so that `docker ps` tells which VS Code
@@ -330,8 +343,8 @@ const PLAIN_LETTERS: Readonly<Record<string, string>> = { ß: 'ss', æ: 'ae', œ
  * file of the window, else of its first folder, as in the title of the window; the repository folder in a devspace):
  * lower case, letters without their accents (PLAIN_LETTERS for those that have none to remove), each run of other
  * characters than `[a-z0-9]` as one `-`, without `-` at the ends, and `window` when nothing is left. A longer name is
- * cut to WORKER_WINDOW_LENGTH characters at the end of a word (its last `-` before the cut), and within the first word
- * only when that word is longer. `<random>` (4 hex characters by default) is new for each worker: it keeps the workers of
+ * cut to WORKER_WINDOW_LENGTH characters at the end of a word (its last `-` before the cut), or within a word when the
+ * words before the cut would keep less than half of the room. `<random>` (4 hex characters by default) is new for each worker: it keeps the workers of
  * windows with the same name on one engine apart (two windows of one folder, two devspaces of one repository, windows
  * of two computers on one remote engine, and the next worker of a window while Docker still removes the last one;
  * openHelperChannel draws once more when the name is in use), and, as no word of a name pair is only hex characters
@@ -347,9 +360,13 @@ export function workerContainerName(windowName: string, random = crypto.randomBy
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   // One character more than the room: a `-` there ends a word at the cut.
-  const cut = words.slice(0, WORKER_WINDOW_LENGTH + 1);
-  const end = cut.lastIndexOf('-');
-  const window = words.length <= WORKER_WINDOW_LENGTH ? words : end > 0 ? cut.slice(0, end) : words.slice(0, WORKER_WINDOW_LENGTH);
+  const end = words.slice(0, WORKER_WINDOW_LENGTH + 1).lastIndexOf('-');
+  const window =
+    words.length <= WORKER_WINDOW_LENGTH
+      ? words
+      : end >= WORKER_WINDOW_LENGTH / 2
+        ? words.slice(0, end)
+        : words.slice(0, WORKER_WINDOW_LENGTH).replace(/-+$/, '');
   return `${WORKER_NAME_PREFIX}${window === '' ? 'window' : window}-${random}`;
 }
 
