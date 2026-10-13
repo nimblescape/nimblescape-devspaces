@@ -194,8 +194,9 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
   };
   const windowName = deps.windowName?.() ?? '';
   // The names of the containers of the engine that contain WORKER_NAME_PREFIX, with one call without the worker (`,`
-  // separates the names of one container); none when the list fails (the next number is tried then).
-  const workerNames = async (): Promise<string[]> => {
+  // separates the names of one container); undefined when the list fails (the last list stays, and the next number is
+  // tried then).
+  const workerNames = async (): Promise<string[] | undefined> => {
     let detail: string;
     try {
       const result = await runWithDockerTarget(target, () =>
@@ -207,7 +208,7 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
       detail = (error as Error).message;
     }
     deps.logger.info(`The containers on ${name} could not be listed for the name of the worker (${detail}), so the worker takes the next number.`);
-    return [];
+    return undefined;
   };
   // The numbers whose names Docker refused in this open (at most WORKER_NAME_ATTEMPTS), and the last list of the
   // engine, also for the start without network.
@@ -228,7 +229,7 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
         if (inUse.size >= WORKER_NAME_ATTEMPTS) {
           throw new HelperChannelError(error.code, `${error.message} Docker refused ${inUse.size} names of the worker on ${name} because other containers have them.`);
         }
-        listed = await workerNames();
+        listed = (await workerNames()) ?? listed;
         number = freeWorkerNumber(windowName, listed, inUse);
         deps.logger.info(`The worker name ${containerName} is in use on ${name}, so the worker starts as ${workerContainerName(windowName, number)}.`);
       }

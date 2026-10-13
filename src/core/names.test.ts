@@ -12,8 +12,8 @@ import {
   composeProjectName,
   devspaceImageName,
   devspaceImageRepository,
-  isDevspaceResourceName,
   freeWorkerNumber,
+  isDevspaceResourceName,
   resourceName,
   workerContainerName,
 } from './names';
