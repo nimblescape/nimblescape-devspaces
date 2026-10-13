@@ -82,7 +82,7 @@ async function waitForLog(expected: RegExp): Promise<string> {
   let log = '';
   let changedAt = Date.now();
   for (;;) {
-    const current = logFiles(path.join(userDataDir, 'logs'))
+    const current = logFiles(currentSessionLogs(path.join(userDataDir, 'logs')))
       .map((file) => fs.readFileSync(file, 'utf8'))
       .join('\n');
     if (current !== log) {
@@ -96,6 +96,16 @@ async function waitForLog(expected: RegExp): Promise<string> {
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
+}
+
+/**
+ * The logs folder of this start of VS Code: VS Code names the folder of each start by its time (YYYYMMDDTHHMMSS), so
+ * the last one in order is this one. A user data folder left by an earlier run keeps the older ones.
+ */
+function currentSessionLogs(logs: string): string {
+  const sessions = fs.existsSync(logs) ? fs.readdirSync(logs).filter((name) => /^\d{8}T\d{6}$/.test(name)) : [];
+  sessions.sort();
+  return path.join(logs, sessions.at(-1) ?? '');
 }
 
 /** The files of the output channel of the extension below `folder` (<n>-Devspaces.log in output_logging_*). */

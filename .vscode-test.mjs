@@ -31,19 +31,19 @@ const dockerHost =
     : 'unix:///nonexistent/nimblescape-devspaces-vscode-test.sock';
 
 /**
- * The labels that `vscode-test --label <label>` (also `-l`, `--label=`, several times) runs; empty without a label
- * (then every configuration runs). `--list-configuration` (the Extension Test Runner of VS Code calls it) runs
+ * The labels that `vscode-test --label <label>` runs: every value after `--label` or `-l` up to the next option, and of
+ * `--label=`; a number is the index of a configuration (the Extension Test Runner of VS Code passes the index). Empty
+ * without a label: then every configuration runs. `--list-configuration` (the Extension Test Runner calls it) runs
  * nothing, so it removes no folder.
  */
 const args = process.argv.slice(2);
 const listsOnly = args.includes('--list-configuration');
-const selectedLabels = args.flatMap((arg, index) =>
-  arg === '--label' || arg === '-l'
-    ? [args[index + 1]]
-    : arg.startsWith('--label=')
-      ? [arg.slice('--label='.length)]
-      : [],
-);
+const selectedLabels = [];
+for (let index = 0; index < args.length; index++) {
+  if (args[index].startsWith('--label=')) selectedLabels.push(args[index].slice('--label='.length));
+  if (args[index] !== '--label' && args[index] !== '-l') continue;
+  while (index + 1 < args.length && !args[index + 1].startsWith('-')) selectedLabels.push(args[++index]);
+}
 /** Tells the user data folders of two checkouts on one computer apart. */
 const checkout = fileURLToPath(new URL('.', import.meta.url));
 const checkoutId = crypto.createHash('sha256').update(checkout).digest('hex').slice(0, 6);
@@ -56,11 +56,10 @@ const checkoutId = crypto.createHash('sha256').update(checkout).digest('hex').sl
  * allows at most 103 bytes in a socket path, which a folder below a checkout often exceeds. The downloaded VS Code and
  * the installed extensions in .vscode-test/ stay.
  */
-function configuration(label, options) {
+function configuration(label, index, options) {
   const userDataDir = path.join(os.tmpdir(), `devspaces ${label} ü ${checkoutId}`);
-  if (!listsOnly && (selectedLabels.length === 0 || selectedLabels.includes(label))) {
-    fs.rmSync(userDataDir, { recursive: true, force: true });
-  }
+  const selected = selectedLabels.length === 0 || selectedLabels.includes(label) || selectedLabels.includes(`${index}`);
+  if (!listsOnly && selected) fs.rmSync(userDataDir, { recursive: true, force: true });
   return {
     label,
     files: 'out/test/vscode/**/*.test.js',
@@ -93,8 +92,8 @@ function configuration(label, options) {
 }
 
 export default defineConfig([
-  configuration('vscode', {}),
-  configuration('vsix', {
+  configuration('vscode', 0, {}),
+  configuration('vsix', 1, {
     extensionDevelopmentPath: fileURLToPath(new URL('test/vscode/host', import.meta.url)),
     // The test host folder has no extensionDependencies, so the Dev Containers extension is named here.
     installExtensions: ['ms-vscode-remote.remote-containers', vsix],
