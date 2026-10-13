@@ -156,8 +156,9 @@ const NO_BRIDGE = /network "?bridge"? not found/i;
 /** Docker's refusal of a container name that another container on the engine has. */
 const NAME_IN_USE = /container name "?[^"\s]*"? is already in use/i;
 /**
- * The most starts of one open whose names Docker refused (workerContainerName), also across the start without network:
- * enough for that many windows with the same name that start their workers on one engine at the same moment.
+ * The most worker names (workerContainerName) that Docker may refuse in one open, also across the start without
+ * network; the open fails at the last one. Enough for that many windows with the same name that start their workers on
+ * one engine at the same moment.
  */
 const WORKER_NAME_ATTEMPTS = 10;
 
@@ -200,29 +201,33 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
         deps.runDirect(['ps', '--all', '--filter', `name=${WORKER_NAME_PREFIX}`, '--format', '{{.Names}}'], { timeoutMs: CHANNEL_PROBE_TIMEOUT_MS }),
       );
       if (result.exitCode === 0) return result.stdout.split('\n').map((line) => line.trim());
-      detail = result.stderr.trim().slice(-500) || `exit code ${result.exitCode}`;
+      detail = result.timedOut ? 'no answer in time' : result.stderr.trim().slice(-500) || `exit code ${result.exitCode}`;
     } catch (error) {
       detail = (error as Error).message;
     }
     deps.logger.info(`The containers on ${name} could not be listed for the name of the worker (${detail}), so the worker takes the next number.`);
     return [];
   };
-  // The refused starts of this open (WORKER_NAME_ATTEMPTS).
-  let refused = 0;
-  // The worker with the number 1 (workerContainerName). When another container on the engine has the name (a worker
-  // of another window with the same name, or the last worker of this window while Docker removes it; Docker created
-  // nothing), the lowest number that no container has, from a new list of the engine after each refusal.
+  // The numbers whose names Docker refused in this open (at most WORKER_NAME_ATTEMPTS), also for the start without
+  // network.
+  const inUse = new Set<number>();
+  // The worker with the lowest number from 1 that Docker did not refuse (workerContainerName). When another container
+  // on the engine has the name (a worker of another window with the same name, or the last worker of this window while
+  // Docker removes it; Docker created nothing), the lowest number that no container has, from a new list of the engine
+  // after each refusal.
   const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
     const windowName = deps.windowName?.() ?? '';
-    const tried = new Set<number>();
-    for (let number = 1; ; ) {
-      tried.add(number);
+    for (let number = freeWorkerNumber(windowName, [], inUse); ; ) {
       const containerName = workerContainerName(windowName, number);
       try {
         return await startNamed(network, containerName);
       } catch (error) {
-        if (!(error instanceof HelperChannelError) || !NAME_IN_USE.test(error.message) || ++refused >= WORKER_NAME_ATTEMPTS) throw error;
-        number = freeWorkerNumber(windowName, await workerNames(), tried);
+        if (!(error instanceof HelperChannelError) || !NAME_IN_USE.test(error.message)) throw error;
+        inUse.add(number);
+        if (inUse.size >= WORKER_NAME_ATTEMPTS) {
+          throw new HelperChannelError(error.code, `${error.message} Docker refused ${inUse.size} names of the worker on ${name} because other containers have them.`);
+        }
+        number = freeWorkerNumber(windowName, await workerNames(), inUse);
         deps.logger.info(`The worker name ${containerName} is in use on ${name}, so the worker starts as ${workerContainerName(windowName, number)}.`);
       }
     }

@@ -378,17 +378,23 @@ function workerWindow(windowName: string): string {
  * worker never reads it (readOwnHelper reads its container ID).
  */
 export function workerContainerName(windowName: string, number: number): string {
-  return `${WORKER_NAME_PREFIX}${workerWindow(windowName)}-${number}`;
+  return `${workerNameStart(windowName)}${number}`;
+}
+
+/** A worker name for `windowName` (workerContainerName) without its number: `devspace-worker-<window>-`. */
+function workerNameStart(windowName: string): string {
+  return `${WORKER_NAME_PREFIX}${workerWindow(windowName)}-`;
 }
 
 /**
  * The lowest number from 1 whose worker name for `windowName` (workerContainerName) is not in `names` (the names of
- * containers of the engine) and not in `tried` (the numbers that Docker refused already).
+ * containers of the engine) and not in `inUse` (the numbers whose names Docker refused already).
  */
-export function freeWorkerNumber(windowName: string, names: readonly string[], tried: ReadonlySet<number>): number {
+export function freeWorkerNumber(windowName: string, names: readonly string[], inUse: ReadonlySet<number>): number {
+  const start = workerNameStart(windowName);
   const taken = new Set(names);
   let number = 1;
-  while (tried.has(number) || taken.has(workerContainerName(windowName, number))) number++;
+  while (inUse.has(number) || taken.has(`${start}${number}`)) number++;
   return number;
 }
 

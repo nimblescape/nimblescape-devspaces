@@ -62,7 +62,7 @@ function refused(stderr: string): StartedProcess {
  * start, the warnings, the information lines, and the lists of containers (`ps`). `engine`: the containers that the
  * list of the engine shows, or a list that fails.
  */
-async function openWith(engine: { containers?: readonly string[]; listFails?: boolean }, ...first: Array<() => StartedProcess>) {
+async function openWith(engine: { containers?: readonly string[]; listFails?: boolean; listTimesOut?: boolean }, ...first: Array<() => StartedProcess>) {
   const networks: string[] = [];
   const names: string[] = [];
   const warnings: string[] = [];
@@ -80,6 +80,7 @@ async function openWith(engine: { containers?: readonly string[]; listFails?: bo
         if (args[0] !== 'ps') return { exitCode: 0, stdout: `${ENGINE}\n`, stderr: '', timedOut: false };
         lists.push([...args]);
         if (engine.listFails) return { exitCode: 1, stdout: '', stderr: 'Cannot connect to the Docker daemon', timedOut: false };
+        if (engine.listTimesOut) return { exitCode: null, stdout: '', stderr: '', timedOut: true };
         return { exitCode: 0, stdout: (engine.containers ?? []).map((name) => `${name}\n`).join(''), stderr: '', timedOut: false };
       },
       logger: { ...silentLogger, warn: (text) => warnings.push(text), info: (text) => infos.push(text) },
@@ -157,6 +158,9 @@ describe('the number of a worker name in use', () => {
     const failed = await openWith({ listFails: true }, () => refused(IN_USE));
     expect(failed.names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-2']);
     expect(failed.infos.join('\n')).toContain('The containers on build-box could not be listed for the name of the worker (Cannot connect to the Docker daemon)');
+    const late = await openWith({ listTimesOut: true }, () => refused(IN_USE));
+    expect(late.names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-2']);
+    expect(late.infos.join('\n')).toContain('could not be listed for the name of the worker (no answer in time)');
     // Another window took the free number between the list and the start.
     expect((await openWith({ containers: ['devspace-worker-api-1'] }, () => refused(IN_USE), () => refused(IN_USE))).names).toEqual([
       'devspace-worker-api-1',
@@ -165,15 +169,17 @@ describe('the number of a worker name in use', () => {
     ]);
   });
 
-  it('starts at most 10 times', async () => {
+  it('fails when Docker has refused 10 names, and says so', async () => {
     const refusals = Array.from({ length: 10 }, () => () => refused(IN_USE));
-    await expect(open(...refusals)).rejects.toMatchObject({ names: Array.from({ length: 10 }, (_, index) => `devspace-worker-api-${index + 1}`) });
+    const failure = open(...refusals);
+    await expect(failure).rejects.toMatchObject({ names: Array.from({ length: 10 }, (_, index) => `devspace-worker-api-${index + 1}`) });
+    await expect(failure).rejects.toThrow('Docker refused 10 names of the worker on build-box because other containers have them.');
   });
 
-  it('numbers again from 1 for the start without network', async () => {
-    const { networks, names } = await open(() => refused('docker: Error response from daemon: network bridge not found.\n'), () => refused(IN_USE));
-    expect(networks).toEqual(['bridge', 'none', 'none']);
-    expect(names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-1', 'devspace-worker-api-2']);
+  it('the start without network keeps the numbers that Docker refused, and takes again a number refused for the network', async () => {
+    const { networks, names } = await open(() => refused(IN_USE), () => refused('docker: Error response from daemon: network bridge not found.\n'), () => refused(IN_USE));
+    expect(networks).toEqual(['bridge', 'bridge', 'none', 'none']);
+    expect(names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-2', 'devspace-worker-api-2', 'devspace-worker-api-3']);
   });
 
   it('counts the refused names of both starts against the 10', async () => {
