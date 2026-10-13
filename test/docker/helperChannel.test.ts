@@ -124,8 +124,8 @@ describe('the helper channel with the real Docker engine', () => {
         stateVolume: testStateVolume({ run, cli }, 'helperChannel'),
         // The shared VS Code server store, a volume of the test.
         vscodeVolume: testVscodeVolume({ run, cli }, 'helperChannel'),
-        // A window name that gives the longest worker name (workerContainerName).
-        windowName: () => `Docker Test ${'x'.repeat(60)}`,
+        // A window name that is cut at the end of a word (workerContainerName).
+        windowName: () => 'Docker Test of the Worker Channel',
       },
       target,
     );
@@ -149,8 +149,8 @@ describe('the helper channel with the real Docker engine', () => {
 
   it('opens: the container has outbound network only, no capability, --rm, and the labels; an operation and its value come back', async () => {
     const { channel, name } = await timings.measure('open a channel', () => open());
-    // The longest name of a worker: its window part has 54 characters.
-    expect(name).toMatch(/^devspace-worker-docker-test-x{42}-[0-9a-f]{4}$/);
+    // The short name of the worker: its window, cut at the end of a word, and 4 random hex characters.
+    expect(name).toMatch(/^devspace-worker-docker-test-of-the-[0-9a-f]{4}$/);
     const details = cli.container(name)!;
     expect(details.State.Running).toBe(true);
     expect(details.HostConfig.AutoRemove).toBe(true);

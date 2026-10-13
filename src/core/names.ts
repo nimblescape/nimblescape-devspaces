@@ -316,38 +316,40 @@ export function isDevspaceResourceName(name: string): boolean {
 const WORKER_NAME_PREFIX = `${RESOURCE_NAME_PREFIX}worker-`;
 
 /**
- * The longest window part of a worker name (workerContainerName): the longest name of a devspace without `devspace-`,
- * so that the worker of a devspace window carries the whole name of its devspace.
+ * The longest window part of a worker name (workerContainerName), so that a worker name has at most 45 characters
+ * (`devspace-worker-` 16, the window part, `-` and 4 random characters).
  */
-const WORKER_WINDOW_LENGTH = MAX_NAME_LENGTH - RESOURCE_NAME_PREFIX.length;
+const WORKER_WINDOW_LENGTH = 24;
 
 /** Letters that NFKD does not split into a letter and an accent, with the plain letters that a worker name takes. */
 const PLAIN_LETTERS: Readonly<Record<string, string>> = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd' };
 
 /**
- * The name of a worker container, `devspace-worker-<window>-<random>`, so that `docker ps` tells which VS Code window a
- * worker belongs to. `<window>` is `windowName` (ConnectionAdapter.windowName: the container of an attached window,
- * else its workspace file or its first folder), without the `devspace-` of the name of a devspace
- * (isDevspaceResourceName): lower case, letters without their accents (PLAIN_LETTERS for those that have none to
- * remove), each run of other characters than `[a-z0-9]` as one `-`, without `-` at the ends, at most
- * WORKER_WINDOW_LENGTH characters, and `window` when nothing is left. `<random>` (4 hex characters by default) is new
- * for each worker: it keeps the workers of windows with the same name on one engine apart (two windows of one folder,
- * windows of two computers on one remote engine, and the next worker of a window while Docker still removes the last
- * one; openHelperChannel draws once more when the name is in use), and, as no word of a name pair is only hex
- * characters (namePairs.ts), it keeps a worker name off the shape of a name of a devspace. Nothing finds a worker by its
- * name (the labels do), and the worker never reads it (readOwnHelper reads its container ID).
+ * The short name of a worker container, `devspace-worker-<window>-<random>`, so that `docker ps` tells which VS Code
+ * window a worker belongs to. `<window>` is `windowName` (ConnectionAdapter.windowName: the name of the saved workspace
+ * file of the window, else of its first folder, as in the title of the window; the repository folder in a devspace):
+ * lower case, letters without their accents (PLAIN_LETTERS for those that have none to remove), each run of other
+ * characters than `[a-z0-9]` as one `-`, without `-` at the ends, and `window` when nothing is left. A longer name is
+ * cut to WORKER_WINDOW_LENGTH characters at the end of a word (its last `-` before the cut), and within the first word
+ * only when that word is longer. `<random>` (4 hex characters by default) is new for each worker: it keeps the workers of
+ * windows with the same name on one engine apart (two windows of one folder, two devspaces of one repository, windows
+ * of two computers on one remote engine, and the next worker of a window while Docker still removes the last one;
+ * openHelperChannel draws once more when the name is in use), and, as no word of a name pair is only hex characters
+ * (namePairs.ts), it keeps a worker name off the shape of a name of a devspace. Nothing finds a worker by its name (the
+ * labels do), and the worker never reads it (readOwnHelper reads its container ID).
  */
 export function workerContainerName(windowName: string, random = crypto.randomBytes(2).toString('hex')): string {
-  const name = isDevspaceResourceName(windowName) ? windowName.slice(RESOURCE_NAME_PREFIX.length) : windowName;
-  const window = name
+  const words = windowName
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, (letter) => PLAIN_LETTERS[letter] ?? letter)
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+/, '')
-    .slice(0, WORKER_WINDOW_LENGTH)
-    .replace(/-+$/, '');
+    .replace(/^-+|-+$/g, '');
+  // One character more than the room: a `-` there ends a word at the cut.
+  const cut = words.slice(0, WORKER_WINDOW_LENGTH + 1);
+  const end = cut.lastIndexOf('-');
+  const window = words.length <= WORKER_WINDOW_LENGTH ? words : end > 0 ? cut.slice(0, end) : words.slice(0, WORKER_WINDOW_LENGTH);
   return `${WORKER_NAME_PREFIX}${window === '' ? 'window' : window}-${random}`;
 }
 

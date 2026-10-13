@@ -418,14 +418,14 @@ describe('channelRunArgs and openHelperChannel', () => {
         socketPath: async () => '/var/run/docker.sock',
         stateVolume: 'devspace-monitor',
         vscodeVolume: 'devspace-vscode',
-        windowName: () => 'devspace-acme-api-tidy-berners',
+        windowName: () => 'api',
       },
       REMOTE,
     );
     expect(started?.context).toBe(REMOTE.context);
     expect(started?.args).toContain('devspace-helper:abc');
     // The worker is named by its window (workerContainerName).
-    expect(started?.args[started.args.indexOf('--name') + 1]).toMatch(/^devspace-worker-acme-api-tidy-berners-[0-9a-f]{4}$/);
+    expect(started?.args[started.args.indexOf('--name') + 1]).toMatch(/^devspace-worker-api-[0-9a-f]{4}$/);
     expect(channel.isOpen).toBe(true);
     expect(written[0]).toBe(`${JSON.stringify('SCRIPT')}\n`);
     // Pipe loading: the loader gets the hash of that script, never the script.

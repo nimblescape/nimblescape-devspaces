@@ -304,16 +304,12 @@ describe('isDevspaceResourceName', () => {
 });
 
 describe('workerContainerName', () => {
-  const ID = '11111111-2222-4333-8444-555555555555';
   /** The names that Docker takes for a container. */
   const DOCKER_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/;
 
-  it('is devspace-worker-<window>-<random>, the window without the devspace- of the name of a devspace', () => {
-    const devspace = resourceName('acme/api', ID);
-    expect(workerContainerName(devspace, '3f9a')).toBe(`devspace-worker-acme-api-${namePair(ID)}-3f9a`);
+  it('is devspace-worker-<window>-<random>', () => {
+    expect(workerContainerName('api', '3f9a')).toBe('devspace-worker-api-3f9a');
     expect(workerContainerName('my-project', '3f9a')).toBe('devspace-worker-my-project-3f9a');
-    // Another name that starts with devspace- keeps it.
-    expect(workerContainerName('devspace-tools', '3f9a')).toBe('devspace-worker-devspace-tools-3f9a');
   });
 
   it('is in lower case, letters without accents, each run of other characters than [a-z0-9] one -', () => {
@@ -321,33 +317,39 @@ describe('workerContainerName', () => {
     expect(workerContainerName('Übung_Café.Web', '3f9a')).toBe('devspace-worker-ubung-cafe-web-3f9a');
     expect(workerContainerName('--a..b--', '3f9a')).toBe('devspace-worker-a-b-3f9a');
     // Letters without an accent to remove get plain letters.
-    expect(workerContainerName('Straße Øresund Łódź Æble Œuvre Đakovo Ðe', '3f9a')).toBe('devspace-worker-strasse-oresund-lodz-aeble-oeuvre-dakovo-de-3f9a');
+    expect(workerContainerName('Straße Øl Łódź', '3f9a')).toBe('devspace-worker-strasse-ol-lodz-3f9a');
+    expect(workerContainerName('Æ Œ Đ Ð', '3f9a')).toBe('devspace-worker-ae-oe-d-d-3f9a');
   });
 
   it('names a window without a name, or with a name of no [a-z0-9], window', () => {
     for (const name of ['', '---', '工作区', ' ']) expect(workerContainerName(name, '3f9a')).toBe('devspace-worker-window-3f9a');
   });
 
-  it('keeps the whole name of every devspace, and shortens a longer window name to 54 characters', () => {
-    const devspace = resourceName(`${'a'.repeat(40)}/${'b'.repeat(40)}`, ID);
-    expect(workerContainerName(devspace, '3f9a')).toBe(`devspace-worker-${devspace.slice('devspace-'.length)}-3f9a`);
-    expect(workerContainerName('x'.repeat(80), '3f9a')).toBe(`devspace-worker-${'x'.repeat(54)}-3f9a`);
-    // A cut that ends in a separator drops it.
-    expect(workerContainerName(`${'x'.repeat(53)}-yz`, '3f9a')).toBe(`devspace-worker-${'x'.repeat(53)}-3f9a`);
+  it('is short: a longer window name is cut to 24 characters at the end of a word, so the name has at most 45', () => {
+    expect(workerContainerName('nimblescape-devspaces', '3f9a')).toBe('devspace-worker-nimblescape-devspaces-3f9a');
+    expect(workerContainerName('nimblescape-markdown-comment-links', '3f9a')).toBe('devspace-worker-nimblescape-markdown-3f9a');
+    expect(workerContainerName('devcontainer-classroom-web-advanced', '3f9a')).toBe('devspace-worker-devcontainer-classroom-3f9a');
+    // A word that ends exactly at the cut is kept; the separator after it is dropped.
+    expect(workerContainerName(`${'a'.repeat(11)}-${'b'.repeat(12)}-c`, '3f9a')).toBe(`devspace-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-3f9a`);
+    // A first word longer than 24 characters is cut within it.
+    expect(workerContainerName('x'.repeat(80), '3f9a')).toBe(`devspace-worker-${'x'.repeat(24)}-3f9a`);
+    expect(workerContainerName(`${'x'.repeat(30)}-y`, '3f9a')).toHaveLength(45);
   });
 
   it('draws 4 new hex characters for each worker, and never has the shape of a name of a devspace', () => {
-    const devspace = resourceName('acme/api', ID);
+    // A window name that ends like a devspace name (`<adjective>-<scientist>`).
+    const window = 'api-tidy-berners';
+    expect(isDevspaceResourceName(`devspace-worker-${window}`)).toBe(true);
     const names = new Set<string>();
     for (let i = 0; i < 20; i++) {
-      const name = workerContainerName(devspace);
-      expect(name).toMatch(new RegExp(`^devspace-worker-acme-api-${namePair(ID)}-[0-9a-f]{4}$`));
+      const name = workerContainerName(window);
+      expect(name).toMatch(/^devspace-worker-api-tidy-berners-[0-9a-f]{4}$/);
       expect(name).toMatch(DOCKER_NAME);
       expect(isDevspaceResourceName(name)).toBe(false);
       names.add(name);
     }
     expect(names.size).toBeGreaterThan(1);
-    for (const random of ['beef', 'cafe', 'dead', 'face', 'abcd']) expect(isDevspaceResourceName(workerContainerName(devspace, random))).toBe(false);
+    for (const random of ['beef', 'cafe', 'dead', 'face', 'abcd']) expect(isDevspaceResourceName(workerContainerName(window, random))).toBe(false);
     // What keeps it so: no word of a name pair is only hex characters.
     expect([...ADJECTIVES, ...SCIENTISTS].filter((word) => /^[0-9a-f]+$/.test(word))).toEqual([]);
   });
