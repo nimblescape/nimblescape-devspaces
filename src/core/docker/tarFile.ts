@@ -41,8 +41,11 @@ function octal(header: Buffer, start: number, length: number): number | undefine
 /** The largest PAX extended header (its records) that firstTarFile reads before the entry of the file. */
 export const MAX_PAX_HEADER_BYTES = 64 * 1024;
 
-/** The keys of PAX records that change which file an entry is or how much data it has; a header with one is refused. */
-const PAX_ENTRY_KEYS = new Set(['path', 'linkpath', 'size']);
+/**
+ * The keys of PAX records that change which file an entry is or how much data it has (`GNU.sparse.*`: the data is a
+ * sparse map and fragments, not the file); a header with one is refused.
+ */
+const PAX_ENTRY_KEYS = /^(?:path|linkpath|size|GNU\.sparse\..*)$/;
 
 /** The bytes of the header blocks and the data blocks of an entry with `size` bytes of data. */
 function entryBytes(size: number): number {
@@ -78,7 +81,7 @@ function harmlessPaxRecords(records: Buffer): boolean {
     const record = records.subarray(space + 1, end - 1);
     const equals = record.indexOf(0x3d);
     if (equals <= 0) return false;
-    if (PAX_ENTRY_KEYS.has(record.subarray(0, equals).toString('latin1'))) return false;
+    if (PAX_ENTRY_KEYS.test(record.subarray(0, equals).toString('latin1'))) return false;
     at = end;
   }
   return true;
@@ -89,8 +92,8 @@ function harmlessPaxRecords(records: Buffer): boolean {
  * file (typeflag `0` or NUL) with the name `options.name` and at most `options.maxBytes` bytes, and the archive holds all
  * of its data. One PAX extended header (typeflag `x`, at most MAX_PAX_HEADER_BYTES) before it is skipped when its records
  * change neither the name nor the size. Undefined for anything else: a link (typeflag `1` or `2`), a folder, a GNU or
- * global extended header, a PAX header with a `path`, `linkpath` or `size` record or malformed records, a header whose
- * checksum does not match, an invalid size, a name with a prefix, or an archive that ends early.
+ * global extended header, a PAX header with a `path`, `linkpath`, `size` or `GNU.sparse.*` record or malformed
+ * records, a header whose checksum does not match, an invalid size, a name with a prefix, or an archive that ends early.
  */
 export function firstTarFile(archive: Buffer, options: TarFileOptions): Buffer | undefined {
   let offset = 0;

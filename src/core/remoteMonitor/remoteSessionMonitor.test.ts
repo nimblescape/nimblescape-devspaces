@@ -590,9 +590,9 @@ describe('RemoteSessionMonitor.ensure: the stored script and the nonce of a crea
       const logger = new Log();
       const docker = answering('running', answer);
       expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('running');
-      // A check that fails is followed by an inspect by the same ID and, still running with the same RestartCount, by
-      // one more check.
-      expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect', 'archive']);
+      // A check that fails is followed by an inspect by the same ID (still running with the same RestartCount: no
+      // evidence, kept without a second read).
+      expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect']);
       expect(docker.calls[1].args).toEqual(SHA);
       expect(logger.lines).toEqual([
         'info The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (devspace-monitor).',
@@ -1754,7 +1754,7 @@ describe('RemoteSessionMonitor.ensure: the waits of a conflict and of a created 
 // A restarted monitor whose stored-script check fails (no answer in time, a transport error) is inspected again
 // before it is kept, so that one that exits 3 again and again is not kept until the next open. A check that gives
 // `unknown` is followed by an inspect by the same ID: restarting, exited with 3, or a grown RestartCount is definite
-// evidence (replaced by its ID); still running with the same RestartCount → one more check; anything else → kept.
+// evidence (replaced by its ID); anything else → kept, without a second read.
 describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
   const NAME = 'remote monitor restart check';
   const SHA = ['archive', 'devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH];
@@ -1797,29 +1797,12 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
     });
   }
 
-  it(`${NAME}: unknown, still running with the same RestartCount, the second check same → kept`, async () => {
+  // The read works in every state of the container, so a failed one is not tried again.
+  it(`${NAME}: unknown, still running with the same RestartCount → kept, logged, without a second read`, async () => {
     const logger = new Log();
-    const docker = sequenced([RESTARTED, RESTARTED], [FAILED, SAME]);
+    const docker = sequenced([RESTARTED, RESTARTED], [FAILED, NO_SCRIPT]);
     expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('running');
-    expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect', 'archive']);
-    expect(docker.calls[3].args).toEqual(SHA);
-    expect(logger.lines).toEqual([]);
-  });
-
-  it(`${NAME}: unknown, still running with the same RestartCount, the second check other → replaced by its ID`, async () => {
-    const logger = new Log();
-    const docker = sequenced([RESTARTED, RESTARTED, MISSING], [FAILED, NO_SCRIPT]);
-    expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('created');
-    expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect', 'archive', 'rm', 'run']);
-    expect(docker.calls[4].args).toEqual(['rm', MONITOR_ID]);
-    expect(logger.lines).toContain(REPLACED_LOG);
-  });
-
-  it(`${NAME}: unknown twice → kept, logged`, async () => {
-    const logger = new Log();
-    const docker = sequenced([RESTARTED, RESTARTED], [FAILED, FAILED]);
-    expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('running');
-    expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect', 'archive']);
+    expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect']);
     expect(logger.lines).toEqual([KEPT_LOG]);
   });
 
@@ -1879,12 +1862,12 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
     expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect']);
   });
 
-  it(`${NAME}: the second inspect and check get the signal of ensure`, async () => {
+  it(`${NAME}: the check and the second inspect get the signal of ensure`, async () => {
     const controller = new AbortController();
-    const docker = sequenced([RESTARTED, RESTARTED], [FAILED, SAME]);
+    const docker = sequenced([RESTARTED, RESTARTED], [FAILED]);
     expect(await monitor(docker).ensure(TAG, SOCKET, controller.signal)).toBe('running');
-    // The signals of the inspect and of the check are linked to it.
-    expectSignalsFollow([docker.calls[2], docker.calls[3]], controller);
+    // The signals of the check and of the inspect are linked to it.
+    expectSignalsFollow([docker.calls[1], docker.calls[2]], controller);
   });
 
   // The start path (an exited container of this version) shares the check.
@@ -1912,19 +1895,11 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
     expect(docker.calls[4].args).toEqual(['rm', MONITOR_ID]);
   });
 
-  it(`${NAME}: started, unknown, still running, the second check same → started`, async () => {
+  it(`${NAME}: started, unknown, still running → kept (started, logged), without a second read`, async () => {
     const logger = new Log();
-    const docker = sequenced([STOPPED, inspected(true, LABEL, 0, 0)], [FAILED, SAME]);
+    const docker = sequenced([STOPPED, inspected(true, LABEL, 0, 0)], [FAILED]);
     expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('started');
-    expect(docker.commands()).toEqual(['inspect', 'start', 'archive', 'inspect', 'archive']);
-    expect(logger.lines).toEqual(['info The Monitor on the Docker host was started again (devspace-monitor).']);
-  });
-
-  it(`${NAME}: started, unknown twice → kept (started, logged)`, async () => {
-    const logger = new Log();
-    const docker = sequenced([STOPPED, inspected(true, LABEL, 0, 0)], [FAILED, FAILED]);
-    expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('started');
-    expect(docker.commands()).toEqual(['inspect', 'start', 'archive', 'inspect', 'archive']);
+    expect(docker.commands()).toEqual(['inspect', 'start', 'archive', 'inspect']);
     expect(logger.lines).toEqual([
       'info The Monitor on the Docker host was started again and its stored script could not be checked; it is kept (devspace-monitor).',
     ]);
