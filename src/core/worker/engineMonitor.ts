@@ -9,7 +9,7 @@
 import { errorMessage } from '../errors';
 import { isAbortError, withTimeLimit } from '../ports';
 import { NO_STORED_SCRIPT, REMOVAL_IN_PROGRESS, parseDockerTime, type MonitorEngine, type MonitorInspected } from '../remoteMonitor/monitorEngine';
-import { LABEL_MONITOR } from '../remoteMonitor/protocol';
+import { LABEL_MONITOR, LABEL_MONITOR_OWNER } from '../remoteMonitor/protocol';
 import { REMOTE_MONITOR_DOCKER_TIMEOUT_MS, REMOTE_MONITOR_EXEC_TIMEOUT_MS } from '../remoteMonitor/remoteSessionMonitor';
 import { runScript } from './containerScripts';
 import { EngineError, isNotRunning, type DockerEngine } from './dockerEngine';
@@ -28,6 +28,7 @@ export function monitorInspected(value: unknown): MonitorInspected {
   const raw = value as { State?: { Status?: unknown; ExitCode?: unknown }; Config?: { Labels?: unknown }; RestartCount?: unknown; Id?: unknown; Created?: unknown };
   const labels = raw.Config?.Labels;
   const label = typeof labels === 'object' && labels !== null ? (labels as Record<string, unknown>)[LABEL_MONITOR] : undefined;
+  const owner = typeof labels === 'object' && labels !== null ? (labels as Record<string, unknown>)[LABEL_MONITOR_OWNER] : undefined;
   const { RestartCount: restartCount, Id: id } = raw;
   const exitCode = raw.State?.ExitCode;
   return {
@@ -38,6 +39,7 @@ export function monitorInspected(value: unknown): MonitorInspected {
     restartCount: typeof restartCount === 'number' && Number.isInteger(restartCount) && restartCount > 0 ? restartCount : 0,
     id: typeof id === 'string' && /^[0-9a-f]{64}$/.test(id) ? id : undefined,
     createdAt: parseDockerTime(raw.Created),
+    ...(typeof owner === 'string' ? { owner } : {}),
   };
 }
 

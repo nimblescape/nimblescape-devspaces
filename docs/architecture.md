@@ -103,7 +103,7 @@ Its steps are the fixed kinds of `src/core/helper/batchSteps.ts`: `clone`, `read
 
 Each engine has one Monitor, the container `devspace-monitor`, made from the helper image under the second tag `devspace-monitor:<12 hex>`. It has the label `nimblescape.devspace.monitor`, no published port, no capabilities, `no-new-privileges`, outbound network on the default network, and a JSON log of at most 2 × 1 MB. It mounts the engine's socket, its volume `devspace-monitor` at `/state`, and the store `devspace-vscode` at `/vscode`.
 
-The worker makes sure that it runs (`monitorEnsure`, and at every open): it creates it when it is missing, and replaces it when its script, image, or mode differs. An open that cannot ensure the monitor is refused. On a remote engine, and on the local engine with `stopLocalMonitorWhenIdle` off, the monitor runs permanently with the restart policy `unless-stopped`. Otherwise it has `on-failure` and exits after 5 minutes without a running devspace (never during a background run).
+The worker makes sure that it runs (`monitorEnsure`, and at every open): it creates it when it is missing, and replaces it when its script, image, or mode differs. An open that cannot ensure the monitor is refused. On every engine, local or remote, the monitor runs permanently with the restart policy `unless-stopped`, unless `stopMonitorWhenIdle` is on: then it has `on-failure` and exits after 5 minutes without a running devspace (never during a background run). A permanent monitor carries the ID of the computer that created it (the label `monitor-owner`). An ensure with `stopMonitorWhenIdle` on replaces only its own computer's permanent monitor and keeps one that another computer owns, so computers with other settings on a shared engine never replace each other's monitor.
 
 The monitor has two jobs: stopping devspaces that no window uses (see [Heartbeats and stops](#heartbeats-and-stops)), and the background run.
 
@@ -259,7 +259,7 @@ VS Code restores the windows of the last session; a restored window that was con
 | `prepared` | prepared image | The key of a prepared image. |
 | `helper`, `build-id` | helper image | The helper image, and the nonce of one build. |
 | `helper-run`, `helper-channel`, `channel-step` | worker and batch helper | The helper containers of Devspaces, the worker's protocol and script hash, and the session of a batch helper. |
-| `monitor`, `monitor-create` | Monitor | The monitor container with the hash of its script, image, and mode, and a nonce of each creation. |
+| `monitor`, `monitor-create`, `monitor-owner` | Monitor | The monitor container with the hash of its script, image, and mode, a nonce of each creation, and the computer ID of the owner of a permanent monitor. |
 
 ## User interface icons
 

@@ -23,7 +23,7 @@ import { workerMonitor, type TargetFlow } from './workerMonitor';
 
 const REMOTE = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'build-box' } as DockerTarget;
 const LOCAL = { kind: 'local', host: '', endpoint: 'unix:///var/run/docker.sock' } as DockerTarget;
-const IMAGES = { schedule: '7 6 * * *', timeZone: 'Europe/Vienna', permanent: true, remote: true };
+const IMAGES = { schedule: '7 6 * * *', timeZone: 'Europe/Vienna', permanent: true, computer: 'c'.repeat(32) };
 
 beforeEach(() => {
   resetFakeVscode();

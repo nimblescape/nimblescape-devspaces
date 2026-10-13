@@ -59,12 +59,12 @@ export function normalizeCacheSchedule(value: unknown): string {
 }
 
 /**
- * Whether the Monitor of an engine runs permanently: on a remote engine (`ssh://`, classifyDockerEndpoint)
- * always; on a local engine only when the setting devspace.stopLocalMonitorWhenIdle is false (its default is true: the
- * local monitor ends after 5 minutes without a running devspace).
+ * Whether the Monitor of an engine runs permanently: on every engine, local or remote, unless the setting
+ * devspace.stopMonitorWhenIdle is true (its default is false; true: the monitor ends after 5 minutes without a running
+ * devspace).
  */
-export function monitorRunsPermanently(remote: boolean, stopLocalMonitorWhenIdle: boolean | undefined): boolean {
-  return remote || stopLocalMonitorWhenIdle === false;
+export function monitorRunsPermanently(stopMonitorWhenIdle: boolean | undefined): boolean {
+  return stopMonitorWhenIdle !== true;
 }
 
 /**

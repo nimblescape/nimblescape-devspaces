@@ -35,16 +35,17 @@ describe('the monitor settings of an open and of monitorEnsure', () => {
     expect(parseMonitorSettings('{}')).toBeUndefined();
   });
 
-  // Why the monitor is permanent: `remote`, a boolean, only with `permanent: true`.
-  it('takes `remote` as a boolean only for a permanent monitor', () => {
-    expect(parseMonitorSettings({ ...IMAGES, permanent: true, remote: true })).toEqual({ ...IMAGES, permanent: true, remote: true });
-    expect(parseMonitorSettings({ ...IMAGES, permanent: true, remote: false })).toEqual({ ...IMAGES, permanent: true, remote: false });
-    expect(parseMonitorSettings({ ...IMAGES, remote: false })).toEqual({ ...IMAGES, remote: false });
-    for (const images of [{ ...IMAGES, remote: true }, { ...IMAGES, permanent: false, remote: true }, { ...IMAGES, permanent: true, remote: 'yes' }, { ...IMAGES, permanent: true, remote: null }]) {
+  // The computer of the settings: the ID of a computer (32 hex digits), in either mode; the old `remote` is none.
+  it('takes `computer` only as the ID of a computer, in either mode', () => {
+    const computer = 'c'.repeat(32);
+    expect(parseMonitorSettings({ ...IMAGES, permanent: true, computer })).toEqual({ ...IMAGES, permanent: true, computer });
+    expect(parseMonitorSettings({ ...IMAGES, permanent: false, computer })).toEqual({ ...IMAGES, permanent: false, computer });
+    expect(parseMonitorSettings({ ...IMAGES, computer })).toEqual({ ...IMAGES, computer });
+    for (const images of [{ ...IMAGES, computer: 'C'.repeat(32) }, { ...IMAGES, computer: 'c'.repeat(31) }, { ...IMAGES, computer: 1 }, { ...IMAGES, computer: null }, { ...IMAGES, permanent: true, remote: true }]) {
       expect(parseMonitorSettings(images), JSON.stringify(images)).toBeUndefined();
     }
-    expect(parseMonitorEnsureParams({ images: { ...IMAGES, permanent: true, remote: true } })).toEqual({ images: { ...IMAGES, permanent: true, remote: true } });
-    expect(imageSettingsOf({ ...IMAGES, permanent: true, remote: true } as typeof IMAGES)).toEqual(IMAGES);
+    expect(parseMonitorEnsureParams({ images: { ...IMAGES, permanent: true, computer } })).toEqual({ images: { ...IMAGES, permanent: true, computer } });
+    expect(imageSettingsOf({ ...IMAGES, permanent: true, computer } as typeof IMAGES)).toEqual(IMAGES);
   });
 
   it('carries the mode in monitorEnsure and in the open', () => {
