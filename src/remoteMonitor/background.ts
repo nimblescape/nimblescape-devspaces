@@ -254,10 +254,8 @@ export class BackgroundRun {
       // A success needs no entry removed: a version is fetched only once its failure does not wait anymore, and such
       // entries are not kept (storeFailedFetches). The update service answered before this fetch, so the run reached a
       // server and a failed fetch waits a day, also one that failed for the network (RunNetwork).
-      if (await (vscode.ensure ?? ensureServer)(vscode.store, server, platform, this.signal)) {
-        this.network.reached();
-        await this.linkIntoContainers(vscode, server, platform);
-      } else failed[version] = this.deps.now();
+      if (await (vscode.ensure ?? ensureServer)(vscode.store, server, platform, this.signal)) await this.linkIntoContainers(vscode, server, platform);
+      else failed[version] = this.deps.now();
     }
     await this.storeFailedFetches(stored, failed);
     return { platform, released, asked };
@@ -375,6 +373,9 @@ export class BackgroundRun {
     await this.removeTemporaryFolders(vscode);
     // The shared extension cache too (never throws).
     await cleanupExtensions(extensionRunDeps(vscode, this.deps));
+    // A run that has not reached the network (it is tried again) did not know the releases, so its cleanup does not
+    // count either: the retry cleans up again.
+    if (this.offline && !this.reached) return;
     await this.deps.state.update({ lastCleanupAt: now });
   }
 

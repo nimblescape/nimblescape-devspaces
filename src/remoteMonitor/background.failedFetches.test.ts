@@ -174,6 +174,15 @@ describe('a run that did not reach the network', () => {
     expect(await harness({ commits: { stable: tls }, ensure: true, images: async () => 'offline' }).run.run()).toBe(false);
   });
 
+  it('a run that did not reach the network does not count its cleanup: the retry cleans up', async () => {
+    const offlineRun = harness({ commits: { stable: offline }, ensure: true, images: async () => 'offline' });
+    expect(await offlineRun.run.run()).toBe(false);
+    expect(offlineRun.state().lastCleanupAt).toBeUndefined();
+    const reached = harness({ commits: { stable: offline }, ensure: true, images: async () => 'reached' });
+    expect(await reached.run.run()).toBe(true);
+    expect(reached.state().lastCleanupAt).toBe(NOW);
+  });
+
   it('the releases that the cleanup asks for do not decide whether the run reached the network', async () => {
     const h = harness({ commits: { stable: offline, insider: [commit(5)] }, ensure: true, images: async () => 'offline' });
     await readyServer(h.root, { commit: commit(4), quality: 'insider' });
