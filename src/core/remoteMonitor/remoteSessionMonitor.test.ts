@@ -218,14 +218,18 @@ const CHECKED_AFTER_WAITS = ['inspect', 'exec', 'inspect', 'exec', ...REMOTE_MON
  */
 async function ensureWithWaits(remote: RemoteSessionMonitor, signal?: AbortSignal): Promise<EnsureOutcome> {
   vi.useFakeTimers();
-  try {
-    const ensured = remote.ensure(TAG, SOCKET, signal);
-    await vi.advanceTimersByTimeAsync(RESTART_WAITS_TOTAL_MS);
-    return await ensured;
-  } finally {
-    vi.useRealTimers();
-  }
+  const ensured = remote.ensure(TAG, SOCKET, signal);
+  // A handler at once, so a rejection during the advance of the timers is not reported as unhandled; the await below
+  // still rejects with it.
+  ensured.catch(() => undefined);
+  await vi.advanceTimersByTimeAsync(RESTART_WAITS_TOTAL_MS);
+  return await ensured;
 }
+
+// The tests that use fake timers (ensureWithWaits and others) go back to real timers, also when they fail.
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('RemoteSessionMonitor.ensure', () => {
   it('does nothing when the container of this version runs', async () => {
@@ -1958,40 +1962,32 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
 
   it(`${NAME}: unknown twice, then found restarting → replaced after the first two waits, not before`, async () => {
     vi.useFakeTimers();
-    try {
-      const docker = sequenced([RESTARTED, RESTARTED, RESTARTED, inspected('restarting', LABEL, 3, 1), MISSING], [CUT_OFF, CUT_OFF]);
-      let settled = false;
-      const ensured = monitor(docker)
-        .ensure(TAG, SOCKET)
-        .finally(() => (settled = true));
-      const firstTwo = REMOTE_MONITOR_RESTART_WAITS_MS[0] + REMOTE_MONITOR_RESTART_WAITS_MS[1];
-      await vi.advanceTimersByTimeAsync(firstTwo - 1);
-      expect(settled).toBe(false);
-      expect(docker.commands()).not.toContain('rm');
-      await vi.advanceTimersByTimeAsync(1);
-      expect(await ensured).toBe('created');
-    } finally {
-      vi.useRealTimers();
-    }
+    const docker = sequenced([RESTARTED, RESTARTED, RESTARTED, inspected('restarting', LABEL, 3, 1), MISSING], [CUT_OFF, CUT_OFF]);
+    let settled = false;
+    const ensured = monitor(docker)
+      .ensure(TAG, SOCKET)
+      .finally(() => (settled = true));
+    const firstTwo = REMOTE_MONITOR_RESTART_WAITS_MS[0] + REMOTE_MONITOR_RESTART_WAITS_MS[1];
+    await vi.advanceTimersByTimeAsync(firstTwo - 1);
+    expect(settled).toBe(false);
+    expect(docker.commands()).not.toContain('rm');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await ensured).toBe('created');
   });
 
   // A monitor that runs is never removed because its check fails: kept after the last wait, not before.
   it(`${NAME}: unknown twice, still running with the same RestartCount → kept after ${RESTART_WAITS_TOTAL_MS / 1000} s, not before`, async () => {
     vi.useFakeTimers();
-    try {
-      const docker = sequenced([RESTARTED, RESTARTED], [CUT_OFF, CUT_OFF]);
-      let settled = false;
-      const ensured = monitor(docker)
-        .ensure(TAG, SOCKET)
-        .finally(() => (settled = true));
-      await vi.advanceTimersByTimeAsync(RESTART_WAITS_TOTAL_MS - 1);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(await ensured).toBe('running');
-      expect(docker.commands()).toEqual(CHECKED_AFTER_WAITS);
-    } finally {
-      vi.useRealTimers();
-    }
+    const docker = sequenced([RESTARTED, RESTARTED], [CUT_OFF, CUT_OFF]);
+    let settled = false;
+    const ensured = monitor(docker)
+      .ensure(TAG, SOCKET)
+      .finally(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(RESTART_WAITS_TOTAL_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await ensured).toBe('running');
+    expect(docker.commands()).toEqual(CHECKED_AFTER_WAITS);
   });
 
   // A look after a wait without evidence ends the waits at once and keeps the monitor.
@@ -2012,19 +2008,15 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
 
   it(`${NAME}: a cancellation during a wait of the restart check passes, nothing removed`, async () => {
     vi.useFakeTimers();
-    try {
-      const controller = new AbortController();
-      const docker = sequenced([RESTARTED, RESTARTED], [CUT_OFF, CUT_OFF]);
-      const ensured = monitor(docker).ensure(TAG, SOCKET, controller.signal);
-      const rejected = expect(ensured).rejects.toMatchObject({ name: 'AbortError' });
-      await vi.advanceTimersByTimeAsync(REMOTE_MONITOR_RESTART_WAITS_MS[0] + 1);
-      controller.abort();
-      await rejected;
-      expect(vi.getTimerCount()).toBe(0);
-      expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec', 'inspect']);
-    } finally {
-      vi.useRealTimers();
-    }
+    const controller = new AbortController();
+    const docker = sequenced([RESTARTED, RESTARTED], [CUT_OFF, CUT_OFF]);
+    const ensured = monitor(docker).ensure(TAG, SOCKET, controller.signal);
+    const rejected = expect(ensured).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(REMOTE_MONITOR_RESTART_WAITS_MS[0] + 1);
+    controller.abort();
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+    expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec', 'inspect']);
   });
 
   it(`${NAME}: the inspects after the waits get the signal of ensure`, async () => {
