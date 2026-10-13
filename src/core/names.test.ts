@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
-import { namePair } from './namePairs';
+import { ADJECTIVES, SCIENTISTS, namePair } from './namePairs';
 import {
   EXTENSION_LABEL_KEYS,
   LABEL_PREFIX,
@@ -348,6 +348,8 @@ describe('workerContainerName', () => {
     }
     expect(names.size).toBeGreaterThan(1);
     for (const random of ['beef', 'cafe', 'dead', 'face', 'abcd']) expect(isDevspaceResourceName(workerContainerName(devspace, random))).toBe(false);
+    // What keeps it so: no word of a name pair is only hex characters.
+    expect([...ADJECTIVES, ...SCIENTISTS].filter((word) => /^[0-9a-f]+$/.test(word))).toEqual([]);
   });
 });
 
