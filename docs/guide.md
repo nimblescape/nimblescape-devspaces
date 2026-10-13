@@ -34,7 +34,7 @@ All computers that use one Docker engine need the same version: an older version
 ## First steps
 
 1. Select the **Devspaces** icon in the activity bar. If Docker is not installed, the view shows the steps to set it up (see [Installing Docker](#installing-docker)).
-2. Select **Sign in with GitHub**. The list shows your repositories that have a Dev Container configuration, grouped by owner. The first load can take a moment with many repositories; the view shows the repositories as they arrive, and later updates read only the repositories that changed.
+2. Select **Sign in with GitHub**. The list shows your repositories that have a Dev Container configuration, grouped by owner (with a [default image](#default-image), also the repositories without one). The first load can take a moment with many repositories; the view shows the repositories as they arrive, and later updates read only the repositories that changed.
 3. Select **Start** on a repository, or double-click it. The first start creates the devspace: it clones the repository, builds the image, and creates the container, which can take several minutes. Later starts take seconds.
 4. The window connects to the container. You work in the repository folder under `/workspaces/<name>`.
 
@@ -102,6 +102,8 @@ The setting `devspaces.startWithDefaultImage` (on by default) decides what plain
 - Off: **Start** uses the configuration of the repository. The context menu offers **Start with Default Image**.
 
 Without a default image, every start uses the configuration, and the menu offers nothing else.
+
+With a default image, the list also shows your repositories that have no Dev Container configuration on their default branch (the tooltip of the row says so). Such a repository starts from the default image whatever the setting says, since it has no other source; its context menu offers no other source either. Without a default image, these repositories are not listed. **Search** and the switcher list them the same way.
 
 Every start that you ask for (**Start**, the switcher, **Search**, a double-click) follows the setting. A devspace keeps the source of its last start until a start names the other one: a restored window and the reopen at startup keep it. When a start names the other source, the devspace is built again from it and its container is created again; the files in its workspace stay. **Select Configuration…** always starts with the configuration that you select. When you change the default image in the settings, the next start of a devspace built from the old one asks **Rebuild now** or **Later**, as after a change of `devcontainer.json`. The row of such a devspace shows `(default image)`, and its tooltip names the image.
 

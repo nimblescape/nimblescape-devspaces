@@ -355,10 +355,13 @@ async function question(host: HostSide, call: string, args: unknown[]): Promise<
     case 'confirmUntrustedRepository':
       return ui.confirmUntrustedRepository(strings(args, 1)[0]);
     case 'configurationChanged': {
-      // The second argument, when given, names what changed (only the default image).
+      // The second argument, when given, names what changed (ConfigurationChange).
       const [repository] = strings(args, 1);
-      if (args.length > 2 || (args.length === 2 && args[1] !== 'defaultImage')) throw new HelperOperationError('invalid', 'The arguments of the request are invalid.', false);
-      return ui.configurationChanged(repository, args.length === 2 ? 'defaultImage' : undefined);
+      const what = args.length === 2 ? args[1] : undefined;
+      if (args.length > 2 || (what !== undefined && what !== 'defaultImage' && what !== 'source')) {
+        throw new HelperOperationError('invalid', 'The arguments of the request are invalid.', false);
+      }
+      return ui.configurationChanged(repository, what);
     }
     case 'configurationKindChanged': {
       const [repository, message] = strings(args, 2);

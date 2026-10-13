@@ -215,6 +215,24 @@ describe('an open with the default image', () => {
     );
   });
 
+  it('asks Rebuild now or Later when the selected source was not built (a switch that fell back to the old devspace)', async () => {
+    // The entry names the default image, the record the configuration: the build of the switch failed and the old
+    // devspace started instead. An open that names no source does not build again on its own.
+    await seedDevspace(h, { container: 'stopped', extra: { defaultImage: IMAGE } });
+    h.ui.configurationChangedAnswer = 'later';
+    await h.service.openDevspace(ENV_ID, options());
+    expect(h.ui.prompts).toEqual([`configurationChanged ${REPO} source`]);
+    expect(h.helper.builds).toEqual([]);
+    expect(h.helper.ups.map((up) => up.image)).toEqual([IMAGE_1]);
+    expect(h.logger.infos).toContain(`Source of ${REPO}: built from the configuration ${DEFAULT_CONFIG_PATH}, selected the default image ${IMAGE}.`);
+    expect((await h.registry.get(ENV_ID))).toMatchObject({ defaultImage: IMAGE, buildRecord: { devspaceImage: IMAGE_1 } });
+
+    h.ui.configurationChangedAnswer = 'rebuildNow';
+    await h.service.openDevspace(ENV_ID, options());
+    expect(h.helper.builds).toEqual([{ imageName: IMAGE_2, configPath: DEFAULT_CONFIG_PATH, override: SYNTHESIZED.config }]);
+    expect((await h.registry.get(ENV_ID))?.buildRecord).toMatchObject({ devspaceImage: IMAGE_2, defaultImage: IMAGE });
+  });
+
   it('restores the source of the last open when the switch could not be started', async () => {
     // No container and no image to fall back to: the failed build ends the open.
     await seedDefaultImageDevspace({ container: null, image: false });

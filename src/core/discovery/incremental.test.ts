@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DiscoveryData, RepositoryInfo } from '../types';
 import type { GraphQLError } from './githubApi';
-import { checkedRepository, needsConfigurationLookup, nodesWithErrors, storedDetections } from './incremental';
+import { needsConfigurationLookup, nodesWithErrors, storedDetections } from './incremental';
 
 function info(nameWithOwner: string, pushedAt: string | null, configPaths: string[]): RepositoryInfo {
   const [owner, name] = nameWithOwner.split('/');
@@ -52,7 +52,7 @@ describe('storedDetections', () => {
       repositories: [info('Acme/API', '2026-09-20T10:00:00Z', ['.devcontainer.json'])],
       hints: [],
       scope: [],
-      withoutConfiguration: [{ nameWithOwner: 'acme/empty', pushedAt: '2026-09-19T10:00:00Z', defaultBranch: 'main' }],
+      withoutConfiguration: [info('acme/empty', '2026-09-19T10:00:00Z', [])],
     };
     expect([...storedDetections(data)]).toEqual([
       ['acme/empty', { pushedAt: '2026-09-19T10:00:00Z', defaultBranch: 'main', configPaths: [] }],
@@ -69,11 +69,5 @@ describe('nodesWithErrors', () => {
     ['an error outside of the nodes', [{ message: 'x', path: ['viewer', 'organizations', 'nodes', 1] }, { message: 'y' }], []],
   ])('%s', (_name, errors, expected) => {
     expect([...nodesWithErrors(errors)]).toEqual(expected);
-  });
-});
-
-describe('checkedRepository', () => {
-  it('keeps only the name and the state of GitHub', () => {
-    expect(checkedRepository(info('acme/empty', null, []))).toEqual({ nameWithOwner: 'acme/empty', pushedAt: null, defaultBranch: 'main' });
   });
 });

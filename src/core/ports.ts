@@ -175,6 +175,13 @@ export interface GitHubAuth {
   reportRejectedToken?(token: string): void;
 }
 
+/**
+ * What the question configurationChanged names (ConfigurationChangeKind): `defaultImage`, the default image of a devspace built from one
+ * changed; `source`, the source selected for the devspace (the default image, or its configuration) is not the one
+ * it was built from (a switch that was not built yet); none, its configuration changed.
+ */
+export type ConfigurationChangeKind = 'defaultImage' | 'source';
+
 /** Decisions and messages that the open pipeline needs from the user interface. */
 export interface PipelineUi {
   /** Security: first open of a repository of another owner. */
@@ -183,7 +190,7 @@ export interface PipelineUi {
    * The devcontainer.json changed since the last build; `what` `defaultImage`: the default image of the setting
    * changed since the last build from one (the message names the default image).
    */
-  configurationChanged(repository: string, what?: 'defaultImage'): Promise<'rebuildNow' | 'later'>;
+  configurationChanged(repository: string, what?: ConfigurationChangeKind): Promise<'rebuildNow' | 'later'>;
   /**
    * The containers of a devspace without a build record are of another kind (Docker Compose or a single container)
    * than its configuration. `message`: Messages.configurationKindChanged. `later` keeps the kind.

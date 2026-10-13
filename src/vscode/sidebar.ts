@@ -28,7 +28,7 @@ import { RepositoryGroupTexts, parseRepositoryGroups, type RepositoryGroupPatter
 import type { SessionCoordinator } from './sessionCoordinator';
 import { dockerStoppedRuntime, devspaceIdsOf, liveBusyDevspaceIds } from './sidebarData';
 import { CoalescingTask, mapLimit } from './tasks';
-import { findRepositoryInfo, ownerTrust, pickerRepositories, repositoriesToLookUp, repositoryKey } from './targets';
+import { findRepositoryInfo, listedRepositories, ownerTrust, pickerRepositories, repositoriesToLookUp, repositoryKey } from './targets';
 import { buildTreeModel, type DevspaceRuntime, type OwnerGroup, type StatesUnknown, type TreeInput } from './treeModel';
 import { REPOSITORIES_VIEW_ID, type RepositoriesTreeProvider } from './treeView';
 
@@ -580,7 +580,7 @@ export class Sidebar implements vscode.Disposable {
     const result = new Map<string, RepositoryInfo | null>();
     const devspaces = await this.availableDevspaces();
     // GitHub is not asked about repositories outside the scan scope; their rows get no `not on GitHub`.
-    const repositories = repositoriesToLookUp(devspaces, data.repositories, this.deps.settings().owners);
+    const repositories = repositoriesToLookUp(devspaces, listedRepositories(data), this.deps.settings().owners);
     await mapLimit(repositories, DISCOVERY_CONCURRENCY, async (repository) => {
       if (this.disposed) return;
       try {

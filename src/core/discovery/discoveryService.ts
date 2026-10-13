@@ -11,7 +11,6 @@ import type { GitHubViewer } from '../helper/containerGit';
 import { splitRepository } from '../names';
 import { abortError, isAbortError, isoTime, silentLogger, systemClock, type Clock, type Logger } from '../ports';
 import type {
-  CheckedRepository,
   DiscoveryData,
   ExtensionSettings,
   OrganizationHint,
@@ -19,7 +18,7 @@ import type {
   RepositoryInfo,
 } from '../types';
 import { detectConfigurations, type ConfigurationNode } from './detect';
-import { checkedRepository, needsConfigurationLookup, nodesWithErrors, storedDetections, type StoredDetection } from './incremental';
+import { needsConfigurationLookup, nodesWithErrors, storedDetections, type StoredDetection } from './incremental';
 import {
   describeGraphQLErrors,
   GitHubApiError,
@@ -1344,10 +1343,9 @@ class RepositoryCollector {
     return this.entries.filter((entry) => !entry.checked && entry.info.configPaths.length > 0).map((entry) => entry.info.nameWithOwner);
   }
 
-  withoutConfiguration(): CheckedRepository[] {
-    return this.entries
-      .filter((entry) => entry.checked && entry.info.configPaths.length === 0)
-      .map((entry) => checkedRepository(entry.info));
+  /** The repositories without a configuration whose detection is certain (the others are read again). */
+  withoutConfiguration(): RepositoryInfo[] {
+    return this.entries.filter((entry) => entry.checked && entry.info.configPaths.length === 0).map((entry) => entry.info);
   }
 
   /** False for a repository that was added before. */
@@ -1446,8 +1444,7 @@ function isRepositoryInfo(value: unknown): value is RepositoryInfo {
     typeof value.isPrivate === 'boolean' &&
     (value.pushedAt === null || typeof value.pushedAt === 'string') &&
     (value.defaultBranch === null || typeof value.defaultBranch === 'string') &&
-    isStringArray(value.configPaths) &&
-    value.configPaths.length > 0
+    isStringArray(value.configPaths)
   );
 }
 
@@ -1476,20 +1473,13 @@ export function parseDiscoveryData(value: unknown): DiscoveryData | undefined {
     fetchedAt: value.fetchedAt,
     viewerLogin: value.viewerLogin,
     organizations: value.organizations.filter((item): item is string => typeof item === 'string'),
-    repositories: value.repositories.filter(isRepositoryInfo),
+    repositories: value.repositories.filter((item): item is RepositoryInfo => isRepositoryInfo(item) && item.configPaths.length > 0),
     hints: Array.isArray(value.hints) ? value.hints.filter(isOrganizationHint) : [],
     scope: normalizeScope(value.scope),
-    withoutConfiguration: value.withoutConfiguration.filter(isCheckedRepository).map(checkedRepository),
+    // The entries of a list of version 0.3.0 and older (the name and the state of GitHub only) are dropped: the next
+    // refresh reads the configurations of these repositories again.
+    withoutConfiguration: value.withoutConfiguration.filter((item): item is RepositoryInfo => isRepositoryInfo(item) && item.configPaths.length === 0),
     ...(isStringArray(value.uncertain) ? { uncertain: [...value.uncertain] } : {}),
   };
 }
 
-function isCheckedRepository(value: unknown): value is CheckedRepository {
-  return (
-    isRecord(value) &&
-    typeof value.nameWithOwner === 'string' &&
-    value.nameWithOwner.includes('/') &&
-    (value.pushedAt === null || typeof value.pushedAt === 'string') &&
-    (value.defaultBranch === null || typeof value.defaultBranch === 'string')
-  );
-}

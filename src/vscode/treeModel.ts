@@ -4,6 +4,7 @@
 
 // Pure model of the sidebar: one list of repositories, grouped by owner. This module never imports `vscode`, so the
 // rules for rows, states, actions, and sorting are unit-tested; treeView.ts only maps the model to tree items.
+import { defaultImageOf, hasConfiguration } from '../core/defaultImage';
 import { filterRepositories } from '../core/discovery/discoveryService';
 import { isOnDockerHost } from '../core/docker/dockerHost';
 import { hostAccessChecks, type HostAccessChecks } from '../core/policy/hostAccessChecks';
@@ -32,6 +33,7 @@ export const TreeTexts = {
   defaultImageShort: 'default image',
   lastUsed: (time: string) => `Last used: ${time}`,
   noDevspace: 'No devspace yet. Start creates it on the default branch.',
+  noConfiguration: 'No Dev Container configuration: Start uses the default image.',
   notListedOnGitHub: 'GitHub does not list this repository.',
   archived: 'Archived repository',
   /** Tooltip line of a kept devspace (Keep Running When Closed). */
@@ -100,10 +102,11 @@ export interface TreeInput {
   discovery: DiscoveryData | undefined;
   /**
    * `hostAccessChecksOff`: the repositories whose host access checks are off (a marker and a warning in the row).
-   * `showOnlyDevspaces`: only the rows of devspaces, without the other repositories and the hints.
+   * `showOnlyDevspaces`: only the rows of devspaces, without the other repositories and the hints. `defaultImage`: with
+   * one, the repositories without a Dev Container configuration are listed too (their devspaces start from it).
    */
   settings: Pick<ExtensionSettings, 'owners' | 'includeArchived' | 'includeForks'> &
-    Partial<Pick<ExtensionSettings, 'hostAccessChecksOff' | 'stopOnClose' | 'respectShutdownActionNone' | 'showOnlyDevspaces'>>;
+    Partial<Pick<ExtensionSettings, 'hostAccessChecksOff' | 'stopOnClose' | 'respectShutdownActionNone' | 'showOnlyDevspaces' | 'defaultImage'>>;
   /**
    * The entries of the Devspace Registry that the signed-in account may use (`availableDevspaces`). Devspaces
    * of another account are never passed, so no row, name, or count reveals them.
@@ -153,6 +156,12 @@ export interface RowActions {
   canRebuild: boolean;
   /** The repository has more than one configuration: Select configuration… */
   multiConfig: boolean;
+  /**
+   * Start or Rebuild is possible and the repository has a configuration (a repository that the discovery does not
+   * know may have one): with a default image, the context menu offers the other source (Start with Default Image or
+   * Start with Configuration). A repository without a configuration has only the default image.
+   */
+  canChooseSource: boolean;
   /** The discovery lists the repository: Show on GitHub. */
   onGitHub: boolean;
 }
@@ -197,7 +206,8 @@ export interface RepositoryRow {
   /** Includes the time of the last use. */
   tooltip: string;
   /**
-   * `repository;canStart;canStop;canDelete;canRebuild;multiConfig;onGitHub;hostAccessChecked;canKeepRunning`, only the
+   * `repository;canStart;canStop;canDelete;canRebuild;multiConfig;canChooseSource;onGitHub;hostAccessChecked;canKeepRunning`,
+   * only the
    * flags that apply (package.json menus); `hostAccessUnrestricted` in place of `hostAccessChecked` while the checks are
    * off; `kept` in place of `canKeepRunning` for a kept devspace; neither without a devspace; and
    * `canCloseAndKeepRunning` for the devspace of this window.
@@ -400,6 +410,7 @@ export function rowActions(
     canDelete: hasDevspace && !(state === 'updating' && busyOperation === 'delete'),
     canRebuild: hasDevspace && state !== 'updating',
     multiConfig: (info?.configPaths.length ?? 0) > 1,
+    canChooseSource: (state !== 'connected' || hasDevspace) && state !== 'updating' && hasConfiguration(info),
     onGitHub: info !== undefined,
   };
 }
@@ -419,6 +430,7 @@ export function contextValue(actions: RowActions, checks?: HostAccessChecks, kep
   if (actions.canDelete) flags.push('canDelete');
   if (actions.canRebuild) flags.push('canRebuild');
   if (actions.multiConfig) flags.push('multiConfig');
+  if (actions.canChooseSource) flags.push('canChooseSource');
   if (actions.onGitHub) flags.push('onGitHub');
   if (checks === 'on') flags.push('hostAccessChecked');
   if (checks === 'off') flags.push('hostAccessUnrestricted');
@@ -429,8 +441,9 @@ export function contextValue(actions: RowActions, checks?: HostAccessChecks, kep
 }
 
 /**
- * The sidebar model: the repositories of the discovery (filtered by the settings) plus every repository that has a
- * devspace. Devspaces are always listed, also when the settings filter their repository out, when GitHub does not
+ * The sidebar model: the repositories of the discovery (filtered by the settings; with a default image also those
+ * without a Dev Container configuration) plus every repository that has a devspace. Devspaces are always listed, also
+ * when the settings filter their repository out, when GitHub does not
  * list the repository (`not on GitHub`), and when the user is not signed in, because they hold the user's work. Without
  * a sign-in, and with the setting `showOnlyDevspaces`, only the devspaces are listed. Groups are sorted by owner; in
  * each group, hints come first, then all repositories in alphabetical order: a repository with a devspace keeps its
@@ -439,9 +452,11 @@ export function contextValue(actions: RowActions, checks?: HostAccessChecks, kep
  * (`groupRows`); other owners, and every owner without valid entries, keep the plain list.
  */
 export function buildTreeModel(input: TreeInput): OwnerGroup[] {
-  const discovered = input.discovery?.repositories ?? [];
+  // With a default image, the repositories without a configuration get rows too; their data serves every row.
+  const withoutConfiguration = input.discovery?.withoutConfiguration ?? [];
+  const discovered = [...(input.discovery?.repositories ?? []), ...(defaultImageOf(input.settings) !== undefined ? withoutConfiguration : [])];
   const infoByKey = new Map<string, RepositoryInfo>();
-  for (const info of discovered) {
+  for (const info of [...discovered, ...withoutConfiguration]) {
     const key = info.nameWithOwner.toLowerCase();
     if (!infoByKey.has(key)) infoByKey.set(key, info);
   }
@@ -810,6 +825,7 @@ function repositoryRow(id: string, info: RepositoryInfo, input: Pick<TreeInput, 
   const tooltip = [
     info.nameWithOwner,
     TreeTexts.noDevspace,
+    hasConfiguration(info) ? undefined : TreeTexts.noConfiguration,
     info.defaultBranch ? TreeTexts.defaultBranch(info.defaultBranch) : undefined,
     info.isArchived ? TreeTexts.archived : undefined,
     checks === 'off' ? Messages.hostAccessUnrestrictedTooltip : undefined,
