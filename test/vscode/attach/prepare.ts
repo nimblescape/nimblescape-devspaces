@@ -30,7 +30,7 @@ const ROOT = path.resolve(__dirname, '../../..');
 const EXTENSION_ID = 'nimblescape.nimblescape-devspaces';
 /** The account of the fake sign-in provider (test/vscode/github/extension.js). */
 const TEST_ACCOUNT_ID = '4242';
-const REPOSITORY = 'devspace-test/attach';
+const REPOSITORY = 'devspaces-test/attach';
 /** A glibc image with a user `node`: the Dev Containers extension installs its server there. */
 const DEV_IMAGE = 'mirror.gcr.io/library/node:24-trixie-slim';
 
