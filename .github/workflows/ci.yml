@@ -14,9 +14,10 @@
 # runs, so no test stops running unseen. The job "docker" runs the integration
 # tests against the Docker Engine of the runner, in three groups of test files
 # side by side, each on a runner of its own. The job "vscode" runs the
-# tests in a real VS Code (stable) with the Dev Containers extension, under a
-# virtual display (xvfb). The VSIX stays a workflow
-# artifact for inspection. This workflow publishes nothing: the release workflow calls it for
+# tests in a real VS Code (stable) with the Dev Containers extension on Linux,
+# Windows and macOS, against the packaged VSIX and on Linux also against the
+# development build. The VSIX of the job "test" stays a workflow artifact for
+# inspection. This workflow publishes nothing: the release workflow calls it for
 # the commit of a version and publishes the VSIX of that call.
 
 name: CI
@@ -187,10 +188,17 @@ jobs:
         run: npm run test:docker
 
   vscode:
-    # The tests in a real VS Code (npm run test:vscode, .vscode-test.mjs). The runner has no display, so xvfb-run gives
-    # VS Code a virtual one; xvfb is preinstalled on ubuntu-latest.
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The tests in a real VS Code (.vscode-test.mjs) on the three systems of the users: against the packaged VSIX, as
+    # users install it, and on Linux also against the development build (npm run test:vscode). The Linux runner has no
+    # display, so xvfb-run gives VS Code a virtual one; xvfb is preinstalled on ubuntu-latest.
+    name: vscode (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      # Every system reports its failures, also when another system failed.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - name: Check out the source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -206,5 +214,13 @@ jobs:
       - name: Install the locked development tools without install scripts
         run: npm ci --ignore-scripts
 
-      - name: Run the tests in VS Code
+      - name: Run the tests in VS Code against the development build
+        if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:vscode
+
+      - name: Build the VSIX package
+        run: npm run package
+
+      - name: Run the tests in VS Code against the VSIX
+        shell: bash
+        run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}npm run test:vscode:vsix
