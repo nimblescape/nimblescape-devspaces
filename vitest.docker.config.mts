@@ -3,8 +3,32 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 import { fileURLToPath } from 'url';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { devcontainerCliVersion } from './scripts/cliVersion.mjs';
+
+const TEST_FILES = 'test/docker/**/*.test.ts';
+
+/**
+ * The groups of test files that CI runs side by side, each on a runner and engine of its own (DEVSPACE_TEST_GROUP, the
+ * matrix of the job "docker" in .github/workflows/ci.yml); each takes about the same time by the times of the files in
+ * CI. The group `other` runs every file that no group here names, so a new test file always runs in CI. Without
+ * DEVSPACE_TEST_GROUP, every file runs.
+ */
+const TEST_GROUPS = new Map<string, string[]>([
+  ['monitor', ['test/docker/remoteMonitor.test.ts', 'test/docker/workerBatch.test.ts']],
+  ['pipeline', ['test/docker/pipeline.test.ts', 'test/docker/compose.test.ts', 'test/docker/helperImage.test.ts']],
+]);
+
+/** The test files of DEVSPACE_TEST_GROUP: `include`, and what to leave out of it. */
+function testGroup(group: string | undefined): { include: string[]; exclude: string[] } {
+  if (group === undefined || group === '') return { include: [TEST_FILES], exclude: [] };
+  if (group === 'other') return { include: [TEST_FILES], exclude: [...TEST_GROUPS.values()].flat() };
+  const files = TEST_GROUPS.get(group);
+  if (files === undefined) throw new Error(`DEVSPACE_TEST_GROUP=${group} names no group (${[...TEST_GROUPS.keys(), 'other'].join(', ')}).`);
+  return { include: files, exclude: [] };
+}
+
+const group = testGroup(process.env.DEVSPACE_TEST_GROUP);
 
 // Integration tests against the real Docker engine (npm run test:docker). `npm test` does not run them.
 export default defineConfig({
@@ -19,7 +43,8 @@ export default defineConfig({
     ],
   },
   test: {
-    include: ['test/docker/**/*.test.ts'],
+    include: group.include,
+    exclude: [...configDefaults.exclude, ...group.exclude],
     environment: 'node',
     globalSetup: ['test/docker/globalSetup.ts'],
     // One file at a time: the files share the Docker engine, and the check for leftovers needs a quiet engine.
