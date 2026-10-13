@@ -54,6 +54,7 @@ import {
   type MarketplaceVersion,
 } from '../core/vscodeExtensions';
 import { STORE_SERVER_FOLDER, isServerReady, serverPlatform, storeLock, storeTryLock, type StoreLockAttempt } from '../core/worker/vscodeServerStore';
+import type { RunNetwork } from './backgroundRules';
 import { engineFailure } from './engine';
 
 /** The time limit of one query of the Marketplace. */
@@ -91,10 +92,11 @@ export interface ExtensionRunDeps {
   log: (message: string) => void;
   now: () => number;
   /**
-   * Whether a failure is one of the network (isNetworkFailure of the background run, which then tries the run again);
-   * such a failure records no wait of a day for the extension. Without it: none is.
+   * What the part tells the background run of the network (RunNetwork): an answer of the Marketplace, and a failure,
+   * which records no wait of a day for the extension when the run says it is one of the network while it reached no
+   * server. Without it: every failure waits a day.
    */
-  networkFailure?: (error: unknown) => boolean;
+  network?: RunNetwork;
 }
 
 /** The locks of the store for the files of the cache (extensionLockFile; lock files are never removed). */
@@ -188,7 +190,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
   const fail = (ref: ExtensionRef, why: string, cause?: unknown) => {
     counts.failed++;
     // A failure of the network waits for no day: the retry of the run tries it again.
-    if (cause !== undefined && deps.networkFailure?.(cause) === true) {
+    if (cause !== undefined && deps.network?.failed(cause) === true) {
       log(`The extension ${extensionEntryText(ref)} is not in the shared extension cache (${why}); the retry of the run tries it again.`);
       return;
     }
@@ -209,8 +211,9 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
     let answer: Map<string, MarketplaceVersion[]> | undefined;
     try {
       answer = await query([...new Set(unpinned.map((ref) => ref.id))], true);
+      deps.network?.reached();
     } catch (error) {
-      deps.networkFailure?.(error);
+      deps.network?.failed(error);
       log(queryFailure(unpinned.length, error));
     }
     let fallbacks = 0;
@@ -237,7 +240,14 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
       else choices.push({ ref, chosen });
     }
   };
-  const ask = (chunk: readonly string[]) => query(chunk, false).then((answer) => ({ answer }), (error: unknown) => ({ error }));
+  const ask = (chunk: readonly string[]) =>
+    query(chunk, false).then(
+      (answer) => {
+        deps.network?.reached();
+        return { answer };
+      },
+      (error: unknown) => ({ error }),
+    );
   let singleQueries = 0;
   const ids = [...new Set(allVersions.map((ref) => ref.id))];
   for (let start = 0; start < ids.length; start += MARKETPLACE_ALL_VERSIONS_CHUNK) {
@@ -285,6 +295,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
     }
     try {
       const outcome = await ensureExtension(storeDeps, chosen, signal);
+      if (outcome === 'downloaded') deps.network?.reached();
       counts[outcome]++;
       inStore(ref, chosen);
       if (outcome === 'downloaded') log(`Downloaded the extension ${chosen.cacheName} into the shared extension cache.`);

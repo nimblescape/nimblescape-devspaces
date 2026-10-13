@@ -231,8 +231,9 @@ export class RemoteSessionMonitor {
     // Several computers can use one engine, so an ensure that wants a monitor that ends when idle takes a running
     // permanent monitor of the same version that another computer owns (LABEL_MONITOR_OWNER) as current (`accepted`),
     // and replaces only this computer's own; one that wants a permanent monitor takes any running permanent one. So
-    // turning stopMonitorWhenIdle on replaces this computer's own permanent monitor at its next ensure, and computers
-    // with other settings never replace each other's monitor at each open.
+    // turning stopMonitorWhenIdle on replaces this computer's own permanent monitor at its next ensure, a computer with
+    // the setting on never replaces one that another computer created, and one with the setting off makes it permanent
+    // again at its next ensure.
     const accepted: AcceptedLabels =
       mode === PERMANENT_LABEL_PART ? { label } : { label, running: monitorLabel(script, helperTag, PERMANENT_LABEL_PART, store), notOwnedBy: images?.computer };
     // The nonce of this create, so that a failure removes only its own container.

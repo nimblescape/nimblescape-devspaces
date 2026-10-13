@@ -17,7 +17,8 @@ import type { HttpRequest, HttpResponse } from '../core/http';
 import { MARKETPLACE_ALL_VERSIONS_CHUNK, MAX_MARKETPLACE_SINGLE_QUERIES, RECORDED_LIST_MS, formatExtensionRecord, type ExtensionRecord } from '../core/vscodeExtensions';
 import { readExtensionRecordFiles } from '../core/worker/vscodeExtensionStore';
 import type { StoreLockAttempt } from '../core/worker/vscodeServerStore';
-import { isNetworkFailure } from './backgroundRules';
+import { isNetworkError } from '../core/networkFailure';
+import type { RunNetwork } from './backgroundRules';
 import { cleanupExtensions, downloadExtensions, type ExtensionRunDeps } from './extensionDownloads';
 
 const DAY = 24 * 60 * 60_000;
@@ -275,55 +276,72 @@ describe('a record that cannot be read keeps the files of unnamed IDs', () => {
   });
 });
 
-describe('a failure of the network waits for no day', () => {
+describe('a failure of the network waits for no day while the run reached no server', () => {
   const offline = () => Object.assign(new Error('getaddrinfo ENOTFOUND marketplace.visualstudio.com'), { code: 'ENOTFOUND' });
   const failures = (state: string) => {
     const file = path.join(state, 'extensions', 'failures.json');
     return fs.existsSync(file) ? Object.keys(JSON.parse(fs.readFileSync(file, 'utf8')) as object) : [];
   };
-
-  it('a download that failed for the network: the retry of the run tries it again; another failure waits a day', async () => {
-    const { root, state } = prepared([{ id: 'a.a' }, { id: 'b.b' }]);
-    const seen: unknown[] = [];
-    const f = fake(root, state, every(['1.0.0']), {
-      networkFailure: (error) => {
-        seen.push(error);
-        return isNetworkFailure(error);
+  /** The network of a run as BackgroundRun keeps it: a failure of the network counts only while nothing answered. */
+  const runNetwork = (reachedBefore = false) => {
+    const seen = { reached: reachedBefore, failed: [] as unknown[] };
+    const network: RunNetwork = {
+      reached: () => void (seen.reached = true),
+      failed: (error) => {
+        seen.failed.push(error);
+        return !seen.reached && isNetworkError(error);
       },
-    });
+    };
+    return { network, seen };
+  };
+
+  it('a query of pinned IDs that failed for the network while nothing answered records no failure', async () => {
+    const { root, state } = prepared([{ id: 'a.a', version: '1.0.0' }, { id: 'b.b', version: '1.0.0' }]);
+    const { network, seen } = runNetwork();
+    const f = fake(root, state, () => {
+      throw offline();
+    }, { network });
+    await downloadExtensions(f.deps);
+    expect(failures(state)).toEqual([]);
+    expect(f.logs.filter((line) => line.endsWith('the retry of the run tries it again.'))).toHaveLength(2);
+    expect(seen.reached).toBe(false);
+  });
+
+  it('the same failure after the run reached a server waits a day', async () => {
+    const { root, state } = prepared([{ id: 'a.a', version: '1.0.0' }]);
+    const f = fake(root, state, () => {
+      throw offline();
+    }, { network: runNetwork(true).network });
+    await downloadExtensions(f.deps);
+    expect(failures(state)).toEqual(['a.a@1.0.0']);
+  });
+
+  it('an answer of the Marketplace reaches the network, so a download that then fails for the network waits a day', async () => {
+    const { root, state } = prepared([{ id: 'a.a' }, { id: 'b.b' }]);
+    const { network, seen } = runNetwork();
+    const f = fake(root, state, every(['1.0.0']), { network });
     const stream = f.deps.transport.stream;
     f.deps.transport = {
       ...f.deps.transport,
       stream: async (target, options) => (target === url('a.a', '1.0.0') ? Promise.reject(offline()) : stream(target, options)),
     };
     await downloadExtensions(f.deps);
-    expect(f.logs.some((line) => line.startsWith('The extension a.a is not in the shared extension cache (') && line.endsWith('); the retry of the run tries it again.'))).toBe(true);
-    expect(failures(state)).toEqual([]);
-    expect(seen).toHaveLength(1);
-  });
-
-  it('a query of several pinned IDs that failed for the network records no failure', async () => {
-    const { root, state } = prepared([{ id: 'a.a', version: '1.0.0' }, { id: 'b.b', version: '1.0.0' }]);
-    const f = fake(root, state, () => {
-      throw offline();
-    }, { networkFailure: isNetworkFailure });
-    await downloadExtensions(f.deps);
-    expect(failures(state)).toEqual([]);
-    expect(f.logs.filter((line) => line.endsWith('the retry of the run tries it again.'))).toHaveLength(2);
+    expect(seen.reached).toBe(true);
+    expect(failures(state)).toEqual(['a.a']);
   });
 
   it('the query of the newest versions that failed for the network tells the run', async () => {
     const { root, state } = prepared([{ id: 'a.a' }]);
-    const seen: unknown[] = [];
+    const { network, seen } = runNetwork();
     const f = fake(root, state, () => {
       throw offline();
-    }, { networkFailure: (error) => (seen.push(error), isNetworkFailure(error)) });
+    }, { network });
     await downloadExtensions(f.deps);
-    expect(seen).toHaveLength(1);
+    expect(seen.failed).toHaveLength(1);
     expect(failures(state)).toEqual([]);
   });
 
-  it('without the rule of the run, a failure of the network waits a day as before', async () => {
+  it('without the network of the run, a failure of the network waits a day as before', async () => {
     const { root, state } = prepared([{ id: 'a.a', version: '1.0.0' }]);
     const f = fake(root, state, () => {
       throw offline();

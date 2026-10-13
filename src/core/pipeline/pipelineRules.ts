@@ -13,6 +13,7 @@ import { composeMountVolumeName } from '../helper/compose';
 import { isAnonymousVolumeName, runArgsUser, type HostAccessChecks } from '../policy';
 import { HELPER_KNOWN_ENV, mayBeSetInHelper, resolveCliVariables, type CliVariables } from '../helper/cliVariables';
 import { isDockerHub, parseImageReference } from '../imageCheck/reference';
+import { isNetworkFailure } from '../networkFailure';
 import {
   COMPOSE_PROJECT_LABEL,
   CONTAINER_CONFIG_UNKNOWN,
@@ -226,33 +227,8 @@ export function nextBuildNumber(input: {
   return highest + 1;
 }
 
-// Messages of Git (curl), Docker, BuildKit, and Node.js when the network or the name resolution fails.
-const NETWORK_PATTERNS: readonly RegExp[] = [
-  /could not resolve (host|proxy)/i,
-  /failed to connect/i,
-  /couldn't connect to server|could not connect to server/i,
-  /connection (timed out|refused|reset)/i,
-  /network is unreachable|no route to host/i,
-  /temporary failure in name resolution/i,
-  /name or service not known/i,
-  /no such host/i,
-  /\bdial tcp\b/i,
-  /i\/o timeout/i,
-  /tls handshake timeout/i,
-  /operation timed out/i,
-  /gnutls_handshake\(\) failed|ssl_error_syscall|ssl_connect/i,
-  /getaddrinfo/i,
-  /\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH)\b/,
-];
-
-/**
- * True if an error text describes a network failure, for example `fatal: unable to access '…': Could not resolve host`.
- * Git's "unable to access" counts only without an HTTP error status, because "returned error: 403" is an access problem.
- */
-export function isNetworkFailure(text: string): boolean {
-  if (NETWORK_PATTERNS.some((pattern) => pattern.test(text))) return true;
-  return /unable to access/i.test(text) && !/returned error:\s*\d{3}/i.test(text);
-}
+// The texts of a failure of the network (in ../networkFailure, which the Monitor's bundle uses too).
+export { isNetworkFailure };
 
 /**
  * True if Git says that github.com rejected the token of the helper run: HTTP 401 over HTTPS, for example

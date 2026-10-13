@@ -60,7 +60,7 @@ describe('the retry of a background run that did not reach the network', () => {
     const s = scheduleOf(DAILY, T0, [false, false, false, false, false, false, false, false]);
     await s.schedule.check();
     expect(s.passes()).toBe(1);
-    expect(stored()).toEqual({ lastEndAt: lastEnd, retryAt: T0 + 2 * MINUTE, retries: 1 });
+    expect(stored()).toEqual({ lastEndAt: lastEnd, retryAt: T0 + 2 * MINUTE, retries: 1, lastAttemptAt: T0 });
     expect(s.log).toContain(`The background run did not reach the network; it is tried again at ${new Date(T0 + 2 * MINUTE).toISOString()}.`);
     let time = T0;
     for (const [retry, wait] of [2, 5, 10, 20, 30, 60, 60].entries()) {
@@ -74,7 +74,7 @@ describe('the retry of a background run that did not reach the network', () => {
       expect(s.passes()).toBe(retry + 2);
       expect(s.log).toContain(`The background run is tried again (retry ${retry + 1}).`);
       const next = [5, 10, 20, 30, 60, 60, 60][retry];
-      expect(stored()).toEqual({ lastEndAt: lastEnd, retryAt: time + next * MINUTE, retries: retry + 2 });
+      expect(stored()).toEqual({ lastEndAt: lastEnd, retryAt: time + next * MINUTE, retries: retry + 2, lastAttemptAt: time });
     }
   });
 
@@ -95,8 +95,8 @@ describe('the retry of a background run that did not reach the network', () => {
     expect(s.passes()).toBe(3);
   });
 
-  it('a restart of the monitor keeps the retry: no run before its time, one at it', async () => {
-    store({ lastEndAt: T0 - 24 * 60 * MINUTE, retryAt: T0 + 10 * MINUTE, retries: 3 });
+  it('a restart of the monitor keeps the retry: no run before its time, one at it (also without the last attempt)', async () => {
+    store({ lastEndAt: T0 - 24 * 60 * MINUTE, retryAt: T0 + 10 * MINUTE, retries: 3, lastAttemptAt: T0 });
     const s = scheduleOf(DAILY, T0 + 9 * MINUTE, [false]);
     await s.schedule.check();
     expect(s.passes()).toBe(0);
@@ -104,7 +104,32 @@ describe('the retry of a background run that did not reach the network', () => {
     await s.schedule.check();
     expect(s.passes()).toBe(1);
     // The fourth retry waits 20 minutes.
-    expect(stored()).toMatchObject({ retryAt: T0 + 30 * MINUTE, retries: 4 });
+    expect(stored()).toMatchObject({ retryAt: T0 + 30 * MINUTE, retries: 4, lastAttemptAt: T0 + 10 * MINUTE });
+    // A stored retry without its last attempt: the retry alone decides, not the schedule of the last run.
+    store({ lastEndAt: T0 - 24 * 60 * MINUTE, retryAt: T0 + 10 * MINUTE, retries: 3 });
+    const older = scheduleOf(DAILY, T0 + 9 * MINUTE);
+    await older.schedule.check();
+    expect(older.passes()).toBe(0);
+  });
+
+  it('a schedule shorter than the wait of the retry still runs at its times, counted from the last attempt', async () => {
+    const s = scheduleOf({ DEVSPACE_IMAGE_SCHEDULE: '5', DEVSPACE_IMAGE_TZ: 'UTC' }, T0, [false, false, false, false, false, false, false]);
+    await s.schedule.check();
+    // Five retries later the wait is an hour; the schedule of 5 minutes still runs.
+    let time = T0;
+    for (const wait of [2, 5, 10, 20, 30]) {
+      time += Math.min(wait, 5) * MINUTE;
+      s.at(time);
+      await s.schedule.check();
+    }
+    const runs = s.passes();
+    expect(stored()).toMatchObject({ retries: runs, lastAttemptAt: time });
+    s.at(time + 5 * MINUTE - 1);
+    await s.schedule.check();
+    expect(s.passes()).toBe(runs);
+    s.at(time + 5 * MINUTE);
+    await s.schedule.check();
+    expect(s.passes()).toBe(runs + 1);
   });
 
   it('a retry comes after its wait, also when an interval of the schedule is longer', async () => {

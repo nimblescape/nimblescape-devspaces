@@ -615,7 +615,8 @@ export function parseImageSettingsInput(text: string): ImageSettings | undefined
  * server of its background run), and the settings of the run are not part of the label. Who wants it permanent is its
  * own label (LABEL_MONITOR_OWNER): an ensure that wants a monitor that ends when idle takes a running permanent monitor
  * of the same version that another computer owns as current, and replaces only its own (RemoteSessionMonitor), so a
- * computer that turns stopMonitorWhenIdle on replaces its own permanent monitor, never one that another computer keeps.
+ * computer that turns stopMonitorWhenIdle on replaces its own permanent monitor, never one that another computer
+ * created; a computer with the setting off makes a replaced one permanent again at its next ensure.
  */
 export const PERMANENT_LABEL_PART = 'permanent';
 

@@ -15,6 +15,7 @@ import type { HttpResponse, HttpTransport } from '../core/http';
 import { EngineError, type EngineImage } from '../core/worker/dockerEngine';
 import type { ImageEngine } from './engine';
 import { ImageMaintenance, referenceText, type ReferencesInUse, type ReplacedImages } from './images';
+import type { NetworkContact } from './backgroundRules';
 
 const DIGEST = `sha256:${'a'.repeat(64)}`;
 const OLD_DIGEST = `sha256:${'b'.repeat(64)}`;
@@ -113,7 +114,7 @@ function registry(options: { tags?: Record<string, string>; unknown?: string[]; 
 async function pass(
   engine: ImageEngine,
   references: string[] | (() => Promise<ReferencesInUse>),
-  options: { log?: string[]; registryTransport?: () => HttpTransport; replaced?: ReplacedImages; passes?: number; reached?: boolean[] } = {},
+  options: { log?: string[]; registryTransport?: () => HttpTransport; replaced?: ReplacedImages; passes?: number; reached?: NetworkContact[] } = {},
 ): Promise<ReplacedImages> {
   let stored: ReplacedImages = options.replaced ?? {};
   const maintenance = new ImageMaintenance({
@@ -124,7 +125,7 @@ async function pass(
     replaced: { read: async () => stored, write: async (value) => void (stored = JSON.parse(JSON.stringify(value)) as ReplacedImages) },
   });
   // `passes` of one monitor (an untagged image goes at the pass after the first).
-  // Each pass's answer whether it reached the network goes to `reached`.
+  // What each pass found of the network goes to `reached`.
   for (let index = 0; index < (options.passes ?? 1); index++) {
     const reached = await maintenance.pass();
     options.reached?.push(reached);
@@ -157,31 +158,36 @@ describe('the images in use of the Monitor', () => {
     expect(referenceText({ repository: 'node', tag: '20', digest: DIGEST })).toBe(`node@${DIGEST}`);
   });
 
-  it('a pass that did not reach the network resolves false: a registry that did not answer, or a pull without network', async () => {
+  it('a pass whose registries did not answer is offline', async () => {
     const { engine } = engineOf([listed('sha256:n20', ['node:20'])]);
-    const silent: boolean[] = [];
+    const silent: NetworkContact[] = [];
     await pass(engine, ['node:20'], { registryTransport: registry({ fails: true }).transport, passes: 2, reached: silent });
-    expect(silent).toEqual([false, false]);
-    const offline: ImageEngine = { ...engineOf([]).engine, pull: async () => Promise.reject(new EngineError('Get "https://ghcr.io/v2/": dial tcp: lookup ghcr.io: no such host', 500)) };
-    const pulled: boolean[] = [];
-    await pass(offline, ['ghcr.io/acme/app:1'], { reached: pulled });
-    expect(pulled).toEqual([false]);
+    expect(silent).toEqual(['offline', 'offline']);
   });
 
-  it('a pass that reached its registries resolves true, also with a pull that the registry refused, and without images in use', async () => {
+  it('a pass reached the network when a registry answered: also with a pull that failed (for the network or refused); none without images in use', async () => {
     const { engine } = engineOf([]);
     const refused: ImageEngine = { ...engine, pull: async () => Promise.reject(new EngineError('pull access denied for ghcr.io/private/x, repository does not exist or may require authorization', 404)) };
-    const reached: boolean[] = [];
+    const offline: ImageEngine = { ...engine, pull: async () => Promise.reject(new EngineError('Get "https://ghcr.io/v2/": dial tcp: lookup ghcr.io: no such host', 500)) };
+    const reached: NetworkContact[] = [];
     await pass(refused, ['ghcr.io/private/x:1'], { reached });
+    await pass(offline, ['ghcr.io/acme/app:1'], { reached });
     await pass(engine, ['node:20'], { reached });
     await pass(engine, [], { reached });
-    expect(reached).toEqual([true, true, true]);
+    expect(reached).toEqual(['reached', 'reached', 'reached', 'none']);
   });
 
-  it('a pass without images in use after one that did not reach the network resolves true (nothing of the pass before counts)', async () => {
+  it('a failure of the engine itself (its list) is none of the network', async () => {
+    const { engine } = engineOf([]);
+    const reached: NetworkContact[] = [];
+    await pass({ ...engine, images: async () => Promise.reject(Object.assign(new Error('connect ECONNREFUSED /var/run/docker.sock'), { code: 'ECONNREFUSED' })) }, ['node:20'], { reached });
+    expect(reached).not.toContain('offline');
+  });
+
+  it('a pass without images in use after an offline one is none (nothing of the pass before counts)', async () => {
     const { engine } = engineOf([listed('sha256:n20', ['node:20'])]);
     let references = ['node:20'];
-    const reached: boolean[] = [];
+    const reached: NetworkContact[] = [];
     await pass(engine, async () => ({ references, complete: true }), {
       registryTransport: registry({ fails: true }).transport,
       passes: 1,
@@ -198,7 +204,7 @@ describe('the images in use of the Monitor', () => {
     reached.push(await maintenance.pass());
     references = [];
     reached.push(await maintenance.pass());
-    expect(reached).toEqual([false, false, true]);
+    expect(reached).toEqual(['offline', 'offline', 'none']);
   });
 
   it('a failed pull (a private image) is one line of the log per pass', async () => {

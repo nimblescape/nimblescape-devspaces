@@ -37,6 +37,16 @@ describe('the monitor settings of extension.ts', () => {
     }
   });
 
+  it('a computer ID that cannot be read is left out, and the open goes on', () => {
+    const settings = monitorSettingsOf({
+      ...deps({}),
+      computerId: () => {
+        throw new Error('EACCES: permission denied');
+      },
+    });
+    expect(settings.forOpen('')).toEqual({ schedule: '7 6 * * *', timeZone: 'Europe/Vienna', permanent: true });
+  });
+
   it('extension.ts gives an open the settings of its Docker host and a repair those of its target', () => {
     const source = fs.readFileSync(path.join(__dirname, 'extension.ts'), 'utf8');
     // No image list of imageLists.
