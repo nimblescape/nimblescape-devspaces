@@ -955,7 +955,7 @@ describe('the port of the engine over the Engine API', () => {
         });
 
         it('missing: only a 404 with the message of a missing container or file', async () => {
-          for (const message of ['No such container: devspace-monitor', 'no container with name or ID "devspace-monitor" found: no such container', 'Could not find the file /opt/devspace/monitor.js in container devspace-monitor', 'lstat /var/lib/docker/overlay2/x/merged/opt/devspace/monitor.js: no such file or directory', 'stat /opt/devspace/monitor.js: no such file or directory']) {
+          for (const message of ['No such container: devspace-monitor', 'no container with name or ID "devspace-monitor" found: no such container', 'Could not find the file /opt/devspace/monitor.js in container devspace-monitor', 'lstat /var/lib/docker/overlay2/x/merged/opt/devspace/monitor.js: no such file or directory', 'stat /opt/devspace/monitor.js: no such file or directory', 'Could not find the file /opt/devspace/monitor.js in container devspace-monitor.\n', 'No such container: devspace-monitor\n']) {
             const { engine } = fake(() => ok({ message }, 404));
             expect(await engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024), message).toBe('missing');
           }
