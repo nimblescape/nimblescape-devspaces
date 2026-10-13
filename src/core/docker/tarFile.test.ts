@@ -57,7 +57,7 @@ describe('firstTarFile', () => {
   });
 
   // The engine writes a PAX header before the file for its extended attributes or exact times.
-  it('skips one PAX header whose records change neither the name nor the size; refuses any other', () => {
+  it('reads one PAX header whose records keep the name, the size and the kind of the entry; refuses any other', () => {
     const record = (key: string, value: string) => {
       const body = ` ${key}=${value}\n`;
       let length = body.length + 1;
@@ -72,7 +72,9 @@ describe('firstTarFile', () => {
     const xattr = record('SCHILY.xattr.security.capability', '\u0001\u0000\u0000\u0002') + record('mtime', '1760000000.123456789');
     expect(firstTarFile(withPax(xattr), OPTIONS)?.equals(DATA)).toBe(true);
     // Records that change the entry, malformed records, and a header over its bound.
-    for (const records of [record('path', 'passwd'), record('size', '3'), record('linkpath', '/etc/shadow'), record('GNU.sparse.realsize', '4096'), record('GNU.sparse.major', '1'), '5 a=b\n', '12 no-equals\n', 'x a=b\n', record('mtime', '1').slice(0, -1)]) {
+    // A `path` or `size` record that repeats the entry, as a writer may put it for every entry.
+    expect(firstTarFile(withPax(record('path', 'passwd') + record('size', String(DATA.length))), OPTIONS)?.equals(DATA)).toBe(true);
+    for (const records of [record('path', 'group'), record('path', 'etc/passwd'), record('size', '3'), record('linkpath', '/etc/shadow'), record('GNU.sparse.realsize', '4096'), record('GNU.sparse.major', '1'), '5 a=b\n', '12 no-equals\n', 'x a=b\n', record('mtime', '1').slice(0, -1)]) {
       expect(firstTarFile(withPax(records), OPTIONS), JSON.stringify(records)).toBeUndefined();
     }
     expect(firstTarFile(withPax(record('comment', 'x'.repeat(MAX_PAX_HEADER_BYTES))), OPTIONS)).toBeUndefined();
