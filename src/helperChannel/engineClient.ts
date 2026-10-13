@@ -165,13 +165,12 @@ export function dockerEngine(
     return value;
   };
   /**
-   * The read of the regular file at the absolute path `filePath` of the container `container` through the archive
-   * endpoint (containerFile, imageFile): its bytes; undefined when it is no regular file or is larger than `maxBytes`
-   * (the answer is bounded to the archive of such a file, so a longer one is truncated); `notFound` of a 404. Rejects
-   * with an EngineError for any other status.
+   * The read of the regular file at the absolute path `filePath` (`name`: its base name, fileBase) of the container
+   * `container` through the archive endpoint (containerFile, imageFile): its bytes; undefined when it is no regular
+   * file or is larger than `maxBytes` (the answer is bounded to the archive of such a file, so a longer one is
+   * truncated); `notFound` of a 404. Rejects with an EngineError for any other status.
    */
-  const archiveFile = async <M>(container: string, filePath: string, maxBytes: number, signal: AbortSignal | undefined, notFound: (answer: EngineAnswer) => M): Promise<Buffer | M | undefined> => {
-    const name = fileBase(filePath);
+  const archiveFile = async <M>(container: string, filePath: string, name: string, maxBytes: number, signal: AbortSignal | undefined, notFound: (answer: EngineAnswer) => M): Promise<Buffer | M | undefined> => {
     // Latin-1: one character per byte, so that the offsets of the tar archive stay byte offsets.
     const answer = await api({
       method: 'GET',
@@ -382,7 +381,7 @@ export function dockerEngine(
     imageFile: async (image, filePath, signal) => {
       // The read of the label container of labelImage, without a commit: created from the image (never started; its
       // command is never run), the file read through the archive endpoint, and removed in every case.
-      fileBase(filePath);
+      const base = fileBase(filePath);
       if (signal?.aborted) throw abortError();
       // As labelImage: a name of its own, by which it is removed also when its create did not answer within its time
       // limit, and the create without the signal of the operation, so that a cancel never leaves it created but unknown.
@@ -407,7 +406,7 @@ export function dockerEngine(
       try {
         if (signal?.aborted) throw abortError();
         // A 404: the path does not exist in the image.
-        const content = await archiveFile(container, filePath, MAX_IMAGE_FILE_BYTES, signal, () => undefined);
+        const content = await archiveFile(container, filePath, base, MAX_IMAGE_FILE_BYTES, signal, () => undefined);
         return content === undefined ? undefined : content.toString('utf8');
       } finally {
         // With its anonymous volumes (`VOLUME` of the image), within a time limit of its own, never the cancel signal.
@@ -416,8 +415,8 @@ export function dockerEngine(
     },
     // Only the engine's own message of a missing container or file is `missing`; a 404 of something on the way is no
     // evidence.
-    containerFile: (container, filePath, maxBytes, signal) =>
-      archiveFile(container, filePath, maxBytes, signal, (answer) => (MISSING_CONTAINER_FILE.test(engineErrorMessage({ ...answer, truncated: false })) ? ('missing' as const) : fail(answer))),
+    containerFile: async (container, filePath, maxBytes, signal) =>
+      archiveFile(container, filePath, fileBase(filePath), maxBytes, signal, (answer) => (MISSING_CONTAINER_FILE.test(engineErrorMessage({ ...answer, truncated: false })) ? ('missing' as const) : fail(answer))),
     systemTime: async (signal) => {
       const value = (await list('/info', signal)) as { SystemTime?: unknown };
       if (typeof value?.SystemTime !== 'string') throw new EngineError('The engine answered /info without its time.', 200);
