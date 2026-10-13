@@ -313,12 +313,9 @@ export function isDevspaceResourceName(name: string): boolean {
   return lower.startsWith(RESOURCE_NAME_PREFIX) && /^[a-z0-9-]+$/.test(lower.slice(RESOURCE_NAME_PREFIX.length)) && trailingPair(lower) !== undefined;
 }
 
-/** The start of the name of a worker container of a window of no devspace (workerNameStart): `devspaces-worker-`. */
-const WORKER_NAME_PREFIX = `${RESOURCE_NAME_PREFIX}worker-`;
-
 /**
- * The longest window part of a worker name (workerNameStart), so that a worker name is short: at most 44 characters
- * up to a number of two digits (`devspaces-worker-` 17, the window part, `-` and the number).
+ * The longest window part of a worker name (workerNameStart), so that a worker name is short: at most 43 characters
+ * up to a number of two digits (`devspaces-` 10, the window part, `-worker` 7, and the number).
  */
 const WORKER_WINDOW_LENGTH = 24;
 
@@ -367,22 +364,23 @@ function workerWindow(windowName: string): string {
 }
 
 /**
- * The name of a worker container without its number, so that `docker ps` tells which VS Code window a worker belongs
- * to: `<devspace>-worker` for the worker of a window of a devspace on the engine of the devspace (`devspaceName`, its
- * resourceName), for example `devspaces-acme-api-sturdy-kahn-worker`, else the short `devspaces-worker-<window>-`
- * (`<window>` is workerWindow of `windowName`). openHelperChannel adds a number from 1, which keeps the workers of one
- * name start apart on one engine (two windows of one folder, windows of two computers on one remote engine, and the
- * next worker of a window while Docker still removes the last one): the lowest free number (freeWorkerNumber) when
- * Docker refuses a name that another container has. As the name ends in digits, it never has the shape of a name of a
- * devspace (isDevspaceResourceName, whose pair is letters only). Without `-` before its number, `<devspace>-worker1` is
- * never the name of a container of Docker Compose, which names them `<project>-<service>-<number>` (the project of a
- * devspace is resourceName), also not of a service `worker`. Nothing finds a worker by its name (the labels do), and
- * the worker never reads it (readOwnHelper reads its container ID).
+ * The name of a worker container without its number, `<owner>-worker`, so that `docker ps` tells which VS Code window a
+ * worker belongs to: `<owner>` is the devspace of the window for its worker on the engine of the devspace
+ * (`devspaceName`, its resourceName), for example `devspaces-acme-api-sturdy-kahn-worker`, else the short
+ * `devspaces-<window>` (`<window>` is workerWindow of `windowName`), for example `devspaces-api-worker`.
+ * openHelperChannel adds a number from 1, which keeps the workers of one name start apart on one engine (two windows of
+ * one folder, windows of two computers on one remote engine, and the next worker of a window while Docker still removes
+ * the last one): the lowest free number (freeWorkerNumber) when Docker refuses a name that another container has. As
+ * the name ends in digits, it never has the shape of a name of a devspace (isDevspaceResourceName, whose pair is
+ * letters only). Without `-` before its number, a worker name is never the name of a container of Docker Compose, which
+ * names them `<project>-<service>-<number>` (the project of a devspace is resourceName), also not of a service
+ * `worker`. Nothing finds a worker by its name (the labels do), and the worker never reads it (readOwnHelper reads its
+ * container ID).
  */
 export function workerNameStart(windowName: string, devspaceName?: string): string {
   const devspace = devspaceName?.toLowerCase();
   if (devspace !== undefined && isDevspaceResourceName(devspace)) return `${devspace}-worker`;
-  return `${WORKER_NAME_PREFIX}${workerWindow(windowName)}-`;
+  return `${RESOURCE_NAME_PREFIX}${workerWindow(windowName)}-worker`;
 }
 
 /**
