@@ -303,7 +303,6 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
     }
     try {
       const outcome = await ensureExtension(storeDeps, chosen, signal);
-      if (outcome === 'downloaded') deps.network?.reached();
       counts[outcome]++;
       inStore(ref, chosen);
       if (outcome === 'downloaded') log(`Downloaded the extension ${chosen.cacheName} into the shared extension cache.`);
