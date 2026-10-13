@@ -12,6 +12,8 @@
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { defineConfig } from '@vscode/test-cli';
 
@@ -30,11 +32,13 @@ const dockerHost =
 /**
  * A configuration with its own empty user data folder: the folder is removed before each run (the default of
  * @vscode/test-electron keeps it between runs), so the extension starts as after a fresh installation on every
- * computer, as on CI. Its path has a space and a letter outside ASCII, as the user folder of many users has. The
- * downloaded VS Code and the installed extensions in .vscode-test/ stay.
+ * computer, as on CI. Its path has a space and a letter outside ASCII, as the user folder of many users has. It is in
+ * the temporary folder of the system, because VS Code puts its socket into the user data folder, and macOS allows
+ * at most 103 characters in a socket path, which a folder below a checkout often exceeds. The downloaded VS Code and
+ * the installed extensions in .vscode-test/ stay.
  */
 function configuration(label, options) {
-  const userDataDir = fileURLToPath(new URL(`.vscode-test/user data ${label} Müller`, import.meta.url));
+  const userDataDir = path.join(os.tmpdir(), `devspaces ${label} ü`);
   fs.rmSync(userDataDir, { recursive: true, force: true });
   return {
     label,
@@ -50,7 +54,8 @@ function configuration(label, options) {
       '--password-store=basic',
     ],
     // DEVSPACE_TEST_USER_DATA_DIR: the tests read the log of the extension from the logs folder of VS Code there.
-    env: { DOCKER_HOST: dockerHost, DEVSPACE_TEST_USER_DATA_DIR: userDataDir },
+    // DEVSPACE_TEST_CONFIGURATION: the tests check that VS Code runs the extension from the build of this label.
+    env: { DOCKER_HOST: dockerHost, DEVSPACE_TEST_USER_DATA_DIR: userDataDir, DEVSPACE_TEST_CONFIGURATION: label },
     mocha: {
       ui: 'bdd',
       // The first activation of the extension in a fresh VS Code can be slow on CI runners.

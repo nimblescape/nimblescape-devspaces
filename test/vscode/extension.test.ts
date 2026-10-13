@@ -30,6 +30,22 @@ describe('the extension in VS Code', () => {
     assert.strictEqual(extension.isActive, true);
   });
 
+  it('runs from the build of the test configuration', () => {
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    const { version } = extension.packageJSON as { version: string };
+    const configuration = process.env.DEVSPACE_TEST_CONFIGURATION;
+    if (configuration === 'vsix') {
+      // VS Code installs a VSIX into the folder <publisher>.<name>-<version> of its extensions folder.
+      assert.strictEqual(path.basename(extension.extensionPath), `${EXTENSION_ID}-${version}`, extension.extensionPath);
+    } else {
+      assert.strictEqual(configuration, 'vscode', 'DEVSPACE_TEST_CONFIGURATION is not set (.vscode-test.mjs)');
+      // The development build runs from the checkout, which has the sources.
+      const source = path.join(extension.extensionPath, 'src', 'vscode', 'extension.ts');
+      assert.ok(fs.existsSync(source), extension.extensionPath);
+    }
+  });
+
   it('registers every command of the manifest', async () => {
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(extension);
