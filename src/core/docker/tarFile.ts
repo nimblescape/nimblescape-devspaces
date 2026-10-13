@@ -4,8 +4,8 @@
 
 // A minimal reader of the first entry of a tar archive, for the answer of `GET /containers/<id>/archive?path=<file>` of
 // the Engine API (the engine archives the one file at that path, under its base name). Only a regular file counts; a
-// link, a folder, an extended header (PAX or GNU), or anything malformed is refused, so that the caller treats the file
-// as unknown. Pure; no I/O, no `vscode`.
+// link, a folder, a GNU extended header, a PAX header that changes the name or the size, or anything malformed is
+// refused, so that the caller treats the file as unknown. Pure; no I/O, no `vscode`.
 
 /** The size of a tar header block (and of the blocks that the data is padded to). */
 export const TAR_BLOCK_BYTES = 512;
@@ -38,21 +38,73 @@ function octal(header: Buffer, start: number, length: number): number | undefine
   return Number.isSafeInteger(value) ? value : undefined;
 }
 
-/**
- * The content of the first entry of the tar archive `archive` (its bytes), when that entry is a regular
- * file (typeflag `0` or NUL) with the name `options.name` and at most `options.maxBytes` bytes, and the archive holds all
- * of its data. Undefined for anything else: a link (typeflag `1` or `2`), a folder, an extended header, a header whose
- * checksum does not match, an invalid size, a name with a prefix, or an archive that ends early.
- */
-export function firstTarFile(archive: Buffer, options: TarFileOptions): Buffer | undefined {
-  if (archive.length < TAR_BLOCK_BYTES) return undefined;
-  const header = archive.subarray(0, TAR_BLOCK_BYTES);
+/** The largest PAX extended header (its records) that firstTarFile reads before the entry of the file. */
+export const MAX_PAX_HEADER_BYTES = 64 * 1024;
+
+/** The keys of PAX records that change which file an entry is or how much data it has; a header with one is refused. */
+const PAX_ENTRY_KEYS = new Set(['path', 'linkpath', 'size']);
+
+/** The bytes of the header blocks and the data blocks of an entry with `size` bytes of data. */
+function entryBytes(size: number): number {
+  return TAR_BLOCK_BYTES + Math.ceil(size / TAR_BLOCK_BYTES) * TAR_BLOCK_BYTES;
+}
+
+/** The header block at `offset` when its checksum matches; undefined when the archive ends before it or it does not. */
+function headerAt(archive: Buffer, offset: number): Buffer | undefined {
+  if (archive.length < offset + TAR_BLOCK_BYTES) return undefined;
+  const header = archive.subarray(offset, offset + TAR_BLOCK_BYTES);
   // The checksum: the sum of the bytes of the header with the checksum field itself counted as spaces.
   const recorded = octal(header, 148, 8);
   if (recorded === undefined) return undefined;
   let sum = 0;
   for (let i = 0; i < TAR_BLOCK_BYTES; i++) sum += i >= 148 && i < 156 ? 0x20 : header[i];
-  if (sum !== recorded) return undefined;
+  return sum === recorded ? header : undefined;
+}
+
+/**
+ * Whether the records of a PAX extended header (`<length> <key>=<value>\n` each, the length counting the whole record)
+ * are well formed and leave the name and the size of the next entry as its own header gives them. The engine writes
+ * such a header for the extended attributes of a file (`SCHILY.xattr.*`) or exact times, which do not change its data.
+ */
+function harmlessPaxRecords(records: Buffer): boolean {
+  let at = 0;
+  while (at < records.length) {
+    const space = records.indexOf(0x20, at);
+    if (space === -1) return false;
+    const lengthText = records.subarray(at, space).toString('latin1');
+    if (!/^[1-9]\d{0,5}$/.test(lengthText)) return false;
+    const end = at + Number(lengthText);
+    if (end > records.length || records[end - 1] !== 0x0a) return false;
+    const record = records.subarray(space + 1, end - 1);
+    const equals = record.indexOf(0x3d);
+    if (equals <= 0) return false;
+    if (PAX_ENTRY_KEYS.has(record.subarray(0, equals).toString('latin1'))) return false;
+    at = end;
+  }
+  return true;
+}
+
+/**
+ * The content of the first file entry of the tar archive `archive` (its bytes), when that entry is a regular
+ * file (typeflag `0` or NUL) with the name `options.name` and at most `options.maxBytes` bytes, and the archive holds all
+ * of its data. One PAX extended header (typeflag `x`, at most MAX_PAX_HEADER_BYTES) before it is skipped when its records
+ * change neither the name nor the size. Undefined for anything else: a link (typeflag `1` or `2`), a folder, a GNU or
+ * global extended header, a PAX header with a `path`, `linkpath` or `size` record or malformed records, a header whose
+ * checksum does not match, an invalid size, a name with a prefix, or an archive that ends early.
+ */
+export function firstTarFile(archive: Buffer, options: TarFileOptions): Buffer | undefined {
+  let offset = 0;
+  let header = headerAt(archive, offset);
+  if (header === undefined) return undefined;
+  if (header[156] === 0x78) {
+    const recordsSize = octal(header, 124, 12);
+    if (recordsSize === undefined || recordsSize > MAX_PAX_HEADER_BYTES) return undefined;
+    if (archive.length < TAR_BLOCK_BYTES + recordsSize) return undefined;
+    if (!harmlessPaxRecords(archive.subarray(TAR_BLOCK_BYTES, TAR_BLOCK_BYTES + recordsSize))) return undefined;
+    offset = entryBytes(recordsSize);
+    header = headerAt(archive, offset);
+    if (header === undefined) return undefined;
+  }
   const typeflag = header[156];
   if (typeflag !== 0x30 && typeflag !== 0) return undefined;
   // The name, without a ustar prefix (the engine names the entry with the base name of the path).
@@ -61,6 +113,15 @@ export function firstTarFile(archive: Buffer, options: TarFileOptions): Buffer |
   if (field(header, 0, 100) !== options.name) return undefined;
   const size = octal(header, 124, 12);
   if (size === undefined || size > options.maxBytes) return undefined;
-  if (archive.length < TAR_BLOCK_BYTES + size) return undefined;
-  return archive.subarray(TAR_BLOCK_BYTES, TAR_BLOCK_BYTES + size);
+  const data = offset + TAR_BLOCK_BYTES;
+  if (archive.length < data + size) return undefined;
+  return archive.subarray(data, data + size);
+}
+
+/**
+ * The longest answer of the archive endpoint for one file of at most `maxBytes` bytes: an optional PAX header with its
+ * records, the header of the file, its data padded to whole blocks, and the two empty blocks of the end.
+ */
+export function maxTarFileArchiveBytes(maxBytes: number): number {
+  return entryBytes(MAX_PAX_HEADER_BYTES) + entryBytes(maxBytes) + 2 * TAR_BLOCK_BYTES;
 }

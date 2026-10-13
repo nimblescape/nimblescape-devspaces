@@ -30,7 +30,7 @@ import { readableStderr } from '../core/loader/pipeLoader';
 import * as crypto from 'crypto';
 import { hasTagOrDigest, parseEngineIdentity, StreamRedactor } from '../core/helperChannel/protocol';
 import { StringDecoder } from 'string_decoder';
-import { firstTarFile } from '../core/docker/tarFile';
+import { firstTarFile, maxTarFileArchiveBytes } from '../core/docker/tarFile';
 import {
   MAX_ENGINE_LIST_ANSWER_CHARACTERS,
   engineApi,
@@ -163,6 +163,28 @@ export function dockerEngine(
     const value = json(answer.body);
     if (value === undefined) throw new EngineError(`The engine answered ${path.split('?')[0]} with an invalid value.`, answer.status);
     return value;
+  };
+  /**
+   * The read of the regular file at the absolute path `filePath` of the container `container` through the archive
+   * endpoint (containerFile, imageFile): its bytes; undefined when it is no regular file or is larger than `maxBytes`
+   * (the answer is bounded to the archive of such a file, so a longer one is truncated); `notFound` of a 404. Rejects
+   * with an EngineError for any other status.
+   */
+  const archiveFile = async <M>(container: string, filePath: string, maxBytes: number, signal: AbortSignal | undefined, notFound: (answer: EngineAnswer) => M): Promise<Buffer | M | undefined> => {
+    const name = fileBase(filePath);
+    // Latin-1: one character per byte, so that the offsets of the tar archive stay byte offsets.
+    const answer = await api({
+      method: 'GET',
+      path: `/containers/${encodeURIComponent(container)}/archive?path=${encodeURIComponent(filePath)}`,
+      signal,
+      latin1: true,
+      maxCharacters: maxTarFileArchiveBytes(maxBytes),
+    });
+    if (answer.status === 404) return notFound(answer);
+    if (answer.status !== 200) fail(answer);
+    // More than the answer holds: more than the bound of the file.
+    if (answer.truncated) return undefined;
+    return firstTarFile(Buffer.from(answer.body, 'latin1'), { name, maxBytes });
   };
   const containerIds = async (filters: EngineFilters, signal?: AbortSignal): Promise<string[]> => {
     const value = await list(`/containers/json?all=true&${filtersQuery(filters)}`, signal);
@@ -360,8 +382,7 @@ export function dockerEngine(
     imageFile: async (image, filePath, signal) => {
       // The read of the label container of labelImage, without a commit: created from the image (never started; its
       // command is never run), the file read through the archive endpoint, and removed in every case.
-      const base = filePath.slice(filePath.lastIndexOf('/') + 1);
-      if (!filePath.startsWith('/') || base === '' || base === '.' || base === '..') throw new Error(`The path ${JSON.stringify(filePath)} is no absolute path of a file.`);
+      fileBase(filePath);
       if (signal?.aborted) throw abortError();
       // As labelImage: a name of its own, by which it is removed also when its create did not answer within its time
       // limit, and the create without the signal of the operation, so that a cancel never leaves it created but unknown.
@@ -385,35 +406,18 @@ export function dockerEngine(
       }
       try {
         if (signal?.aborted) throw abortError();
-        // Latin-1: one character per byte, so that the offsets of the tar archive stay byte offsets.
-        const answer = await api({ method: 'GET', path: `/containers/${encodeURIComponent(container)}/archive?path=${encodeURIComponent(filePath)}`, signal, latin1: true });
-        // The path does not exist in the image.
-        if (answer.status === 404) return undefined;
-        if (answer.status !== 200) fail(answer);
-        // More than the answer holds: more than the bound of the file anyway.
-        if (answer.truncated) return undefined;
-        const content = firstTarFile(Buffer.from(answer.body, 'latin1'), { name: base, maxBytes: MAX_IMAGE_FILE_BYTES });
+        // A 404: the path does not exist in the image.
+        const content = await archiveFile(container, filePath, MAX_IMAGE_FILE_BYTES, signal, () => undefined);
         return content === undefined ? undefined : content.toString('utf8');
       } finally {
         // With its anonymous volumes (`VOLUME` of the image), within a time limit of its own, never the cancel signal.
         await api({ method: 'DELETE', path: `/containers/${encodeURIComponent(container)}?force=true&v=true`, signal: AbortSignal.timeout(RUN_CLEANUP_TIMEOUT_MS) }).catch(() => undefined);
       }
     },
-    containerFile: async (container, filePath, maxBytes, signal) => {
-      const base = filePath.slice(filePath.lastIndexOf('/') + 1);
-      if (!filePath.startsWith('/') || base === '' || base === '.' || base === '..') throw new Error(`The path ${JSON.stringify(filePath)} is no absolute path of a file.`);
-      // Latin-1: one character per byte, so that the offsets of the tar archive stay byte offsets.
-      const answer = await api({ method: 'GET', path: `/containers/${encodeURIComponent(container)}/archive?path=${encodeURIComponent(filePath)}`, signal, latin1: true });
-      if (answer.status === 404) {
-        // Only the engine's own message of a missing container or file; a 404 of something on the way is no evidence.
-        if (MISSING_CONTAINER_FILE.test(engineErrorMessage({ ...answer, truncated: false }))) return 'missing';
-        fail(answer);
-      }
-      if (answer.status !== 200) fail(answer);
-      // More than the answer holds: more than can be read.
-      if (answer.truncated) return undefined;
-      return firstTarFile(Buffer.from(answer.body, 'latin1'), { name: base, maxBytes });
-    },
+    // Only the engine's own message of a missing container or file is `missing`; a 404 of something on the way is no
+    // evidence.
+    containerFile: (container, filePath, maxBytes, signal) =>
+      archiveFile(container, filePath, maxBytes, signal, (answer) => (MISSING_CONTAINER_FILE.test(engineErrorMessage({ ...answer, truncated: false })) ? ('missing' as const) : fail(answer))),
     systemTime: async (signal) => {
       const value = (await list('/info', signal)) as { SystemTime?: unknown };
       if (typeof value?.SystemTime !== 'string') throw new EngineError('The engine answered /info without its time.', 200);
@@ -456,13 +460,21 @@ export function dockerEngine(
   };
 }
 
+/** The base name of the absolute path of a file (the name of its entry in an archive); throws for any other path. */
+function fileBase(filePath: string): string {
+  const base = filePath.slice(filePath.lastIndexOf('/') + 1);
+  if (!filePath.startsWith('/') || base === '' || base === '.' || base === '..') throw new Error(`The path ${JSON.stringify(filePath)} is no absolute path of a file.`);
+  return base;
+}
+
 /**
  * The engine's message of a 404 of the archive endpoint (DockerEngine.containerFile) for a container that does not exist
- * (`No such container: <name>`; Podman's ends with `no such container`, as isNotRunning reads it) or a path that does
- * not exist in it (`Could not find the file <path> in container <name>` of newer engines, the `lstat <path>: no such
- * file or directory` of older ones).
+ * (`No such container: <name>`; Podman's ends with `no such container`) or a path that does not exist in it (`Could not
+ * find the file <path> in container <name>` of newer engines, `lstat <path>: no such file or directory` of older ones).
+ * Each alternative is tied to the start or the end of the message, so a message that only quotes an inner error (a
+ * failed mount: `…: no such file or directory`) is no evidence.
  */
-export const MISSING_CONTAINER_FILE = /no such container|^Could not find the file |\bno such file or directory\b/i;
+export const MISSING_CONTAINER_FILE = /^No such container: |no such container$|^Could not find the file \S+ in container |^lstat \S+: no such file or directory$/i;
 
 /**
  * The time limit of the create and of the removal of a container of labelImage, and of the create and the removal of

@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EngineError, isMissing, MAX_IMAGE_FILE_BYTES, type DockerEngine } from '../core/worker/dockerEngine';
 import { MIN_SECRET_LENGTH, SECRET_TOKEN } from '../core/helperChannel/protocol';
 import { scriptCommand } from '../core/worker/containerScripts';
+import { maxTarFileArchiveBytes } from '../core/docker/tarFile';
 import { engineApi, engineHijack, MAX_ENGINE_FRAME_BYTES, type EngineAnswer, type EngineApi, type EngineRequest } from './engineApi';
 import { dockerEngine, MAX_EXEC_OUTPUT_CHARACTERS } from './engineClient';
 
@@ -946,6 +947,11 @@ describe('the port of the engine over the Engine API', () => {
           expect(await engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024, signal)).toEqual(SCRIPT);
           expect(requests).toHaveLength(1);
           expect(requests[0]).toMatchObject({ method: 'GET', path: '/containers/devspace-monitor/archive?path=%2Fopt%2Fdevspace%2Fmonitor.js', latin1: true, signal });
+          // The answer is bounded to the archive of a file of the bound, not to the default bound of an answer.
+          expect(requests[0].maxCharacters).toBe(maxTarFileArchiveBytes(1024));
+          const large = fake(() => archive(tarOf('monitor.js', SCRIPT)));
+          await large.engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 8 * 1024 * 1024);
+          expect(large.requests[0].maxCharacters).toBeGreaterThan(8 * 1024 * 1024);
         });
 
         it('missing: only a 404 with the message of a missing container or file', async () => {
@@ -953,9 +959,12 @@ describe('the port of the engine over the Engine API', () => {
             const { engine } = fake(() => ok({ message }, 404));
             expect(await engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024), message).toBe('missing');
           }
-          // A 404 of something on the way (an old API version, a proxy) is no evidence.
-          const elsewhere = fake(() => ok({ message: 'page not found' }, 404));
-          await expect(elsewhere.engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024)).rejects.toMatchObject({ status: 404, message: 'page not found' });
+          // A 404 of something on the way (an old API version, a proxy), or one that only quotes an inner error, is no
+          // evidence.
+          for (const message of ['page not found', 'error mounting "/var/lib/docker/volumes/x/_data" to rootfs at "/data": no such file or directory', 'no such container in the cache: retry']) {
+            const elsewhere = fake(() => ok({ message }, 404));
+            await expect(elsewhere.engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024), message).rejects.toMatchObject({ status: 404, message });
+          }
         });
 
         it('undefined for a link, a folder, a file over the bound, a truncated answer, and a malformed archive', async () => {

@@ -23,7 +23,7 @@ export type MonitorInspected =
 
 /**
  * What the check of the stored script of the container found (REMOTE_MONITOR_SCRIPT_PATH, read through the archive
- * endpoint of the engine, DockerEngine.containerFile): the SHA-256 of its bytes (64 hex digits; the caller checks it),
+ * endpoint of the engine, DockerEngine.containerFile): the SHA-256 of its bytes (64 lower-case hex digits),
  * `none` (definite evidence: the engine answers that the script or the container does not exist), or `unknown` (the
  * check itself failed: no answer in time, a transport error, no regular file, a file too large to read).
  */

@@ -178,7 +178,7 @@ describe('the Docker of the pipeline over the Engine API', () => {
 
   // The read of the stored script of the Monitor: a file of the container through the archive endpoint, in any state of
   // the container (nothing runs in it), also from a volume of the container.
-  it('containerFile: reads a file of a running and of an exited container; a missing file or container is missing', async () => {
+  it('containerFile: reads a file of a running, a paused and an exited container; a missing file or container is missing', async () => {
     const engine = dockerEngine(engineApi(socket), engineHijack(socket));
     const target = `${name}-file`;
     cli.ok(['run', '-d', '--name', target, '--network', 'none', '--init', '--label', runLabel, '--mount', `type=volume,source=${name},target=/data`, TEST_BASE_IMAGE, 'sleep', '600']);
@@ -190,6 +190,9 @@ describe('the Docker of the pipeline over the Engine API', () => {
     // A folder is no regular file; a file over the bound is not read.
     expect(await engine.containerFile(target, '/tmp', 1024)).toBeUndefined();
     expect(await engine.containerFile(target, '/tmp/monitor.js', 4)).toBeUndefined();
+    cli.ok(['pause', target]);
+    expect(await engine.containerFile(target, '/tmp/monitor.js', 1024)).toEqual(expected);
+    cli.ok(['unpause', target]);
     cli.ok(['stop', '-t', '0', target]);
     expect(await engine.containerFile(target, '/tmp/monitor.js', 1024)).toEqual(expected);
     expect(await engine.containerFile(target, '/data/devspace-stored.js', 1024)).toEqual(Buffer.from('x'));

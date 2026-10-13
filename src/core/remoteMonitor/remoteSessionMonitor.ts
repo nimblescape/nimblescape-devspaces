@@ -38,6 +38,8 @@ import {
 
 /** Time limit of each Docker call of ensure (an SSH connection plus the call). */
 export const REMOTE_MONITOR_DOCKER_TIMEOUT_MS = 60_000;
+/** Time limit of the check of the stored script (the read of one file of the container through the engine). */
+export const REMOTE_MONITOR_CHECK_TIMEOUT_MS = 20_000;
 
 /**
  * The log of the monitor container, `docker logs` of at most about 2 MB. Not part of the label (remoteMonitorLabelValue
@@ -146,15 +148,14 @@ export class RemoteSessionMonitor {
   /**
    * Makes sure that the monitor container runs the current script with the helper image `helperTag`, by the state of the
    * container with the name (pipe loading):
-   * - the matching label and running or paused → nothing; when Docker restarted a running one (RestartCount > 0),
-   *   a read of the stored script through the archive endpoint checks it (works in every state of the container, so
-   *   the exit of the loader cannot cut it off; a restarted container whose first load was cut off has none:
-   *   its loader exits 3 again and again; only in the rare case of a first run that was killed before it wrote its
+   * - the matching label and running or paused → nothing; when Docker restarted it (RestartCount > 0), a read of the
+   *   stored script through the archive endpoint checks it (nothing runs in the container, so the read works in every
+   *   state of it and the exit of the loader cannot cut it off; a restarted container whose first load was cut off has
+   *   none: its loader exits 3 again and again; only in the rare case of a first run that was killed before it wrote its
    *   marker does it wait up to 60 s for an input, as `running`, and this check catches it); only definite evidence of
-   *   another or no stored script (storedScript `other`) → `docker rm -f`, then create; a check that fails keeps it
-   *   (logged), and a paused one is kept without a check (it goes on when it is unpaused); a check that fails is
-   *   followed by checkAgain (an inspect by the same ID: restarting, exited with LOADER_EXIT_CODE or a grown
-   *   RestartCount → replaced; still running → one more check);
+   *   another or no stored script (storedScript `other`) → `docker rm -f`, then create; a check that fails is followed
+   *   by checkAgain (an inspect by the same ID: restarting, exited with LOADER_EXIT_CODE or a grown RestartCount →
+   *   replaced; still running → one more check), and without evidence it keeps the container (logged);
    * - the matching label and exited with an exit code other than LOADER_EXIT_CODE → `docker start <ID>` (the loader
    *   resumes from the stored script); then the stored script is checked as for a restarted one: `same` → started;
    *   definite evidence of another or no stored script (`other`: a first run killed before its script was stored exits
@@ -314,9 +315,8 @@ export class RemoteSessionMonitor {
     if (isRunning(current.status)) {
       // A container that Docker restarted runs its stored script only when it has one; one whose first load was cut off
       // gets a new input without a writer and never its script. RestartCount 0 (a normal open, or the create of another
-      // window that is still loading) needs no extra call. A paused one is kept without a check (it goes on when it is
-      // unpaused).
-      if (current.restartCount === 0 || current.status === 'paused') return 'running';
+      // window that is still loading) needs no extra call. A paused one is checked too: the read runs nothing in it.
+      if (current.restartCount === 0) return 'running';
       // Only definite evidence replaces it; a check that fails keeps it, after checkAgain.
       let stored = await this.storedScript(script, signal);
       if (stored === 'unknown') stored = await this.checkAgain(current, script, signal);
@@ -444,7 +444,7 @@ export class RemoteSessionMonitor {
    * after the waits of REMOTE_MONITOR_CREATED_WAITS_MS, or still `removing` after the waits of
    * REMOTE_MONITOR_CONFLICT_WAITS_MS: CONFLICT_LOOK_BUDGET waits in all, whatever the status, a shorter list repeating
    * its last wait, so a container that stays `removing` gets 9 waits, 7.75 s, 10 looks in all). Only inspects: it never
-   * removes anything. A cancellation during a wait passes (AbortError). A running one that Docker restarted
+   * removes anything. A cancellation during a wait passes (AbortError). A running or paused one that Docker restarted
    * (RestartCount > 0) is accepted only when it holds the stored script of this version (storedScript `same`);
    * otherwise `other` (the next open's first look decides on evidence).
    */
@@ -454,7 +454,7 @@ export class RemoteSessionMonitor {
       if (!found.exists) return 'missing';
       // Also a running permanent monitor of the same version for an ensure of one that ends when idle.
       if (labelAccepted(found, accepted) && isRunning(found.status)) {
-        if (found.status === 'paused' || found.restartCount === 0) return 'running';
+        if (found.restartCount === 0) return 'running';
         return (await this.storedScript(script, signal)) === 'same' ? 'running' : 'other';
       }
       // A `created` one gets the waits of the first look (the create-to-start gap of another window over SSH), a
@@ -506,17 +506,15 @@ export class RemoteSessionMonitor {
 
   /**
    * Whether the container holds the script (the SHA-256 of REMOTE_MONITOR_SCRIPT_PATH in it, read through the archive
-   * endpoint, MonitorEngine.storedScript): its bundleHash → `same`; another hash of 64 hex digits → `other`; definite
-   * evidence that no script is stored or that the container does not exist (`none`) → `other`. No answer in time, a
-   * failure, or another answer → `unknown`. A cancellation passes.
+   * endpoint, MonitorEngine.storedScript): its bundleHash → `same`; another hash → `other`; definite evidence that no
+   * script is stored or that the container does not exist (`none`) → `other`. No answer in time, a failure, or another
+   * answer → `unknown`. A cancellation passes.
    */
   private async storedScript(script: string, signal: AbortSignal | undefined): Promise<StoredScript> {
     const found = await this.options.engine.storedScript(this.containerName, signal);
     if (found === 'none') return 'other';
     if (found === 'unknown') return 'unknown';
-    const hash = found.hash.trim().split(/\s+/)[0] ?? '';
-    if (!/^[0-9a-f]{64}$/.test(hash)) return 'unknown';
-    return hash === bundleHash(script) ? 'same' : 'other';
+    return found.hash === bundleHash(script) ? 'same' : 'other';
   }
 
   /**

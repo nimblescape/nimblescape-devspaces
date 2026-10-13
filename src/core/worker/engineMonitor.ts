@@ -4,7 +4,8 @@
 
 // The engine of the ensure of the Monitor (MonitorEngine) over the port of the worker's engine (DockerEngine,
 // the Engine API); every remote action is a worker operation. Each call has a time limit
-// (REMOTE_MONITOR_DOCKER_TIMEOUT_MS); a call past it fails with "no answer in time", a cancel passes as an AbortError.
+// (REMOTE_MONITOR_DOCKER_TIMEOUT_MS, the check of the stored script REMOTE_MONITOR_CHECK_TIMEOUT_MS); a call past it
+// fails with "no answer in time", a cancel passes as an AbortError.
 // No I/O of its own, no `vscode`.
 import { createHash } from 'crypto';
 import { errorMessage } from '../errors';
@@ -12,7 +13,7 @@ import { MAX_BUNDLE_LINE_LENGTH } from '../loader/pipeLoader';
 import { isAbortError, withTimeLimit } from '../ports';
 import { REMOVAL_IN_PROGRESS, parseDockerTime, type MonitorEngine, type MonitorInspected } from '../remoteMonitor/monitorEngine';
 import { LABEL_MONITOR, LABEL_MONITOR_OWNER, REMOTE_MONITOR_SCRIPT_PATH } from '../remoteMonitor/protocol';
-import { REMOTE_MONITOR_DOCKER_TIMEOUT_MS } from '../remoteMonitor/remoteSessionMonitor';
+import { REMOTE_MONITOR_CHECK_TIMEOUT_MS, REMOTE_MONITOR_DOCKER_TIMEOUT_MS } from '../remoteMonitor/remoteSessionMonitor';
 import { EngineError, type DockerEngine } from './dockerEngine';
 
 /**
@@ -43,6 +44,12 @@ export function monitorInspected(value: unknown): MonitorInspected {
     ...(typeof owner === 'string' ? { owner } : {}),
   };
 }
+
+/**
+ * The largest stored script (in bytes) that the check reads: the loader bounds the JSON line of the script by
+ * MAX_BUNDLE_LINE_LENGTH UTF-16 code units, and each code unit is at most 3 bytes of UTF-8 in the stored file.
+ */
+export const MAX_STORED_SCRIPT_BYTES = 3 * MAX_BUNDLE_LINE_LENGTH;
 
 /** MonitorEngine over the worker's engine (see the module comment). */
 export function engineMonitor(engine: DockerEngine): MonitorEngine {
@@ -92,8 +99,8 @@ export function engineMonitor(engine: DockerEngine): MonitorEngine {
       let file: Buffer | 'missing' | undefined;
       try {
         // Read through the archive endpoint (nothing runs in the container), so the exit of a loader that exits at once
-        // cannot cut the check off. Up to the longest script that the loader takes; a larger answer is no evidence.
-        file = await limited(REMOTE_MONITOR_DOCKER_TIMEOUT_MS, signal, (limit) => engine.containerFile(name, REMOTE_MONITOR_SCRIPT_PATH, MAX_BUNDLE_LINE_LENGTH, limit));
+        // cannot cut the check off. Up to the longest script that the loader takes; a larger file is no evidence.
+        file = await limited(REMOTE_MONITOR_CHECK_TIMEOUT_MS, signal, (limit) => engine.containerFile(name, REMOTE_MONITOR_SCRIPT_PATH, MAX_STORED_SCRIPT_BYTES, limit));
       } catch (error) {
         if (isAbortError(error) && signal?.aborted) throw error;
         return 'unknown';
