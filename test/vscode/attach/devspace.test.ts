@@ -13,7 +13,21 @@ import * as childProcess from 'child_process';
 import * as vscode from 'vscode';
 import { devContainersSettings } from '../../../src/core/devContainers';
 import { VSCODE_STORE_TARGET } from '../../../src/core/names';
-import { EXTENSION_ID, channelLog, connectedFolder, credentialPaths, docker, execIn, printLogs, seed, vscodeCommit, waitFor } from './support';
+import {
+  ENABLING_MACHINE_SETTINGS,
+  EXTENSION_ID,
+  assertOnlyDevspaceCredentials,
+  changeMachineSettings,
+  channelLog,
+  connectedFolder,
+  credentialPaths,
+  docker,
+  execIn,
+  printLogs,
+  seed,
+  vscodeCommit,
+  waitFor,
+} from './support';
 
 /** The port of the HTTP server in the container that VS Code forwards. */
 const SERVER_PORT = 8123;
@@ -67,6 +81,10 @@ describe('the window of a devspace', () => {
     assert.strictEqual(sshCommand, 'ssh -o IdentityAgent=none');
   });
 
+  it('gives Git, Docker and the GitHub CLI only the configuration of the devspace', async () => {
+    await assertOnlyDevspaceCredentials(user);
+  });
+
   it('uses the shared VS Code server of the store', () => {
     const commit = vscodeCommit();
     const link = execIn(user, `readlink "$HOME/.vscode-server/bin/${commit}"`);
@@ -99,5 +117,11 @@ describe('the window of a devspace', () => {
     console.log(`    forwarded ${external.toString()}:\n${listening.join('\n')}`);
     assert.ok(listening.length > 0, `Nothing listens on port ${port}`);
     for (const line of listening) assert.match(line, /\s(127\.0\.0\.1|\[::1\]):\d+\s/, line);
+  });
+
+  // The last test: the next start of VS Code (reattach.test.ts) attaches again with these machine settings.
+  it('lets a process in the container switch the features of Dev Containers on in the machine settings', () => {
+    const settings = changeMachineSettings(user, ENABLING_MACHINE_SETTINGS);
+    for (const [key, value] of Object.entries(ENABLING_MACHINE_SETTINGS)) assert.strictEqual(settings[key], value, key);
   });
 });
