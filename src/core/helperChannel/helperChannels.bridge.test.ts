@@ -71,6 +71,7 @@ async function openWith(
   const warnings: string[] = [];
   const infos: string[] = [];
   const lists: string[][] = [];
+  let windowReads = 0;
   const processes = [...first, good];
   const channel = await openHelperChannel(
     {
@@ -92,14 +93,17 @@ async function openWith(
       socketPath: async () => '/var/run/docker.sock',
       stateVolume: 'devspace-monitor',
       vscodeVolume: 'devspace-vscode',
-      windowName: () => 'api',
+      windowName: () => {
+        windowReads++;
+        return 'api';
+      },
     },
     REMOTE,
   ).catch((error: unknown) => {
     throw Object.assign(error as Error, { networks, names });
   });
   channel.close();
-  return { networks, names, warnings, infos, lists };
+  return { networks, names, warnings, infos, lists, windowReads };
 }
 
 /** openWith an engine whose list shows no container. */
@@ -186,9 +190,11 @@ describe('the number of a worker name in use', () => {
   });
 
   it('the start without network keeps the numbers that Docker refused, and takes again a number refused for the network', async () => {
-    const { networks, names } = await open(() => refused(IN_USE), () => refused('docker: Error response from daemon: network bridge not found.\n'), () => refused(IN_USE));
+    const { networks, names, windowReads } = await open(() => refused(IN_USE), () => refused('docker: Error response from daemon: network bridge not found.\n'), () => refused(IN_USE));
     expect(networks).toEqual(['bridge', 'bridge', 'none', 'none']);
     expect(names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-2', 'devspace-worker-api-2', 'devspace-worker-api-3']);
+    // The window name is read once for the open.
+    expect(windowReads).toBe(1);
   });
 
   it('the start without network takes the number from the last list of the engine', async () => {
