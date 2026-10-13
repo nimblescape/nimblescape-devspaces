@@ -12,7 +12,8 @@
 # tests again as root; the job "test" runs them as a user without root, as some
 # tests need. The job "every test ran" fails when a test is skipped in both
 # runs, so no test stops running unseen. The job "docker" runs the integration
-# tests against the Docker Engine of the runner. The job "vscode" runs the
+# tests against the Docker Engine of the runner, in three groups of test files
+# side by side, each on a runner of its own. The job "vscode" runs the
 # tests in a real VS Code (stable) with the Dev Containers extension, under a
 # virtual display (xvfb). The VSIX stays a workflow
 # artifact for inspection. This workflow publishes nothing: the release workflow calls it for
@@ -153,9 +154,27 @@ jobs:
 
   docker:
     # Docker Engine is preinstalled on the runner. The tests build the helper image and run the Dev Container CLI of
-    # the pinned version (devDependency @devcontainers/cli) against it.
+    # the pinned version (devDependency @devcontainers/cli) against it. The test files run one at a time on an engine
+    # (vitest.docker.config.mts), so three groups of files run side by side, each on its own runner and engine. The
+    # groups take about the same time (the times of the files in CI); the last one runs every file that the others do
+    # not name, so a new test file always runs.
+    name: docker (${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      # Every group reports its failures, also when another group failed.
+      fail-fast: false
+      matrix:
+        include:
+          - group: monitor
+            files: test/docker/remoteMonitor.test.ts test/docker/workerBatch.test.ts
+          - group: pipeline
+            files: test/docker/pipeline.test.ts test/docker/compose.test.ts test/docker/helperImage.test.ts
+          - group: other files
+            files: >-
+              --exclude test/docker/remoteMonitor.test.ts --exclude test/docker/workerBatch.test.ts
+              --exclude test/docker/pipeline.test.ts --exclude test/docker/compose.test.ts
+              --exclude test/docker/helperImage.test.ts
     steps:
       - name: Check out the source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -171,8 +190,11 @@ jobs:
       - name: Install the locked development tools
         run: npm ci
 
+      # FILES is split into its words on purpose: file filters, or --exclude with a file.
       - name: Run the integration tests against Docker
-        run: npm run test:docker
+        env:
+          FILES: ${{ matrix.files }}
+        run: npm run test:docker -- $FILES
 
   vscode:
     # The tests in a real VS Code (npm run test:vscode, .vscode-test.mjs). The runner has no display, so xvfb-run gives
