@@ -55,6 +55,7 @@ import {
 } from '../core/vscodeExtensions';
 import { STORE_SERVER_FOLDER, isServerReady, serverPlatform, storeLock, storeTryLock, type StoreLockAttempt } from '../core/worker/vscodeServerStore';
 import type { RunNetwork } from './backgroundRules';
+import { isNetworkError } from '../core/networkFailure';
 import { engineFailure } from './engine';
 
 /** The time limit of one query of the Marketplace. */
@@ -213,7 +214,9 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
       answer = await query([...new Set(unpinned.map((ref) => ref.id))], true);
       deps.network?.reached();
     } catch (error) {
-      deps.network?.failed(error);
+      // An answer that refuses (HTTP 4xx) or that cannot be read still came from the Marketplace.
+      if (isNetworkError(error)) deps.network?.failed(error);
+      else deps.network?.reached();
       log(queryFailure(unpinned.length, error));
     }
     let fallbacks = 0;
