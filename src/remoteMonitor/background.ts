@@ -252,8 +252,8 @@ export class BackgroundRun {
       }
       log(`The newest VS Code server ${server.commit} (${quality}) is not in the shared store yet.`);
       // A success needs no entry removed: a version is fetched only once its failure does not wait anymore, and such
-      // entries are not kept (storeFailedFetches). A fetch that failed for the network while the run reached no server
-      // does not wait a day: the retry of the run fetches it (RunNetwork).
+      // entries are not kept (storeFailedFetches). The update service answered before this fetch, so the run reached a
+      // server and a failed fetch waits a day, also one that failed for the network (RunNetwork).
       let cause: unknown;
       const store = { ...vscode.store, onFailure: (error: unknown) => void (cause = error) };
       if (await (vscode.ensure ?? ensureServer)(store, server, platform, this.signal)) {
@@ -272,7 +272,9 @@ export class BackgroundRun {
       this.network.reached();
       return commits;
     } catch (error) {
-      this.network.failed(error);
+      // An answer that refuses (HTTP 404) or that is no release list still came from the server.
+      if (isNetworkError(error)) this.network.failed(error);
+      else this.network.reached();
       this.deps.log(`The newest VS Code server (${quality}, ${platform}) could not be read from the update service: ${error instanceof Error ? error.message : String(error)}`);
       return undefined;
     }

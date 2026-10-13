@@ -182,6 +182,8 @@ describe('a run that did not reach the network', () => {
   it('the update service that answered with a refusal of the release list: true', async () => {
     const h = harness({ commits: { stable: new Error('the update service answered HTTP 404') }, ensure: true });
     expect(await h.run.run()).toBe(true);
+    // The refusal is an answer: it reached a server, also after the images failed for the network.
+    expect(await harness({ commits: { stable: new Error('the update service answered HTTP 404') }, ensure: true, images: async () => 'offline' }).run.run()).toBe(true);
   });
 
   it('a part that throws for the network counts only while nothing answered', async () => {

@@ -890,7 +890,8 @@ export async function writeRunRequest(stateDir: string, now: number): Promise<vo
  * did not reach the network (`pass` resolves false: a computer that woke up before its Wi-Fi or VPN, an engine without
  * internet) does not count as a run: the end of the last run stays, and the run is tried again after runRetryDelay
  * (2, 5, 10, 20, 30 minutes, then every hour) until one reaches it; the retry is kept in the volume too, so a restart of
- * the monitor keeps it, and while it waits, its time alone decides the next run.
+ * the monitor keeps it. While it waits, the next run comes at its time, or earlier at a time of the schedule counted
+ * from the last attempt (`lastAttemptAt`), so a schedule shorter than the wait still runs at its times.
  */
 export class CacheSchedule {
   /** The end of the last run (the stored one at first; undefined: none is known). */

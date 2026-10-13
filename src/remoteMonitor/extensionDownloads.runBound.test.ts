@@ -341,6 +341,17 @@ describe('a failure of the network waits for no day while the run reached no ser
     expect(failures(state)).toEqual([]);
   });
 
+  it('a query of the newest versions that the Marketplace refused (HTTP 400) reached it', async () => {
+    const { root, state } = prepared([{ id: 'a.a' }]);
+    const { network, seen } = runNetwork();
+    const f = fake(root, state, () => {
+      throw new Error('the Marketplace answered HTTP 400');
+    }, { network });
+    await downloadExtensions(f.deps);
+    expect(seen.reached).toBe(true);
+    expect(seen.failed).toEqual([]);
+  });
+
   it('without the network of the run, a failure of the network waits a day as before', async () => {
     const { root, state } = prepared([{ id: 'a.a', version: '1.0.0' }]);
     const f = fake(root, state, () => {

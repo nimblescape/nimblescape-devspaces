@@ -336,8 +336,10 @@ async function activateExtension(
     owner: () => ({ windowId: windowCoordinator?.windowId ?? '', pid: process.pid }),
     logger,
   });
-  // The source of the heartbeats and the owner of a permanent Monitor (computer.id); created by the first reader.
-  const computerId = (): string => readOrCreateComputerId(paths.computerId);
+  // The source of the heartbeats and the owner of a permanent Monitor (computer.id); created by the first reader, and
+  // read once (each open and each repair of the heartbeats asks for it; a failed read is tried again at the next call).
+  let knownComputerId: string | undefined;
+  const computerId = (): string => (knownComputerId ??= readOrCreateComputerId(paths.computerId));
   // The open carries the settings of this computer for the Monitor of its engine (no image prefixes and no
   // image list): the schedule of the monitor's whole background run (cacheUpdateSchedule), and its mode, the same on
   // every engine (monitorRunsPermanently with stopMonitorWhenIdle). In monitorSettings.ts, tested by its behaviour.

@@ -224,7 +224,8 @@ export class RemoteSessionMonitor {
     const images = this.options.imageMaintenance?.();
     // The schedule and the time zone come with `settings -` (monitorSettings), so computers with other settings or
     // another time zone on the same engine do not replace it at each open. The label holds the mode (permanent or not:
-    // its restart policy and its exit when idle), why it is permanent, and the store that it mounts.
+    // its restart policy and its exit when idle) and the store that it mounts; the owner of a permanent one has its own
+    // label (LABEL_MONITOR_OWNER).
     const mode = monitorModeOf(images);
     const store = this.options.vscodeStoreVolume;
     const label = monitorLabel(script, helperTag, mode, store);
