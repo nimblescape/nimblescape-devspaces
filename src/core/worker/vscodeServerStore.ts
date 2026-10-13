@@ -546,9 +546,13 @@ export async function downloadToFile(
   } catch (error) {
     // A cancel or the time limit of the caller: its own error (the caller names it).
     if (signal.aborted) throw error;
-    if (stall.signal.aborted) throw new FetchError(`the download stalled: no data for ${Math.round(stallMs / 1000)} s${progress()}`);
+    // The cause keeps the code of the socket (ECONNRESET) and a stall as a time limit, so the background run of the
+    // Monitor tells a failure of the network (isNetworkFailure) from one of the server version.
+    if (stall.signal.aborted) {
+      throw new FetchError(`the download stalled: no data for ${Math.round(stallMs / 1000)} s${progress()}`, { cause: Object.assign(new Error('no data in time'), { name: 'TimeoutError' }) });
+    }
     if (error instanceof FetchError || !receiving) throw error;
-    throw new FetchError(`${errorMessage(error)}${progress()}`);
+    throw new FetchError(`${errorMessage(error)}${progress()}`, { cause: error });
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }

@@ -167,7 +167,7 @@ export class BackgroundRun {
       const contact = await this.deps.images();
       if (contact === 'reached') this.network.reached();
       else if (contact === 'offline' && !this.reached) this.offline = true;
-    });
+    }, true);
     const vscode = this.deps.vscode();
     if (vscode === undefined) {
       log('The Monitor mounts no shared VS Code server store; the background run leaves the VS Code server out.');
@@ -175,9 +175,9 @@ export class BackgroundRun {
       let found: ServerFindings | undefined;
       await this.part('the VS Code server', async () => {
         found = await this.newestServers(vscode);
-      });
+      }, true);
       // The part "extensions", after the part of the server.
-      await this.part('the VS Code extensions', () => downloadExtensions(extensionRunDeps(vscode, this.deps, this.network)));
+      await this.part('the VS Code extensions', () => downloadExtensions(extensionRunDeps(vscode, this.deps, this.network)), true);
       await this.part('the cleanup of the VS Code server store', () => this.cleanupWhenDue(vscode, found));
     }
     const prepares = this.deps.prepares;
@@ -197,12 +197,16 @@ export class BackgroundRun {
     },
   };
 
-  /** One part: a failure is one line of the log, and the run goes on. */
-  private async part(what: string, work: () => Promise<void>): Promise<void> {
+  /**
+   * One part: a failure is one line of the log, and the run goes on. Only the failure of a part that asks the network
+   * (`network`) can mean that the run did not reach it; one of the cleanup or the prepares cannot (a code such as
+   * ECONNREFUSED there is the socket of the engine, not the network).
+   */
+  private async part(what: string, work: () => Promise<void>, network = false): Promise<void> {
     try {
       await work();
     } catch (error) {
-      this.network.failed(error);
+      if (network) this.network.failed(error);
       this.deps.log(`The background run could not do ${what}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

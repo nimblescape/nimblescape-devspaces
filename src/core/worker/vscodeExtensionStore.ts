@@ -381,7 +381,8 @@ export async function ensureExtension(deps: ExtensionStoreDeps, chosen: ChosenEx
     }
   } catch (error) {
     if (signal.aborted) throw new Error('the run was ended');
-    if (limit.aborted) throw new Error(`the download took longer than ${Math.round(timeoutMs / 1000)} s`);
+    // A time limit, as the fetch of a server names it (TimeoutError): the background run of the Monitor tries it again.
+    if (limit.aborted) throw Object.assign(new Error(`the download took longer than ${Math.round(timeoutMs / 1000)} s`), { name: 'TimeoutError' });
     throw error;
   }
 }
