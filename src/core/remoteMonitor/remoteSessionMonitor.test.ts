@@ -29,8 +29,10 @@ import {
   REMOTE_MONITOR_CREATED_WAITS_MS,
   REMOTE_MONITOR_DOCKER_TIMEOUT_MS,
   REMOTE_MONITOR_LOG,
+  REMOTE_MONITOR_RESTART_WAITS_MS,
   REMOTE_MONITOR_STALE_CREATED_MS,
   RemoteSessionMonitor,
+  type EnsureOutcome,
 } from './remoteSessionMonitor';
 import { parseDockerTime, type MonitorEngine } from './monitorEngine';
 
@@ -199,6 +201,30 @@ class Log implements Logger {
 
 function monitor(docker: FakeDocker, logger = new Log(), script = SCRIPT): RemoteSessionMonitor {
   return new RemoteSessionMonitor({ engine: engineMonitor(docker.engine), logger, script: async () => script });
+}
+
+/** The waits of the restart check (REMOTE_MONITOR_RESTART_WAITS_MS) in all: 3.75 s. */
+const RESTART_WAITS_TOTAL_MS = REMOTE_MONITOR_RESTART_WAITS_MS.reduce((total, ms) => total + ms, 0);
+/**
+ * The calls of a restarted container whose check fails twice while it still runs with the same RestartCount: the
+ * inspect, the check, the inspect by the same ID, the second check, then one inspect after each wait of the restart
+ * check.
+ */
+const CHECKED_AFTER_WAITS = ['inspect', 'exec', 'inspect', 'exec', ...REMOTE_MONITOR_RESTART_WAITS_MS.map(() => 'inspect')];
+
+/**
+ * Ensure with fake timers, so the waits of the restart check (REMOTE_MONITOR_RESTART_WAITS_MS) pass without real time
+ * (the fake engine answers at once, so no time limit of a call runs out).
+ */
+async function ensureWithWaits(remote: RemoteSessionMonitor, signal?: AbortSignal): Promise<EnsureOutcome> {
+  vi.useFakeTimers();
+  try {
+    const ensured = remote.ensure(TAG, SOCKET, signal);
+    await vi.advanceTimersByTimeAsync(RESTART_WAITS_TOTAL_MS);
+    return await ensured;
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 describe('RemoteSessionMonitor.ensure', () => {
@@ -617,10 +643,10 @@ describe('RemoteSessionMonitor.ensure: the stored script and the nonce of a crea
     it(`running with RestartCount 1 and ${what} → kept, logged`, async () => {
       const logger = new Log();
       const docker = answering('running', answer);
-      expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('running');
+      expect(await ensureWithWaits(monitor(docker, logger))).toBe('running');
       // A check that fails is followed by an inspect by the same ID and, still running with the same RestartCount, by
-      // one more check.
-      expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec']);
+      // one more check, then by the inspects of the restart check.
+      expect(docker.commands()).toEqual(CHECKED_AFTER_WAITS);
       expect(docker.calls[1].args).toEqual(SHA256SUM);
       expect(logger.lines).toEqual([
         'info The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (devspace-monitor).',
@@ -1013,10 +1039,10 @@ describe('RemoteSessionMonitor.ensure: probes of the stored-script check and the
   ] as const) {
     it(`a failed check with ${what} keeps the monitor`, async () => {
       const docker = restartedWith(result(255, '', stderr));
-      expect(await monitor(docker).ensure(TAG, SOCKET)).toBe('running');
+      expect(await ensureWithWaits(monitor(docker))).toBe('running');
       // A check that fails is followed by an inspect by the same ID and, still running with the same RestartCount, by
-      // one more check.
-      expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec']);
+      // one more check, then by the inspects of the restart check.
+      expect(docker.commands()).toEqual(CHECKED_AFTER_WAITS);
     });
   }
 
@@ -1029,10 +1055,10 @@ describe('RemoteSessionMonitor.ensure: probes of the stored-script check and the
   ] as const) {
     it(`an answer with ${what} keeps the monitor`, async () => {
       const docker = restartedWith(result(0, stdout));
-      expect(await monitor(docker).ensure(TAG, SOCKET)).toBe('running');
+      expect(await ensureWithWaits(monitor(docker))).toBe('running');
       // A check that fails is followed by an inspect by the same ID and, still running with the same RestartCount, by
-      // one more check.
-      expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec']);
+      // one more check, then by the inspects of the restart check.
+      expect(docker.commands()).toEqual(CHECKED_AFTER_WAITS);
       expect(docker.calls[1].args).toEqual(SHA);
     });
   }
@@ -1587,10 +1613,10 @@ describe('RemoteSessionMonitor.ensure: probes of the start, the removal and the 
   for (const [what, stderr] of quoted) {
     it(`a failed check with ${what} keeps the monitor`, async () => {
       const docker = restartedWith(result(1, '', stderr));
-      expect(await monitor(docker).ensure(TAG, SOCKET)).toBe('running');
+      expect(await ensureWithWaits(monitor(docker))).toBe('running');
       // A check that fails is followed by an inspect by the same ID and, still running with the same RestartCount, by
-      // one more check.
-      expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec']);
+      // one more check, then by the inspects of the restart check.
+      expect(docker.commands()).toEqual(CHECKED_AFTER_WAITS);
     });
 
     // The start path decides on the same check, so the same cases keep a started container too.
@@ -1903,12 +1929,109 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
     expect(logger.lines).toContain(REPLACED_LOG);
   });
 
-  it(`${NAME}: unknown twice → kept, logged`, async () => {
+  it(`${NAME}: unknown twice, still running with the same RestartCount through the waits → kept, logged`, async () => {
     const logger = new Log();
     const docker = sequenced([RESTARTED, RESTARTED], [CUT_OFF, CUT_OFF]);
-    expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('running');
-    expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec']);
+    expect(await ensureWithWaits(monitor(docker, logger))).toBe('running');
+    expect(docker.commands()).toEqual(CHECKED_AFTER_WAITS);
+    expect(docker.calls.some((call) => call.args[0] === 'rm')).toBe(false);
     expect(logger.lines).toEqual([KEPT_LOG]);
+  });
+
+  // On a busy host the daemon may record the exit of the loader only after both checks failed: the inspects after the
+  // waits find the evidence.
+  for (const [what, again] of [
+    ['found restarting', inspected('restarting', LABEL, 3, 1)],
+    ['exited with 3', inspected(false, LABEL, 3, 1)],
+    ['running with a grown RestartCount', inspected(true, LABEL, 3, 2)],
+  ] as const) {
+    it(`${NAME}: unknown twice, then ${what} after the second wait → replaced by its ID`, async () => {
+      const logger = new Log();
+      const docker = sequenced([RESTARTED, RESTARTED, RESTARTED, again, MISSING], [CUT_OFF, CUT_OFF]);
+      expect(await ensureWithWaits(monitor(docker, logger))).toBe('created');
+      expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec', 'inspect', 'inspect', 'rm', 'run']);
+      expect(docker.calls[6].args).toEqual(['rm', MONITOR_ID]);
+      expect(logger.lines).toContain(REPLACED_LOG);
+      expect(logger.lines).not.toContain(KEPT_LOG);
+    });
+  }
+
+  it(`${NAME}: unknown twice, then found restarting → replaced after the first two waits, not before`, async () => {
+    vi.useFakeTimers();
+    try {
+      const docker = sequenced([RESTARTED, RESTARTED, RESTARTED, inspected('restarting', LABEL, 3, 1), MISSING], [CUT_OFF, CUT_OFF]);
+      let settled = false;
+      const ensured = monitor(docker)
+        .ensure(TAG, SOCKET)
+        .finally(() => (settled = true));
+      const firstTwo = REMOTE_MONITOR_RESTART_WAITS_MS[0] + REMOTE_MONITOR_RESTART_WAITS_MS[1];
+      await vi.advanceTimersByTimeAsync(firstTwo - 1);
+      expect(settled).toBe(false);
+      expect(docker.commands()).not.toContain('rm');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await ensured).toBe('created');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A monitor that runs is never removed because its check fails: kept after the last wait, not before.
+  it(`${NAME}: unknown twice, still running with the same RestartCount → kept after ${RESTART_WAITS_TOTAL_MS / 1000} s, not before`, async () => {
+    vi.useFakeTimers();
+    try {
+      const docker = sequenced([RESTARTED, RESTARTED], [CUT_OFF, CUT_OFF]);
+      let settled = false;
+      const ensured = monitor(docker)
+        .ensure(TAG, SOCKET)
+        .finally(() => (settled = true));
+      await vi.advanceTimersByTimeAsync(RESTART_WAITS_TOTAL_MS - 1);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await ensured).toBe('running');
+      expect(docker.commands()).toEqual(CHECKED_AFTER_WAITS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A look after a wait without evidence ends the waits at once and keeps the monitor.
+  for (const [what, again] of [
+    ['a failed inspect', new EngineError('error during connect: read: connection reset by peer', 500)],
+    ['a container that is gone', MISSING],
+    ['an ID that changed (restarting)', inspected('restarting', LABEL, 3, 2, OTHER_ID)],
+    ['paused', inspected('paused', LABEL, 3, 1)],
+  ] as const) {
+    it(`${NAME}: unknown twice, then ${what} after the first wait → kept, nothing removed`, async () => {
+      const logger = new Log();
+      const docker = sequenced([RESTARTED, RESTARTED, again], [CUT_OFF, CUT_OFF]);
+      expect(await ensureWithWaits(monitor(docker, logger))).toBe('running');
+      expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec', 'inspect']);
+      expect(logger.lines).toEqual([KEPT_LOG]);
+    });
+  }
+
+  it(`${NAME}: a cancellation during a wait of the restart check passes, nothing removed`, async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const docker = sequenced([RESTARTED, RESTARTED], [CUT_OFF, CUT_OFF]);
+      const ensured = monitor(docker).ensure(TAG, SOCKET, controller.signal);
+      const rejected = expect(ensured).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(REMOTE_MONITOR_RESTART_WAITS_MS[0] + 1);
+      controller.abort();
+      await rejected;
+      expect(vi.getTimerCount()).toBe(0);
+      expect(docker.commands()).toEqual(['inspect', 'exec', 'inspect', 'exec', 'inspect']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it(`${NAME}: the inspects after the waits get the signal of ensure`, async () => {
+    const controller = new AbortController();
+    const docker = sequenced([RESTARTED, RESTARTED, RESTARTED, inspected('restarting', LABEL, 3, 1), MISSING], [CUT_OFF, CUT_OFF]);
+    expect(await ensureWithWaits(monitor(docker), controller.signal)).toBe('created');
+    expectSignalsFollow([docker.calls[4], docker.calls[5]], controller);
   });
 
   // The failures of the inspect of the port.
@@ -2012,11 +2135,19 @@ describe('RemoteSessionMonitor.ensure: remote monitor restart check', () => {
   it(`${NAME}: started, unknown twice → kept (started, logged)`, async () => {
     const logger = new Log();
     const docker = sequenced([STOPPED, inspected(true, LABEL, 0, 0)], [CUT_OFF, CUT_OFF]);
-    expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('started');
-    expect(docker.commands()).toEqual(['inspect', 'start', 'exec', 'inspect', 'exec']);
+    expect(await ensureWithWaits(monitor(docker, logger))).toBe('started');
+    expect(docker.commands()).toEqual(['inspect', 'start', 'exec', 'inspect', 'exec', ...REMOTE_MONITOR_RESTART_WAITS_MS.map(() => 'inspect')]);
     expect(logger.lines).toEqual([
       'info The Monitor on the Docker host was started again and its stored script could not be checked; it is kept (devspace-monitor).',
     ]);
+  });
+
+  it(`${NAME}: started, unknown twice, then running with RestartCount 1 after a wait → replaced`, async () => {
+    const running = inspected(true, LABEL, 0, 0);
+    const docker = sequenced([STOPPED, running, running, inspected(true, LABEL, 0, 1), MISSING], [CUT_OFF, CUT_OFF]);
+    expect(await ensureWithWaits(monitor(docker))).toBe('created');
+    expect(docker.commands()).toEqual(['inspect', 'start', 'exec', 'inspect', 'exec', 'inspect', 'inspect', 'rm', 'run']);
+    expect(docker.calls[7].args).toEqual(['rm', MONITOR_ID]);
   });
 
   it(`${NAME}: started, unknown, then a failed second inspect → kept (started), nothing removed`, async () => {
