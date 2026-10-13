@@ -308,7 +308,7 @@ describe('workerContainerName', () => {
   /** The names that Docker takes for a container. */
   const DOCKER_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/;
 
-  it('is devspace-worker-<window>-<random>', () => {
+  it('is devspace-worker-<window>-<number>', () => {
     expect(workerContainerName('api', 1)).toBe('devspace-worker-api-1');
     expect(workerContainerName('my-project', 1)).toBe('devspace-worker-my-project-1');
   });
