@@ -147,10 +147,7 @@ describe('the download of one file', () => {
   it('a download that never ends is ended by its time limit', async () => {
     const { root } = sandbox();
     const t = answering(() => ({ status: 200, headers: {}, body: new Readable({ read() {} }) }));
-    const failure = ensureExtension({ root, transport: t, lock: async () => () => undefined, timeoutMs: 200 }, CHOSEN, new AbortController().signal);
-    await expect(failure).rejects.toThrow('took longer than');
-    // A time limit (TimeoutError), as for the server: the background run of the Monitor tries it again.
-    await expect(failure).rejects.toMatchObject({ name: 'TimeoutError' });
+    await expect(ensureExtension({ root, transport: t, lock: async () => () => undefined, timeoutMs: 200 }, CHOSEN, new AbortController().signal)).rejects.toThrow('took longer than');
     expect(fs.readdirSync(path.join(root, 'extensions', 'tmp'))).toEqual([]);
   }, 10_000);
 

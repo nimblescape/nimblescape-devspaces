@@ -13,7 +13,6 @@ import * as path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LOCK_BUSY_EXIT } from '../helperChannel/protocol';
 import type { HttpStreamTransport, HttpTransport } from '../http';
-import { proxiedHttpsTransport } from '../proxyTransport';
 import { MAX_SERVER_COMMITS, MAX_SERVER_COMMITS_BYTES, ensureServer, parseServerCommits, serverCommits, storeTryLock, temporaryFolderVersion, type VscodeStoreDeps } from './vscodeServerStore';
 
 const COMMIT = '0123456789abcdef0123456789abcdef01234567';
@@ -143,32 +142,5 @@ describe('the small rules of the store', () => {
       `The VS Code server ${COMMIT} (stable) for linux-x64 could not be fetched into the shared store (the run was ended).`,
       `The VS Code server ${COMMIT} (stable) for linux-x64 could not be fetched into the shared store (the open was cancelled); the Dev Containers extension installs it in the container.`,
     ]);
-  });
-
-  it('a failed fetch reports its cause (the time limit as a TimeoutError), a cancelled one none', async () => {
-    const unused = () => {
-      throw new Error('not used');
-    };
-    const causes: unknown[] = [];
-    const refused = new Error('lock refused');
-    const deps = (lock: VscodeStoreDeps['lock'], timeoutMs?: number): VscodeStoreDeps => ({
-      root: tempDir(),
-      // Proxy settings that never come: the time limit of the whole fetch ends it.
-      transport: timeoutMs !== undefined ? proxiedHttpsTransport(() => new Promise(() => undefined)) : ({ request: unused, stream: unused } as unknown as HttpTransport & HttpStreamTransport),
-      architecture: unused,
-      lock,
-      unpack: unused,
-      logger: { info: () => {}, warn: () => {}, error: () => {}, output: () => {} } as unknown as VscodeStoreDeps['logger'],
-      background: true,
-      onFailure: (cause) => void causes.push(cause),
-      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-    });
-    const server = { commit: COMMIT, quality: 'stable' as const };
-    expect(await ensureServer(deps(async () => Promise.reject(refused)), server, 'linux-x64', new AbortController().signal)).toBe(false);
-    expect(await ensureServer(deps(async () => () => undefined, 50), server, 'linux-x64', new AbortController().signal)).toBe(false);
-    expect(await ensureServer(deps(async () => Promise.reject(refused)), server, 'linux-x64', AbortSignal.abort())).toBe(false);
-    expect(causes).toHaveLength(2);
-    expect(causes[0]).toBe(refused);
-    expect(causes[1]).toMatchObject({ name: 'TimeoutError', message: 'the fetch took longer than 0 s' });
   });
 });

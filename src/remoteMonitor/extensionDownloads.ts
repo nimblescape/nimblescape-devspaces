@@ -190,9 +190,10 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
   const counts = { downloaded: 0, present: 0, failed: 0 };
   const fail = (ref: ExtensionRef, why: string, cause?: unknown) => {
     counts.failed++;
-    // A failure of the network waits for no day: the retry of the run tries it again.
+    // A failure of the network while the run reached no server waits for no day: the next run (its retry, or the next
+    // time of the schedule when a later part reaches a server) tries it again.
     if (cause !== undefined && deps.network?.failed(cause) === true) {
-      log(`The extension ${extensionEntryText(ref)} is not in the shared extension cache (${why}); the retry of the run tries it again.`);
+      log(`The extension ${extensionEntryText(ref)} is not in the shared extension cache (${why}); the next run tries it again.`);
       return;
     }
     failures.set(extensionEntryText(ref), now);
@@ -249,7 +250,11 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
         deps.network?.reached();
         return { answer };
       },
-      (error: unknown) => ({ error }),
+      (error: unknown) => {
+        // A refusal (HTTP 4xx) or an answer that cannot be read still came from the Marketplace.
+        if (!isNetworkError(error)) deps.network?.reached();
+        return { error };
+      },
     );
   let singleQueries = 0;
   const ids = [...new Set(allVersions.map((ref) => ref.id))];

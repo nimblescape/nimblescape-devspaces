@@ -113,12 +113,6 @@ export interface VscodeStoreDeps {
    * Dev Containers extension).
    */
   background?: boolean;
-  /**
-   * The cause of a fetch that failed (a time limit of the whole fetch as an Error named TimeoutError), before
-   * ensureServer resolves false; not for a cancel by its signal. The background run tells a failure of the network from
-   * one of the server version by it.
-   */
-  onFailure?: (cause: unknown) => void;
 }
 
 /** A failure of a fetch, with the text of its log line. */
@@ -189,7 +183,6 @@ async function ensureServerWithin(
         : error instanceof Error
           ? error.message
           : String(error);
-    if (!signal.aborted) deps.onFailure?.(limit.aborted ? Object.assign(new Error(why), { name: 'TimeoutError' }) : error);
     // The background run of the Monitor names no fallback (it fetches ahead of any open).
     const fallback = deps.background === true ? '' : '; the Dev Containers extension installs it in the container';
     deps.logger.warn(`The VS Code server ${name} for ${platform} could not be fetched into the shared store (${why})${fallback}.`);
@@ -546,13 +539,9 @@ export async function downloadToFile(
   } catch (error) {
     // A cancel or the time limit of the caller: its own error (the caller names it).
     if (signal.aborted) throw error;
-    // The cause keeps the code of the socket (ECONNRESET) and a stall as a time limit, so the background run of the
-    // Monitor tells a failure of the network (isNetworkFailure) from one of the server version.
-    if (stall.signal.aborted) {
-      throw new FetchError(`the download stalled: no data for ${Math.round(stallMs / 1000)} s${progress()}`, { cause: Object.assign(new Error('no data in time'), { name: 'TimeoutError' }) });
-    }
+    if (stall.signal.aborted) throw new FetchError(`the download stalled: no data for ${Math.round(stallMs / 1000)} s${progress()}`);
     if (error instanceof FetchError || !receiving) throw error;
-    throw new FetchError(`${errorMessage(error)}${progress()}`, { cause: error });
+    throw new FetchError(`${errorMessage(error)}${progress()}`);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
