@@ -225,7 +225,7 @@ describe('ConnectionAdapter', () => {
     expect(adapter.isEmptyWindow()).toBe(true);
   });
 
-  it('names the window by its container, else its saved workspace file, else its first folder', () => {
+  it('names the window as its title does: by its saved workspace file, else its first folder', () => {
     const adapter = new ConnectionAdapter();
     expect(adapter.windowName()).toBe('');
     fake.state.workspaceFolders = [{ uri: fake.uri({ scheme: 'file', path: '/Users/me/My Project' }), name: 'My Project' }];
@@ -243,13 +243,12 @@ describe('ConnectionAdapter', () => {
     // A workspace file without a name before `.code-workspace` too.
     fake.state.workspaceFile = fake.uri({ scheme: 'file', path: '/Users/me/.code-workspace' });
     expect(adapter.windowName()).toBe('api');
-    // An attached window by its container, also under a saved workspace file.
+    // The window of a devspace by its repository folder, not by its container.
     fake.state.remoteName = 'attached-container';
-    fake.state.workspaceFile = fake.uri({ scheme: 'file', path: '/Users/me/course.code-workspace' });
-    fake.state.workspaceFolders = [{ ...remoteFolder(NAME), name: 'api' }];
-    expect(adapter.windowName()).toBe(NAME);
-    // An attached window without a folder has no name.
     fake.state.workspaceFile = undefined;
+    fake.state.workspaceFolders = [{ ...remoteFolder(NAME), name: 'api' }];
+    expect(adapter.windowName()).toBe('api');
+    // An attached window without a folder has no name.
     fake.state.workspaceFolders = [];
     expect(adapter.windowName()).toBe('');
   });
