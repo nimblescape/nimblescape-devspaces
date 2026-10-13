@@ -4,15 +4,16 @@
 
 // The engine of the ensure of the Monitor (MonitorEngine) over the port of the worker's engine (DockerEngine,
 // the Engine API); every remote action is a worker operation. Each call has a time limit
-// (REMOTE_MONITOR_DOCKER_TIMEOUT_MS, the check of the stored script REMOTE_MONITOR_EXEC_TIMEOUT_MS); a call past it
-// fails with "no answer in time", a cancel passes as an AbortError. No I/O of its own, no `vscode`.
+// (REMOTE_MONITOR_DOCKER_TIMEOUT_MS); a call past it fails with "no answer in time", a cancel passes as an AbortError.
+// No I/O of its own, no `vscode`.
+import { createHash } from 'crypto';
 import { errorMessage } from '../errors';
+import { MAX_BUNDLE_LINE_LENGTH } from '../loader/pipeLoader';
 import { isAbortError, withTimeLimit } from '../ports';
-import { NO_STORED_SCRIPT, REMOVAL_IN_PROGRESS, parseDockerTime, type MonitorEngine, type MonitorInspected } from '../remoteMonitor/monitorEngine';
-import { LABEL_MONITOR, LABEL_MONITOR_OWNER } from '../remoteMonitor/protocol';
-import { REMOTE_MONITOR_DOCKER_TIMEOUT_MS, REMOTE_MONITOR_EXEC_TIMEOUT_MS } from '../remoteMonitor/remoteSessionMonitor';
-import { runScript } from './containerScripts';
-import { EngineError, isNotRunning, type DockerEngine } from './dockerEngine';
+import { REMOVAL_IN_PROGRESS, parseDockerTime, type MonitorEngine, type MonitorInspected } from '../remoteMonitor/monitorEngine';
+import { LABEL_MONITOR, LABEL_MONITOR_OWNER, REMOTE_MONITOR_SCRIPT_PATH } from '../remoteMonitor/protocol';
+import { REMOTE_MONITOR_DOCKER_TIMEOUT_MS } from '../remoteMonitor/remoteSessionMonitor';
+import { EngineError, type DockerEngine } from './dockerEngine';
 
 /**
  * `call` within `ms`: past it, an Error "no answer in time"; the cancel of `signal` passes as an AbortError. The one
@@ -88,20 +89,20 @@ export function engineMonitor(engine: DockerEngine): MonitorEngine {
     },
 
     async storedScript(name, signal) {
+      let file: Buffer | 'missing' | undefined;
       try {
-        // `sha256sum REMOTE_MONITOR_SCRIPT_PATH` as the script `monitorScriptHash` of the registry.
-        const result = await runScript(engine, name, 'monitorScriptHash', [], { timeoutMs: REMOTE_MONITOR_EXEC_TIMEOUT_MS, ...(signal ? { signal } : {}) });
-        if (result.timedOut) return 'unknown';
-        if (result.exitCode === 0) return { hash: result.stdout };
-        // The runtime's refusal of an exec in a container that just stopped comes on the output of the exec; every
-        // alternative starts a line, so a hash never matches.
-        return NO_STORED_SCRIPT.test(`${result.stderr}\n${result.stdout}`) ? 'none' : 'unknown';
+        // Read through the archive endpoint (nothing runs in the container), so the exit of a loader that exits at once
+        // cannot cut the check off. Up to the longest script that the loader takes; a larger answer is no evidence.
+        file = await limited(REMOTE_MONITOR_DOCKER_TIMEOUT_MS, signal, (limit) => engine.containerFile(name, REMOTE_MONITOR_SCRIPT_PATH, MAX_BUNDLE_LINE_LENGTH, limit));
       } catch (error) {
         if (isAbortError(error) && signal?.aborted) throw error;
-        // The engine refused the exec: the container does not exist, does not run, or restarts. The one rule
-        // (isNotRunning, with `restarting`, as NO_STORED_SCRIPT); a 404 that names no container is no evidence.
-        return isNotRunning(error, { restarting: true }) ? 'none' : 'unknown';
+        return 'unknown';
       }
+      // The engine's own answer that the container or the stored script does not exist.
+      if (file === 'missing') return 'none';
+      // No regular file, or too large to read.
+      if (file === undefined) return 'unknown';
+      return { hash: createHash('sha256').update(file).digest('hex') };
     },
 
     async idsWithLabel(label, signal) {

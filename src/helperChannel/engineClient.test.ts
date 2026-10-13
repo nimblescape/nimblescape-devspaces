@@ -934,6 +934,62 @@ describe('the port of the engine over the Engine API', () => {
         });
       });
 
+      // The read of a file of a container in any of its states, without anything that runs in it.
+      describe('containerFile', () => {
+        const SCRIPT = Buffer.from('console.log("monitor ü")\n', 'utf8');
+        /** The archive answer as engineApi gives it with `latin1`: one character per byte. */
+        const archive = (bytes: Buffer, status = 200, truncated = false): EngineAnswer => ({ status, body: bytes.toString('latin1'), truncated });
+
+        it('reads the file of the container through the archive endpoint as Latin-1 and gives its bytes; nothing else is asked', async () => {
+          const { engine, requests } = fake(() => archive(tarOf('monitor.js', SCRIPT)));
+          const signal = new AbortController().signal;
+          expect(await engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024, signal)).toEqual(SCRIPT);
+          expect(requests).toHaveLength(1);
+          expect(requests[0]).toMatchObject({ method: 'GET', path: '/containers/devspace-monitor/archive?path=%2Fopt%2Fdevspace%2Fmonitor.js', latin1: true, signal });
+        });
+
+        it('missing: only a 404 with the message of a missing container or file', async () => {
+          for (const message of ['No such container: devspace-monitor', 'no container with name or ID "devspace-monitor" found: no such container', 'Could not find the file /opt/devspace/monitor.js in container devspace-monitor', 'lstat /var/lib/docker/overlay2/x/merged/opt/devspace/monitor.js: no such file or directory']) {
+            const { engine } = fake(() => ok({ message }, 404));
+            expect(await engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024), message).toBe('missing');
+          }
+          // A 404 of something on the way (an old API version, a proxy) is no evidence.
+          const elsewhere = fake(() => ok({ message: 'page not found' }, 404));
+          await expect(elsewhere.engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024)).rejects.toMatchObject({ status: 404, message: 'page not found' });
+        });
+
+        it('undefined for a link, a folder, a file over the bound, a truncated answer, and a malformed archive', async () => {
+          const cases: EngineAnswer[] = [
+            archive(tarOf('monitor.js', Buffer.from('/elsewhere.js'), '2')),
+            archive(tarOf('monitor.js/', Buffer.alloc(0), '5')),
+            archive(tarOf('monitor.js', Buffer.alloc(1025, 0x61))),
+            archive(tarOf('monitor.js', SCRIPT), 200, true),
+            archive(tarOf('monitor.js', SCRIPT).subarray(0, 520)),
+            archive(Buffer.from('not a tar archive')),
+            archive(tarOf('other.js', SCRIPT)),
+          ];
+          for (const [index, answer] of cases.entries()) {
+            const { engine } = fake(() => answer);
+            expect(await engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024), `case ${index}`).toBeUndefined();
+          }
+          // A file of exactly the bound is read.
+          const bound = Buffer.alloc(1024, 0x61);
+          expect(await fake(() => archive(tarOf('monitor.js', bound))).engine.containerFile('devspace-monitor', '/opt/devspace/monitor.js', 1024)).toEqual(bound);
+        });
+
+        it('fails for other answers and for a transport error; a path that is no absolute path of a file is refused before any request', async () => {
+          await expect(fake(() => ok({ message: 'the engine is busy' }, 500)).engine.containerFile('m', '/opt/devspace/monitor.js', 1024)).rejects.toMatchObject({ status: 500 });
+          const broken = fake(() => {
+            throw new Error('socket hang up');
+          });
+          await expect(broken.engine.containerFile('m', '/opt/devspace/monitor.js', 1024)).rejects.toThrow('socket hang up');
+          const none = fake(() => undefined);
+          await expect(none.engine.containerFile('m', 'opt/devspace/monitor.js', 1024)).rejects.toThrow('no absolute path');
+          await expect(none.engine.containerFile('m', '/opt/devspace/', 1024)).rejects.toThrow('no absolute path');
+          expect(none.requests).toEqual([]);
+        });
+      });
+
       it('a pull prints a line that is no JSON, fails with the first error, and needs the secret of its login', async () => {
         const { engine } = fake((request) => {
           request.onChunk?.('plain text\n{"error":"first"}\n{"error":"second"}\n');

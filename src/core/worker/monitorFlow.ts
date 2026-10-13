@@ -13,7 +13,7 @@ import { REMOTE_MONITOR_CONTAINER, isUnderRecordsLock, monitorExecFailure, type 
 import { runScript, scriptCommand, type ContainerScript } from './containerScripts';
 import { isMissing, isNotRunning, type DockerEngine } from './dockerEngine';
 
-/** The time limit of a command in the Monitor container (as REMOTE_MONITOR_EXEC_TIMEOUT_MS of the extension). */
+/** The time limit of a command in the Monitor container. */
 export const MONITOR_EXEC_TIMEOUT_MS = 20_000;
 
 /** The entries of the registry that run in the Monitor container. */

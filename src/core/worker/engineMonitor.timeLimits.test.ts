@@ -4,8 +4,7 @@
 
 // engineMonitor: the time limits, the cancels and the failures of its calls.
 import { describe, expect, it, vi } from 'vitest';
-import { REMOTE_MONITOR_SCRIPT_PATH } from '../remoteMonitor/protocol';
-import { EngineError, type DockerEngine, type EngineExecResult } from './dockerEngine';
+import { EngineError, type DockerEngine } from './dockerEngine';
 import { unusedEngine } from './dockerEngine.testkit';
 import { engineMonitor, limited, monitorInspected } from './engineMonitor';
 
@@ -13,7 +12,6 @@ const ID = 'feed'.padEnd(64, '1');
 const abortError = () => Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const with_ = (methods: Partial<DockerEngine>) => engineMonitor({ ...unusedEngine(), ...methods });
-const result = (exitCode: number | null, stdout = '', stderr = '', timedOut = false): EngineExecResult => ({ exitCode, stdout, stderr, timedOut });
 /** A call that answers after 30 ms, unless its signal aborted by then. */
 const slow = <T>(value: T) => async (signal?: AbortSignal): Promise<T> => {
   await delay(30);
@@ -77,13 +75,12 @@ describe('engineMonitor: time limits, cancels and failures', () => {
     expect(start).toHaveBeenCalledWith(ID, expect.any(AbortSignal));
   });
 
-  it('storedScript: a check past its time is unknown whatever it printed; the cancel goes to the exec; a 409 alone is no evidence', async () => {
-    const timedOut = result(null, '', `sha256sum: ${REMOTE_MONITOR_SCRIPT_PATH}: No such file or directory\n`, true);
-    expect(await with_({ exec: async () => timedOut }).storedScript('m')).toBe('unknown');
-    const exec = vi.fn(async () => result(0, 'abc'));
-    const signal = new AbortController().signal;
-    await with_({ exec }).storedScript('m', signal);
-    expect(exec).toHaveBeenCalledWith('m', ['sha256sum', REMOTE_MONITOR_SCRIPT_PATH], { timeoutMs: 20_000, signal });
-    expect(await with_({ exec: async () => Promise.reject(new EngineError(`Container ${ID} is not running`, 500)) }).storedScript('m')).toBe('unknown');
+  it('storedScript: within the time limit of a Docker call (60 s), not less; a cancel passes; a 404 failure alone is no evidence', async () => {
+    const script = Buffer.from('x');
+    expect(await with_({ containerFile: (_name, _path, _max, signal) => slow(script)(signal) }).storedScript('m')).toEqual({ hash: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 10);
+    await expect(with_({ containerFile: (_name, _path, _max, signal) => untilAborted(signal) }).storedScript('m', controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    expect(await with_({ containerFile: async () => Promise.reject(new EngineError('page not found', 404)) }).storedScript('m')).toBe('unknown');
   });
 });

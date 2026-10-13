@@ -46,14 +46,13 @@ const COMMAND_ENTRIES: Partial<Record<ContainerScript, readonly string[]>> = {
   mountInfo: ['cat', '/proc/self/mountinfo'],
   userId: ['id', '-u'],
   groupId: ['id', '-g'],
-  monitorScriptHash: ['sha256sum', REMOTE_MONITOR_SCRIPT_PATH],
 };
 
 describe('the registry of the scripts that run in a container', () => {
   it('names the scripts that the flows run, each with the text that is written and reviewed where it belongs', () => {
     // No `configOwnershipFix` (it runs only in the batch helper, whose image has GNU find for its `-execdir`; never in
     // the dev container). Every command of the pipeline in a container is an entry (branch, check, gitVersion, groupId,
-    // mountInfo, monitorScriptHash, userId). The commands of the Monitor are entries too (monitorForget,
+    // mountInfo, userId). The commands of the Monitor are entries too (monitorForget,
     // monitorHeartbeat, monitorImages, monitorSettings, and monitorRunNow for "Update All Images Now"). In the dev
     // container: the link of the shared VS Code server (vscodeServerLink), the seed of the shared extension cache
     // (vscodeExtensionSeed), and the check whether the container has the server of the window (vscodeServerPresent).
@@ -69,7 +68,6 @@ describe('the registry of the scripts that run in a container', () => {
       'monitorHeartbeat',
       'monitorImages',
       'monitorRunNow',
-      'monitorScriptHash',
       'monitorSettings',
       'mountInfo',
       'ownershipFix',
@@ -138,14 +136,13 @@ describe('every command of the pipeline in a container is an entry of the regist
     ]);
     expect(scriptCommand('existingPaths', ['/workspaces/api/a', '/workspaces/api/b'])).toEqual(['sh', '-c', EXISTING_PATHS_SCRIPT, 'sh', '/workspaces/api/a', '/workspaces/api/b']);
     expect(scriptCommand('tokenWrite', ['vscode', 'octo'])).toEqual(['sh', '-c', TOKEN_WRITE_SCRIPT, 'sh', 'vscode', 'octo']);
-    // The programs of the container (the check, `git --version`, `cat /proc/self/mountinfo`, `id -u|-g <user>`,
-    // `sha256sum REMOTE_MONITOR_SCRIPT_PATH`): exactly these commands, without a shell.
+    // The programs of the container (the check, `git --version`, `cat /proc/self/mountinfo`, `id -u|-g <user>`): exactly
+    // these commands, without a shell.
     expect(scriptCommand('check', [])).toEqual(['/bin/sh', '-c', 'exit 0']);
     expect(scriptCommand('gitVersion', [])).toEqual(['git', '--version']);
     expect(scriptCommand('mountInfo', [])).toEqual(['cat', '/proc/self/mountinfo']);
     expect(scriptCommand('userId', ['vscode'])).toEqual(['id', '-u', 'vscode']);
     expect(scriptCommand('groupId', ['vscode'])).toEqual(['id', '-g', 'vscode']);
-    expect(scriptCommand('monitorScriptHash', [])).toEqual(['sha256sum', '/opt/devspace/monitor.js']);
     for (const [name, command] of Object.entries(COMMAND_ENTRIES) as Array<[ContainerScript, readonly string[]]>) {
       expect(CONTAINER_SCRIPTS[name], name).toEqual({ command });
     }

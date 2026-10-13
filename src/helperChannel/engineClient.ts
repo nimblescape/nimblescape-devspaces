@@ -399,6 +399,21 @@ export function dockerEngine(
         await api({ method: 'DELETE', path: `/containers/${encodeURIComponent(container)}?force=true&v=true`, signal: AbortSignal.timeout(RUN_CLEANUP_TIMEOUT_MS) }).catch(() => undefined);
       }
     },
+    containerFile: async (container, filePath, maxBytes, signal) => {
+      const base = filePath.slice(filePath.lastIndexOf('/') + 1);
+      if (!filePath.startsWith('/') || base === '' || base === '.' || base === '..') throw new Error(`The path ${JSON.stringify(filePath)} is no absolute path of a file.`);
+      // Latin-1: one character per byte, so that the offsets of the tar archive stay byte offsets.
+      const answer = await api({ method: 'GET', path: `/containers/${encodeURIComponent(container)}/archive?path=${encodeURIComponent(filePath)}`, signal, latin1: true });
+      if (answer.status === 404) {
+        // Only the engine's own message of a missing container or file; a 404 of something on the way is no evidence.
+        if (MISSING_CONTAINER_FILE.test(engineErrorMessage({ ...answer, truncated: false }))) return 'missing';
+        fail(answer);
+      }
+      if (answer.status !== 200) fail(answer);
+      // More than the answer holds: more than can be read.
+      if (answer.truncated) return undefined;
+      return firstTarFile(Buffer.from(answer.body, 'latin1'), { name: base, maxBytes });
+    },
     systemTime: async (signal) => {
       const value = (await list('/info', signal)) as { SystemTime?: unknown };
       if (typeof value?.SystemTime !== 'string') throw new EngineError('The engine answered /info without its time.', 200);
@@ -440,6 +455,14 @@ export function dockerEngine(
     runAttached: (spec, options) => runAttached(api, hijack, spec, options),
   };
 }
+
+/**
+ * The engine's message of a 404 of the archive endpoint (DockerEngine.containerFile) for a container that does not exist
+ * (`No such container: <name>`; Podman's ends with `no such container`, as isNotRunning reads it) or a path that does
+ * not exist in it (`Could not find the file <path> in container <name>` of newer engines, the `lstat <path>: no such
+ * file or directory` of older ones).
+ */
+export const MISSING_CONTAINER_FILE = /no such container|^Could not find the file |\bno such file or directory\b/i;
 
 /**
  * The time limit of the create and of the removal of a container of labelImage, and of the create and the removal of
