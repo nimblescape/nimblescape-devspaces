@@ -7,15 +7,23 @@
 // user data folder, and runs the bundled tests of out/test/vscode/ with mocha in its extension host. VSCODE_TEST_VERSION
 // selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On Linux without a
 // display, run it under xvfb-run.
+import * as fs from 'fs';
+import { fileURLToPath } from 'url';
 import { defineConfig } from '@vscode/test-cli';
+
+// Each run starts with an empty user data folder (the default of @vscode/test-electron, which keeps it between runs),
+// so the extension starts as after a fresh installation on every computer, as on CI. The downloaded VS Code and the
+// installed extensions in .vscode-test/ stay.
+const userDataDir = fileURLToPath(new URL('.vscode-test/user-data', import.meta.url));
+fs.rmSync(userDataDir, { recursive: true, force: true });
 
 export default defineConfig({
   label: 'vscode',
   files: 'out/test/vscode/**/*.test.js',
   version: process.env.VSCODE_TEST_VERSION || 'stable',
-  // No workspace trust prompt, no first-run pages, and on Linux secrets in a file instead of a keyring, which a CI
-  // runner or a container does not have.
-  launchArgs: ['--disable-workspace-trust', '--skip-welcome', '--skip-release-notes', '--password-store=basic'],
+  // The empty user data folder, no workspace trust prompt, no first-run pages, and on Linux secrets in a file instead
+  // of a keyring, which a CI runner or a container does not have.
+  launchArgs: [`--user-data-dir=${userDataDir}`, '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes', '--password-store=basic'],
   // The extension of the test window must never reach the Docker engine of this computer: with a fresh user data
   // folder it would build the helper image in the background and restore devspaces from the volumes there. DOCKER_HOST
   // decides over the Docker context (src/core/docker/dockerTargets.ts), and nothing listens on this socket, so the
