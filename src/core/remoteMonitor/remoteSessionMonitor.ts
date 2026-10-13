@@ -155,7 +155,7 @@ export class RemoteSessionMonitor {
    *   marker does it wait up to 60 s for an input, as `running`, and this check catches it); only definite evidence of
    *   another or no stored script (storedScript `other`) → `docker rm -f`, then create; a check that fails is followed
    *   by checkAgain (an inspect by the same ID: restarting, exited with LOADER_EXIT_CODE or a grown RestartCount →
-   *   replaced; still running → one more check), and without evidence it keeps the container (logged);
+   *   replaced), and without evidence it keeps the container (logged);
    * - the matching label and exited with an exit code other than LOADER_EXIT_CODE → `docker start <ID>` (the loader
    *   resumes from the stored script); then the stored script is checked as for a restarted one: `same` → started;
    *   definite evidence of another or no stored script (`other`: a first run killed before its script was stored exits
@@ -319,7 +319,7 @@ export class RemoteSessionMonitor {
       if (current.restartCount === 0) return 'running';
       // Only definite evidence replaces it; a check that fails keeps it, after checkAgain.
       let stored = await this.storedScript(script, signal);
-      if (stored === 'unknown') stored = await this.checkAgain(current, script, signal);
+      if (stored === 'unknown') stored = await this.checkAgain(current, signal);
       if (stored === 'same') return 'running';
       if (stored === 'unknown') {
         logger.info(`The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (${this.containerName}).`);
@@ -337,7 +337,7 @@ export class RemoteSessionMonitor {
       let stored = await this.storedScript(script, signal);
       // `docker start` resets RestartCount to 0, so the count before the start is no base for a restart by the policy
       // after it.
-      if (stored === 'unknown') stored = await this.checkAgain({ ...current, restartCount: 0 }, script, signal);
+      if (stored === 'unknown') stored = await this.checkAgain({ ...current, restartCount: 0 }, signal);
       if (stored === 'same') {
         logger.info(`The Monitor on the Docker host was started again (${this.containerName}).`);
         return 'started';
@@ -359,12 +359,12 @@ export class RemoteSessionMonitor {
    * After a stored-script check of the container `current` that gave `unknown` (the read failed: no answer in time, a
    * transport error), the container of the name is inspected again. The same ID found `restarting`, exited with
    * LOADER_EXIT_CODE, or with a RestartCount above that of `current` is definite evidence that it exits at once without
-   * its script → `other` (replaced by its ID). The same ID still
-   * `running` with the same RestartCount → the stored script is checked once more (its answer counts; `unknown` again
-   * keeps it). An inspect that fails, a missing container, another ID or an ID that cannot be read, or any other state
-   * → `unknown` (no evidence: kept). Only inspects and reads; a cancellation passes (AbortError).
+   * its script → `other` (replaced by its ID). Anything else (the same ID still running, an inspect that fails, a
+   * missing container, another ID or an ID that cannot be read) → `unknown` (no evidence: kept). No second read: the
+   * read works in every state of the container, so one that failed would most likely fail again. Only an inspect; a
+   * cancellation passes (AbortError).
    */
-  private async checkAgain(current: Inspected & { exists: true }, script: string, signal: AbortSignal | undefined): Promise<StoredScript> {
+  private async checkAgain(current: Inspected & { exists: true }, signal: AbortSignal | undefined): Promise<'other' | 'unknown'> {
     let again: Inspected;
     try {
       again = await this.inspect(signal);
@@ -376,8 +376,7 @@ export class RemoteSessionMonitor {
     if (again.status === 'restarting' || (again.status === 'exited' && again.exitCode === LOADER_EXIT_CODE) || again.restartCount > current.restartCount) {
       return 'other';
     }
-    if (again.status !== 'running') return 'unknown';
-    return this.storedScript(script, signal);
+    return 'unknown';
   }
 
   /**

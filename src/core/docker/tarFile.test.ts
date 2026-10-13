@@ -72,7 +72,7 @@ describe('firstTarFile', () => {
     const xattr = record('SCHILY.xattr.security.capability', '\u0001\u0000\u0000\u0002') + record('mtime', '1760000000.123456789');
     expect(firstTarFile(withPax(xattr), OPTIONS)?.equals(DATA)).toBe(true);
     // Records that change the entry, malformed records, and a header over its bound.
-    for (const records of [record('path', 'passwd'), record('size', '3'), record('linkpath', '/etc/shadow'), '5 a=b\n', '12 no-equals\n', 'x a=b\n', record('mtime', '1').slice(0, -1)]) {
+    for (const records of [record('path', 'passwd'), record('size', '3'), record('linkpath', '/etc/shadow'), record('GNU.sparse.realsize', '4096'), record('GNU.sparse.major', '1'), '5 a=b\n', '12 no-equals\n', 'x a=b\n', record('mtime', '1').slice(0, -1)]) {
       expect(firstTarFile(withPax(records), OPTIONS), JSON.stringify(records)).toBeUndefined();
     }
     expect(firstTarFile(withPax(record('comment', 'x'.repeat(MAX_PAX_HEADER_BYTES))), OPTIONS)).toBeUndefined();

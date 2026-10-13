@@ -470,11 +470,12 @@ function fileBase(filePath: string): string {
 /**
  * The engine's message of a 404 of the archive endpoint (DockerEngine.containerFile) for a container that does not exist
  * (`No such container: <name>`; Podman's ends with `no such container`) or a path that does not exist in it (`Could not
- * find the file <path> in container <name>` of newer engines, `lstat <path>: no such file or directory` of older ones).
+ * find the file <path> in container <name>` of newer engines, `lstat <path>: no such file or directory` of older ones,
+ * `stat <path>: no such file or directory` as Podman words it).
  * Each alternative is tied to the start or the end of the message, so a message that only quotes an inner error (a
  * failed mount: `…: no such file or directory`) is no evidence.
  */
-export const MISSING_CONTAINER_FILE = /^No such container: |no such container$|^Could not find the file \S+ in container |^lstat \S+: no such file or directory$/i;
+export const MISSING_CONTAINER_FILE = /^No such container: |no such container$|^Could not find the file \S+ in container |^l?stat \S+: no such file or directory$/i;
 
 /**
  * The time limit of the create and of the removal of a container of labelImage, and of the create and the removal of
