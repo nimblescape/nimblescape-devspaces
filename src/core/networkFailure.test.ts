@@ -6,7 +6,7 @@
 // (with the texts of isNetworkFailure) and causes, where a refusal of a reachable server is none; and the texts of the
 // flows (isNetworkFailure).
 import { describe, expect, it } from 'vitest';
-import { isNetworkError, isNetworkFailure } from './networkFailure';
+import { isNetworkError, isNetworkFailure, isServerAnswer } from './networkFailure';
 
 describe('the failures of the network of an error', () => {
   const coded = (code: string) => Object.assign(new Error(`connect ${code} 1.2.3.4:443`), { code });
@@ -75,5 +75,16 @@ describe('the texts of a failure of the network', () => {
     expect(isNetworkFailure('dial tcp: lookup ghcr.io: no such host')).toBe(true);
     expect(isNetworkFailure("fatal: unable to access 'https://github.com/a/b/': The requested URL returned error: 403")).toBe(false);
     expect(isNetworkFailure('the update service answered HTTP 503')).toBe(false);
+  });
+});
+
+describe('a failure that an answer of a server caused', () => {
+  it('counts a refusal and an answer that cannot be read; not a failure of the network, nor one without an answer', () => {
+    expect(isServerAnswer(new Error('the update service answered HTTP 404'))).toBe(true);
+    expect(isServerAnswer(new Error('the Marketplace answered no list of extensions'))).toBe(true);
+    expect(isServerAnswer(new Error('the update service answered HTTP 503'))).toBe(false);
+    expect(isServerAnswer(Object.assign(new Error('Hostname/IP does not match certificate'), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' }))).toBe(false);
+    expect(isServerAnswer(new Error('The request ended before the proxy settings of the Docker engine were read.'))).toBe(false);
+    expect(isServerAnswer('the update service answered HTTP 404')).toBe(false);
   });
 });
