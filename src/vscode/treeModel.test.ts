@@ -636,6 +636,27 @@ describe('buildTreeModel', () => {
     expect(filtered.map((group) => group.owner)).toEqual(['acme']);
   });
 
+  it('shows the default image of the last open in place of the configuration name', () => {
+    const configs = ['.devcontainer/devcontainer.json', '.devcontainer/node/devcontainer.json'];
+    const groups = buildTreeModel(
+      input({
+        discovery: discovery([repo('acme/multi', { configPaths: configs }), repo('acme/single')]),
+        devspaces: [
+          devspace('e1', 'acme/multi', { configPath: '.devcontainer/node/devcontainer.json', defaultImage: 'ghcr.io/acme/base:latest' }),
+          devspace('e2', 'acme/single', { defaultImage: 'ghcr.io/acme/base:latest' }),
+        ],
+      }),
+    );
+    for (const name of ['acme/multi', 'acme/single']) {
+      expect(row(groups, name).description).toBe('main (default image)   Stopped');
+      expect(row(groups, name).defaultImage).toBe('ghcr.io/acme/base:latest');
+      expect(row(groups, name).tooltip).toContain(TreeTexts.defaultImage('ghcr.io/acme/base:latest'));
+      expect(row(groups, name).tooltip).not.toContain('Configuration:');
+    }
+    // The configuration name stays known for Select Configuration….
+    expect(row(groups, 'acme/multi').configurationName).toBe('node');
+  });
+
   it('shows the configuration name only when the repository has more than one configuration', () => {
     const configs = ['.devcontainer/devcontainer.json', '.devcontainer.json', '.devcontainer/node/devcontainer.json'];
     const groups = buildTreeModel(

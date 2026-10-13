@@ -80,6 +80,8 @@ export const ControllerTexts = {
   selectDevspaceToStopWhenClosed: 'Select a devspace to stop when closed',
   selectDevspaceToDelete: 'Select a devspace to delete',
   selectDevspaceToRebuild: 'Select a devspace to rebuild',
+  /** Start with Default Image without the setting defaultImage. */
+  noDefaultImage: 'No default image is set. Set the setting devspaces.defaultImage first.',
   selectRepositoryForConfiguration: 'Select a repository to select its configuration',
   selectRepositoryForGitHub: 'Select a repository to show on GitHub',
   selectConfigurationTitle: 'Select Configuration',

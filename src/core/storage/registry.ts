@@ -520,6 +520,8 @@ const OPTIONAL_FIELDS: ReadonlyArray<readonly [keyof Devspace, Check]> = [
   ['gitSummary', isGitSummary],
   ['lastSeenInUseAt', isString],
   ['buildRecord', isBuildRecord],
+  // The default image of the last open (DevspaceSource).
+  ['defaultImage', isNonEmptyString],
   ['busy', isBusyMark],
   ['remoteUser', isString],
   ['remoteWorkspaceFolder', isString],
@@ -584,6 +586,7 @@ export function isBuildRecord(value: unknown): value is BuildRecord {
     isCount(value.buildNumber) &&
     isString(value.configPath) &&
     isString(value.configHash) &&
+    (value.defaultImage === undefined || isNonEmptyString(value.defaultImage)) &&
     isStringRecord(value.images) &&
     isStringRecord(value.features)
   );

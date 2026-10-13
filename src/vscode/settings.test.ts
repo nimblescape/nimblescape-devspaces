@@ -16,8 +16,10 @@ import {
   MAX_REFRESH_INTERVAL_MINUTES,
   normalizeSettings,
   readListOpenMode,
+  normalizeDefaultImage,
   readSettings,
   SETTINGS_SECTION,
+  warnInvalidDefaultImage,
   warnInvalidHostAccessChecksOff,
 } from './settings';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
@@ -50,7 +52,49 @@ describe('settings', () => {
       cacheUpdateSchedule: '7 6 * * *',
       // True by default: the local monitor ends when idle.
       stopMonitorWhenIdle: false,
+      // No default image: every start uses the configuration of the repository.
+      defaultImage: '',
+      startWithDefaultImage: true,
     });
+  });
+
+  it('reads defaultImage as a trimmed image reference, and ignores an invalid one', () => {
+    const of = (value: unknown) => normalizeSettings((key) => (key === 'defaultImage' ? value : undefined)).defaultImage;
+    expect(of(' ghcr.io/majikmate/devcontainer-base:latest ')).toBe('ghcr.io/majikmate/devcontainer-base:latest');
+    expect(of('node:22')).toBe('node:22');
+    expect(of(`ghcr.io/acme/base@sha256:${'a'.repeat(64)}`)).toBe(`ghcr.io/acme/base@sha256:${'a'.repeat(64)}`);
+    for (const odd of ['', '   ', 'Not An Image', 'ghcr.io/acme/base:', '${localEnv:IMAGE}', 3, null, ['node:22']]) {
+      expect(of(odd), JSON.stringify(odd)).toBe('');
+    }
+    expect(normalizeDefaultImage('node:22 ')).toBe('node:22');
+    expect(normalizeDefaultImage('a b')).toBeUndefined();
+  });
+
+  it('reads startWithDefaultImage as a boolean, true by default', () => {
+    const of = (value: unknown) => normalizeSettings((key) => (key === 'startWithDefaultImage' ? value : undefined)).startWithDefaultImage;
+    expect(of(false)).toBe(false);
+    expect(of(true)).toBe(true);
+    expect(of('false')).toBe(true);
+    expect(of(undefined)).toBe(true);
+  });
+
+  it('warns once about an invalid defaultImage, and again only when it changes', () => {
+    let value: unknown = ' not an image ';
+    fakeVscode.workspace.getConfiguration.mockReturnValue({ get: (key: string) => (key === 'defaultImage' ? value : undefined), inspect: () => undefined });
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
+    const warned = warnInvalidDefaultImage(logger, '');
+    expect(warned).toBe('not an image');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(Messages.defaultImageInvalid('not an image'));
+    expect(logger.warn).toHaveBeenCalledWith(Messages.defaultImageInvalid('not an image'));
+    expect(warnInvalidDefaultImage(logger, warned)).toBe(warned);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
+    // A valid value, and an empty one: nothing to warn about.
+    value = 'ghcr.io/acme/base:latest';
+    expect(warnInvalidDefaultImage(logger, warned)).toBe('');
+    value = '';
+    expect(warnInvalidDefaultImage(logger, '')).toBe('');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
   });
 
   // There is no setting imageUpdates: a value that settings.json holds is not read (VS Code shows it as an unknown

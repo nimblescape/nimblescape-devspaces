@@ -748,6 +748,7 @@ export function openOperation(
       signal: context.signal,
       ...(checked.forceRebuild === true ? { forceRebuild: true } : {}),
       ...(checked.configPath !== undefined ? { configPath: checked.configPath } : {}),
+      ...(checked.source !== undefined ? { source: checked.source } : {}),
     };
     try {
       const result =

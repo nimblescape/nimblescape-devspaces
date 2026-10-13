@@ -29,6 +29,7 @@ import {
   retryTransientSync,
   type StoragePaths,
 } from './paths';
+import { parseDevspaceSource } from '../helperChannel/protocol';
 import { isRecord } from '../valueChecks';
 
 /** Default age after which `cleanupStaleClaims` removes a claimed operation file. */
@@ -283,6 +284,7 @@ const OPERATION_REASONS: Record<PendingOperation['reason'], true> = {
   update: true,
   configChanged: true,
   configurationSelected: true,
+  sourceSelected: true,
 };
 
 function isKeyOf<K extends string>(record: Record<K, true>, value: unknown): value is K {
@@ -298,6 +300,7 @@ export function isPendingOperation(value: unknown): value is PendingOperation {
     typeof value.requestedBy === 'string' &&
     isKeyOf(OPERATION_REASONS, value.reason) &&
     (value.configPath === undefined || isNonEmptyString(value.configPath)) &&
+    (value.source === undefined || parseDevspaceSource(value.source) !== undefined) &&
     (value.additionalVolumesToRemove === undefined ||
       (Array.isArray(value.additionalVolumesToRemove) && value.additionalVolumesToRemove.every(isNonEmptyString)))
   );
