@@ -152,6 +152,8 @@ export interface ChannelOpenDeps {
 
 /** Docker's refusal of `--network bridge` on a daemon without it. */
 const NO_BRIDGE = /network "?bridge"? not found/i;
+/** Docker's refusal of a container name that another container on the engine has. */
+const NAME_IN_USE = /container name "?[^"\s]*"? is already in use/i;
 
 /** The name of the engine of `target` in the log. */
 function engineName(target: DockerTarget): string {
@@ -175,12 +177,23 @@ function identityText(identity: EngineIdentity): string {
 export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTarget): Promise<HelperChannel> {
   const [script, tag, socketPath] = await Promise.all([deps.script(), deps.helperTag(), deps.socketPath(target)]);
   const name = engineName(target);
-  const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
+  const startNamed = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
     const containerName = workerContainerName(deps.windowName?.() ?? '');
     const args = channelRunArgs({ tag, socketPath, stateVolume: deps.stateVolume, vscodeVolume: deps.vscodeVolume, containerName, label: channelLabelValue(script), scriptHash: bundleHash(script), network });
     const process = await runWithDockerTarget(target, async () => deps.start(args));
     if (process === undefined) throw new HelperChannelError('open', 'The Docker CLI cannot be started.');
     return HelperChannel.open(process, script, { logger: deps.logger, name });
+  };
+  const start = async (network: 'bridge' | 'none'): Promise<HelperChannel> => {
+    try {
+      return await startNamed(network);
+    } catch (error) {
+      // Another container on the engine has the name (a worker of a window with the same name and the same random
+      // characters, workerContainerName; Docker created nothing): once more with new random characters.
+      if (!(error instanceof HelperChannelError) || !NAME_IN_USE.test(error.message)) throw error;
+      deps.logger.info(`The name of the worker on ${name} was in use, so the worker starts again with another name.`);
+      return startNamed(network);
+    }
   };
   let channel: HelperChannel;
   try {

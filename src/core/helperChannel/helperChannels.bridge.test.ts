@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The probes of the mutation testing of the bridge fallback of openHelperChannel (a daemon without its default bridge
-// network). No Docker: the processes of the channel are stand-ins.
+// network), and of its second name for a worker name in use. No Docker: the processes of the channel are stand-ins.
 import { describe, expect, it } from 'vitest';
 import { dockerTargetOf, remoteContextNames, type DockerTarget } from '../docker/dockerHost';
 import { silentLogger, type StartedProcess } from '../ports';
@@ -57,12 +57,16 @@ function refused(stderr: string): StartedProcess {
   };
 }
 
-/** Opens with the processes `first`, then a good one; records the network and the name of each start, and the warnings. */
-async function open(first: () => StartedProcess) {
+/**
+ * Opens with the processes `first`, then a good one; records the network and the name of each start, the warnings, and
+ * the information lines.
+ */
+async function open(...first: Array<() => StartedProcess>) {
   const networks: string[] = [];
   const names: string[] = [];
   const warnings: string[] = [];
-  const processes = [first, good];
+  const infos: string[] = [];
+  const processes = [...first, good];
   const channel = await openHelperChannel(
     {
       start: (args) => {
@@ -71,7 +75,7 @@ async function open(first: () => StartedProcess) {
         return processes.shift()!();
       },
       runDirect: async () => ({ exitCode: 0, stdout: `${ENGINE}\n`, stderr: '', timedOut: false }),
-      logger: { ...silentLogger, warn: (text) => warnings.push(text) },
+      logger: { ...silentLogger, warn: (text) => warnings.push(text), info: (text) => infos.push(text) },
       script: async () => 'SCRIPT',
       helperTag: async () => 'devspace-helper:abc',
       socketPath: async () => '/var/run/docker.sock',
@@ -80,10 +84,10 @@ async function open(first: () => StartedProcess) {
     },
     REMOTE,
   ).catch((error: unknown) => {
-    throw Object.assign(error as Error, { networks });
+    throw Object.assign(error as Error, { networks, names });
   });
   channel.close();
-  return { networks, names, warnings };
+  return { networks, names, warnings, infos };
 }
 
 describe('the bridge fallback of openHelperChannel', () => {
@@ -114,5 +118,33 @@ describe('the bridge fallback of openHelperChannel', () => {
     expect(names).toHaveLength(2);
     expect(names[0]).not.toBe(names[1]);
     expect(warnings.join('\n')).toContain('The Docker engine build-box has no default bridge network');
+  });
+});
+
+describe('the second name of openHelperChannel for a worker name in use', () => {
+  const IN_USE =
+    'docker: Error response from daemon: Conflict. The container name "/devspace-worker-api-3f9a" is already in use by container "0123456789ab". You have to remove (or rename) that container to be able to reuse that name.\n';
+
+  it('starts again with the same network and new random characters, and the log says why', async () => {
+    const { networks, names, infos } = await open(() => refused(IN_USE));
+    expect(networks).toEqual(['bridge', 'bridge']);
+    expect(names).toHaveLength(2);
+    for (const name of names) expect(name).toMatch(/^devspace-worker-window-[0-9a-f]{4}$/);
+    expect(infos.join('\n')).toContain('The name of the worker on build-box was in use');
+  });
+
+  it('draws only once more: a second name in use fails the open', async () => {
+    await expect(open(() => refused(IN_USE), () => refused(IN_USE))).rejects.toMatchObject({ networks: ['bridge', 'bridge'] });
+  });
+
+  it('draws once more also for the start without network', async () => {
+    const { networks } = await open(() => refused('docker: Error response from daemon: network bridge not found.\n'), () => refused(IN_USE));
+    expect(networks).toEqual(['bridge', 'none', 'none']);
+  });
+
+  it('another failure that is already in use is not retried', async () => {
+    await expect(open(() => refused('docker: Error response from daemon: driver failed programming external connectivity: address already in use.\n'))).rejects.toMatchObject({
+      networks: ['bridge'],
+    });
   });
 });
