@@ -364,8 +364,8 @@ function workerWindow(windowName: string): string {
 }
 
 /**
- * The name of a worker container without its number, `<owner>-worker`, so that `docker ps` tells which VS Code window a
- * worker belongs to: `<owner>` is the devspace of the window for its worker on the engine of the devspace
+ * The name of a worker container without its number, `<base>-worker`, so that `docker ps` tells which VS Code window a
+ * worker belongs to: `<base>` is the devspace of the window for its worker on the engine of the devspace
  * (`devspaceName`, its resourceName), for example `devspaces-acme-api-sturdy-kahn-worker`, else the short
  * `devspaces-<window>` (`<window>` is workerWindow of `windowName`), for example `devspaces-api-worker`.
  * openHelperChannel adds a number from 1, which keeps the workers of one name start apart on one engine (two windows of

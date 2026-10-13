@@ -143,7 +143,8 @@ describe('the Docker of the pipeline over the Engine API', () => {
     await expect(apiDocker.imageUserIds('devspaces-test-missing:1', 'root')).rejects.toThrow();
     // No container of the reads is left.
     expect(cli.lines(['ps', '-aq', '--no-trunc']).filter((id) => !containersBefore.has(id))).toEqual([]);
-    expect(cli.lines(['ps', '-aq', '--filter', 'name=devspaces-read-'])).toEqual([]);
+    // Exact names: the filter matches a part of a name, and `devspaces-read-…-worker1` is a worker of a window `read…`.
+    expect(cli.lines(['ps', '-a', '--filter', 'name=devspaces-read-', '--format', '{{.Names}}']).filter((container) => /^devspaces-read-[0-9a-f]{12}$/.test(container))).toEqual([]);
   });
 
   it('leaves no anonymous volume of an image with `VOLUME` behind', async () => {
