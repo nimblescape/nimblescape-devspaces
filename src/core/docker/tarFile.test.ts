@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
-import { TAR_BLOCK_BYTES, firstTarFile } from './tarFile';
+import { MAX_PAX_HEADER_BYTES, TAR_BLOCK_BYTES, firstTarFile, maxTarFileArchiveBytes } from './tarFile';
 
 /** A ustar header for `name` with `size` and `typeflag`, its checksum computed (`checksum` overrides it). */
 function header(name: string, size: number | string, typeflag = '0', more: { checksum?: string; prefix?: string; magic?: string } = {}): Buffer {
@@ -54,6 +54,37 @@ describe('firstTarFile', () => {
     for (const typeflag of ['1', '2', '3', '4', '5', '6', '7', 'x', 'g', 'L', 'K']) {
       expect(firstTarFile(archive('passwd', DATA, typeflag), OPTIONS), typeflag).toBeUndefined();
     }
+  });
+
+  // The engine writes a PAX header before the file for its extended attributes or exact times.
+  it('skips one PAX header whose records change neither the name nor the size; refuses any other', () => {
+    const record = (key: string, value: string) => {
+      const body = ` ${key}=${value}\n`;
+      let length = body.length + 1;
+      while (`${length}${body}`.length !== length) length += 1;
+      return `${length}${body}`;
+    };
+    const withPax = (records: string) => {
+      const data = Buffer.from(records, 'latin1');
+      const padding = Buffer.alloc((TAR_BLOCK_BYTES - (data.length % TAR_BLOCK_BYTES)) % TAR_BLOCK_BYTES);
+      return Buffer.concat([header('PaxHeaders/passwd', data.length, 'x'), data, padding, archive('passwd', DATA)]);
+    };
+    const xattr = record('SCHILY.xattr.security.capability', '\u0001\u0000\u0000\u0002') + record('mtime', '1760000000.123456789');
+    expect(firstTarFile(withPax(xattr), OPTIONS)?.equals(DATA)).toBe(true);
+    // Records that change the entry, malformed records, and a header over its bound.
+    for (const records of [record('path', 'passwd'), record('size', '3'), record('linkpath', '/etc/shadow'), '5 a=b\n', '12 no-equals\n', 'x a=b\n', record('mtime', '1').slice(0, -1)]) {
+      expect(firstTarFile(withPax(records), OPTIONS), JSON.stringify(records)).toBeUndefined();
+    }
+    expect(firstTarFile(withPax(record('comment', 'x'.repeat(MAX_PAX_HEADER_BYTES))), OPTIONS)).toBeUndefined();
+    // Two PAX headers, or a PAX header and nothing after it.
+    expect(firstTarFile(withPax(xattr).subarray(0, 2 * TAR_BLOCK_BYTES), OPTIONS)).toBeUndefined();
+    const twice = Buffer.concat([withPax(xattr).subarray(0, 2 * TAR_BLOCK_BYTES), withPax(xattr)]);
+    expect(firstTarFile(twice, OPTIONS)).toBeUndefined();
+  });
+
+  it('the bound of the answer holds a PAX header and a file of the bound', () => {
+    expect(maxTarFileArchiveBytes(1024)).toBe(TAR_BLOCK_BYTES + MAX_PAX_HEADER_BYTES + TAR_BLOCK_BYTES + 1024 + 2 * TAR_BLOCK_BYTES);
+    expect(maxTarFileArchiveBytes(1)).toBe(TAR_BLOCK_BYTES + MAX_PAX_HEADER_BYTES + 2 * TAR_BLOCK_BYTES + 2 * TAR_BLOCK_BYTES);
   });
 
   it('refuses another name, a name with a prefix, and a file over the bound', () => {

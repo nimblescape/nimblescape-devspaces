@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EngineError, type DockerEngine } from './dockerEngine';
 import { unusedEngine } from './dockerEngine.testkit';
+import { REMOTE_MONITOR_CHECK_TIMEOUT_MS } from '../remoteMonitor/remoteSessionMonitor';
 import { engineMonitor, limited, monitorInspected } from './engineMonitor';
 
 const ID = 'feed'.padEnd(64, '1');
@@ -75,7 +76,15 @@ describe('engineMonitor: time limits, cancels and failures', () => {
     expect(start).toHaveBeenCalledWith(ID, expect.any(AbortSignal));
   });
 
-  it('storedScript: within the time limit of a Docker call (60 s), not less; a cancel passes; a 404 failure alone is no evidence', async () => {
+  it('storedScript: within the time limit of the check (20 s), not less; a cancel passes; a 404 failure alone is no evidence', async () => {
+    expect(REMOTE_MONITOR_CHECK_TIMEOUT_MS).toBe(20_000);
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    try {
+      await with_({ containerFile: async () => undefined }).storedScript('m');
+      expect(timeout).toHaveBeenCalledWith(REMOTE_MONITOR_CHECK_TIMEOUT_MS);
+    } finally {
+      timeout.mockRestore();
+    }
     const script = Buffer.from('x');
     expect(await with_({ containerFile: (_name, _path, _max, signal) => slow(script)(signal) }).storedScript('m')).toEqual({ hash: expect.stringMatching(/^[0-9a-f]{64}$/) });
     const controller = new AbortController();

@@ -10,7 +10,7 @@ import { MAX_BUNDLE_LINE_LENGTH } from '../loader/pipeLoader';
 import { LABEL_MONITOR, REMOTE_MONITOR_SCRIPT_PATH } from '../remoteMonitor/protocol';
 import { EngineError, type DockerEngine } from './dockerEngine';
 import { unusedEngine } from './dockerEngine.testkit';
-import { engineMonitor, limited, monitorInspected } from './engineMonitor';
+import { MAX_STORED_SCRIPT_BYTES, engineMonitor, limited, monitorInspected } from './engineMonitor';
 
 const ID = 'feed'.padEnd(64, '1');
 const INSPECT = {
@@ -84,8 +84,9 @@ describe('the engine of the ensure of the Monitor over the Engine API', () => {
     const script = Buffer.from('console.log("monitor")');
     const containerFile = vi.fn(async () => script as Buffer | 'missing' | undefined);
     expect(await with_({ containerFile }).storedScript('devspace-monitor')).toEqual({ hash: createHash('sha256').update(script).digest('hex') });
-    // Up to the longest script that the loader takes; within the time limit of a Docker call (60 s).
-    expect(containerFile).toHaveBeenCalledWith('devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH, MAX_BUNDLE_LINE_LENGTH, expect.any(AbortSignal));
+    // Up to the longest script that the loader takes, in bytes of UTF-8.
+    expect(containerFile).toHaveBeenCalledWith('devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH, MAX_STORED_SCRIPT_BYTES, expect.any(AbortSignal));
+    expect(MAX_STORED_SCRIPT_BYTES).toBe(3 * MAX_BUNDLE_LINE_LENGTH);
     const answers: [string, Buffer | 'missing' | undefined | Error, unknown][] = [
       ['an empty file', Buffer.alloc(0), { hash: createHash('sha256').digest('hex') }],
       ['no stored file, or no container', 'missing', 'none'],

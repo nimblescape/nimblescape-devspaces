@@ -600,14 +600,26 @@ describe('RemoteSessionMonitor.ensure: the stored script and the nonce of a crea
     });
   }
 
-  for (const [what, answer] of [...replacing, ...keeping, ['the stored script of this version', SAME] as const]) {
-    // A paused one goes on when it is unpaused, so it is kept without a check.
-    it(`paused with RestartCount 1 (${what} if it were asked) → running, no check`, async () => {
+  // The read runs nothing in the container, so a paused one is checked as a running one.
+  for (const [what, answer] of replacing) {
+    it(`paused with RestartCount 1 and ${what} → replaced`, async () => {
+      const docker = answering('paused', answer);
+      expect(await monitor(docker).ensure(TAG, SOCKET)).toBe('created');
+      expect(docker.commands()).toEqual(['inspect', 'archive', 'rm', 'run']);
+      expect(docker.calls[2].args).toEqual(['rm', MONITOR_ID]);
+    });
+  }
+
+  for (const [what, answer] of keeping) {
+    it(`paused with RestartCount 1 and ${what} → kept, logged`, async () => {
       const logger = new Log();
       const docker = answering('paused', answer);
       expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe('running');
-      expect(docker.commands()).toEqual(['inspect']);
-      expect(logger.lines).toEqual([]);
+      // The inspect by the same ID finds it paused again: no evidence, kept without another check.
+      expect(docker.commands()).toEqual(['inspect', 'archive', 'inspect']);
+      expect(logger.lines).toEqual([
+        'info The Monitor on the Docker host was restarted and its stored script could not be checked; it is kept (devspace-monitor).',
+      ]);
     });
   }
 
@@ -615,9 +627,8 @@ describe('RemoteSessionMonitor.ensure: the stored script and the nonce of a crea
     it(`${state} with RestartCount 1 and the stored script of this version → running, nothing removed`, async () => {
       const docker = new FakeDocker((args) => (args[0] === 'inspect' ? inspected(state, LABEL, 0, 1) : args[0] === 'archive' ? SAME : undefined));
       expect(await monitor(docker).ensure(TAG, SOCKET)).toBe('running');
-      // A paused one is not checked.
-      expect(docker.commands()).toEqual(state === 'paused' ? ['inspect'] : ['inspect', 'archive']);
-      if (state === 'running') expect(docker.calls[1].args).toEqual(SHA);
+      expect(docker.commands()).toEqual(['inspect', 'archive']);
+      expect(docker.calls[1].args).toEqual(SHA);
     });
 
     it(`${state} with RestartCount 0 → running without any other call`, async () => {
@@ -1383,10 +1394,13 @@ describe('RemoteSessionMonitor.ensure: created containers, the nonce, and IDs', 
     expectSignalsFollow([read!], controller);
   });
 
-  it('a conflict with a matching paused container with RestartCount 2 is accepted without a check', async () => {
-    const docker = new FakeDocker((args, index) => (index === 0 ? MISSING : args[0] === 'ps' ? [] : inspected('paused', LABEL, 0, 2)), CONFLICTED);
+  it('a conflict with a matching paused container with RestartCount 2 is accepted only with its stored script', async () => {
+    const docker = new FakeDocker((args, index) => (index === 0 ? MISSING : args[0] === 'ps' ? [] : args[0] === 'archive' ? SAME : inspected('paused', LABEL, 0, 2)), CONFLICTED);
     expect(await monitor(docker).ensure(TAG, SOCKET)).toBe('running');
-    expect(docker.commands()).toEqual(['inspect', 'run', 'ps', 'inspect']);
+    expect(docker.commands()).toEqual(['inspect', 'run', 'ps', 'inspect', 'archive']);
+    const without = new FakeDocker((args, index) => (index === 0 ? MISSING : args[0] === 'ps' ? [] : args[0] === 'archive' ? NO_SCRIPT : inspected('paused', LABEL, 0, 2)), CONFLICTED);
+    expect(await monitor(without).ensure(TAG, SOCKET)).toBe('failed');
+    expect(without.calls.some((call) => call.args[0] === 'rm')).toBe(false);
   });
 
   // An exited container of this version is started by its ID, then its stored script is checked.
