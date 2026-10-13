@@ -15,7 +15,7 @@ import {
   freeWorkerNumber,
   isDevspaceResourceName,
   resourceName,
-  workerContainerName,
+  workerNameStart,
 } from './names';
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -312,73 +312,95 @@ describe('isDevspaceResourceName', () => {
   });
 });
 
-describe('workerContainerName', () => {
+describe('workerNameStart', () => {
   /** The names that Docker takes for a container. */
   const DOCKER_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/;
+  /** The name of a worker: workerNameStart and the number. */
+  const workerName = (windowName: string, number: number, devspaceName?: string) => `${workerNameStart(windowName, devspaceName)}${number}`;
 
-  it('is devspaces-worker-<window>-<number>', () => {
-    expect(workerContainerName('api', 1)).toBe('devspaces-worker-api-1');
-    expect(workerContainerName('my-project', 1)).toBe('devspaces-worker-my-project-1');
+  it('is devspaces-worker-<window>- for a window of no devspace', () => {
+    expect(workerName('api', 1)).toBe('devspaces-worker-api-1');
+    expect(workerName('my-project', 1)).toBe('devspaces-worker-my-project-1');
   });
 
   it('is in lower case, letters without accents, each run of other characters than [a-z0-9] one -', () => {
-    expect(workerContainerName('My Project (2)', 1)).toBe('devspaces-worker-my-project-2-1');
-    expect(workerContainerName('Übung_Café.Web', 1)).toBe('devspaces-worker-ubung-cafe-web-1');
-    expect(workerContainerName('--a..b--', 1)).toBe('devspaces-worker-a-b-1');
+    expect(workerName('My Project (2)', 1)).toBe('devspaces-worker-my-project-2-1');
+    expect(workerName('Übung_Café.Web', 1)).toBe('devspaces-worker-ubung-cafe-web-1');
+    expect(workerName('--a..b--', 1)).toBe('devspaces-worker-a-b-1');
     // Letters without an accent to remove get plain letters.
-    expect(workerContainerName('Straße Øl Łódź', 1)).toBe('devspaces-worker-strasse-ol-lodz-1');
-    expect(workerContainerName('Æ Œ Đ Ð', 1)).toBe('devspaces-worker-ae-oe-d-d-1');
-    expect(workerContainerName('Işık Þór Ħ Ŧ Ŋ', 1)).toBe('devspaces-worker-isik-thor-h-t-n-1');
+    expect(workerName('Straße Øl Łódź', 1)).toBe('devspaces-worker-strasse-ol-lodz-1');
+    expect(workerName('Æ Œ Đ Ð', 1)).toBe('devspaces-worker-ae-oe-d-d-1');
+    expect(workerName('Işık Þór Ħ Ŧ Ŋ', 1)).toBe('devspaces-worker-isik-thor-h-t-n-1');
   });
 
   it('names a window without a name, or with a name of no [a-z0-9], window', () => {
-    for (const name of ['', '---', '工作区', ' ']) expect(workerContainerName(name, 1)).toBe('devspaces-worker-window-1');
+    for (const name of ['', '---', '工作区', ' ']) expect(workerName(name, 1)).toBe('devspaces-worker-window-1');
   });
 
   it('is short: a longer window name is cut to 24 characters at the end of a word, so the name has at most 44 up to 99', () => {
-    expect(workerContainerName('nimblescape-devspaces', 1)).toBe('devspaces-worker-nimblescape-devspaces-1');
-    expect(workerContainerName('nimblescape-markdown-comment-links', 1)).toBe('devspaces-worker-nimblescape-markdown-1');
-    expect(workerContainerName('devcontainer-classroom-web-advanced', 1)).toBe('devspaces-worker-devcontainer-classroom-1');
+    expect(workerName('nimblescape-devspaces', 1)).toBe('devspaces-worker-nimblescape-devspaces-1');
+    expect(workerName('nimblescape-markdown-comment-links', 1)).toBe('devspaces-worker-nimblescape-markdown-1');
+    expect(workerName('devcontainer-classroom-web-advanced', 1)).toBe('devspaces-worker-devcontainer-classroom-1');
     // A word that ends exactly at the cut is kept; the separator after it is dropped.
-    expect(workerContainerName(`${'a'.repeat(11)}-${'b'.repeat(12)}-c`, 1)).toBe(`devspaces-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
+    expect(workerName(`${'a'.repeat(11)}-${'b'.repeat(12)}-c`, 1)).toBe(`devspaces-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
     // A first word longer than 24 characters is cut within it.
-    expect(workerContainerName('x'.repeat(80), 1)).toBe(`devspaces-worker-${'x'.repeat(24)}-1`);
-    expect(workerContainerName(`${'x'.repeat(30)}-y`, 99)).toHaveLength(44);
+    expect(workerName('x'.repeat(80), 1)).toBe(`devspaces-worker-${'x'.repeat(24)}-1`);
+    expect(workerName(`${'x'.repeat(30)}-y`, 99)).toHaveLength(44);
     // So is a long word after words of less than half of the room, so that they are not all that is left.
-    expect(workerContainerName('a-verylongrepositorynames-service', 1)).toBe('devspaces-worker-a-verylongrepositoryname-1');
-    expect(workerContainerName(`${'a'.repeat(11)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
-    expect(workerContainerName(`${'a'.repeat(12)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-worker-${'a'.repeat(12)}-1`);
+    expect(workerName('a-verylongrepositorynames-service', 1)).toBe('devspaces-worker-a-verylongrepositoryname-1');
+    expect(workerName(`${'a'.repeat(11)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
+    expect(workerName(`${'a'.repeat(12)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-worker-${'a'.repeat(12)}-1`);
     // A cut within a word never ends in a separator.
-    expect(workerContainerName(`a-${'b'.repeat(21)}-cc`, 1)).toBe(`devspaces-worker-a-${'b'.repeat(21)}-1`);
+    expect(workerName(`a-${'b'.repeat(21)}-cc`, 1)).toBe(`devspaces-worker-a-${'b'.repeat(21)}-1`);
   });
 
   it('ends in its number, so it never has the shape of a name of a devspace', () => {
-    expect(workerContainerName('api', 12)).toBe('devspaces-worker-api-12');
+    expect(workerName('api', 12)).toBe('devspaces-worker-api-12');
     // A window name that ends like a devspace name (`<adjective>-<scientist>`).
     const window = 'api-tidy-berners';
     expect(isDevspaceResourceName(`devspaces-worker-${window}`)).toBe(true);
     for (const number of [1, 2, 10, 99]) {
-      const name = workerContainerName(window, number);
+      const name = workerName(window, number);
       expect(name).toBe(`devspaces-worker-api-tidy-berners-${number}`);
       expect(name).toMatch(DOCKER_NAME);
       expect(isDevspaceResourceName(name)).toBe(false);
+    }
+  });
+
+  it('is <devspace>-worker- for a window of a devspace, whatever the window name', () => {
+    const ID = '11111111-2222-4333-8444-555555555555';
+    const devspace = resourceName('majikmate/module-html-css-2', ID);
+    expect(workerName('module-html-css-2', 1, devspace)).toBe(`${devspace}-worker-1`);
+    expect(workerName('', 2, devspace.toUpperCase())).toBe(`${devspace}-worker-2`);
+    // The longest devspace name.
+    const longest = resourceName(`${'o'.repeat(40)}/${'r'.repeat(40)}`, ID);
+    expect(longest).toHaveLength(63);
+    for (const name of [workerName('api', 1, devspace), workerName('api', 99, longest)]) {
+      expect(name).toMatch(DOCKER_NAME);
+      expect(isDevspaceResourceName(name)).toBe(false);
+    }
+  });
+
+  it('takes the window name for a devspace name that has not the shape of one', () => {
+    for (const devspace of [undefined, '', 'devspaces-acme-api', 'acme-api-tidy-berners', 'devspaces-acme_api-tidy-berners']) {
+      expect(workerName('api', 1, devspace)).toBe('devspaces-worker-api-1');
     }
   });
 });
 
 describe('freeWorkerNumber', () => {
   it('is the lowest number from 1 that no container name and no tried start has', () => {
-    expect(freeWorkerNumber('api', [], new Set())).toBe(1);
-    expect(freeWorkerNumber('api', ['devspaces-worker-api-1', 'devspaces-worker-api-3'], new Set())).toBe(2);
-    expect(freeWorkerNumber('api', ['devspaces-worker-api-1', 'devspaces-worker-api-3'], new Set([2]))).toBe(4);
-    expect(freeWorkerNumber('api', [], new Set([1]))).toBe(2);
+    expect(freeWorkerNumber(workerNameStart('api'), [], new Set())).toBe(1);
+    expect(freeWorkerNumber(workerNameStart('api'), ['devspaces-worker-api-1', 'devspaces-worker-api-3'], new Set())).toBe(2);
+    expect(freeWorkerNumber(workerNameStart('api'), ['devspaces-worker-api-1', 'devspaces-worker-api-3'], new Set([2]))).toBe(4);
+    expect(freeWorkerNumber(workerNameStart('api'), [], new Set([1]))).toBe(2);
   });
 
-  it('counts only the names of the same window part, compared as workerContainerName writes them', () => {
+  it('counts only the names of the same window part, compared as workerNameStart writes them', () => {
     // Other windows, and a window name that differs only in what the window part drops.
-    expect(freeWorkerNumber('API', ['devspaces-worker-web-1', 'devspaces-worker-api-2-1', 'devspaces-worker-api', ''], new Set())).toBe(1);
-    expect(freeWorkerNumber('My API', ['devspaces-worker-my-api-1'], new Set())).toBe(2);
-    expect(freeWorkerNumber('', ['devspaces-worker-window-1', 'devspaces-worker-window-2'], new Set())).toBe(3);
+    expect(freeWorkerNumber(workerNameStart('API'), ['devspaces-worker-web-1', 'devspaces-worker-api-2-1', 'devspaces-worker-api', ''], new Set())).toBe(1);
+    expect(freeWorkerNumber(workerNameStart('My API'), ['devspaces-worker-my-api-1'], new Set())).toBe(2);
+    expect(freeWorkerNumber(workerNameStart(''), ['devspaces-worker-window-1', 'devspaces-worker-window-2'], new Set())).toBe(3);
   });
 });
 

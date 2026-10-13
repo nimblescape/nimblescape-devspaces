@@ -9,11 +9,32 @@ import type { HelperPrebuildOutcome } from '../core/helper/helperPrebuild';
 import type { DevspaceOperations } from '../core/pipeline/devspaceOperations';
 import type { Logger } from '../core/ports';
 import { errorMessage } from '../core/errors';
+import { resourceName } from '../core/names';
 import type { DevspaceRegistry } from '../core/storage/registry';
 import type { Devspace } from '../core/types';
 
 /** The longest wait of the activation for the restore of a lost registry. */
 export const WINDOW_RESTORE_TIMEOUT_MS = 30_000;
+
+/**
+ * The name of the devspace of this window (resourceName), for the names of its workers (workerNameStart): of the
+ * registry entry of the container that the window is attached to (`containerName`,
+ * ConnectionAdapter.currentContainerName). Undefined for a window of no container, for a container that the registry
+ * does not know (also of a lost registry before its restore: the worker is then named after the window), and when the
+ * registry cannot be read. Never rejects.
+ */
+export async function windowDevspaceName(
+  containerName: string | undefined,
+  registry: Pick<DevspaceRegistry, 'findByContainerName'>,
+): Promise<string | undefined> {
+  if (!containerName) return undefined;
+  try {
+    const devspace = await registry.findByContainerName(containerName);
+    return devspace && resourceName(devspace.repository, devspace.id);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The registry entry of the container that this window is attached to. When the registry lost its content (the file is

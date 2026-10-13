@@ -7,7 +7,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { silentLogger } from '../core/ports';
 import type { Devspace } from '../core/types';
-import { WINDOW_RESTORE_TIMEOUT_MS, findWindowDevspace, restoreAfterPrebuild } from './windowDevspace';
+import { resourceName } from '../core/names';
+import { WINDOW_RESTORE_TIMEOUT_MS, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
 
 const ENTRY = { id: 'e1', containerName: 'devspaces-acme-api-x' } as Devspace;
 
@@ -97,5 +98,24 @@ describe('the devspace of the window at its activation', () => {
       await restoreAfterPrebuild(outcome, restore);
       expect(restore, outcome).toHaveBeenCalledTimes(1);
     }
+  });
+});
+
+describe('the name of the devspace of the window, for the names of its workers', () => {
+  const ID = '11111111-2222-4333-8444-555555555555';
+  const devspace = { id: ID, repository: 'majikmate/module-html-css-2', containerName: 'devspaces-majikmate-module-html-css-2-x-app-1' } as Devspace;
+
+  it('is the resource name of the devspace of the attached container, also of Docker Compose', async () => {
+    const registry = { findByContainerName: vi.fn(async () => devspace) };
+    expect(await windowDevspaceName(devspace.containerName, registry)).toBe(resourceName(devspace.repository, ID));
+    expect(registry.findByContainerName).toHaveBeenCalledWith(devspace.containerName);
+  });
+
+  it('is undefined for a window of no container, a container that the registry does not know, and a registry that cannot be read', async () => {
+    const registry = { findByContainerName: vi.fn(async () => undefined) };
+    expect(await windowDevspaceName(undefined, registry)).toBeUndefined();
+    expect(registry.findByContainerName).not.toHaveBeenCalled();
+    expect(await windowDevspaceName('other', registry)).toBeUndefined();
+    expect(await windowDevspaceName('other', { findByContainerName: async () => Promise.reject(new Error('EISDIR')) })).toBeUndefined();
   });
 });

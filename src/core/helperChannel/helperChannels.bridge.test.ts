@@ -59,11 +59,12 @@ function refused(stderr: string): StartedProcess {
 
 /**
  * Opens with the processes `first`, then a good one, for the window `api`; records the network and the name of each
- * start, the warnings, the information lines, and the lists of containers (`ps`). `engine`: the containers that the
- * list of the engine shows, or a list that fails.
+ * start, the warnings, the information lines, the lists of containers (`ps`), and how often the names of the window and
+ * of its devspace were read. `engine`: the containers that the list of the engine shows, or a list that fails, and the
+ * devspace of the window.
  */
 async function openWith(
-  engine: { containers?: readonly string[]; listFails?: boolean; listFailsFrom?: number; listTimesOut?: boolean },
+  engine: { containers?: readonly string[]; listFails?: boolean; listFailsFrom?: number; listTimesOut?: boolean; devspace?: string },
   ...first: Array<() => StartedProcess>
 ) {
   const networks: string[] = [];
@@ -72,6 +73,7 @@ async function openWith(
   const infos: string[] = [];
   const lists: string[][] = [];
   let windowReads = 0;
+  let devspaceReads = 0;
   const processes = [...first, good];
   const channel = await openHelperChannel(
     {
@@ -97,13 +99,17 @@ async function openWith(
         windowReads++;
         return 'api';
       },
+      devspaceName: async () => {
+        devspaceReads++;
+        return engine.devspace;
+      },
     },
     REMOTE,
   ).catch((error: unknown) => {
     throw Object.assign(error as Error, { networks, names });
   });
   channel.close();
-  return { networks, names, warnings, infos, lists, windowReads };
+  return { networks, names, warnings, infos, lists, windowReads, devspaceReads };
 }
 
 /** openWith an engine whose list shows no container. */
@@ -157,11 +163,18 @@ describe('the number of a worker name in use', () => {
     expect(networks).toEqual(['bridge', 'bridge']);
     expect(names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-3']);
     // One list without the worker, of the containers whose name contains the start of a worker name.
-    expect(lists).toEqual([['ps', '--all', '--filter', 'name=devspaces-worker-', '--format', '{{.Names}}']]);
+    expect(lists).toEqual([['ps', '--all', '--filter', 'name=devspaces-worker-api-', '--format', '{{.Names}}']]);
     expect(infos.join('\n')).toContain('The worker name devspaces-worker-api-1 is in use on build-box, so the worker starts as devspaces-worker-api-3.');
     // A container with more than one name (legacy links) shows them in one line, separated by `,`.
     const linked = await openWith({ containers: ['devspaces-worker-api-1', 'devspaces-worker-api-2,other/api'] }, () => refused(IN_USE));
     expect(linked.names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-3']);
+  });
+
+  it('names the worker of a window of a devspace after it, also next to the containers of a service worker of Docker Compose', async () => {
+    const devspace = 'devspaces-acme-api-tidy-berners';
+    const { names, lists } = await openWith({ devspace, containers: [`${devspace}-worker-1`, `${devspace}-app-1`] }, () => refused(IN_USE));
+    expect(names).toEqual([`${devspace}-worker-1`, `${devspace}-worker-2`]);
+    expect(lists).toEqual([['ps', '--all', '--filter', `name=${devspace}-worker-`, '--format', '{{.Names}}']]);
   });
 
   it('takes the next number when the list fails, and never a number that Docker refused', async () => {
@@ -190,11 +203,12 @@ describe('the number of a worker name in use', () => {
   });
 
   it('the start without network keeps the numbers that Docker refused, and takes again a number refused for the network', async () => {
-    const { networks, names, windowReads } = await open(() => refused(IN_USE), () => refused('docker: Error response from daemon: network bridge not found.\n'), () => refused(IN_USE));
+    const { networks, names, windowReads, devspaceReads } = await open(() => refused(IN_USE), () => refused('docker: Error response from daemon: network bridge not found.\n'), () => refused(IN_USE));
     expect(networks).toEqual(['bridge', 'bridge', 'none', 'none']);
     expect(names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-2', 'devspaces-worker-api-2', 'devspaces-worker-api-3']);
-    // The window name is read once for the open.
+    // The names of the window and of its devspace are read once for the open.
     expect(windowReads).toBe(1);
+    expect(devspaceReads).toBe(1);
   });
 
   it('the start without network takes the number from the last list of the engine', async () => {

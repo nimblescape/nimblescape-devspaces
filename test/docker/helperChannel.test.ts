@@ -124,7 +124,7 @@ describe('the helper channel with the real Docker engine', () => {
         stateVolume: testStateVolume({ run, cli }, 'helperChannel'),
         // The shared VS Code server store, a volume of the test.
         vscodeVolume: testVscodeVolume({ run, cli }, 'helperChannel'),
-        // A window name that is cut at the end of a word (workerContainerName).
+        // A window name that is cut at the end of a word (workerNameStart).
         windowName: () => 'Docker Test of the Worker Channel',
       },
       target,

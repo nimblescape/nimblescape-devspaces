@@ -47,7 +47,7 @@ import { StoragePaths } from '../core/storage/paths';
 import { ConfigCheckStore } from '../core/storage/configChecks';
 import { bundleHash } from '../core/loader/pipeLoader';
 import { DevspaceRegistry } from '../core/storage/registry';
-import { findWindowDevspace, restoreAfterPrebuild } from './windowDevspace';
+import { findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
 import { workerMonitor } from './workerMonitor';
 import { defaultExtensionEntries, windowVscodeServer } from './vscodeServer';
 import { HELPER_DOCKER_SOCKET, VSCODE_STORE_VOLUME } from '../core/names';
@@ -315,8 +315,9 @@ async function activateExtension(
           stateVolume: REMOTE_MONITOR_VOLUME,
           // The shared VS Code server store of the engine, which the worker mounts read-write.
           vscodeVolume: VSCODE_STORE_VOLUME,
-          // The name of this window in the name of the worker's container.
+          // The name of this window, or of its devspace, in the name of the worker's container.
           windowName: () => connection.windowName(),
+          devspaceName: () => windowDevspaceName(connection.currentContainerName(), registry),
         },
         target,
       ),
