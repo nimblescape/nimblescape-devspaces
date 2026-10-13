@@ -104,14 +104,23 @@ s.on('error', () => end(-1));
 setTimeout(() => end(-1), 5000);
 `;
 
-/** Node.js in the container as `user` with `script` on its standard input and the variables `env`. */
-function nodeIn(user: string, script: string, env: Record<string, string>): string {
+/**
+ * Node.js in the container as `user` with `script` on its standard input and the variables `env`. Asynchronous: Dev
+ * Containers relays the forwarded SSH agent through this extension host, which a synchronous call would block.
+ */
+function nodeIn(user: string, script: string, env: Record<string, string>): Promise<string> {
   const variables = Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]);
-  const result = childProcess.spawnSync('docker', ['exec', '-i', '-u', user, ...variables, seed().containerName, 'node', '-'], { encoding: 'utf8', input: script });
-  return result.stdout.trim();
+  return new Promise((resolve) => {
+    const child = childProcess.spawn('docker', ['exec', '-i', '-u', user, ...variables, seed().containerName, 'node', '-'], { stdio: ['pipe', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout.on('data', (data: Buffer) => (out += data.toString()));
+    child.on('error', () => resolve(''));
+    child.on('close', () => resolve(out.trim()));
+    child.stdin.end(script);
+  });
 }
 
-export function credentialPaths(user: string): CredentialPaths {
+export async function credentialPaths(user: string): Promise<CredentialPaths> {
   const home = execIn(user, 'printf %s "$HOME"').out;
   const files = `/etc/gitconfig "${home}/.gitconfig" "\${GIT_CONFIG_GLOBAL:-/nonexistent}"`;
   const gitConfigOfRunner = execIn(user, `cat ${files} 2>/dev/null | grep -q ${RUNNER_GIT_MARKER}`).code === 0;
@@ -130,7 +139,7 @@ export function credentialPaths(user: string): CredentialPaths {
   let sshAgentKeys: number | undefined;
   for (const socket of sockets) {
     const exists = execIn('root', `test -S '${socket}'`).code === 0;
-    const answer = exists ? Number.parseInt(nodeIn('root', SSH_AGENT_KEYS, { SOCKET: socket }), 10) : -1;
+    const answer = exists ? Number.parseInt(await nodeIn('root', SSH_AGENT_KEYS, { SOCKET: socket }), 10) : -1;
     const keys = Number.isNaN(answer) ? -1 : answer;
     console.log(`    SSH_AUTH_SOCK ${socket}: ${exists ? `a socket, ${keys < 0 ? 'no answer' : `${keys} keys`}` : 'no socket'}`);
     if (keys >= 0) sshAgentKeys = Math.max(sshAgentKeys ?? 0, keys);
