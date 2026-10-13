@@ -42,8 +42,9 @@ describe('the window of a container that is no devspace', () => {
   it('shows the ways that Dev Containers opens to the runner without the override', () => {
     // The control of the devspace test: the same checks find the features of Dev Containers here.
     const paths = credentialPaths(user);
-    console.log(`    ways from the plain container to the runner: ${JSON.stringify(paths)}`);
+    console.log(`    ways from the plain container to the runner: ${JSON.stringify({ ...paths, sshAgentKeys: paths.sshAgentKeys ?? null })}`);
     assert.strictEqual(paths.gitConfigOfRunner, true, 'Dev Containers copied no Git configuration of the runner');
     assert.strictEqual(paths.gitCredentialHelper, true, 'Dev Containers configured no Git credential helper');
+    assert.strictEqual(paths.dockerCredentialHelper, true, 'Dev Containers configured no Docker credential helper');
   });
 });

@@ -16,8 +16,8 @@
 //   extension is empty, and the window restores the devspace from the volume labels, as on a new computer. The
 //   configuration sets the old key "remote.containers.copyGitConfig": true and a postAttachCommand that counts the
 //   attaches.
-// - A plain container that is no devspace, of the same dev image (with Git, so that Dev Containers configures Git
-//   there).
+// - A plain container that is no devspace, of the same dev image (with Git and the Docker CLI, so that Dev Containers
+//   configures its credential helpers there).
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -39,9 +39,12 @@ const TEST_ACCOUNT_ID = '4242';
 const REPOSITORY = 'devspaces-test/attach';
 /** A glibc image with a user `node`: the Dev Containers extension installs its server there. */
 const BASE_IMAGE = 'mirror.gcr.io/library/node:24-trixie-slim';
-/** The dev image of the devspace and of the plain container: the base image with Git. */
+/**
+ * The dev image of the devspace and of the plain container: the base image with Git and the Docker CLI, so that Dev
+ * Containers configures its credential helpers of Git and Docker where its settings allow them.
+ */
 const DOCKERFILE = `FROM ${BASE_IMAGE}
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends docker-cli git && rm -rf /var/lib/apt/lists/*
 `;
 const PLAIN_IMAGE = 'devspaces-attach-test-plain:1';
 

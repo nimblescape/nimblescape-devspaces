@@ -72,8 +72,9 @@ export function vscodeCommit(): string {
 /**
  * The ways from the container to the credentials of the runner after the attach, as the user of the window sees them:
  * the Git configuration of the runner (its marker, set by CI), a Git credential helper of Dev Containers, the Docker
- * credential helper of Dev Containers, a GitHub CLI sign-in, and the forwarded SSH agent (with the number of keys it
- * offers). The test of the plain container checks that the checks see what Dev Containers sets up.
+ * credential helper of Dev Containers, a GitHub CLI sign-in in the default folder of gh, and the forwarded SSH agent
+ * (with the number of keys it offers). The test of the plain container checks that the checks see what Dev Containers
+ * sets up.
  */
 export interface CredentialPaths {
   gitConfigOfRunner: boolean;
@@ -117,11 +118,18 @@ export function credentialPaths(user: string): CredentialPaths {
   const gitCredentialHelper = execIn(user, `cat ${files} 2>/dev/null | grep -i 'helper' | grep -qi 'vscode\\|remote-containers'`).code === 0;
   const dockerCredentialHelper =
     execIn(user, `ls /usr/local/bin/docker-credential-dev-containers-* >/dev/null 2>&1 || grep -qs 'dev-containers' "${home}/.docker/config.json" "\${DOCKER_CONFIG:-/nonexistent}/config.json"`).code === 0;
-  const githubCli = execIn(user, `test -s "${home}/.config/gh/hosts.yml" || test -s "\${GH_CONFIG_DIR:-/nonexistent}/hosts.yml"`).code === 0;
-  const sockets = execIn(user, 'ls /tmp/vscode-ssh-auth-*.sock 2>/dev/null').out.split('\n').filter((line) => line !== '');
+  // The default folder of gh; the folder of a devspace (GH_CONFIG_DIR) holds the sign-in of the devspace itself.
+  const githubCli = execIn(user, `test -s "${home}/.config/gh/hosts.yml"`).code === 0;
+  // The forwarded SSH agent: the sockets that the processes of Dev Containers in the container name in SSH_AUTH_SOCK.
+  const sockets = new Set(
+    execIn('root', `cat /proc/[0-9]*/environ 2>/dev/null | tr '\\0' '\\n' | sed -n 's/^SSH_AUTH_SOCK=//p'; ls /tmp/vscode-ssh-auth-*.sock 2>/dev/null`)
+      .out.split('\n')
+      .filter((line) => line.startsWith('/')),
+  );
   let sshAgentKeys: number | undefined;
   for (const socket of sockets) {
-    const keys = Number(nodeIn(user, SSH_AGENT_KEYS, { SOCKET: socket }));
+    const keys = Number(nodeIn('root', SSH_AGENT_KEYS, { SOCKET: socket }));
+    console.log(`    SSH agent socket ${socket}: ${keys} keys`);
     if (keys >= 0) sshAgentKeys = Math.max(sshAgentKeys ?? 0, keys);
   }
   return { gitConfigOfRunner, gitCredentialHelper, dockerCredentialHelper, githubCli, sshAgentKeys };
