@@ -352,8 +352,12 @@ describe('DevspaceRegistry.needsRestore: the registry lost content', () => {
     expect(await needsRestore()).toBe(true);
     writeRaw({ version: 1, devspaces: [ENTRY, ENTRY] });
     expect(await needsRestore()).toBe(true);
-    // An entry of version 0.2.1 or older.
+  });
+
+  it('is false when the registry leaves out only entries of version 0.2.1 or older, which no restore brings back', async () => {
     writeRaw({ version: 1, devspaces: [ENTRY, { ...ENTRY, id: ID_B, volumeName: 'devspace-o-r-brave-noether' }] });
+    expect(await needsRestore()).toBe(false);
+    writeRaw({ version: 1, devspaces: [{ ...ENTRY, volumeName: 'devspace-o-r-brave-noether' }, { id: 'broken' }] });
     expect(await needsRestore()).toBe(true);
   });
 
@@ -540,6 +544,18 @@ describe('DevspaceRegistry changes', () => {
     expect(JSON.parse(fs.readFileSync(`${paths.registry}.backup-99`, 'utf8'))).toEqual(content);
     expect(readRaw()).toEqual({ version: 1, devspaces: [devspace(ID_A, 'o/a'), devspace(ID_B, 'o/b')] });
     expect(logger.warnings[0]).toContain('1 invalid devspace entries');
+  });
+
+  it('keeps a copy when entries of version 0.2.1 or older would be lost', async () => {
+    const old = { ...devspace(ID_C, 'o/c'), volumeName: 'devspace-o-c-brave-noether', containerName: 'devspace-o-c-brave-noether' };
+    const content = { version: 1, devspaces: [devspace(ID_A, 'o/a'), old] };
+    writeRaw(content);
+    const logger = recordingLogger();
+    const registry = new DevspaceRegistry(paths, fixedClock(99), { logger });
+    await registry.add(devspace(ID_B, 'o/b'));
+    expect(JSON.parse(fs.readFileSync(`${paths.registry}.backup-99`, 'utf8'))).toEqual(content);
+    expect(readRaw()).toEqual({ version: 1, devspaces: [devspace(ID_A, 'o/a'), devspace(ID_B, 'o/b')] });
+    expect(logger.warnings[0]).toContain('1 entries of version 0.2.1 or older');
   });
 
   it('does not change an invalid file when nothing is written', async () => {
