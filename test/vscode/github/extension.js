@@ -8,7 +8,7 @@
 // dialog. GitHub rejects the token, so every question to GitHub fails.
 const vscode = require('vscode');
 
-const ACCOUNT = { id: '4242', label: 'devspace-test' };
+const ACCOUNT = { id: '4242', label: 'devspaces-test' };
 const TOKEN = 'dummy-token-of-the-vscode-attach-tests';
 
 function session(scopes) {
