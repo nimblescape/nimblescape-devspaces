@@ -229,3 +229,47 @@ jobs:
       - name: Run the tests in VS Code against the VSIX
         shell: bash
         run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}npm run test:vscode:vsix
+
+  vscode-attach:
+    # Spike of plan step 2a: VS Code starts in the window of a container on the Docker Engine of the runner
+    # (.vscode-test.mjs, label attach): first a container that is no devspace, then a devspace that the window restores
+    # from its volume labels. test/vscode/attach/prepare.ts prepares the engine and the test VS Code.
+    name: vscode attach (spike)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up the pinned Node release
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Install the locked development tools without install scripts
+        run: npm ci --ignore-scripts
+
+      - name: Prepare the Docker engine and the test VS Code
+        run: npm run test:vscode:attach:prepare
+
+      - name: Run the tests in the window of a container that is no devspace
+        if: ${{ !cancelled() }}
+        env:
+          DEVSPACE_TEST_ATTACH: plain
+        run: xvfb-run -a npm run test:vscode:attach
+
+      - name: Run the tests in the window of a restored devspace
+        if: ${{ !cancelled() }}
+        env:
+          DEVSPACE_TEST_ATTACH: devspace
+        run: xvfb-run -a npm run test:vscode:attach
+
+      - name: Show the Docker objects
+        if: ${{ !cancelled() }}
+        run: |
+          docker ps -a
+          docker volume ls
+          docker images
