@@ -55,7 +55,8 @@ export class ConnectionAdapter {
     const workspaceFile = vscode.workspace.workspaceFile;
     // An untitled workspace (`untitled:<number>`) has no name of its own.
     if (workspaceFile !== undefined && workspaceFile.scheme !== 'untitled') {
-      return workspaceFile.path.slice(workspaceFile.path.lastIndexOf('/') + 1).replace(/\.code-workspace$/i, '');
+      const name = workspaceFile.path.slice(workspaceFile.path.lastIndexOf('/') + 1).replace(/\.code-workspace$/i, '');
+      if (name !== '') return name;
     }
     return vscode.workspace.workspaceFolders?.[0]?.name ?? '';
   }
