@@ -440,7 +440,9 @@ describe('RemoteSessionMonitor.ensure with the pipe loader', () => {
     // The loader refused (exit 3), or the container never ran as it should: replaced.
     ['exited', 3, 'created', ['inspect', 'rm', 'run']],
     // A `created` one may be the create of another window; its own tests cover it.
-    ['restarting', 3, 'created', ['inspect', 'rm', 'run']],
+    // Restarting: the stored script is read; without evidence of the same script (here an answer without a hash) it is
+    // replaced. Its own tests cover the same script.
+    ['restarting', 3, 'created', ['inspect', 'archive', 'rm', 'run']],
     ['dead', 0, 'created', ['inspect', 'rm', 'run']],
   ] as const) {
     it(`the container of this version, ${state} with exit code ${exitCode} → ${outcome}`, async () => {
@@ -449,7 +451,26 @@ describe('RemoteSessionMonitor.ensure with the pipe loader', () => {
       expect(docker.commands()).toEqual(commands);
       // By the ID, never by the name.
       if (outcome === 'started') expect(docker.calls[1].args).toEqual(['start', MONITOR_ID]);
-      if (outcome === 'created') expect(docker.calls[1].args).toEqual(['rm', MONITOR_ID]);
+      if (outcome === 'created') expect(docker.calls.find((call) => call.args[0] === 'rm')?.args).toEqual(['rm', MONITOR_ID]);
+    });
+  }
+
+  // A restarting container of this version (between two starts of its restart policy) is kept only with the stored
+  // script of this version; another or no stored script, or a read that fails, replaces it by its ID.
+  for (const [what, answer, outcome, commands] of [
+    ['the stored script of this version', SAME, 'running', ['inspect', 'archive']],
+    ['another stored script', Buffer.from('another script'), 'created', ['inspect', 'archive', 'rm', 'run']],
+    ['no stored script', NO_SCRIPT, 'created', ['inspect', 'archive', 'rm', 'run']],
+    ['a read without an answer in time', TIMED_OUT, 'created', ['inspect', 'archive', 'rm', 'run']],
+  ] as const) {
+    it(`a restarting container of this version with ${what} → ${outcome}`, async () => {
+      const logger = new Log();
+      const docker = new FakeDocker((args) => (args[0] === 'inspect' ? inspected('restarting', LABEL, 1, 1) : args[0] === 'archive' ? answer : undefined));
+      expect(await monitor(docker, logger).ensure(TAG, SOCKET)).toBe(outcome);
+      expect(docker.commands()).toEqual(commands);
+      expect(docker.calls[1].args).toEqual(['archive', 'devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH]);
+      if (outcome === 'created') expect(docker.calls[2].args).toEqual(['rm', MONITOR_ID]);
+      else expect(logger.lines.join('\n')).toContain('is restarting with its script; it is kept');
     });
   }
 
@@ -1457,7 +1478,7 @@ describe('RemoteSessionMonitor.ensure: created containers, the nonce, and IDs', 
   for (const [what, answer, commands] of [
     ['exited (to be started)', inspected(false, LABEL, 0, 0, null), ['inspect']],
     ['exited with 3', inspected(false, LABEL, 3, 0, null), ['inspect']],
-    ['restarting', inspected('restarting', LABEL, 3, 0, null), ['inspect']],
+    ['restarting', inspected('restarting', LABEL, 3, 0, null), ['inspect', 'archive']],
     ['dead', inspected('dead', LABEL, 0, 0, null), ['inspect']],
     ['of another label', inspected(true, 'old-label', 0, 0, null), ['inspect']],
     ['running with RestartCount 1 and no stored script', inspected(true, LABEL, 0, 1, null), ['inspect', 'archive']],
