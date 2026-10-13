@@ -2,42 +2,69 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The tests in a real VS Code (npm run test:vscode): @vscode/test-cli downloads VS Code to .vscode-test/, installs the
-// Dev Containers extension (extensionDependencies) there, starts VS Code with the extension from dist/ and an empty
-// user data folder, and runs the bundled tests of out/test/vscode/ with mocha in its extension host.
+// The tests in a real VS Code: @vscode/test-cli downloads VS Code to .vscode-test/, installs the Dev Containers
+// extension (extensionDependencies) there, starts VS Code with an empty user data folder, and runs the bundled tests of
+// out/test/vscode/ with mocha in its extension host. Two configurations:
+// - "vscode" (npm run test:vscode): the extension of the development build in dist/.
+// - "vsix" (npm run test:vscode:vsix, after npm run package): the packaged VSIX of the version in package.json, as
+//   users install it. VS Code loads only the small folder test/vscode/host as development extension, because a
+//   development extension with the ID of the installed VSIX would be loaded in its place.
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 import { defineConfig } from '@vscode/test-cli';
 
-// Each run starts with an empty user data folder (the default of @vscode/test-electron, which keeps it between runs),
-// so the extension starts as after a fresh installation on every computer, as on CI. The downloaded VS Code and the
-// installed extensions in .vscode-test/ stay.
-const userDataDir = fileURLToPath(new URL('.vscode-test/user-data', import.meta.url));
-fs.rmSync(userDataDir, { recursive: true, force: true });
+const manifest = JSON.parse(fs.readFileSync(new URL('package.json', import.meta.url), 'utf8'));
+const vsix = fileURLToPath(new URL(`${manifest.name}-${manifest.version}.vsix`, import.meta.url));
 
-export default defineConfig({
-  label: 'vscode',
-  files: 'out/test/vscode/**/*.test.js',
-  version: process.env.VSCODE_TEST_VERSION || 'stable',
-  // The empty user data folder, no workspace trust prompt, no first-run pages, and on Linux secrets in a file instead
-  // of a keyring, which a CI runner or a container does not have.
-  launchArgs: [
-    `--user-data-dir=${userDataDir}`,
-    '--disable-workspace-trust',
-    '--skip-welcome',
-    '--skip-release-notes',
-    '--password-store=basic',
-  ],
-  // The extension of the test window must never reach the Docker engine of this computer: with a fresh user data
-  // folder it would build the helper image in the background and restore devspaces from the volumes there. DOCKER_HOST
-  // decides over the Docker context (src/core/docker/dockerTargets.ts), and nothing listens on this socket, so the
-  // extension finds Docker not running.
-  env: { DOCKER_HOST: 'unix:///nonexistent/nimblescape-devspaces-vscode-test.sock' },
-  mocha: {
-    ui: 'bdd',
-    // The first activation of the extension in a fresh VS Code can be slow on CI runners.
-    timeout: 60_000,
-  },
-});
+// The extension of the test window must never reach the Docker engine of this computer: with a fresh user data
+// folder it would build the helper image in the background and restore devspaces from the volumes there. DOCKER_HOST
+// decides over the Docker context (src/core/docker/dockerTargets.ts), and nothing listens at this address, so the
+// extension finds Docker not running. Windows has named pipes where other systems have Unix sockets.
+const dockerHost =
+  process.platform === 'win32'
+    ? 'npipe:////./pipe/nimblescape-devspaces-vscode-test'
+    : 'unix:///nonexistent/nimblescape-devspaces-vscode-test.sock';
+
+/**
+ * A configuration with its own empty user data folder: the folder is removed before each run (the default of
+ * @vscode/test-electron keeps it between runs), so the extension starts as after a fresh installation on every
+ * computer, as on CI. Its path has a space and a letter outside ASCII, as the user folder of many users has. The
+ * downloaded VS Code and the installed extensions in .vscode-test/ stay.
+ */
+function configuration(label, options) {
+  const userDataDir = fileURLToPath(new URL(`.vscode-test/user data ${label} Müller`, import.meta.url));
+  fs.rmSync(userDataDir, { recursive: true, force: true });
+  return {
+    label,
+    files: 'out/test/vscode/**/*.test.js',
+    version: process.env.VSCODE_TEST_VERSION || 'stable',
+    // The empty user data folder, no workspace trust prompt, no first-run pages, and on Linux secrets in a file
+    // instead of a keyring, which a CI runner or a container does not have.
+    launchArgs: [
+      `--user-data-dir=${userDataDir}`,
+      '--disable-workspace-trust',
+      '--skip-welcome',
+      '--skip-release-notes',
+      '--password-store=basic',
+    ],
+    // DEVSPACE_TEST_USER_DATA_DIR: the tests read the log of the extension from the logs folder of VS Code there.
+    env: { DOCKER_HOST: dockerHost, DEVSPACE_TEST_USER_DATA_DIR: userDataDir },
+    mocha: {
+      ui: 'bdd',
+      // The first activation of the extension in a fresh VS Code can be slow on CI runners.
+      timeout: 60_000,
+    },
+    ...options,
+  };
+}
+
+export default defineConfig([
+  configuration('vscode', {}),
+  configuration('vsix', {
+    extensionDevelopmentPath: fileURLToPath(new URL('test/vscode/host', import.meta.url)),
+    // The VSIX does not bring the Dev Containers extension (extensionDependencies of the host folder are none).
+    installExtensions: ['ms-vscode-remote.remote-containers', vsix],
+  }),
+]);

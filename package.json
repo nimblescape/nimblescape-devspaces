@@ -796,7 +796,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:docker": "vitest run --config vitest.docker.config.mts",
-    "test:vscode": "node esbuild.mjs && node scripts/build-vscode-tests.mjs && vscode-test",
+    "test:vscode": "node esbuild.mjs && node scripts/build-vscode-tests.mjs && vscode-test --label vscode",
+    "test:vscode:vsix": "node scripts/build-vscode-tests.mjs && vscode-test --label vsix",
     "vscode:prepublish": "node esbuild.mjs --production",
     "package": "vsce package --no-dependencies --no-rewrite-relative-links",
     "install-local": "node scripts/install-local.mjs"
