@@ -318,52 +318,54 @@ describe('workerNameStart', () => {
   /** The name of a worker: workerNameStart and the number. */
   const workerName = (windowName: string, number: number, devspaceName?: string) => `${workerNameStart(windowName, devspaceName)}${number}`;
 
-  it('is devspaces-worker-<window>- for a window of no devspace', () => {
-    expect(workerName('api', 1)).toBe('devspaces-worker-api-1');
-    expect(workerName('my-project', 1)).toBe('devspaces-worker-my-project-1');
+  it('is devspaces-<window>-worker for a window of no devspace', () => {
+    expect(workerName('api', 1)).toBe('devspaces-api-worker1');
+    expect(workerName('my-project', 1)).toBe('devspaces-my-project-worker1');
   });
 
   it('is in lower case, letters without accents, each run of other characters than [a-z0-9] one -', () => {
-    expect(workerName('My Project (2)', 1)).toBe('devspaces-worker-my-project-2-1');
-    expect(workerName('Übung_Café.Web', 1)).toBe('devspaces-worker-ubung-cafe-web-1');
-    expect(workerName('--a..b--', 1)).toBe('devspaces-worker-a-b-1');
+    expect(workerName('My Project (2)', 1)).toBe('devspaces-my-project-2-worker1');
+    expect(workerName('Übung_Café.Web', 1)).toBe('devspaces-ubung-cafe-web-worker1');
+    expect(workerName('--a..b--', 1)).toBe('devspaces-a-b-worker1');
     // Letters without an accent to remove get plain letters.
-    expect(workerName('Straße Øl Łódź', 1)).toBe('devspaces-worker-strasse-ol-lodz-1');
-    expect(workerName('Æ Œ Đ Ð', 1)).toBe('devspaces-worker-ae-oe-d-d-1');
-    expect(workerName('Işık Þór Ħ Ŧ Ŋ', 1)).toBe('devspaces-worker-isik-thor-h-t-n-1');
+    expect(workerName('Straße Øl Łódź', 1)).toBe('devspaces-strasse-ol-lodz-worker1');
+    expect(workerName('Æ Œ Đ Ð', 1)).toBe('devspaces-ae-oe-d-d-worker1');
+    expect(workerName('Işık Þór Ħ Ŧ Ŋ', 1)).toBe('devspaces-isik-thor-h-t-n-worker1');
   });
 
   it('names a window without a name, or with a name of no [a-z0-9], window', () => {
-    for (const name of ['', '---', '工作区', ' ']) expect(workerName(name, 1)).toBe('devspaces-worker-window-1');
+    for (const name of ['', '---', '工作区', ' ']) expect(workerName(name, 1)).toBe('devspaces-window-worker1');
   });
 
-  it('is short: a longer window name is cut to 24 characters at the end of a word, so the name has at most 44 up to 99', () => {
-    expect(workerName('nimblescape-devspaces', 1)).toBe('devspaces-worker-nimblescape-devspaces-1');
-    expect(workerName('nimblescape-markdown-comment-links', 1)).toBe('devspaces-worker-nimblescape-markdown-1');
-    expect(workerName('devcontainer-classroom-web-advanced', 1)).toBe('devspaces-worker-devcontainer-classroom-1');
+  it('is short: a longer window name is cut to 24 characters at the end of a word, so the name has at most 43 up to 99', () => {
+    expect(workerName('nimblescape-devspaces', 1)).toBe('devspaces-nimblescape-devspaces-worker1');
+    expect(workerName('nimblescape-markdown-comment-links', 1)).toBe('devspaces-nimblescape-markdown-worker1');
+    expect(workerName('devcontainer-classroom-web-advanced', 1)).toBe('devspaces-devcontainer-classroom-worker1');
     // A word that ends exactly at the cut is kept; the separator after it is dropped.
-    expect(workerName(`${'a'.repeat(11)}-${'b'.repeat(12)}-c`, 1)).toBe(`devspaces-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
+    expect(workerName(`${'a'.repeat(11)}-${'b'.repeat(12)}-c`, 1)).toBe(`devspaces-${'a'.repeat(11)}-${'b'.repeat(12)}-worker1`);
     // A first word longer than 24 characters is cut within it.
-    expect(workerName('x'.repeat(80), 1)).toBe(`devspaces-worker-${'x'.repeat(24)}-1`);
-    expect(workerName(`${'x'.repeat(30)}-y`, 99)).toHaveLength(44);
+    expect(workerName('x'.repeat(80), 1)).toBe(`devspaces-${'x'.repeat(24)}-worker1`);
+    expect(workerName(`${'x'.repeat(30)}-y`, 99)).toHaveLength(43);
     // So is a long word after words of less than half of the room, so that they are not all that is left.
-    expect(workerName('a-verylongrepositorynames-service', 1)).toBe('devspaces-worker-a-verylongrepositoryname-1');
-    expect(workerName(`${'a'.repeat(11)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
-    expect(workerName(`${'a'.repeat(12)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-worker-${'a'.repeat(12)}-1`);
+    expect(workerName('a-verylongrepositorynames-service', 1)).toBe('devspaces-a-verylongrepositoryname-worker1');
+    expect(workerName(`${'a'.repeat(11)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-${'a'.repeat(11)}-${'b'.repeat(12)}-worker1`);
+    expect(workerName(`${'a'.repeat(12)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-${'a'.repeat(12)}-worker1`);
     // A cut within a word never ends in a separator.
-    expect(workerName(`a-${'b'.repeat(21)}-cc`, 1)).toBe(`devspaces-worker-a-${'b'.repeat(21)}-1`);
+    expect(workerName(`a-${'b'.repeat(21)}-cc`, 1)).toBe(`devspaces-a-${'b'.repeat(21)}-worker1`);
   });
 
-  it('ends in its number, so it never has the shape of a name of a devspace', () => {
-    expect(workerName('api', 12)).toBe('devspaces-worker-api-12');
+  it('ends in its number after worker, so it is never a name of a devspace or of Docker Compose', () => {
+    expect(workerName('api', 12)).toBe('devspaces-api-worker12');
     // A window name that ends like a devspace name (`<adjective>-<scientist>`).
     const window = 'api-tidy-berners';
-    expect(isDevspaceResourceName(`devspaces-worker-${window}`)).toBe(true);
+    expect(isDevspaceResourceName(`devspaces-${window}`)).toBe(true);
     for (const number of [1, 2, 10, 99]) {
       const name = workerName(window, number);
-      expect(name).toBe(`devspaces-worker-api-tidy-berners-${number}`);
+      expect(name).toBe(`devspaces-api-tidy-berners-worker${number}`);
       expect(name).toMatch(DOCKER_NAME);
       expect(isDevspaceResourceName(name)).toBe(false);
+      // Docker Compose names its containers `<project>-<service>-<number>`.
+      expect(name).not.toMatch(/-[0-9]+$/);
     }
   });
 
@@ -385,7 +387,7 @@ describe('workerNameStart', () => {
 
   it('takes the window name for a devspace name that has not the shape of one', () => {
     for (const devspace of [undefined, '', 'devspaces-acme-api', 'acme-api-tidy-berners', 'devspaces-acme_api-tidy-berners']) {
-      expect(workerName('api', 1, devspace)).toBe('devspaces-worker-api-1');
+      expect(workerName('api', 1, devspace)).toBe('devspaces-api-worker1');
     }
   });
 });
@@ -393,16 +395,16 @@ describe('workerNameStart', () => {
 describe('freeWorkerNumber', () => {
   it('is the lowest number from 1 that no container name and no tried start has', () => {
     expect(freeWorkerNumber(workerNameStart('api'), [], new Set())).toBe(1);
-    expect(freeWorkerNumber(workerNameStart('api'), ['devspaces-worker-api-1', 'devspaces-worker-api-3'], new Set())).toBe(2);
-    expect(freeWorkerNumber(workerNameStart('api'), ['devspaces-worker-api-1', 'devspaces-worker-api-3'], new Set([2]))).toBe(4);
+    expect(freeWorkerNumber(workerNameStart('api'), ['devspaces-api-worker1', 'devspaces-api-worker3'], new Set())).toBe(2);
+    expect(freeWorkerNumber(workerNameStart('api'), ['devspaces-api-worker1', 'devspaces-api-worker3'], new Set([2]))).toBe(4);
     expect(freeWorkerNumber(workerNameStart('api'), [], new Set([1]))).toBe(2);
   });
 
   it('counts only the names of the same window part, compared as workerNameStart writes them', () => {
     // Other windows, and a window name that differs only in what the window part drops.
-    expect(freeWorkerNumber(workerNameStart('API'), ['devspaces-worker-web-1', 'devspaces-worker-api-2-1', 'devspaces-worker-api', ''], new Set())).toBe(1);
-    expect(freeWorkerNumber(workerNameStart('My API'), ['devspaces-worker-my-api-1'], new Set())).toBe(2);
-    expect(freeWorkerNumber(workerNameStart(''), ['devspaces-worker-window-1', 'devspaces-worker-window-2'], new Set())).toBe(3);
+    expect(freeWorkerNumber(workerNameStart('API'), ['devspaces-web-worker1', 'devspaces-api-2-worker1', 'devspaces-api-worker', ''], new Set())).toBe(1);
+    expect(freeWorkerNumber(workerNameStart('My API'), ['devspaces-my-api-worker1'], new Set())).toBe(2);
+    expect(freeWorkerNumber(workerNameStart(''), ['devspaces-window-worker1', 'devspaces-window-worker2'], new Set())).toBe(3);
   });
 });
 
