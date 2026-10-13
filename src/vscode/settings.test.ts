@@ -49,7 +49,7 @@ describe('settings', () => {
       // The schedule of the whole background run of the Monitor, a cron expression: daily at 06:07.
       cacheUpdateSchedule: '7 6 * * *',
       // True by default: the local monitor ends when idle.
-      stopLocalMonitorWhenIdle: true,
+      stopMonitorWhenIdle: false,
     });
   });
 
@@ -89,7 +89,7 @@ describe('settings', () => {
   // The manifest has the two settings with the defaults of the code (scope application, as the other settings of the
   // monitor), no imageUpdateSchedule, and the pattern of cacheUpdateSchedule takes whole minutes and five fields, and
   // refuses other text.
-  it('declares cacheUpdateSchedule and stopLocalMonitorWhenIdle in package.json with the defaults of the code', () => {
+  it('declares cacheUpdateSchedule and stopMonitorWhenIdle in package.json with the defaults of the code', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { configuration: { properties: Record<string, { default?: unknown; pattern?: string; scope?: string; type?: string }> } };
     };
@@ -100,7 +100,9 @@ describe('settings', () => {
     expect(JSON.stringify(properties[`${SETTINGS_SECTION}.cacheUpdateSchedule`])).not.toContain('Image Updates');
     const schedule = properties[`${SETTINGS_SECTION}.cacheUpdateSchedule`];
     expect(schedule).toMatchObject({ type: 'string', default: DEFAULT_SETTINGS.cacheUpdateSchedule, scope: 'application' });
-    expect(properties[`${SETTINGS_SECTION}.stopLocalMonitorWhenIdle`]).toMatchObject({ type: 'boolean', default: DEFAULT_SETTINGS.stopLocalMonitorWhenIdle, scope: 'application' });
+    expect(properties[`${SETTINGS_SECTION}.stopMonitorWhenIdle`]).toMatchObject({ type: 'boolean', default: DEFAULT_SETTINGS.stopMonitorWhenIdle, scope: 'application' });
+    expect(DEFAULT_SETTINGS.stopMonitorWhenIdle).toBe(false);
+    expect(properties).not.toHaveProperty(`${SETTINGS_SECTION}.stopLocalMonitorWhenIdle`);
     const pattern = new RegExp(schedule.pattern ?? '');
     for (const text of ['17', ' 60 ', '7 6 * * *', '7 */6 * * 1-5']) expect(pattern.test(text), text).toBe(true);
     for (const text of ['17 minutes', '7 6 * *', 'soon', '']) expect(pattern.test(text), text).toBe(false);
@@ -125,13 +127,13 @@ describe('settings', () => {
     expect(properties[`${SETTINGS_SECTION}.updateRunningContainer`]).toBeUndefined();
   });
 
-  // stopLocalMonitorWhenIdle, a boolean, true by default.
-  it('reads stopLocalMonitorWhenIdle: a boolean; anything else is true', () => {
-    const read = (value: unknown) => normalizeSettings((key) => (key === 'stopLocalMonitorWhenIdle' ? value : undefined)).stopLocalMonitorWhenIdle;
+  // stopMonitorWhenIdle, a boolean, false by default.
+  it('reads stopMonitorWhenIdle: a boolean; anything else is false', () => {
+    const read = (value: unknown) => normalizeSettings((key) => (key === 'stopMonitorWhenIdle' ? value : undefined)).stopMonitorWhenIdle;
     expect(read(false)).toBe(false);
     expect(read(true)).toBe(true);
-    expect(read(undefined)).toBe(true);
-    expect(read('false')).toBe(true);
+    expect(read(undefined)).toBe(false);
+    expect(read('true')).toBe(false);
   });
 
   it('reads the section devspace', () => {

@@ -19,7 +19,7 @@ import { monitorRunNowOperation, type ensureWorkerMonitor } from './flowOperatio
 import { contextSecrets } from './operationContext.testkit';
 import type { OperationContext } from './server';
 
-const IMAGES = { schedule: '7 6 * * *', timeZone: 'Europe/Vienna', permanent: true, remote: true };
+const IMAGES = { schedule: '7 6 * * *', timeZone: 'Europe/Vienna', permanent: true, computer: 'c'.repeat(32) };
 const OWN = { image: { tag: 'devspace-helper:1', id: `sha256:${'a'.repeat(64)}` }, socket: '/var/run/docker.sock' } as unknown as OwnHelper;
 
 const result = (exitCode: number | null, stdout = '', stderr = ''): EngineExecResult => ({ exitCode, stdout, stderr, timedOut: false });

@@ -29,6 +29,12 @@ export const LABEL_MONITOR = 'nimblescape.devspace.monitor';
  */
 export const LABEL_MONITOR_CREATE = 'nimblescape.devspace.monitor-create';
 /**
+ * The label of a permanent monitor with the ID of the computer that created it (not part of remoteMonitorLabelValue):
+ * an ensure that wants a monitor that ends when idle replaces its own permanent one, never one that another computer
+ * keeps (RemoteSessionMonitor).
+ */
+export const LABEL_MONITOR_OWNER = 'nimblescape.devspace.monitor-owner';
+/**
  * Where the pipe loader stores the script (its own file system, so it matches the container version). A
  * restart of the container starts it from there without new input (resume); the `docker exec` subcommands run it too.
  */
@@ -546,14 +552,14 @@ export interface ImageSettings {
 
 /**
  * The settings of the Monitor that an open and `monitorEnsure` carry: the image settings (ImageSettings, which
- * the monitor gets with `settings -`), and whether it runs permanently (monitorRunsPermanently: on a remote engine, or
- * on a local one with stopLocalMonitorWhenIdle off). The mode is part of its label (monitorModeOf, monitorLabel), never
- * of `settings -`; missing means false. And why it is permanent: `remote` when the computer reaches the engine as a
- * remote one (only with `permanent`).
+ * the monitor gets with `settings -`), and whether it runs permanently (monitorRunsPermanently: on every engine unless
+ * stopMonitorWhenIdle is on). The mode is part of its label (monitorModeOf, monitorLabel), never of `settings -`;
+ * missing means false. And `computer`, the ID of the computer (isSourceId): the owner of a permanent monitor that it
+ * creates (LABEL_MONITOR_OWNER).
  */
 export interface MonitorSettings extends ImageSettings {
   permanent?: boolean;
-  remote?: boolean;
+  computer?: string;
 }
 
 /** The image settings of MonitorSettings, as `settings -` takes them (without the mode). */
@@ -570,19 +576,18 @@ function scheduleSettingsOf(value: Record<string, unknown>): ImageSettings | und
 
 /**
  * The strict check of MonitorSettings (both sides of `open` and `monitorEnsure`): an object with the keys `schedule`
- * and `timeZone` (as parseImageSettingsInput) and optionally `permanent` (a boolean) and `remote`. Undefined for
- * anything else. No `prefixes` (the extension and its worker are of one version).
+ * and `timeZone` (as parseImageSettingsInput) and optionally `permanent` (a boolean) and `computer` (isSourceId).
+ * Undefined for anything else. No `prefixes` (the extension and its worker are of one version).
  */
 export function parseMonitorSettings(value: unknown): MonitorSettings | undefined {
   if (!isRecord(value)) return undefined;
-  const { permanent, remote } = value;
-  if (!hasOnlyKeys(value, ['schedule', 'timeZone'], ['permanent', 'remote'])) return undefined;
+  const { permanent, computer } = value;
+  if (!hasOnlyKeys(value, ['schedule', 'timeZone'], ['permanent', 'computer'])) return undefined;
   if ('permanent' in value && typeof permanent !== 'boolean') return undefined;
-  // `remote`, a boolean, only for a permanent monitor (a remote engine always has one).
-  if ('remote' in value && (typeof remote !== 'boolean' || (remote && permanent !== true))) return undefined;
+  if ('computer' in value && !isSourceId(computer)) return undefined;
   const images = scheduleSettingsOf(value);
   if (images === undefined) return undefined;
-  return { ...images, ...(typeof permanent === 'boolean' ? { permanent } : {}), ...(typeof remote === 'boolean' ? { remote } : {}) };
+  return { ...images, ...(typeof permanent === 'boolean' ? { permanent } : {}), ...(isSourceId(computer) ? { computer } : {}) };
 }
 
 /**
@@ -607,23 +612,19 @@ export function parseImageSettingsInput(text: string): ImageSettings | undefined
 /**
  * The part of the label of a monitor that runs permanently (restart policy `unless-stopped`, never an exit when idle),
  * so a change of the mode replaces it at the next ensure. The monitor always has its outbound network (the VS Code
- * server of its background run), and the settings of the run are not part of the label. The part says why it is
- * permanent: a computer reaches the engine as a remote one (`permanent-remote`), or as the local one with
- * stopLocalMonitorWhenIdle off (`permanent-local`). An ensure that sees the engine as local takes a running
- * `permanent-remote` monitor of the same version as current, and one that sees it as remote a running `permanent-local`
- * one (RemoteSessionMonitor), so a computer that turns the setting on again replaces its own permanent monitor, but
- * never one that another computer runs as remote.
+ * server of its background run), and the settings of the run are not part of the label. Who wants it permanent is its
+ * own label (LABEL_MONITOR_OWNER): an ensure that wants a monitor that ends when idle takes a running permanent monitor
+ * of the same version that another computer owns as current, and replaces only its own (RemoteSessionMonitor), so a
+ * computer that turns stopMonitorWhenIdle on replaces its own permanent monitor, never one that another computer keeps.
  */
-export const PERMANENT_REMOTE_LABEL_PART = 'permanent-remote';
-export const PERMANENT_LOCAL_LABEL_PART = 'permanent-local';
+export const PERMANENT_LABEL_PART = 'permanent';
 
-/** The mode of a monitor: it ends when idle, or it is permanent for one of two reasons. */
-export type MonitorMode = 'idle' | typeof PERMANENT_LOCAL_LABEL_PART | typeof PERMANENT_REMOTE_LABEL_PART;
+/** The mode of a monitor: it ends when idle, or it is permanent. */
+export type MonitorMode = 'idle' | typeof PERMANENT_LABEL_PART;
 
 /** The mode of the monitor that MonitorSettings ask for. */
-export function monitorModeOf(settings: Pick<MonitorSettings, 'permanent' | 'remote'> | undefined): MonitorMode {
-  if (settings?.permanent !== true) return 'idle';
-  return settings.remote === true ? PERMANENT_REMOTE_LABEL_PART : PERMANENT_LOCAL_LABEL_PART;
+export function monitorModeOf(settings: Pick<MonitorSettings, 'permanent'> | undefined): MonitorMode {
+  return settings?.permanent === true ? PERMANENT_LABEL_PART : 'idle';
 }
 
 /**

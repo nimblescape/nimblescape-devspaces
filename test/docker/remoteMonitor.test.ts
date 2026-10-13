@@ -690,7 +690,7 @@ describe('the Monitor container: the devspace lock of its stops and its exit whe
     cli.run(['rm', '-f', name]);
   });
 
-  // A permanent monitor (a remote engine, or stopLocalMonitorWhenIdle off) has the restart policy `unless-stopped`,
+  // A permanent monitor (stopMonitorWhenIdle off, the default) has the restart policy `unless-stopped`,
   // mounts the store of the worker read-write with `nocopy` at /vscode (a volume of this run), and never exits when
   // idle; an ensure of one that ends when idle keeps it. Its first background run is a day away
   // (DEVSPACE_IMAGE_FIRST_MS), so nothing is downloaded here (the one Docker test of the monitor with the store).
@@ -707,9 +707,9 @@ describe('the Monitor container: the devspace lock of its stops and its exit whe
       containerEnv: { DEVSPACE_MONITOR_TICK_MS: String(TICK_MS), DEVSPACE_MONITOR_IDLE_MS: '3000', DEVSPACE_IMAGE_FIRST_MS: '86400000' },
       vscodeStoreVolume: store,
     };
-    // A monitor of a computer that reaches the engine as a remote one (`remote`), which a window that sees the engine
-    // as local keeps (a local one with the setting off would be replaced).
-    const permanent = new RemoteSessionMonitor({ ...options, imageMaintenance: () => ({ schedule: '17', timeZone: 'UTC', permanent: true, remote: true }) });
+    // A permanent monitor of another computer, which a computer with stopMonitorWhenIdle on keeps (its own permanent
+    // one would be replaced).
+    const permanent = new RemoteSessionMonitor({ ...options, imageMaintenance: () => ({ schedule: '17', timeZone: 'UTC', permanent: true, computer: 'b'.repeat(32) }) });
     expect(await permanent.ensure(helperTag, socket)).toBe('created');
     const details = cli.container(containerName) as unknown as {
       HostConfig: { RestartPolicy: { Name: string }; Mounts?: Array<{ Type: string; Source: string; Target: string; VolumeOptions?: { NoCopy?: boolean } }> };
@@ -725,8 +725,9 @@ describe('the Monitor container: the devspace lock of its stops and its exit whe
     await new Promise((resolve) => setTimeout(resolve, 10_000));
     expect(running(containerName)).toBe(true);
     expect(logs()).not.toContain('the Monitor exits');
-    // A window that sees this engine as local keeps it.
-    const idle = new RemoteSessionMonitor({ ...options, imageMaintenance: () => ({ schedule: '17', timeZone: 'UTC', permanent: false }) });
+    // A computer with stopMonitorWhenIdle on keeps it, and its owner label names the other computer.
+    expect(cli.container(containerName)!.Config.Labels?.['nimblescape.devspace.monitor-owner']).toBe('b'.repeat(32));
+    const idle = new RemoteSessionMonitor({ ...options, imageMaintenance: () => ({ schedule: '17', timeZone: 'UTC', permanent: false, computer: 'a'.repeat(32) }) });
     expect(await idle.ensure(helperTag, socket)).toBe('running');
     expect(cli.container(containerName)!.HostConfig.RestartPolicy?.Name).toBe('unless-stopped');
     cli.ok(['rm', '-f', containerName]);

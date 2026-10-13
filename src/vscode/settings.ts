@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS: Readonly<ExtensionSettings> = Object.freeze({
   openInNewWindow: false,
   stopAfterMinutes: 10,
   cacheUpdateSchedule: DEFAULT_CACHE_UPDATE_SCHEDULE,
-  stopLocalMonitorWhenIdle: true,
+  stopMonitorWhenIdle: false,
   updateContainer: 'notify',
 });
 
@@ -153,8 +153,8 @@ export function normalizeSettings(get: (key: keyof ExtensionSettings) => unknown
     // A cron expression of five fields, or an interval of at least 5 whole minutes; anything else: the default, daily
     // at 06:07 (normalizeCacheSchedule).
     cacheUpdateSchedule: normalizeCacheSchedule(get('cacheUpdateSchedule')),
-    // The local Monitor ends when idle unless this is false.
-    stopLocalMonitorWhenIdle: bool('stopLocalMonitorWhenIdle', DEFAULT_SETTINGS.stopLocalMonitorWhenIdle ?? true),
+    // The Monitor of every engine runs permanently unless this is true.
+    stopMonitorWhenIdle: bool('stopMonitorWhenIdle', DEFAULT_SETTINGS.stopMonitorWhenIdle ?? false),
     // `ask`, or else the default `notify`.
     updateContainer: get('updateContainer') === 'ask' ? 'ask' : 'notify',
   };

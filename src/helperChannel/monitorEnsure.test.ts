@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { bundleHash, encodeBundle } from '../core/loader/pipeLoader';
 import { parseMonitorEnsureParams, parseMonitorEnsureValue } from '../core/helperChannel/protocol';
-import { LABEL_MONITOR_CREATE, LABEL_MONITOR, PERMANENT_LOCAL_LABEL_PART, PERMANENT_REMOTE_LABEL_PART, remoteMonitorLabelValue, vscodeStoreLabelPart } from '../core/remoteMonitor/protocol';
+import { LABEL_MONITOR_CREATE, LABEL_MONITOR, LABEL_MONITOR_OWNER, PERMANENT_LABEL_PART, remoteMonitorLabelValue, vscodeStoreLabelPart } from '../core/remoteMonitor/protocol';
 import type { DockerEngine, MonitorCreated, MonitorRunSpec } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import type { OwnHelper } from '../core/worker/ownHelper';
@@ -96,9 +96,8 @@ describe('the ensure of the Monitor in the worker', () => {
     const { engine, specs } = engineWith({});
     const own: OwnHelper = { ...OWN, vscodeStore: 'devspace-vscode' };
     await monitorEnsureOperation(() => engine, async () => own, () => SCRIPT)({ images: { ...IMAGES, permanent: true } }, contextOf().context);
-    // The part says why it is permanent (here: no `remote`, so `permanent-local`), and the label names the store that
-    // it mounts.
-    expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_LOCAL_LABEL_PART, vscodeStoreLabelPart('devspace-vscode')]));
+    // The part of the mode, and the label names the store that it mounts.
+    expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_LABEL_PART, vscodeStoreLabelPart('devspace-vscode')]));
     expect(specs[0].restartPolicy).toBe('unless-stopped');
     expect(specs[0].mounts).toEqual({ socket: OWN.socket, volume: 'devspace-monitor', volumeTarget: '/state', store: { volume: 'devspace-vscode', target: '/vscode' } });
     expect(specs[0].env).toEqual({ DEVSPACE_IMAGE_SCHEDULE: IMAGES.schedule, DEVSPACE_IMAGE_TZ: IMAGES.timeZone, DEVSPACE_MONITOR_PERMANENT: '1', DEVSPACE_VSCODE_STORE: 'devspace-vscode' });
@@ -111,12 +110,17 @@ describe('the ensure of the Monitor in the worker', () => {
     expect(idle.specs[0].env).not.toHaveProperty('DEVSPACE_MONITOR_PERMANENT');
   });
 
-  // A monitor that is permanent because this computer reaches the engine as a remote one.
-  it('a permanent monitor of a remote engine: the part `permanent-remote`', async () => {
+  // The computer of the settings owns a permanent monitor that it creates.
+  it('a permanent monitor names the computer of the settings as its owner; one that ends when idle has none', async () => {
+    const computer = 'c'.repeat(32);
     const { engine, specs } = engineWith({});
-    await monitorEnsureOperation(() => engine, async () => OWN, () => SCRIPT)({ images: { ...IMAGES, permanent: true, remote: true } }, contextOf().context);
-    expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_REMOTE_LABEL_PART]));
+    await monitorEnsureOperation(() => engine, async () => OWN, () => SCRIPT)({ images: { ...IMAGES, permanent: true, computer } }, contextOf().context);
+    expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_LABEL_PART]));
+    expect(specs[0].labels[LABEL_MONITOR_OWNER]).toBe(computer);
     expect(specs[0].restartPolicy).toBe('unless-stopped');
+    const idle = engineWith({});
+    await monitorEnsureOperation(() => idle.engine, async () => OWN, () => SCRIPT)({ images: { ...IMAGES, permanent: false, computer } }, contextOf().context);
+    expect(idle.specs[0].labels).not.toHaveProperty(LABEL_MONITOR_OWNER);
   });
 
   it('keeps a running monitor of this version', async () => {

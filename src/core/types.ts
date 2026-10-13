@@ -378,10 +378,10 @@ export interface ExtensionSettings {
    */
   cacheUpdateSchedule?: string;
   /**
-   * The Monitor of a local engine ends after 5 minutes without a running devspace (true, the default);
-   * false: it runs permanently, as on a remote engine.
+   * The Monitor of an engine, local or remote, ends after 5 minutes without a running devspace (true); false, the
+   * default: it runs permanently.
    */
-  stopLocalMonitorWhenIdle?: boolean;
+  stopMonitorWhenIdle?: boolean;
   /**
    * What an open does when a newer image is available for the existing container of the devspace (running or
    * stopped). `notify` (default): a modal message that the container is updated now (Continue, or Cancel: the open ends

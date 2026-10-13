@@ -27,8 +27,8 @@ import {
   REMOTE_MONITOR_SCRIPT_PATH,
   REMOTE_MONITOR_STATE_DIR,
   REMOTE_MONITOR_VOLUME,
-  PERMANENT_LOCAL_LABEL_PART,
-  PERMANENT_REMOTE_LABEL_PART,
+  LABEL_MONITOR_OWNER,
+  PERMANENT_LABEL_PART,
   monitorModeOf,
   remoteMonitorLabelValue,
   vscodeStoreLabelPart,
@@ -81,8 +81,8 @@ export interface ImageMaintenanceSettings {
   timeZone: string;
   /** The monitor runs permanently (MonitorSettings.permanent); missing: it ends when idle. */
   permanent?: MonitorSettings['permanent'];
-  /** Permanent because the engine is remote for this computer (MonitorSettings.remote). */
-  remote?: MonitorSettings['remote'];
+  /** The ID of this computer (MonitorSettings.computer): the owner of a permanent monitor that it creates. */
+  computer?: MonitorSettings['computer'];
 }
 
 /** The environment variable that tells the monitor that it runs permanently (`1`). */
@@ -228,13 +228,13 @@ export class RemoteSessionMonitor {
     const mode = monitorModeOf(images);
     const store = this.options.vscodeStoreVolume;
     const label = monitorLabel(script, helperTag, mode, store);
-    // One engine can be local for one computer and remote for another, so an ensure takes a running monitor of the same
-    // version that another computer runs permanently as current (`accepted`). An ensure that sees the engine as local
-    // (permanent or not) takes a running `permanent-remote` one; one that sees it as remote takes a running
-    // `permanent-local` one. So turning stopLocalMonitorWhenIdle on again replaces this computer's own permanent
-    // monitor (`permanent-local`) at its next ensure.
-    const other: MonitorMode = mode === PERMANENT_REMOTE_LABEL_PART ? PERMANENT_LOCAL_LABEL_PART : PERMANENT_REMOTE_LABEL_PART;
-    const accepted = { label, running: monitorLabel(script, helperTag, other, store) };
+    // Several computers can use one engine, so an ensure that wants a monitor that ends when idle takes a running
+    // permanent monitor of the same version that another computer owns (LABEL_MONITOR_OWNER) as current (`accepted`),
+    // and replaces only this computer's own; one that wants a permanent monitor takes any running permanent one. So
+    // turning stopMonitorWhenIdle on replaces this computer's own permanent monitor at its next ensure, and computers
+    // with other settings never replace each other's monitor at each open.
+    const accepted: AcceptedLabels =
+      mode === PERMANENT_LABEL_PART ? { label } : { label, running: monitorLabel(script, helperTag, PERMANENT_LABEL_PART, store), notOwnedBy: images?.computer };
     // The nonce of this create, so that a failure removes only its own container.
     const createId = randomUUID();
     const spec = this.runSpec(helperImage ?? helperTag, socketPath, label, script, images, createId, imageId);
@@ -531,6 +531,8 @@ export class RemoteSessionMonitor {
     const permanent = images?.permanent === true;
     const labels: Record<string, string> = { [LABEL_MONITOR]: label };
     if (createId !== undefined) labels[LABEL_MONITOR_CREATE] = createId;
+    // Who wants it permanent; a monitor that ends when idle has no owner.
+    if (permanent && images?.computer !== undefined) labels[LABEL_MONITOR_OWNER] = images.computer;
     for (const [key, value] of Object.entries(this.options.labels ?? {})) labels[key] = value;
     const env: Record<string, string> = { ...(this.options.containerEnv ?? {}) };
     if (images) {
@@ -551,7 +553,7 @@ export class RemoteSessionMonitor {
       // when idle has `on-failure`: it exits with 0 when it is idle (no running devspace container for 5 minutes,
       // REMOTE_IDLE_EXIT_MS of src/remoteMonitor/main.ts) and stays exited until an open ensures it or the heartbeats
       // of a window repair it; a failure (an uncaught error, the loader's exit 3) is restarted, and the loader resumes
-      // from the stored script. A permanent monitor (a remote engine, or stopLocalMonitorWhenIdle off) never exits when
+      // from the stored script. A permanent monitor (stopMonitorWhenIdle off, the default, on any engine) never exits when
       // idle and has `unless-stopped`, so Docker starts it again after a crash and after a restart of the engine. No
       // published port, no capability: it needs the socket and its volumes.
       restartPolicy: monitorRestartPolicy(permanent),
@@ -578,8 +580,7 @@ export class RemoteSessionMonitor {
 
 /**
  * The label of the monitor container (remoteMonitorLabelValue) for its mode: no part for one that ends when idle,
- * `permanent-remote` or `permanent-local` for a permanent one (PERMANENT_REMOTE_LABEL_PART,
- * PERMANENT_LOCAL_LABEL_PART); and the store that it mounts (vscodeStoreLabelPart).
+ * `permanent` for a permanent one (PERMANENT_LABEL_PART); and the store that it mounts (vscodeStoreLabelPart).
  */
 export function monitorLabel(script: string, helperTag: string, mode: MonitorMode, store?: string): string {
   return remoteMonitorLabelValue(script, helperTag, [...(mode === 'idle' ? [] : [mode]), ...(store !== undefined ? [vscodeStoreLabelPart(store)] : [])]);
@@ -587,14 +588,18 @@ export function monitorLabel(script: string, helperTag: string, mode: MonitorMod
 
 /**
  * The labels that an ensure takes as current: its own `label`, and for an ensure of a monitor that ends when idle also
- * `running`, the label of the permanent monitor of the same version, while that container runs.
+ * `running`, the label of the permanent monitor of the same version, while that container runs and another computer
+ * owns it (`notOwnedBy`: this computer; undefined: any owner).
  */
 interface AcceptedLabels {
   label: string;
   running?: string;
+  notOwnedBy?: string;
 }
 
 /** Whether the container `found` has a label that the ensure takes as current (AcceptedLabels). */
 function labelAccepted(found: Inspected & { exists: true }, accepted: AcceptedLabels): boolean {
-  return found.label === accepted.label || (accepted.running !== undefined && found.label === accepted.running && isRunning(found.status));
+  if (found.label === accepted.label) return true;
+  if (accepted.running === undefined || found.label !== accepted.running || !isRunning(found.status)) return false;
+  return accepted.notOwnedBy === undefined || found.owner !== accepted.notOwnedBy;
 }

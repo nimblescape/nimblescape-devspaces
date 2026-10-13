@@ -11,14 +11,15 @@ import type { MonitorCreated, MonitorRunSpec } from '../worker/dockerEngine';
 
 /**
  * The state of the monitor container: missing, or its status (`created`, `running`, `paused`, `restarting`, `removing`,
- * `exited`, `dead`), the exit code of its last run, its label (LABEL_MONITOR), how often Docker restarted it by
+ * `exited`, `dead`), the exit code of its last run, its label (LABEL_MONITOR), its owner (LABEL_MONITOR_OWNER; missing
+ * without that label), how often Docker restarted it by
  * its restart policy since its last start by a client (`RestartCount`; 0 when it cannot be read), its ID (64 hex digits;
  * undefined when it cannot be read), and when the daemon created it (milliseconds since the epoch on the clock of the
  * daemon; undefined when it cannot be read).
  */
 export type MonitorInspected =
   | { exists: false }
-  | { exists: true; status: string; exitCode: number | undefined; label: string; restartCount: number; id: string | undefined; createdAt: number | undefined };
+  | { exists: true; status: string; exitCode: number | undefined; label: string; restartCount: number; id: string | undefined; createdAt: number | undefined; owner?: string };
 
 /**
  * What the check of the stored script of the running container found (`sha256sum` of REMOTE_MONITOR_SCRIPT_PATH in it):

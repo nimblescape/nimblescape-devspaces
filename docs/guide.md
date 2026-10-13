@@ -122,7 +122,7 @@ All settings have the prefix `devspace.`. Settings marked *user only* count only
 | `updateImagesOnConnect` | `true` | At each start, check whether the base image or the Features of the devspace have a newer version, and update the devspace if so (your files stay). Off: the devspace keeps its image until you choose **Rebuild**. |
 | `updateContainer` | `notify` | *User only.* What a start does when a newer image is available for the existing container (see [Updates](#updates)). `notify`: says that the container is updated now, with **Continue** or **Cancel**. `ask`: asks, with **Update Now** or **Later**. |
 | `cacheUpdateSchedule` | `7 6 * * *` | *User only.* When the Monitor on each Docker engine does its background work (see [Updates](#updates)). A cron expression of five fields (minute, hour, day of month, month, day of week) in your time zone, or the minutes between two runs (5 to 1440). Examples: `7 6 * * *` daily at 06:07, `7 6 * * 1-5` on weekdays at 06:07, `7 */6 * * *` every six hours, `60` every hour. An invalid value means the default. |
-| `stopLocalMonitorWhenIdle` | `true` | *User only.* On the local Docker engine, end the Monitor when no devspace has run for 5 minutes; the next start starts it again. Off: it keeps running, so its background work also runs while no devspace runs. On a remote engine it always keeps running. |
+| `stopMonitorWhenIdle` | `false` | *User only.* End the Monitor of a Docker engine, local or remote, when no devspace has run for 5 minutes; the next start starts it again. Off: it keeps running, so its background work and its retries also run while no devspace runs. On an engine that several computers use, it keeps running while one of them has this setting off. |
 | `respectShutdownActionNone` | `false` | *User only.* Keep a devspace running after its window closes when its `devcontainer.json` says `"shutdownAction": "none"`. Off: that line is ignored, and `stopOnClose` applies. |
 | `owners` | `[]` | Organizations or accounts whose repositories the sidebar lists. Empty: all repositories that you can access. **Select Organizations…** changes it. |
 | `includeArchived` | `false` | List archived repositories. |
@@ -150,7 +150,7 @@ A small container on each Docker engine, the **Monitor** (`devspace-monitor`), d
 4. **Cleans up** that store at most once a day.
 5. **Prepares the next image of each devspace** whose base image or Features changed: it builds the new image in the background, so that the update at the next start takes seconds. It prepares one devspace at a time, the most recently used first, and stops a prepare after 30 minutes. It uses no token and no credentials, so devspaces with private images or Features, and repositories whose host access checks are off, are not prepared.
 
-On the local Docker, the monitor runs only while devspaces run, unless you turn off `devspace.stopLocalMonitorWhenIdle`. On a remote engine it always runs.
+The monitor keeps running on every Docker engine, local and remote, so its background work runs at the scheduled time even when no devspace runs. Turn on `devspace.stopMonitorWhenIdle` to end it 5 minutes after the last devspace stopped; a missed run then waits until the next start.
 
 **Devspaces: Update All Images Now** (Command Palette, or the **…** menu of the view) runs the same work at once on the current Docker engine, for example after a new image was pushed. The run starts within a minute, and the command does not wait for it: the message says "The Monitor on <engine> updates the images now."
 

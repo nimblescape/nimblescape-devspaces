@@ -69,13 +69,10 @@ describe('cacheUpdateSchedule', () => {
 });
 
 describe('the mode of the monitor and its restart policy', () => {
-  it('runs permanently on a remote engine always, on a local one only with stopLocalMonitorWhenIdle off', () => {
-    expect(monitorRunsPermanently(true, true)).toBe(true);
-    expect(monitorRunsPermanently(true, false)).toBe(true);
-    expect(monitorRunsPermanently(true, undefined)).toBe(true);
-    expect(monitorRunsPermanently(false, true)).toBe(false);
-    expect(monitorRunsPermanently(false, undefined)).toBe(false);
-    expect(monitorRunsPermanently(false, false)).toBe(true);
+  it('runs permanently on every engine unless stopMonitorWhenIdle is on (default off)', () => {
+    expect(monitorRunsPermanently(undefined)).toBe(true);
+    expect(monitorRunsPermanently(false)).toBe(true);
+    expect(monitorRunsPermanently(true)).toBe(false);
   });
 
   it('a permanent monitor has unless-stopped, one that ends when idle on-failure', () => {

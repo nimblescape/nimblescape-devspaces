@@ -336,18 +336,18 @@ async function activateExtension(
     owner: () => ({ windowId: windowCoordinator?.windowId ?? '', pid: process.pid }),
     logger,
   });
+  // The source of the heartbeats and the owner of a permanent Monitor (computer.id); created by the first reader.
+  const computerId = (): string => readOrCreateComputerId(paths.computerId);
   // The open carries the settings of this computer for the Monitor of its engine (no image prefixes and no
-  // image list): the schedule of the monitor's whole background run (cacheUpdateSchedule), and its mode for an engine
-  // that is remote (`ssh://`, classifyDockerEndpoint) or local (monitorRunsPermanently with stopLocalMonitorWhenIdle).
-  // In monitorSettings.ts, tested by its behaviour.
+  // image list): the schedule of the monitor's whole background run (cacheUpdateSchedule), and its mode, the same on
+  // every engine (monitorRunsPermanently with stopMonitorWhenIdle). In monitorSettings.ts, tested by its behaviour.
   const monitorSettings = monitorSettingsOf({
     settings: getSettings,
     // An unknown zone of Node.js (`Etc/Unknown`) is UTC.
     timeZone: () => usableTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone),
+    computerId,
   });
   const connection = new ConnectionAdapter(logger);
-  // The source of the heartbeats (computer.id); created by the first reader.
-  const computerId = (): string => readOrCreateComputerId(paths.computerId);
   // The heartbeats of this window to the Monitor container of the engine of each devspace it uses, through
   // this window's worker of that engine (its operation `heartbeat`; the worker is made ready first); a missing monitor
   // is started again as the open starts it. `signal` aborts at the deadline of the heartbeat's attempt; it ends only

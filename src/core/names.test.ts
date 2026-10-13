@@ -199,6 +199,8 @@ describe('EXTENSION_LABEL_KEYS', () => {
       // The nonce label of each create of the remote Monitor, by which a failed create removes only its own
       // container.
       'monitor-create',
+      // The owner of a permanent Monitor: the ID of the computer that created it.
+      'monitor-owner',
       'owner-id',
       // The prepare key and helper image of the prepared devspace image.
       'prepared',
