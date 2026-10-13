@@ -3,6 +3,12 @@
 Each section lists the changes of one released version. The release workflow
 takes the section of a version as the notes of its GitHub release.
 
+## 0.3.0
+
+**Breaking change, without migration:** Devspaces now uses the name of the extension everywhere. Settings, commands and keybindings are devspaces.<key> (was devspace.<key>); settings and keybindings with the old IDs are not read any more, so rename them by hand. The Docker objects are devspaces-... (was devspace-...) and their labels nimblescape.devspaces.... (was nimblescape.devspace....). This version does not show or use the devspaces of version 0.2.1 and older: push the changes in each devspace before the update, and after the update remove the old devspace-... containers, volumes, images and networks on each Docker engine before you start a devspace. A start of a repository then creates a new devspace and clones the repository again. All computers that use one Docker engine need the same version. The steps are in the user guide, section [Update from version 0.2.1 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-021-or-older).
+
+The worker container of a window is now named after the window, for example devspaces-worker-api-1: the name of the saved workspace file or of the first folder, then a number. So docker ps shows which window a worker belongs to. The tests in a real VS Code now also run on Windows and macOS and against the packaged VSIX.
+
 ## 0.2.1
 
 The Monitor tries a background run again when the run reached no server, for example right after a wake from hibernation before the Wi-Fi or VPN is back: after 2, 5, 10, 20 and 30 minutes, then every hour, until a run reaches the network. The Monitor now runs permanently on every Docker engine, local or remote, so its background work also runs while no devspace runs; the setting devspace.stopMonitorWhenIdle (off by default) ends it after 5 minutes without a running devspace. The check of a restarted Monitor reads its stored script through the archive endpoint of the Docker engine instead of running a command in the container, so a Monitor whose first load was cut off is replaced reliably.
