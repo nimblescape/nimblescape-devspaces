@@ -705,9 +705,9 @@ export class Controller implements vscode.Disposable {
 
   /**
    * The source of a Start of the user (startSource): the settings defaultImage and startWithDefaultImage; a repository
-   * without a configuration starts from the default image.
+   * without a configuration starts from the default image, and keeps its last source without one.
    */
-  private startSource(target: Pick<Target, 'info'>): DevspaceSource {
+  private startSource(target: Pick<Target, 'info'>): DevspaceSource | undefined {
     return startSource(this.deps.settings(), target.info);
   }
 

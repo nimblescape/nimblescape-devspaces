@@ -487,8 +487,9 @@ export class DiscoveryService {
    * The configuration lookups follow in batches of LOOKUP_BATCH_SIZE, each started as soon as its repositories are listed:
    * for all repositories on the first load, else only for new and changed ones (incremental detection), there also the
    * rest of each page at once while a slot is free. All requests share the limit of DISCOVERY_CONCURRENCY at the same
-   * time (RequestLimiter); while a list loads, the lookups leave it one slot, and the list pages go first. Keeps only
-   * repositories with at least one configuration. Errors for organizations with SAML single sign-on or OAuth
+   * time (RequestLimiter); while a list loads, the lookups leave it one slot, and the list pages go first. Lists the
+   * repositories with at least one configuration and keeps those without one apart (`withoutConfiguration`). Errors
+   * for organizations with SAML single sign-on or OAuth
    * app access restrictions become one hint per organization. Partial data with errors is used. Stores the result with
    * its scope atomically in the file of the account and returns it. Throws on a network failure, an HTTP error, when
    * GitHub does not return the list, or when the token belongs to another account (a sign-in changed the session
@@ -912,7 +913,7 @@ export class DiscoveryService {
       repositories: merged.repositories(),
       hints: [],
       scope: [...run.scope],
-      withoutConfiguration: [],
+      withoutConfiguration: merged.withoutConfiguration(),
     };
     for (const listener of this.partialListeners) {
       try {

@@ -571,7 +571,7 @@ export class Sidebar implements vscode.Disposable {
   }
 
   /**
-   * The discovery stores only repositories with a configuration on the default branch. The repositories of the other
+   * The discovery stores the repositories of its scan, with and without a configuration. The repositories of the other
    * devspaces are asked one by one, at most DISCOVERY_CONCURRENCY at the same time (the refresh has ended, so no other
    * request of the list runs), so the view shows `not on GitHub` only for repositories that GitHub does not return.
    * A failed question leaves the repository unknown.

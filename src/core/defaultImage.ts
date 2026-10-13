@@ -27,16 +27,16 @@ export function hasConfiguration(info: Pick<RepositoryInfo, 'configPaths'> | und
  * devspace from: the default image while the setting `startWithDefaultImage` is on and a default image is set, else
  * the configuration of the repository. The context menu offers the other one (startWithSource of the controller).
  * A repository without a configuration (`info`) starts from the default image whatever the setting says: it has no
- * other source.
+ * other source. Without a default image it has nothing to name: `undefined`, its devspace keeps the source of its
+ * last open (a first open then reports the missing configuration).
  */
 export function startSource(
   settings: Pick<ExtensionSettings, 'defaultImage' | 'startWithDefaultImage'>,
   info?: Pick<RepositoryInfo, 'configPaths'>,
-): DevspaceSource {
+): DevspaceSource | undefined {
   const image = defaultImageOf(settings);
-  return image !== undefined && (settings.startWithDefaultImage !== false || !hasConfiguration(info))
-    ? { kind: 'defaultImage', image }
-    : { kind: 'configuration' };
+  if (image === undefined) return hasConfiguration(info) ? { kind: 'configuration' } : undefined;
+  return settings.startWithDefaultImage !== false || !hasConfiguration(info) ? { kind: 'defaultImage', image } : { kind: 'configuration' };
 }
 
 /**

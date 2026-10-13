@@ -55,7 +55,7 @@ function fakeHost(answers: Partial<Record<string, unknown>> = {}) {
   const host: HostSide = {
     questions: {
       confirmUntrustedRepository: async (repository) => (record('confirmUntrustedRepository', repository), of('confirmUntrustedRepository', false)),
-      configurationChanged: async (repository) => (record('configurationChanged', repository), of('configurationChanged', 'later' as const)),
+      configurationChanged: async (repository, what) => (record('configurationChanged', repository, ...(what !== undefined ? [what] : [])), of('configurationChanged', 'later' as const)),
       configurationKindChanged: async (repository, message) => (record('configurationKindChanged', repository, message), of('configurationKindChanged', 'later' as const)),
       filesMissing: async (repository) => (record('filesMissing', repository), of('filesMissing', undefined)),
       recreateContainer: async (repository, question) => (record('recreateContainer', repository, question), of('recreateContainer', false)),
@@ -154,6 +154,7 @@ describe('the requests of a flow in the worker', () => {
     });
     expect(await worker.questions.confirmUntrustedRepository('acme/app')).toBe(true);
     expect(await worker.questions.configurationChanged('acme/app')).toBe('rebuildNow');
+    expect(await worker.questions.configurationChanged('acme/app', 'source')).toBe('rebuildNow');
     expect(await worker.questions.configurationKindChanged('acme/app', 'the kind changed')).toBe('rebuildNow');
     expect(await worker.questions.filesMissing('acme/app')).toBe('cloneAgain');
     expect(await worker.questions.recreateContainer('acme/app', { message: 'm', detail: 'd' })).toBe(true);
@@ -162,11 +163,13 @@ describe('the requests of a flow in the worker', () => {
     expect(calls.map((call) => call.call)).toEqual([
       'confirmUntrustedRepository',
       'configurationChanged',
+      'configurationChanged',
       'configurationKindChanged',
       'filesMissing',
       'recreateContainer',
       'message',
     ]);
+    expect(calls[2]).toEqual({ call: 'configurationChanged', args: ['acme/app', 'source'] });
     expect(calls.at(-1)).toEqual({ call: 'message', args: ['warn', 'careful'] });
   });
 
