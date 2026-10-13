@@ -240,6 +240,9 @@ describe('ConnectionAdapter', () => {
     expect(adapter.windowName()).toBe('course');
     fake.state.workspaceFile = fake.uri({ scheme: 'untitled', path: '1555503116870' });
     expect(adapter.windowName()).toBe('api');
+    // A workspace file without a name before `.code-workspace` too.
+    fake.state.workspaceFile = fake.uri({ scheme: 'file', path: '/Users/me/.code-workspace' });
+    expect(adapter.windowName()).toBe('api');
     // An attached window by its container, also under a saved workspace file.
     fake.state.remoteName = 'attached-container';
     fake.state.workspaceFile = fake.uri({ scheme: 'file', path: '/Users/me/course.code-workspace' });
