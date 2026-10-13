@@ -455,8 +455,8 @@ describe('RemoteSessionMonitor.ensure with the pipe loader', () => {
     });
   }
 
-  // A restarting container of this version (between two starts of its restart policy) is kept only with the stored
-  // script of this version; another or no stored script, or a read that fails, replaces it by its ID.
+  // A restarting container of this version that failed once (RestartCount 1) is kept only with the stored script of
+  // this version; another or no stored script, or a read that fails, replaces it by its ID.
   for (const [what, answer, outcome, commands] of [
     ['the stored script of this version', SAME, 'running', ['inspect', 'archive']],
     ['another stored script', Buffer.from('another script'), 'created', ['inspect', 'archive', 'rm', 'run']],
@@ -473,6 +473,22 @@ describe('RemoteSessionMonitor.ensure with the pipe loader', () => {
       else expect(logger.lines.join('\n')).toContain('is restarting with its script; it is kept');
     });
   }
+
+  // One that failed more often fails at each start, also with its script: replaced without a read, so the create's
+  // ready check reports the cause.
+  it('a restarting container of this version with RestartCount 2 is replaced without a read', async () => {
+    const docker = new FakeDocker((args) => (args[0] === 'inspect' ? inspected('restarting', LABEL, 1, 2) : args[0] === 'archive' ? SAME : undefined));
+    expect(await monitor(docker).ensure(TAG, SOCKET)).toBe('created');
+    expect(docker.commands()).toEqual(['inspect', 'rm', 'run']);
+    expect(docker.calls[1].args).toEqual(['rm', MONITOR_ID]);
+  });
+
+  // Keeping it needs no ID: nothing is removed or started.
+  it('a restarting container of this version with its script and an ID that cannot be read is kept', async () => {
+    const docker = new FakeDocker((args) => (args[0] === 'inspect' ? inspected('restarting', LABEL, 1, 1, null) : args[0] === 'archive' ? SAME : undefined));
+    expect(await monitor(docker).ensure(TAG, SOCKET)).toBe('running');
+    expect(docker.commands()).toEqual(['inspect', 'archive']);
+  });
 
   it('fails without a ready line within the time limit: the container is removed', async () => {
     vi.useFakeTimers();
