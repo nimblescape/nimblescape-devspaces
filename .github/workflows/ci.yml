@@ -263,7 +263,7 @@ jobs:
 
       - name: Give the runner a Git configuration and an SSH agent with a key
         run: |
-          git config --global devspaces.marker devspaces-runner-git-configuration
+          git config --global devspacestest.marker devspaces-runner-git-configuration
           ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/devspaces-test-key"
           eval "$(ssh-agent -s)"
           ssh-add "$RUNNER_TEMP/devspaces-test-key"
