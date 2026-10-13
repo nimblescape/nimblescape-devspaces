@@ -60,7 +60,7 @@ export const TreeTexts = {
         return `${engine} not ready: the state could not be read (see the Devspaces output).`;
     }
   },
-  /** Label of the sign-in row (the title of the command devspace.signIn). */
+  /** Label of the sign-in row (the title of the command devspaces.signIn). */
   signIn: 'Sign in with GitHub',
   signInTooltip: 'Sign in with GitHub to see your repositories that have a Dev Container configuration.',
 } as const;
@@ -178,7 +178,7 @@ export interface RepositoryRow {
   /** The row has a devspace, and GitHub does not list its repository. */
   notOnGitHub: boolean;
   /**
-   * The switch of the host access checks of the repository (setting devspace.hostAccessChecksOff): `off` shows the
+   * The switch of the host access checks of the repository (setting devspaces.hostAccessChecksOff): `off` shows the
    * marker `host access unrestricted` and a warning in the tooltip, and offers Turn On Host Access Checks instead of
    * Turn Off Host Access Checks….
    */
@@ -282,18 +282,18 @@ export interface StateIcon {
  * contrast), also in Quick Picks and the status bar.
  */
 export const MonitorIcons = {
-  off: 'devspace-monitor-off',
-  on: 'devspace-monitor-on',
-  connected: 'devspace-monitor-connected',
+  off: 'devspaces-monitor-off',
+  on: 'devspaces-monitor-on',
+  connected: 'devspaces-monitor-connected',
   /** The header row of a remote Docker host. */
-  remote: 'devspace-monitor-remote',
+  remote: 'devspaces-monitor-remote',
   // The other states, with the badges of the codicons vm-running (play), vm-pending (clock), vm-outline (ring), and a
   // warning sign.
-  running: 'devspace-monitor-running',
-  updating: 'devspace-monitor-updating',
-  noContainer: 'devspace-monitor-no-container',
+  running: 'devspaces-monitor-running',
+  updating: 'devspaces-monitor-updating',
+  noContainer: 'devspaces-monitor-no-container',
   /** Files missing, and the header row of a Docker endpoint that is not supported. */
-  warning: 'devspace-monitor-warning',
+  warning: 'devspaces-monitor-warning',
 } as const;
 
 const STATE_ICONS: Record<DevspaceState, StateIcon> = {

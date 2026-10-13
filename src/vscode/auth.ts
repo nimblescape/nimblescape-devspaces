@@ -18,7 +18,7 @@ export const GITHUB_SCOPES: readonly string[] = ['repo', 'read:org'];
 /** Requested only when a private image on ghcr.io needs it. */
 export const PACKAGES_SCOPES: readonly string[] = ['repo', 'read:org', 'read:packages'];
 /** Context key for the welcome view and the menus (package.json). */
-export const SIGNED_IN_CONTEXT_KEY = 'devspace.signedIn';
+export const SIGNED_IN_CONTEXT_KEY = 'devspaces.signedIn';
 
 // User-visible text that messages.ts lacks; to be moved there.
 /** Shown by VS Code when a new session is requested because GitHub rejected the stored one. */
@@ -144,7 +144,7 @@ export class VsCodeGitHubAuth implements GitHubAuth, vscode.Disposable {
   }
 
   /**
-   * Sets the context key `devspace.signedIn` (package.json: the welcome view with **Sign in with GitHub**). The
+   * Sets the context key `devspaces.signedIn` (package.json: the welcome view with **Sign in with GitHub**). The
    * only place that sets it: signed in means a session exists and GitHub did not reject its token. Returns the state.
    */
   async updateContextKey(): Promise<boolean> {

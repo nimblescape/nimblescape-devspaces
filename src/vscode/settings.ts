@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Settings of the extension (prefix `devspace`).
+// Settings of the extension (prefix `devspaces`).
 import * as vscode from 'vscode';
 import { errorMessage } from '../core/errors';
 import { HOST_ACCESS_CHECKS_OFF_SETTING, parseHostAccessChecksOff } from '../core/policy/hostAccessChecks';
@@ -12,7 +12,7 @@ import type { ExtensionSettings } from '../core/types';
 import { DEFAULT_CACHE_UPDATE_SCHEDULE, normalizeCacheSchedule } from '../core/remoteMonitor/cacheSettings';
 import { normalizeListOpenMode, type ListOpenMode } from './rowActivation';
 
-export const SETTINGS_SECTION = 'devspace';
+export const SETTINGS_SECTION = 'devspaces';
 
 /** Defaults of the settings. */
 export const DEFAULT_SETTINGS: Readonly<ExtensionSettings> = Object.freeze({
@@ -66,7 +66,7 @@ export function readSettings(): ExtensionSettings {
 }
 
 /**
- * The raw value of devspace.hostAccessChecksOff in the user settings (scope `application`). A value of a workspace or
+ * The raw value of devspaces.hostAccessChecksOff in the user settings (scope `application`). A value of a workspace or
  * folder, which a repository could bring along, never turns a check off: VS Code ignores such values of an application
  * setting, and this reads the user value only, to be sure.
  */
@@ -74,14 +74,14 @@ export function hostAccessChecksOffValue(configuration: Pick<vscode.WorkspaceCon
   return configuration.inspect<unknown>(HOST_ACCESS_CHECKS_OFF_SETTING)?.globalValue;
 }
 
-/** The entries of devspace.hostAccessChecksOff (user settings) that are no repository name, for one warning. */
+/** The entries of devspaces.hostAccessChecksOff (user settings) that are no repository name, for one warning. */
 export function invalidHostAccessChecksOffEntries(): string[] {
   const configuration = vscode.workspace.getConfiguration(SETTINGS_SECTION);
   return parseHostAccessChecksOff(hostAccessChecksOffValue(configuration)).invalid;
 }
 
 /**
- * One warning (a message and a log line) that names the invalid entries of devspace.hostAccessChecksOff, which
+ * One warning (a message and a log line) that names the invalid entries of devspaces.hostAccessChecksOff, which
  * are ignored. `warned`: the entries of the last warning (`''` for none); the same entries are not named again. Returns
  * the entries of this call, for the next one.
  */

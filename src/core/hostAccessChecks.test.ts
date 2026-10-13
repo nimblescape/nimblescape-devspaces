@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { hostAccessChecks, isRepositoryEntry, parseHostAccessChecksOff, withHostAccessChecks } from './policy';
 
-describe('the setting devspace.hostAccessChecksOff', () => {
+describe('the setting devspaces.hostAccessChecksOff', () => {
   it.each<[string, unknown, string[], string[]]>([
     ['no value (the default)', undefined, [], []],
     ['null', null, [], []],

@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Setting `devspace.repositoryGroups`: regular expressions that filter the repository names of the sidebar and group
+// Setting `devspaces.repositoryGroups`: regular expressions that filter the repository names of the sidebar and group
 // them in levels. This module never imports `vscode`; it reads the raw entries of the setting, compiles them, and
 // splits a repository name into its levels.
 
@@ -43,17 +43,17 @@ export interface ParsedRepositoryGroups {
 // User-visible texts that messages.ts lacks; to be moved there.
 export const RepositoryGroupTexts = {
   wrongType: (entry: string) =>
-    `The repository group ${entry} in the setting devspace.repositoryGroups is ignored: an entry must be a regular expression, or an object with "pattern" and optional "name" and "flags" texts.`,
+    `The repository group ${entry} in the setting devspaces.repositoryGroups is ignored: an entry must be a regular expression, or an object with "pattern" and optional "name" and "flags" texts.`,
   empty: (entry: string) =>
-    `The repository group ${entry} in the setting devspace.repositoryGroups is ignored: its regular expression is empty.`,
+    `The repository group ${entry} in the setting devspaces.repositoryGroups is ignored: its regular expression is empty.`,
   invalid: (entry: string, error: string) =>
-    `The repository group ${entry} in the setting devspace.repositoryGroups is ignored: its regular expression is not valid (${error}).`,
+    `The repository group ${entry} in the setting devspaces.repositoryGroups is ignored: its regular expression is not valid (${error}).`,
   ignoredFlags: (entry: string, flags: string) =>
-    `The repository group ${entry} in the setting devspace.repositoryGroups uses the flags "${flags}", which are ignored. Only the flags i, u, and s are allowed.`,
+    `The repository group ${entry} in the setting devspaces.repositoryGroups uses the flags "${flags}", which are ignored. Only the flags i, u, and s are allowed.`,
   failed: (source: string, error: string) =>
-    `The repository group ${JSON.stringify(source)} in the setting devspace.repositoryGroups failed while it was matched (${error}). It does not match the names for which it fails.`,
+    `The repository group ${JSON.stringify(source)} in the setting devspaces.repositoryGroups failed while it was matched (${error}). It does not match the names for which it fails.`,
   slow: (milliseconds: number) =>
-    `Grouping the repositories took ${milliseconds} ms. A regular expression in the setting devspace.repositoryGroups may be slow, for example one with a nested repetition such as (a+)+. If VS Code stops responding, remove that entry from your settings.json.`,
+    `Grouping the repositories took ${milliseconds} ms. A regular expression in the setting devspaces.repositoryGroups may be slow, for example one with a nested repetition such as (a+)+. If VS Code stops responding, remove that entry from your settings.json.`,
 } as const;
 
 /**

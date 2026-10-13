@@ -57,7 +57,7 @@ export const HEARTBEAT_LOCK_WAIT_SECONDS = 5;
 /** A heartbeat that holds HEARTBEAT_LOCK_PATH longer than this, in seconds, is killed (the lock with it). */
 export const HEARTBEAT_RUN_LIMIT_SECONDS = 10;
 
-/** Default of the setting devspace.stopAfterMinutes (10 minutes, on every engine). */
+/** Default of the setting devspaces.stopAfterMinutes (10 minutes, on every engine). */
 export const DEFAULT_REMOTE_STOP_AFTER_SECONDS = 600;
 /** The smallest time limit that a heartbeat can set. */
 export const MIN_LIMIT_SECONDS = 60;

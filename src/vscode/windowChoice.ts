@@ -13,7 +13,7 @@ export type WindowRequest = 'default' | 'newWindow' | 'currentWindow';
 
 export interface WindowChoiceInput {
   request: WindowRequest;
-  /** The setting devspace.openInNewWindow. */
+  /** The setting devspaces.openInNewWindow. */
   openInNewWindow: boolean;
   /** The window is local and has no folder and no workspace (`ConnectionAdapter.isEmptyWindow`). */
   emptyWindow: boolean;

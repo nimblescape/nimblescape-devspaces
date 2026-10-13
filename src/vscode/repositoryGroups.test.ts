@@ -47,7 +47,7 @@ describe('parseRepositoryGroups', () => {
     const { patterns, problems } = parseRepositoryGroups(['(', { pattern: '[' }]);
     expect(patterns).toEqual([]);
     expect(problems.map((problem) => problem.index)).toEqual([0, 1]);
-    expect(problems[0].message).toMatch(/^The repository group "\(" in the setting devspace\.repositoryGroups is ignored: /);
+    expect(problems[0].message).toMatch(/^The repository group "\(" in the setting devspaces\.repositoryGroups is ignored: /);
     expect(problems[0].message).toContain('not valid');
     // The error of JavaScript is part of the text.
     expect(problems[0].message).toContain('Unterminated group');

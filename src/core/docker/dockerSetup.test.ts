@@ -611,11 +611,11 @@ describe('context keys', () => {
 
   it('uses the key names of package.json', () => {
     expect(DockerContextKeys).toEqual({
-      missing: 'devspace.dockerMissing',
-      setupRequired: 'devspace.dockerSetupRequired',
-      installed: 'devspace.dockerInstalled',
-      ready: 'devspace.dockerReady',
-      wslReady: 'devspace.wslReady',
+      missing: 'devspaces.dockerMissing',
+      setupRequired: 'devspaces.dockerSetupRequired',
+      installed: 'devspaces.dockerInstalled',
+      ready: 'devspaces.dockerReady',
+      wslReady: 'devspaces.wslReady',
     });
   });
 });

@@ -16,7 +16,7 @@
 // - ./images.ts:           image references (other devspaces, image IDs, Docker's grammar) and image labels;
 // - ./rewrites.ts:         what the policy changes instead of refusing (removed flags, 127.0.0.1, Compose mounts/ports);
 // - ./report.ts:           the report, the classes of its items, and the limits of a listed item;
-// - ./hostAccessChecks.ts: the per-repository switch (setting devspace.hostAccessChecksOff).
+// - ./hostAccessChecks.ts: the per-repository switch (setting devspaces.hostAccessChecksOff).
 // Pure functions, no I/O, no `vscode`: the pipeline runs checkContainer in the analysis worker
 // (../helper/configurationAnalysis.ts), with limits of time and memory.
 import { composeAccessReport, composeConfigurationReport, type ComposeAccessInput } from './compose';

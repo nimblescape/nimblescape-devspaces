@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Pure part of the editor of the setting `devspace.repositoryGroups`: the entries as the editor shows them, their
+// Pure part of the editor of the setting `devspaces.repositoryGroups`: the entries as the editor shows them, their
 // checks, the value that Save writes, the messages of the webview (checked, never trusted), the preview of the sidebar,
 // and the test of one repository name. This module never imports `vscode`; the preview uses the same functions as the
 // sidebar (parseRepositoryGroups, matchRepositoryGroup, buildTreeModel), so it shows what the sidebar will show.
@@ -56,7 +56,7 @@ export const GroupsEditorTexts = {
     `Entry ${position}${name !== undefined ? ` ("${name}")` : ''} matches.`,
   testInvalid: 'Enter the repository name without spaces, for example 2026-3cWI-SWP-module-oop-EnesHA81 or owner/name.',
   invalidEntriesNotSaved: 'Correct the entries with an error first. Nothing was saved.',
-  changedMeanwhile: 'devspace.repositoryGroups was changed in settings.json while this editor was open.',
+  changedMeanwhile: 'devspaces.repositoryGroups was changed in settings.json while this editor was open.',
   changedMeanwhileDetail: (theirs: string) =>
     `settings.json now:${theirs}\n\nLoad settings.json shows this list in the editor and drops your unsaved edits. Save Mine replaces it with the entries of this editor. Cancel changes nothing.`,
   loadTheirs: 'Load settings.json',
@@ -80,7 +80,7 @@ export const GroupsEditorTexts = {
   testTooSlow: 'The test was stopped: the regular expressions took more than 1 second for this name.',
   tooSlowNotSaved: 'A regular expression takes too long for the repository names of the view. Nothing was saved.',
   previewFailed: 'The preview could not check these regular expressions; Save is not possible.',
-  notAListConflict: 'settings.json holds a value for devspace.repositoryGroups that is not a list.',
+  notAListConflict: 'settings.json holds a value for devspaces.repositoryGroups that is not a list.',
   notAListDetail: (theirs: string) =>
     `The value in settings.json is not a list: ${theirs}\n\nLoad settings.json shows the editor for that value (with no entries) and drops your unsaved edits. Save Mine replaces that value with the entries of this editor. Cancel changes nothing.`,
   slow: (milliseconds: number) =>

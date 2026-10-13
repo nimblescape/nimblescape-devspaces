@@ -136,13 +136,13 @@ describe('settings', () => {
     expect(read('true')).toBe(false);
   });
 
-  it('reads the section devspace', () => {
+  it('reads the section devspaces', () => {
     const values: Partial<Record<keyof ExtensionSettings, unknown>> = { stopOnClose: false, owners: ['acme'] };
-    // `inspect`: devspace.hostAccessChecksOff is read from the user settings only; it has no user value here.
+    // `inspect`: devspaces.hostAccessChecksOff is read from the user settings only; it has no user value here.
     fakeVscode.workspace.getConfiguration.mockReturnValue({ get: (key: keyof ExtensionSettings) => values[key], inspect: () => undefined });
     expect(readSettings()).toEqual({ ...DEFAULT_SETTINGS, stopOnClose: false, owners: ['acme'] });
     expect(fakeVscode.workspace.getConfiguration).toHaveBeenCalledWith(SETTINGS_SECTION);
-    expect(SETTINGS_SECTION).toBe('devspace');
+    expect(SETTINGS_SECTION).toBe('devspaces');
   });
 
   it('reads the VS Code setting workbench.list.openMode (double-click on a row)', () => {

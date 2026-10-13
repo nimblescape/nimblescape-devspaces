@@ -38,7 +38,7 @@ import { Controller } from './controller';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
 
 const ROOT = path.join(__dirname, '..', '..');
-const REMOVED_COMMAND = 'devspace.installDocker';
+const REMOVED_COMMAND = 'devspaces.installDocker';
 
 interface Manifest {
   contributes: {
@@ -197,13 +197,13 @@ describe('the Docker setup in the sidebar welcome view', () => {
     const after = welcome.filter((view) => view.contents.startsWith('Your repositories appear here once Docker is installed'));
     expect(after).toEqual([
       {
-        view: 'devspace.repositories',
+        view: 'devspaces.repositories',
         contents: 'Your repositories appear here once Docker is installed. Devspaces starts Docker when needed.',
         when: `${DockerContextKeys.setupRequired} && !isLinux`,
       },
       {
         // Docker Engine on Linux needs administrator rights to start: the error offers Start Docker instead.
-        view: 'devspace.repositories',
+        view: 'devspaces.repositories',
         contents: 'Your repositories appear here once Docker is installed. Devspaces asks to start Docker Engine when needed.',
         when: `${DockerContextKeys.setupRequired} && isLinux`,
       },

@@ -32,7 +32,7 @@ function textFiles(): string[] {
 describe('the product name', () => {
   it('the pattern recognises the old spellings, the plural too, and leaves Devspaces alone', () => {
     for (const old of ['Dev Space', 'Dev Spaces', 'dev-space', 'DEV_SPACES', 'devenv', 'dev-env-1', 'Dev Environments']) expect(old).toMatch(OLD_NAMES);
-    for (const name of ['Devspace', 'Devspaces', 'devspace.reopenLastOnStartup', 'nimblescape.devspace.id', 'DevSpace-abcd1234', '/dev/null', 'process.env']) expect(name).not.toMatch(OLD_NAMES);
+    for (const name of ['Devspace', 'Devspaces', 'devspaces.reopenLastOnStartup', 'nimblescape.devspace.id', 'DevSpace-abcd1234', '/dev/null', 'process.env']) expect(name).not.toMatch(OLD_NAMES);
   });
 
   it('no source, test, resource, script or document names it the old way', () => {

@@ -17,7 +17,7 @@ export function dockerAdapterOptions(dockerSetup: () => DockerSetupReports | und
   return {
     // Docker Desktop installed or updated while VS Code runs is found without a reload.
     findDocker: findDockerCli,
-    // Each `docker info` that ran anyway (context key devspace.dockerReady).
+    // Each `docker info` that ran anyway (context key devspaces.dockerReady).
     onDaemonStatus: (running) => dockerSetup()?.reportDaemonStatus(running),
     // Docker was uninstalled or moved while VS Code runs: the sidebar shows the Docker setup again, without a lookup
     // (the next call of the adapter looks the CLI up again).

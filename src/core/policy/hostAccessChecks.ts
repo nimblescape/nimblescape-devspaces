@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The switch of the host access checks, per repository (docs/security.md "Host access checks"): the security policy is
-// configurable per repository, and by default it is on. The user setting devspace.hostAccessChecksOff lists the
+// configurable per repository, and by default it is on. The user setting devspaces.hostAccessChecksOff lists the
 // repositories whose configuration may use the computer; for every other repository the checks are on. The open
 // pipeline reads the switch at each open and passes it to the container policy (checkContainer in ./index.ts), which
 // then lifts only the refusals of access to the computer. Pure functions, no I/O.
@@ -39,7 +39,7 @@ export interface HostAccessChecksOffSetting {
 }
 
 /**
- * Reads the raw value of devspace.hostAccessChecksOff. Each entry is trimmed; entries that are no `owner/name`
+ * Reads the raw value of devspaces.hostAccessChecksOff. Each entry is trimmed; entries that are no `owner/name`
  * (also entries that are no text) are ignored and listed in `invalid`, for one warning. A value that is no list turns
  * no check off.
  */

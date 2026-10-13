@@ -269,14 +269,14 @@ The extension contributes eight icons (`contributes.icons`) from the font `resou
 
 | Icon ID | Glyph | Icon | Used for |
 |---|---|---|---|
-| `devspace-monitor-off` | `\E001` | Switched-off monitor | Stopped · the Local Docker row · "Open devspace…" in the status bar · "Use the Local Docker" in the host list |
-| `devspace-monitor-on` | `\E002` | Switched-on monitor | Connected in another window |
-| `devspace-monitor-connected` | `\E003` | Switched-on monitor with the connection sign | Connected in this window · the status bar |
-| `devspace-monitor-remote` | `\E004` | Switched-off monitor with the connection sign | The Remote Docker host row |
-| `devspace-monitor-running` | `\E005` | Switched-off monitor with a play sign | Running without a window |
-| `devspace-monitor-updating` | `\E006` | Switched-off monitor with a clock | Updating · "Updating…" in the status bar |
-| `devspace-monitor-no-container` | `\E007` | Switched-off monitor with a ring | No container |
-| `devspace-monitor-warning` | `\E008` | Switched-off monitor with a warning sign | Files missing (warning colour) · an unsupported Docker endpoint |
+| `devspaces-monitor-off` | `\E001` | Switched-off monitor | Stopped · the Local Docker row · "Open devspace…" in the status bar · "Use the Local Docker" in the host list |
+| `devspaces-monitor-on` | `\E002` | Switched-on monitor | Connected in another window |
+| `devspaces-monitor-connected` | `\E003` | Switched-on monitor with the connection sign | Connected in this window · the status bar |
+| `devspaces-monitor-remote` | `\E004` | Switched-off monitor with the connection sign | The Remote Docker host row |
+| `devspaces-monitor-running` | `\E005` | Switched-off monitor with a play sign | Running without a window |
+| `devspaces-monitor-updating` | `\E006` | Switched-off monitor with a clock | Updating · "Updating…" in the status bar |
+| `devspaces-monitor-no-container` | `\E007` | Switched-off monitor with a ring | No container |
+| `devspaces-monitor-warning` | `\E008` | Switched-off monitor with a warning sign | Files missing (warning colour) · an unsupported Docker endpoint |
 
 ## Code layout and build
 

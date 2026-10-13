@@ -636,7 +636,7 @@ describe('Controller commands', () => {
       ]),
     );
     expect(defaults).toEqual({ ...DEFAULT_SETTINGS });
-    const keys = new Set(manifest.contributes.viewsWelcome.flatMap((view) => view.when.match(/devspace\.\w+/g) ?? []));
+    const keys = new Set(manifest.contributes.viewsWelcome.flatMap((view) => view.when.match(/devspaces\.\w+/g) ?? []));
     // Exactly the keys that the extension sets.
     expect([...keys].sort()).toEqual(
       [
@@ -651,7 +651,7 @@ describe('Controller commands', () => {
     // The other terms are the platform keys of VS Code.
     const others = new Set(
       manifest.contributes.viewsWelcome.flatMap((view) =>
-        view.when.split('&&').map((term) => term.trim().replace(/^!/, '')).filter((term) => !term.startsWith('devspace.')),
+        view.when.split('&&').map((term) => term.trim().replace(/^!/, '')).filter((term) => !term.startsWith('devspaces.')),
       ),
     );
     expect([...others].sort()).toEqual(['isLinux', 'isMac', 'isWindows']);
@@ -685,16 +685,16 @@ describe('Controller commands', () => {
     const afterLinux =
       'Your repositories appear here once Docker is installed. Devspaces asks to start Docker Engine when needed.';
     const signIn =
-      'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n[Sign in with GitHub](command:devspace.signIn)';
+      'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n[Sign in with GitHub](command:devspaces.signIn)';
     const installWsl =
-      '1. Install WSL 2, which Docker Desktop needs. Windows asks for administrator permission; restart afterwards.\n[Install WSL 2](command:devspace.dockerSetup.installWsl)';
+      '1. Install WSL 2, which Docker Desktop needs. Windows asks for administrator permission; restart afterwards.\n[Install WSL 2](command:devspaces.dockerSetup.installWsl)';
     const wslInstalled = '1. ✓ WSL 2 is installed.';
     const installMac =
-      'Install Docker Desktop with Homebrew or Docker\'s installer. You see the commands before anything runs. Docker Desktop is free for personal use, education, non-commercial open source, and small businesses; larger companies need a [paid subscription](https://www.docker.com/legal/docker-subscription-service-agreement/).\n[Install Docker](command:devspace.dockerSetup.install)';
+      'Install Docker Desktop with Homebrew or Docker\'s installer. You see the commands before anything runs. Docker Desktop is free for personal use, education, non-commercial open source, and small businesses; larger companies need a [paid subscription](https://www.docker.com/legal/docker-subscription-service-agreement/).\n[Install Docker](command:devspaces.dockerSetup.install)';
     const installWindows =
-      '2. Install Docker Desktop with winget or Docker\'s installer. You see the commands before anything runs. Docker Desktop is free for personal use, education, non-commercial open source, and small businesses; larger companies need a [paid subscription](https://www.docker.com/legal/docker-subscription-service-agreement/).\n[Install Docker](command:devspace.dockerSetup.install)';
+      '2. Install Docker Desktop with winget or Docker\'s installer. You see the commands before anything runs. Docker Desktop is free for personal use, education, non-commercial open source, and small businesses; larger companies need a [paid subscription](https://www.docker.com/legal/docker-subscription-service-agreement/).\n[Install Docker](command:devspaces.dockerSetup.install)';
     const installLinux =
-      'Install Docker Engine from Docker\'s package repository. You see the commands before anything runs.\n[Install Docker](command:devspace.dockerSetup.install)';
+      'Install Docker Engine from Docker\'s package repository. You see the commands before anything runs.\n[Install Docker](command:devspaces.dockerSetup.install)';
 
     it('shows the steps of macOS, then the sign-in', () => {
       expect(shownWelcome({ ...setup, isMac: true })).toEqual([intro, installMac, after, signIn]);
@@ -741,7 +741,7 @@ describe('Controller commands', () => {
       expect(shownWelcome({ ...signedIn, [LOAD_FAILED_CONTEXT_KEY]: true })).toEqual([intro, installMac, after]);
       // Every entry but the sign-in either belongs to the setup or is hidden under it.
       for (const view of welcomeManifest().contributes.viewsWelcome) {
-        if (view.when === '!devspace.signedIn') continue;
+        if (view.when === '!devspaces.signedIn') continue;
         const terms = view.when.split('&&').map((term) => term.trim());
         expect(terms.includes(DockerContextKeys.setupRequired) || terms.includes(`!${DockerContextKeys.setupRequired}`)).toBe(true);
       }
@@ -753,9 +753,9 @@ describe('Controller commands', () => {
       const used = manifest.contributes.viewsWelcome.flatMap((view) => [...view.contents.matchAll(/\(command:([\w.]+)\)/g)].map((match) => match[1]));
       expect(used).toEqual(
         expect.arrayContaining([
-          'devspace.dockerSetup.install',
-          'devspace.dockerSetup.installWsl',
-          'devspace.signIn',
+          'devspaces.dockerSetup.install',
+          'devspaces.dockerSetup.installWsl',
+          'devspaces.signIn',
         ]),
       );
       for (const command of used) expect(declared.has(command), command).toBe(true);
@@ -1353,10 +1353,10 @@ describe('Keep Running When Closed and Stop When Closed', () => {
     expect(title(Commands.stopWhenClosed)).toBe('Stop When Closed');
     const menus = manifest.contributes.menus;
     const when = (menu: string, command: string) => menus[menu].filter((item) => item.command === command).map((item) => item.when);
-    expect(when('view/item/context', Commands.keepRunning)).toEqual(['view == devspace.repositories && viewItem =~ /;canKeepRunning(;|$)/']);
-    expect(when('view/item/context', Commands.stopWhenClosed)).toEqual(['view == devspace.repositories && viewItem =~ /;kept(;|$)/']);
-    expect(when('devspace.more', Commands.keepRunning)).toEqual(['viewItem =~ /;canKeepRunning(;|$)/']);
-    expect(when('devspace.more', Commands.stopWhenClosed)).toEqual(['viewItem =~ /;kept(;|$)/']);
+    expect(when('view/item/context', Commands.keepRunning)).toEqual(['view == devspaces.repositories && viewItem =~ /;canKeepRunning(;|$)/']);
+    expect(when('view/item/context', Commands.stopWhenClosed)).toEqual(['view == devspaces.repositories && viewItem =~ /;kept(;|$)/']);
+    expect(when('devspaces.more', Commands.keepRunning)).toEqual(['viewItem =~ /;canKeepRunning(;|$)/']);
+    expect(when('devspaces.more', Commands.stopWhenClosed)).toEqual(['viewItem =~ /;kept(;|$)/']);
     // Like Stop: in the Command Palette, with a picker of the devspaces.
     expect(when('commandPalette', Commands.keepRunning)).toEqual([]);
     expect(when('commandPalette', Commands.stopWhenClosed)).toEqual([]);
@@ -1365,8 +1365,8 @@ describe('Keep Running When Closed and Stop When Closed', () => {
     // The when clauses against the contextValue of rows (treeModel.contextValue): exactly one of the two matches a row with
     // a devspace, and none a row without one.
     const matches = (clause: string, value: string) => new RegExp(clause.match(/viewItem =~ \/(.*)\/$/)![1]).test(value);
-    const keepClause = when('devspace.more', Commands.keepRunning)[0]!;
-    const stopClause = when('devspace.more', Commands.stopWhenClosed)[0]!;
+    const keepClause = when('devspaces.more', Commands.keepRunning)[0]!;
+    const stopClause = when('devspaces.more', Commands.stopWhenClosed)[0]!;
     const actions = rowActions('running', undefined);
     const notKept = treeContextValue(actions, 'on', false);
     const kept = treeContextValue(actions, 'on', true);
@@ -3784,10 +3784,10 @@ describe('the switch of the host access checks', () => {
     };
     const menus = manifest.contributes.menus;
     const when = (menu: string, command: string) => menus[menu].filter((item) => item.command === command).map((item) => item.when);
-    expect(when('view/item/context', Commands.turnOffHostAccessChecks)).toEqual(['view == devspace.repositories && viewItem =~ /hostAccessChecked/']);
-    expect(when('view/item/context', Commands.turnOnHostAccessChecks)).toEqual(['view == devspace.repositories && viewItem =~ /hostAccessUnrestricted/']);
-    expect(when('devspace.more', Commands.turnOffHostAccessChecks)).toEqual(['viewItem =~ /hostAccessChecked/']);
-    expect(when('devspace.more', Commands.turnOnHostAccessChecks)).toEqual(['viewItem =~ /hostAccessUnrestricted/']);
+    expect(when('view/item/context', Commands.turnOffHostAccessChecks)).toEqual(['view == devspaces.repositories && viewItem =~ /hostAccessChecked/']);
+    expect(when('view/item/context', Commands.turnOnHostAccessChecks)).toEqual(['view == devspaces.repositories && viewItem =~ /hostAccessUnrestricted/']);
+    expect(when('devspaces.more', Commands.turnOffHostAccessChecks)).toEqual(['viewItem =~ /hostAccessChecked/']);
+    expect(when('devspaces.more', Commands.turnOnHostAccessChecks)).toEqual(['viewItem =~ /hostAccessUnrestricted/']);
     expect(when('commandPalette', Commands.turnOffHostAccessChecks)).toEqual(['false']);
     expect(when('commandPalette', Commands.turnOnHostAccessChecks)).toEqual(['false']);
     // A workspace or folder setting cannot turn a check off.
@@ -4042,18 +4042,18 @@ describe('Start in a new window', () => {
       menus[menu].filter((item) => item.command === command).map((item) => [item.when, item.group]);
     // Right after Start (1_actions@1), in a fixed order.
     expect(entries('view/item/context', Commands.startInNewWindow)).toEqual([
-      ['view == devspace.repositories && viewItem =~ /canStart/ && !config.devspace.openInNewWindow', '1_actions@2'],
+      ['view == devspaces.repositories && viewItem =~ /canStart/ && !config.devspaces.openInNewWindow', '1_actions@2'],
     ]);
     expect(entries('view/item/context', Commands.startInCurrentWindow)).toEqual([
-      ['view == devspace.repositories && viewItem =~ /canStart/ && config.devspace.openInNewWindow', '1_actions@2'],
+      ['view == devspaces.repositories && viewItem =~ /canStart/ && config.devspaces.openInNewWindow', '1_actions@2'],
     ]);
-    expect(entries('devspace.more', Commands.startInNewWindow)).toEqual([
-      ['viewItem =~ /canStart/ && !config.devspace.openInNewWindow', '0_start@1'],
+    expect(entries('devspaces.more', Commands.startInNewWindow)).toEqual([
+      ['viewItem =~ /canStart/ && !config.devspaces.openInNewWindow', '0_start@1'],
     ]);
-    expect(entries('commandPalette', Commands.startInNewWindow)).toEqual([['!config.devspace.openInNewWindow', undefined]]);
-    expect(entries('commandPalette', Commands.startInCurrentWindow)).toEqual([['config.devspace.openInNewWindow', undefined]]);
-    expect(entries('commandPalette', Commands.switchDevspaceInNewWindow)).toEqual([['!config.devspace.openInNewWindow', undefined]]);
-    expect(entries('commandPalette', Commands.switchDevspaceInCurrentWindow)).toEqual([['config.devspace.openInNewWindow', undefined]]);
+    expect(entries('commandPalette', Commands.startInNewWindow)).toEqual([['!config.devspaces.openInNewWindow', undefined]]);
+    expect(entries('commandPalette', Commands.startInCurrentWindow)).toEqual([['config.devspaces.openInNewWindow', undefined]]);
+    expect(entries('commandPalette', Commands.switchDevspaceInNewWindow)).toEqual([['!config.devspaces.openInNewWindow', undefined]]);
+    expect(entries('commandPalette', Commands.switchDevspaceInCurrentWindow)).toEqual([['config.devspaces.openInNewWindow', undefined]]);
     // Only the user settings decide which window a Start uses.
     expect(manifest.contributes.configuration.properties[`${SETTINGS_SECTION}.openInNewWindow`]).toMatchObject({
       type: 'boolean',
@@ -4154,11 +4154,11 @@ describe('the Docker host of the current Docker context', () => {
     const title = manifest.contributes.menus['view/title'];
     // The first row of the list chooses the Docker host; the title bar has no icon of the Docker host, and the commands
     // no icon.
-    expect(title.filter((entry) => entry.command === 'devspace.useRemoteDockerHost' || entry.command === 'devspace.chooseDockerHost')).toEqual([]);
+    expect(title.filter((entry) => entry.command === 'devspaces.useRemoteDockerHost' || entry.command === 'devspaces.chooseDockerHost')).toEqual([]);
     const icons = Object.fromEntries(manifest.contributes.commands.map((command) => [command.command, command.icon]));
-    expect(icons['devspace.useRemoteDockerHost']).toBeUndefined();
-    expect(icons['devspace.chooseDockerHost']).toBeUndefined();
-    expect(manifest.contributes.menus.commandPalette).toContainEqual({ command: 'devspace.chooseDockerHost', when: 'false' });
+    expect(icons['devspaces.useRemoteDockerHost']).toBeUndefined();
+    expect(icons['devspaces.chooseDockerHost']).toBeUndefined();
+    expect(manifest.contributes.menus.commandPalette).toContainEqual({ command: 'devspaces.chooseDockerHost', when: 'false' });
   });
 
   it('runs every other command as one operation on the host that is current when it starts', async () => {
@@ -4740,8 +4740,8 @@ describe('Close and Keep Running', () => {
     expect(manifest.contributes.commands.find((entry) => entry.command === Commands.closeAndKeepRunning)?.title).toBe('Close and Keep Running');
     const when = (menu: string) => manifest.contributes.menus[menu].filter((item) => item.command === Commands.closeAndKeepRunning).map((item) => item.when);
     expect(when('commandPalette')).toEqual([CONNECTED_CONTEXT_KEY]);
-    const clause = when('devspace.more')[0]!;
-    expect(when('view/item/context')).toEqual([`view == devspace.repositories && ${clause}`]);
+    const clause = when('devspaces.more')[0]!;
+    expect(when('view/item/context')).toEqual([`view == devspaces.repositories && ${clause}`]);
     const matches = (value: string) => new RegExp(clause.match(/viewItem =~ \/(.*)\/$/)![1]).test(value);
     expect(matches(treeContextValue(rowActions('connected', undefined), 'on', false, true))).toBe(true);
     expect(matches(treeContextValue(rowActions('connected', undefined), 'on', true, true))).toBe(true);

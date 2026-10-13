@@ -60,15 +60,15 @@ describe('Show Only Devspaces', () => {
     expect(command(Commands.showAllRepositories)).toMatchObject({ title: 'Show All Repositories', icon: '$(vm-active)' });
     const title = manifest.contributes.menus['view/title'];
     expect(title.find((entry) => entry.command === Commands.showOnlyDevspaces)?.when).toBe(
-      `view == devspace.repositories && !${DEVSPACES_ONLY_CONTEXT_KEY}`,
+      `view == devspaces.repositories && !${DEVSPACES_ONLY_CONTEXT_KEY}`,
     );
     expect(title.find((entry) => entry.command === Commands.showAllRepositories)?.when).toBe(
-      `view == devspace.repositories && ${DEVSPACES_ONLY_CONTEXT_KEY}`,
+      `view == devspaces.repositories && ${DEVSPACES_ONLY_CONTEXT_KEY}`,
     );
-    expect(manifest.contributes.configuration.properties['devspace.showOnlyDevspaces']).toMatchObject({ type: 'boolean', default: false });
+    expect(manifest.contributes.configuration.properties['devspaces.showOnlyDevspaces']).toMatchObject({ type: 'boolean', default: false });
     const empty = manifest.contributes.viewsWelcome.filter((entry) => entry.when.includes(DEVSPACES_ONLY_CONTEXT_KEY));
     expect(empty.map((entry) => entry.contents)).toEqual([
-      'No repository with a Dev Container configuration was found.\n[Refresh](command:devspace.refresh)',
+      'No repository with a Dev Container configuration was found.\n[Refresh](command:devspaces.refresh)',
       `You have no devspace on this Docker engine yet.\n[Show All Repositories](command:${Commands.showAllRepositories})`,
     ]);
   });

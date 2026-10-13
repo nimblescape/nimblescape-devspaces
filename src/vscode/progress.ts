@@ -9,13 +9,13 @@ import { Actions, Steps, type ProgressStep } from '../core/messages';
 import type { ProgressReporter } from '../core/ports';
 
 /** Command that opens the output channel (package.json). */
-export const SHOW_LOG_COMMAND = 'devspace.showLog';
+export const SHOW_LOG_COMMAND = 'devspaces.showLog';
 
 /**
  * The link "Show details" of a progress notification opens the output channel and closes the notification (the
  * operation goes on; the status bar shows it). Its argument is the ID of the operation.
  */
-export const SHOW_PROGRESS_DETAILS_COMMAND = 'devspace.showProgressDetails';
+export const SHOW_PROGRESS_DETAILS_COMMAND = 'devspaces.showProgressDetails';
 
 // A progress notification cannot have buttons besides Cancel, but its message renders links, also command links.
 const SHOW_DETAILS_LINK = `[${Actions.showDetails}](command:${SHOW_LOG_COMMAND})`;
@@ -102,7 +102,7 @@ export function hideProgressNotification(id: unknown): void {
 
 /**
  * Runs `task` with one progress notification. The message shows the current step (`Steps[step]`) and its detail,
- * followed by the link "Show details" (command `devspace.showProgressDetails` with the ID of the operation: it
+ * followed by the link "Show details" (command `devspaces.showProgressDetails` with the ID of the operation: it
  * opens the output channel and closes the notification, while the task goes on). Cancel aborts the signal. The promise
  * settles with the result of the task.
  */

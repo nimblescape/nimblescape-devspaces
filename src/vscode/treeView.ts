@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Sidebar view `devspace.repositories`. The rows come from the pure model in treeModel.ts.
+// Sidebar view `devspaces.repositories`. The rows come from the pure model in treeModel.ts.
 import * as vscode from 'vscode';
 import { Actions } from '../core/messages';
 import type { Logger } from '../core/ports';
@@ -18,7 +18,7 @@ import {
   type SignInRow,
 } from './treeModel';
 
-export const REPOSITORIES_VIEW_ID = 'devspace.repositories';
+export const REPOSITORIES_VIEW_ID = 'devspaces.repositories';
 
 /**
  * The first row names the Docker host. The merged header of the single view does not reliably show the view's title or

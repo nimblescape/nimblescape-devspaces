@@ -19,12 +19,12 @@ export const OPERATION_FAILED = 'The operation failed.';
  * Command of the action "Install Docker…" (Show Docker Setup, hidden): shows the sidebar view, whose welcome view has
  * the steps of the Docker setup while the CLI is missing (a CLI lost since it was found is reported by BootstrapDocker).
  */
-const INSTALL_DOCKER_COMMAND = 'devspace.dockerSetup.show';
+const INSTALL_DOCKER_COMMAND = 'devspaces.dockerSetup.show';
 /**
  * Command of the action "Start Docker" (Linux, Docker Engine; local windows only): `sudo systemctl enable --now docker`
  * in a terminal, after a confirmation. The extension cannot start Docker Engine by itself (administrator rights).
  */
-const START_DOCKER_COMMAND = 'devspace.dockerSetup.start';
+const START_DOCKER_COMMAND = 'devspaces.dockerSetup.start';
 
 export interface ShowErrorOptions {
   logger: Logger;

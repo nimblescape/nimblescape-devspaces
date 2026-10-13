@@ -206,9 +206,9 @@ describe('DockerSetup: context keys and CLI checks', () => {
     expect(dockerSetup.setupRequired).toBe(true);
     expect(changed).toHaveBeenCalledTimes(1);
     const calls = fakeVscode.commands.executeCommand.mock.calls.map((call) => call[0] as string);
-    expect(calls).toContain('devspace.repositories.focus');
+    expect(calls).toContain('devspaces.repositories.focus');
     // The context key is set before the view is shown.
-    expect(calls.indexOf('setContext')).toBeLessThan(calls.indexOf('devspace.repositories.focus'));
+    expect(calls.indexOf('setContext')).toBeLessThan(calls.indexOf('devspaces.repositories.focus'));
     expect(contextCalls()).toContainEqual([DockerContextKeys.setupRequired, true]);
     dockerSetup.dispose();
   });

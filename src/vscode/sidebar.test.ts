@@ -283,13 +283,13 @@ describe('Sidebar', () => {
     locations.length = 0;
     h.view.visible = true;
     await h.sidebar.refreshDiscovery({ again: true });
-    expect(locations).toEqual([{ viewId: 'devspace.repositories' }]);
+    expect(locations).toEqual([{ viewId: 'devspaces.repositories' }]);
   });
 
   it('uses the status bar for the progress while no view is registered', () => {
     expect(viewProgressLocation(undefined)).toBe(fakeVscode.ProgressLocation.Window);
     expect(viewProgressLocation({ visible: false })).toBe(fakeVscode.ProgressLocation.Window);
-    expect(viewProgressLocation({ visible: true })).toEqual({ viewId: 'devspace.repositories' });
+    expect(viewProgressLocation({ visible: true })).toEqual({ viewId: 'devspaces.repositories' });
   });
 
   it('shows the stored list at once and marks the view as loaded, then refreshes in the background', async () => {
@@ -861,7 +861,7 @@ describe('Sidebar progressive display', () => {
 
     const warnings = fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call[0] as string);
     expect(warnings).toHaveLength(2);
-    expect(warnings[0]).toContain('The repository group "(" in the setting devspace.repositoryGroups is ignored');
+    expect(warnings[0]).toContain('The repository group "(" in the setting devspaces.repositoryGroups is ignored');
     expect(warnings[1]).toContain('uses the flags "g", which are ignored');
     for (const warning of warnings) expect(h.logger.warn).toHaveBeenCalledWith(warning);
 
@@ -954,7 +954,7 @@ describe('Sidebar progressive display', () => {
     h.settings.repositoryGroups = ['^(web)-(.+)$'];
     await h.sidebar.render();
     expect(slow()).toHaveLength(1);
-    expect(String(slow()[0][0])).toContain('devspace.repositoryGroups');
+    expect(String(slow()[0][0])).toContain('devspaces.repositoryGroups');
     expect(h.logger.warn).toHaveBeenCalledWith(slow()[0][0]);
     await h.sidebar.render();
     expect(slow()).toHaveLength(1);
