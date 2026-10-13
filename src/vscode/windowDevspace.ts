@@ -8,6 +8,7 @@ import type { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import type { HelperPrebuildOutcome } from '../core/helper/helperPrebuild';
 import type { DevspaceOperations } from '../core/pipeline/devspaceOperations';
 import type { Logger } from '../core/ports';
+import { isOnDockerHost } from '../core/docker/dockerHost';
 import { errorMessage } from '../core/errors';
 import { resourceName } from '../core/names';
 import type { DevspaceRegistry } from '../core/storage/registry';
@@ -17,23 +18,20 @@ import type { Devspace } from '../core/types';
 export const WINDOW_RESTORE_TIMEOUT_MS = 30_000;
 
 /**
- * The name of the devspace of this window (resourceName), for the names of its workers (workerNameStart): of the
- * registry entry of the container that the window is attached to (`containerName`,
- * ConnectionAdapter.currentContainerName). Undefined for a window of no container, for a container that the registry
- * does not know (also of a lost registry before its restore: the worker is then named after the window), and when the
- * registry cannot be read. Never rejects.
+ * The name of the devspace of this window (resourceName) for the name of its worker on the Docker host `host` (the
+ * host of the worker's engine, '' for the local Docker; workerNameStart): of the registry entry of the container that
+ * the window is attached to (`containerName`, ConnectionAdapter.currentContainerName), when the devspace is on that
+ * host. Undefined for a window of no container, for a container that the registry does not know (also of a lost
+ * registry before its restore), and for the workers of the window on other engines: these are named after the window.
  */
 export async function windowDevspaceName(
   containerName: string | undefined,
+  host: string,
   registry: Pick<DevspaceRegistry, 'findByContainerName'>,
 ): Promise<string | undefined> {
   if (!containerName) return undefined;
-  try {
-    const devspace = await registry.findByContainerName(containerName);
-    return devspace && resourceName(devspace.repository, devspace.id);
-  } catch {
-    return undefined;
-  }
+  const devspace = await registry.findByContainerName(containerName);
+  return devspace && isOnDockerHost(devspace, host) ? resourceName(devspace.repository, devspace.id) : undefined;
 }
 
 /**
