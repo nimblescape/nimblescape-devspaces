@@ -317,7 +317,7 @@ async function activateExtension(
           vscodeVolume: VSCODE_STORE_VOLUME,
           // The name of this window, or of its devspace, in the name of the worker's container.
           windowName: () => connection.windowName(),
-          devspaceName: () => windowDevspaceName(connection.currentContainerName(), registry),
+          devspaceName: (target) => windowDevspaceName(connection.currentContainerName(), target.host, registry),
         },
         target,
       ),

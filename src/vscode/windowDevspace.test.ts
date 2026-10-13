@@ -104,18 +104,21 @@ describe('the devspace of the window at its activation', () => {
 describe('the name of the devspace of the window, for the names of its workers', () => {
   const ID = '11111111-2222-4333-8444-555555555555';
   const devspace = { id: ID, repository: 'majikmate/module-html-css-2', containerName: 'devspaces-majikmate-module-html-css-2-x-app-1' } as Devspace;
+  const remote = { ...devspace, dockerHost: 'build-box' } as Devspace;
 
-  it('is the resource name of the devspace of the attached container, also of Docker Compose', async () => {
+  it('is the resource name of the devspace of the attached container on its engine, also of Docker Compose', async () => {
     const registry = { findByContainerName: vi.fn(async () => devspace) };
-    expect(await windowDevspaceName(devspace.containerName, registry)).toBe(resourceName(devspace.repository, ID));
+    expect(await windowDevspaceName(devspace.containerName, '', registry)).toBe(resourceName(devspace.repository, ID));
     expect(registry.findByContainerName).toHaveBeenCalledWith(devspace.containerName);
+    expect(await windowDevspaceName(remote.containerName, 'build-box', { findByContainerName: async () => remote })).toBe(resourceName(devspace.repository, ID));
   });
 
-  it('is undefined for a window of no container, a container that the registry does not know, and a registry that cannot be read', async () => {
+  it('is undefined on another engine, for a window of no container, and for a container that the registry does not know', async () => {
+    expect(await windowDevspaceName(devspace.containerName, 'build-box', { findByContainerName: async () => devspace })).toBeUndefined();
+    expect(await windowDevspaceName(remote.containerName, '', { findByContainerName: async () => remote })).toBeUndefined();
     const registry = { findByContainerName: vi.fn(async () => undefined) };
-    expect(await windowDevspaceName(undefined, registry)).toBeUndefined();
+    expect(await windowDevspaceName(undefined, '', registry)).toBeUndefined();
     expect(registry.findByContainerName).not.toHaveBeenCalled();
-    expect(await windowDevspaceName('other', registry)).toBeUndefined();
-    expect(await windowDevspaceName('other', { findByContainerName: async () => Promise.reject(new Error('EISDIR')) })).toBeUndefined();
+    expect(await windowDevspaceName('other', '', registry)).toBeUndefined();
   });
 });

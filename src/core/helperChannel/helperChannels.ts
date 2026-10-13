@@ -150,10 +150,11 @@ export interface ChannelOpenDeps {
    */
   windowName?(): string;
   /**
-   * The name of the devspace of the window (resourceName; windowDevspaceName), read with windowName: a worker of a
-   * window of a devspace is named after it (workerNameStart). Undefined for a window of no devspace. Never rejects.
+   * The name of the devspace of the window when it is on the engine `target` (resourceName; windowDevspaceName), read
+   * with windowName: the worker of a window of a devspace on its engine is named after it (workerNameStart). Undefined
+   * for a window of no devspace and for another engine; when it fails, the worker is named after the window.
    */
-  devspaceName?(): Promise<string | undefined>;
+  devspaceName?(target: DockerTarget): Promise<string | undefined>;
 }
 
 /** Docker's refusal of `--network bridge` on a daemon without it. */
@@ -187,7 +188,15 @@ function identityText(identity: EngineIdentity): string {
  * that it answers. Throws HelperChannelError('open').
  */
 export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTarget): Promise<HelperChannel> {
-  const [script, tag, socketPath, devspaceName] = await Promise.all([deps.script(), deps.helperTag(), deps.socketPath(target), deps.devspaceName?.()]);
+  const devspaceName = async (): Promise<string | undefined> => {
+    try {
+      return await deps.devspaceName?.(target);
+    } catch (error) {
+      deps.logger.info(`The devspace of this window could not be found for the name of its worker (${errorMessage(error)}), so the worker is named after the window.`);
+      return undefined;
+    }
+  };
+  const [script, tag, socketPath, devspace] = await Promise.all([deps.script(), deps.helperTag(), deps.socketPath(target), devspaceName()]);
   const name = engineName(target);
   const label = channelLabelValue(script);
   const scriptHash = bundleHash(script);
@@ -197,7 +206,7 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
     if (process === undefined) throw new HelperChannelError('open', 'The Docker CLI cannot be started.');
     return HelperChannel.open(process, script, { logger: deps.logger, name });
   };
-  const nameStart = workerNameStart(deps.windowName?.() ?? '', devspaceName);
+  const nameStart = workerNameStart(deps.windowName?.() ?? '', devspace);
   // The names of the containers of the engine that contain nameStart, with one call without the worker (`,` separates
   // the names of one container); undefined when the list fails (the last list stays, and the next number is tried
   // then).
