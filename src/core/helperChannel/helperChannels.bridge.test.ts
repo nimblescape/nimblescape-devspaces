@@ -62,7 +62,10 @@ function refused(stderr: string): StartedProcess {
  * start, the warnings, the information lines, and the lists of containers (`ps`). `engine`: the containers that the
  * list of the engine shows, or a list that fails.
  */
-async function openWith(engine: { containers?: readonly string[]; listFails?: boolean; listTimesOut?: boolean }, ...first: Array<() => StartedProcess>) {
+async function openWith(
+  engine: { containers?: readonly string[]; listFails?: boolean; listFailsFrom?: number; listTimesOut?: boolean },
+  ...first: Array<() => StartedProcess>
+) {
   const networks: string[] = [];
   const names: string[] = [];
   const warnings: string[] = [];
@@ -79,7 +82,7 @@ async function openWith(engine: { containers?: readonly string[]; listFails?: bo
       runDirect: async (args) => {
         if (args[0] !== 'ps') return { exitCode: 0, stdout: `${ENGINE}\n`, stderr: '', timedOut: false };
         lists.push([...args]);
-        if (engine.listFails) return { exitCode: 1, stdout: '', stderr: 'Cannot connect to the Docker daemon', timedOut: false };
+        if (engine.listFails || lists.length > (engine.listFailsFrom ?? Infinity)) return { exitCode: 1, stdout: '', stderr: 'Cannot connect to the Docker daemon', timedOut: false };
         if (engine.listTimesOut) return { exitCode: null, stdout: '', stderr: '', timedOut: true };
         return { exitCode: 0, stdout: (engine.containers ?? []).map((name) => `${name}\n`).join(''), stderr: '', timedOut: false };
       },
@@ -164,6 +167,9 @@ describe('the number of a worker name in use', () => {
     const late = await openWith({ listTimesOut: true }, () => refused(IN_USE));
     expect(late.names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-2']);
     expect(late.infos.join('\n')).toContain('could not be listed for the name of the worker (no answer in time)');
+    // A failed list after a good one keeps the good one.
+    const later = await openWith({ containers: ['devspace-worker-api-1', 'devspace-worker-api-2'], listFailsFrom: 1 }, () => refused(IN_USE), () => refused(IN_USE));
+    expect(later.names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-3', 'devspace-worker-api-4']);
     // Another window took the free number between the list and the start.
     expect((await openWith({ containers: ['devspace-worker-api-1'] }, () => refused(IN_USE), () => refused(IN_USE))).names).toEqual([
       'devspace-worker-api-1',
