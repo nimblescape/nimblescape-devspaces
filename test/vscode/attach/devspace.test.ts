@@ -54,7 +54,7 @@ describe('the window of a devspace', () => {
   it('leaves the container no way to the credentials of the runner through Dev Containers', () => {
     // The repository sets "remote.containers.copyGitConfig": true (the old key); the override sets both keys.
     const paths = credentialPaths(user);
-    console.log(`    ways from the devspace to the runner: ${JSON.stringify(paths)}`);
+    console.log(`    ways from the devspace to the runner: ${JSON.stringify({ ...paths, sshAgentKeys: paths.sshAgentKeys ?? null })}`);
     assert.deepStrictEqual(
       { gitConfigOfRunner: paths.gitConfigOfRunner, gitCredentialHelper: paths.gitCredentialHelper, dockerCredentialHelper: paths.dockerCredentialHelper, githubCli: paths.githubCli },
       { gitConfigOfRunner: false, gitCredentialHelper: false, dockerCredentialHelper: false, githubCli: false },
