@@ -416,7 +416,7 @@ export function dockerEngine(
     // Only the engine's own message of a missing container or file is `missing`; a 404 of something on the way is no
     // evidence.
     containerFile: async (container, filePath, maxBytes, signal) =>
-      archiveFile(container, filePath, fileBase(filePath), maxBytes, signal, (answer) => (MISSING_CONTAINER_FILE.test(engineErrorMessage({ ...answer, truncated: false })) ? ('missing' as const) : fail(answer))),
+      archiveFile(container, filePath, fileBase(filePath), maxBytes, signal, (answer) => (isMissingContainerFile(engineErrorMessage({ ...answer, truncated: false })) ? ('missing' as const) : fail(answer))),
     systemTime: async (signal) => {
       const value = (await list('/info', signal)) as { SystemTime?: unknown };
       if (typeof value?.SystemTime !== 'string') throw new EngineError('The engine answered /info without its time.', 200);
@@ -475,6 +475,11 @@ function fileBase(filePath: string): string {
  * failed mount: `…: no such file or directory`) is no evidence.
  */
 export const MISSING_CONTAINER_FILE = /^No such container: |no such container$|^Could not find the file \S+ in container |^l?stat \S+: no such file or directory$/i;
+
+/** Whether the 404 message `message` of the archive endpoint matches MISSING_CONTAINER_FILE, without the white space and the one period that may end it. */
+export function isMissingContainerFile(message: string): boolean {
+  return MISSING_CONTAINER_FILE.test(message.trim().replace(/\.$/, ''));
+}
 
 /**
  * The time limit of the create and of the removal of a container of labelImage, and of the create and the removal of
