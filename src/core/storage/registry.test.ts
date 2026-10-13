@@ -186,6 +186,9 @@ describe('DevspaceRegistry reading', () => {
         { ...devspace('e10', 'o/g'), owner: undefined },
         { ...devspace('e4', 'no-slash') },
         { ...devspace('e5', 'o/r'), volumeName: '' },
+        // An entry of version 0.2.1 or older, whose objects have the old names and labels.
+        { ...devspace('e11', 'o/h'), volumeName: 'devspace-o-h-brave-noether', containerName: 'devspace-o-h-brave-noether' },
+        { ...devspace('e12', 'o/i'), volumeName: 'DevSpace-o-i-brave-noether' },
         { ...devspace('e6', 'o/r'), containerName: 7 },
         { ...devspace('', 'o/r') },
         'text',
@@ -348,6 +351,9 @@ describe('DevspaceRegistry.needsRestore: the registry lost content', () => {
     writeRaw({ version: 1, devspaces: [ENTRY, { id: 'broken' }] });
     expect(await needsRestore()).toBe(true);
     writeRaw({ version: 1, devspaces: [ENTRY, ENTRY] });
+    expect(await needsRestore()).toBe(true);
+    // An entry of version 0.2.1 or older.
+    writeRaw({ version: 1, devspaces: [ENTRY, { ...ENTRY, id: ID_B, volumeName: 'devspace-o-r-brave-noether' }] });
     expect(await needsRestore()).toBe(true);
   });
 

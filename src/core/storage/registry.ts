@@ -528,8 +528,16 @@ const OPTIONAL_FIELDS: ReadonlyArray<readonly [keyof Devspace, Check]> = [
 ];
 
 /**
- * Checks one entry in place. An entry without a usable ID, repository, volume name, container name, or owner is left out.
- * Missing configuration path and times get defaults. Invalid optional fields are removed. Unknown fields are kept.
+ * The start of the names of the devspaces of version 0.2.1 and older (since then RESOURCE_NAME_PREFIX). Their volumes
+ * and containers have the old names and labels, which this version does not use (docs/guide.md, "Update from version
+ * 0.2.1 or older"): their entries are left out, so that a start creates a new devspace instead of one with an old name.
+ */
+const OLD_RESOURCE_NAME_PREFIX = 'devspace-';
+
+/**
+ * Checks one entry in place. An entry without a usable ID, repository, volume name, container name, or owner is left out,
+ * and so is an entry of version 0.2.1 or older (OLD_RESOURCE_NAME_PREFIX). Missing configuration path and times get
+ * defaults. Invalid optional fields are removed. Unknown fields are kept.
  */
 function normalizeDevspace(value: unknown): Devspace | undefined {
   if (!isRecord(value)) return undefined;
@@ -538,7 +546,8 @@ function normalizeDevspace(value: unknown): Devspace | undefined {
     !isRepositoryName(value.repository) ||
     !isNonEmptyString(value.volumeName) ||
     !isNonEmptyString(value.containerName) ||
-    !isOwner(value.owner)
+    !isOwner(value.owner) ||
+    value.volumeName.toLowerCase().startsWith(OLD_RESOURCE_NAME_PREFIX)
   ) {
     return undefined;
   }
