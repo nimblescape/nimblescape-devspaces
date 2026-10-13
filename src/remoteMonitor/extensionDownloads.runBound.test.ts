@@ -303,7 +303,7 @@ describe('a failure of the network waits for no day while the run reached no ser
     }, { network });
     await downloadExtensions(f.deps);
     expect(failures(state)).toEqual([]);
-    expect(f.logs.filter((line) => line.endsWith('the retry of the run tries it again.'))).toHaveLength(2);
+    expect(f.logs.filter((line) => line.endsWith('the next run tries it again.'))).toHaveLength(2);
     expect(seen.reached).toBe(false);
   });
 
@@ -339,6 +339,17 @@ describe('a failure of the network waits for no day while the run reached no ser
     await downloadExtensions(f.deps);
     expect(seen.failed).toHaveLength(1);
     expect(failures(state)).toEqual([]);
+  });
+
+  it('a query of pinned IDs that the Marketplace refused (HTTP 400) reached it', async () => {
+    const { root, state } = prepared([{ id: 'a.a', version: '1.0.0' }]);
+    const { network, seen } = runNetwork();
+    const f = fake(root, state, () => {
+      throw new Error('the Marketplace answered HTTP 400');
+    }, { network });
+    await downloadExtensions(f.deps);
+    expect(seen.reached).toBe(true);
+    expect(failures(state)).toEqual(['a.a@1.0.0']);
   });
 
   it('a query of the newest versions that the Marketplace refused (HTTP 400) reached it', async () => {

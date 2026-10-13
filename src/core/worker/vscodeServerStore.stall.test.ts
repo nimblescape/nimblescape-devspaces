@@ -74,12 +74,10 @@ describe('a download that receives nothing ends as stalled', () => {
     const file = path.join(tempDir(), 'server.tar.gz');
     const t = streamOf(async () => ({ status: 200, headers: { 'content-length': String(3 * 1024 * 1024) }, body: hangingBody(Buffer.alloc(1024 * 1024)) }));
     const started = Date.now();
-    const failure = downloadToFile(t.transport, URL_, file, 10 * 1024 * 1024, never(), undefined, undefined, 80);
-    await expect(failure).rejects.toThrow(/^the download stalled: no data for 0 s after 1\.0 of 3\.0 MiB in \d+ s$/);
+    await expect(downloadToFile(t.transport, URL_, file, 10 * 1024 * 1024, never(), undefined, undefined, 80)).rejects.toThrow(
+      /^the download stalled: no data for 0 s after 1\.0 of 3\.0 MiB in \d+ s$/,
+    );
     expect(Date.now() - started).toBeLessThan(5_000);
-    // A time limit as its cause: a failure of the network for the background run of the Monitor (isNetworkFailure).
-    const error = await failure.catch((caught: unknown) => caught);
-    expect((error as Error).cause).toMatchObject({ name: 'TimeoutError' });
   });
 
   it('no answer at all ends after the stall time too, and the request gets an aborted signal', async () => {
@@ -122,11 +120,7 @@ describe('a download that receives nothing ends as stalled', () => {
         })(),
       ),
     }));
-    const failure = downloadToFile(t.transport, URL_, file, 10 * 1024 * 1024, never());
-    await expect(failure).rejects.toThrow(/^read ECONNRESET after 2\.0 of 4\.0 MiB in \d+ s$/);
-    // The code of the socket stays in the cause: a failure of the network for the background run (isNetworkFailure).
-    const error = await failure.catch((caught: unknown) => caught);
-    expect((error as Error).cause).toMatchObject({ code: 'ECONNRESET' });
+    await expect(downloadToFile(t.transport, URL_, file, 10 * 1024 * 1024, never())).rejects.toThrow(/^read ECONNRESET after 2\.0 of 4\.0 MiB in \d+ s$/);
   });
 
   it('a cancel of the caller stays the caller error (AbortError), never a stall', async () => {

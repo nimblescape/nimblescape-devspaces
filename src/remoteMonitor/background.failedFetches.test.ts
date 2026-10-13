@@ -41,8 +41,8 @@ async function readyServer(root: string, server: VscodeServerRef, platform: Vsco
 
 function harness(options: {
   commits: Partial<Record<'stable' | 'insider', string[] | Error>>;
-  /** The fetch of a server: ready, or not ready (false: no cause; `cause`: the cause that it reports first). */
-  ensure: boolean | { cause: unknown };
+  /** The fetch of a server: ready or not. */
+  ensure: boolean;
   /** Part a (default: nothing to do). */
   images?: () => Promise<NetworkContact | void>;
   /** The prepares (default: none). */
@@ -105,11 +105,7 @@ function harness(options: {
       locks.push(name);
       return { kind: 'locked', release: () => {} };
     },
-    ensure: async (deps) => {
-      if (typeof options.ensure === 'boolean') return options.ensure;
-      deps.onFailure?.(options.ensure.cause);
-      return false;
-    },
+    ensure: async () => options.ensure,
   };
   const run = new BackgroundRun({
     log: (message) => log.push(message),
@@ -146,23 +142,10 @@ describe('the failed fetches that the run stores', () => {
 describe('a run that did not reach the network', () => {
   const offline = Object.assign(new Error('getaddrinfo ENOTFOUND update.code.visualstudio.com'), { code: 'ENOTFOUND' });
 
-  it('resolves true when every part reached it, also when a fetch failed for the server version', async () => {
-    const h = harness({ commits: { stable: [commit(1)] }, ensure: { cause: new Error('the download answered HTTP 404') } });
-    expect(await h.run.run()).toBe(true);
-    expect(h.log).toContain('The background run ended.');
-    // A failure of the version waits a day, as before.
-    expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBe(NOW);
-  });
-
-  it('a fetch of the server that failed for the network after the update service answered: the run reached it, the version waits a day', async () => {
-    const h = harness({ commits: { stable: [commit(1)] }, ensure: { cause: offline } });
-    expect(await h.run.run()).toBe(true);
-    expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBe(NOW);
-  });
-
-  it('a fetch that failed without a cause waits a day and counts as reached (no evidence of the network)', async () => {
+  it('a failed fetch of the server, for any cause, waits a day: the update service answered before it, so the run reached the network', async () => {
     const h = harness({ commits: { stable: [commit(1)] }, ensure: false });
     expect(await h.run.run()).toBe(true);
+    expect(h.log).toContain('The background run ended.');
     expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBe(NOW);
   });
 
