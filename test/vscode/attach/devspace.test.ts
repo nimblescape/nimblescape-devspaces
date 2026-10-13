@@ -59,7 +59,10 @@ describe('the window of a devspace', () => {
       { gitConfigOfRunner: paths.gitConfigOfRunner, gitCredentialHelper: paths.gitCredentialHelper, dockerCredentialHelper: paths.dockerCredentialHelper, githubCli: paths.githubCli },
       { gitConfigOfRunner: false, gitCredentialHelper: false, dockerCredentialHelper: false, githubCli: false },
     );
-    // The forwarded SSH agent is listed only: Git does not use it (GIT_SSH_COMMAND of the devspace), other programs can.
+    // The forwarded SSH agent stays: Dev Containers forwards it into every container and no setting turns this off
+    // (docs/security.md, "SSH agent"). Git does not use it (GIT_SSH_COMMAND of the devspace), other programs can. When
+    // this fails, the forwarding changed and docs/security.md must say so.
+    assert.strictEqual(paths.sshAgentKeys, 1, 'The SSH agent of the runner (one key) is no longer forwarded');
     const sshCommand = execIn(user, 'printf %s "$GIT_SSH_COMMAND"').out;
     assert.strictEqual(sshCommand, 'ssh -o IdentityAgent=none');
   });
