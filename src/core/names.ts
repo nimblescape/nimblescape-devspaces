@@ -312,6 +312,40 @@ export function isDevspaceResourceName(name: string): boolean {
   return lower.startsWith(RESOURCE_NAME_PREFIX) && /^[a-z0-9-]+$/.test(lower.slice(RESOURCE_NAME_PREFIX.length)) && trailingPair(lower) !== undefined;
 }
 
+/** The start of the name of a worker container (workerContainerName). */
+export const WORKER_NAME_PREFIX = 'devspace-worker-';
+
+/**
+ * The longest window part of a worker name (workerContainerName): the longest name of a devspace without `devspace-`,
+ * so that the worker of a devspace window carries the whole name of its devspace.
+ */
+const WORKER_WINDOW_LENGTH = MAX_NAME_LENGTH - RESOURCE_NAME_PREFIX.length;
+
+/**
+ * The name of a worker container, `devspace-worker-<window>-<random>`, so that `docker ps` tells which VS Code window a
+ * worker belongs to. `<window>` is `windowName` (ConnectionAdapter.windowName: the container of an attached window,
+ * else its workspace file or its first folder), without the `devspace-` of the name of a devspace
+ * (isDevspaceResourceName): lower case, letters without their accents, each run of other characters than `[a-z0-9]` as
+ * one `-`, without `-` at the ends, at most WORKER_WINDOW_LENGTH characters, and `window` when nothing is left.
+ * `<random>` (4 hex characters by default) is new for each worker: it keeps the workers of windows with the same name
+ * on one engine apart (two windows of one folder, windows of two computers on one remote engine, and the next worker of
+ * a window while Docker still removes the last one), and, as no word of a name pair is only hex characters
+ * (namePairs.ts), it keeps a worker name off the shape of a name of a devspace. Nothing finds a worker by its name (the
+ * labels do), and the worker never reads it (readOwnHelper reads its container ID).
+ */
+export function workerContainerName(windowName: string, random = crypto.randomBytes(2).toString('hex')): string {
+  const name = isDevspaceResourceName(windowName) ? windowName.slice(RESOURCE_NAME_PREFIX.length) : windowName;
+  const window = name
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, WORKER_WINDOW_LENGTH)
+    .replace(/-+$/, '');
+  return `${WORKER_NAME_PREFIX}${window === '' ? 'window' : window}-${random}`;
+}
+
 /** Repository part of the devspace image name: resourceName. */
 export function devspaceImageRepository(repository: string, devspaceId: string): string {
   return resourceName(repository, devspaceId);

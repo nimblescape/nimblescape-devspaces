@@ -282,6 +282,8 @@ async function activateExtension(
   // Cancelled when the window closes, after the release of deactivate() (which may join its build), as the preparations
   // of the heartbeats.
   context.subscriptions.push(closingWork.deferred({ dispose: () => helperBuilds.dispose() }));
+  // The window of an attached container, also in the names of its workers (ConnectionAdapter.windowName).
+  const connection = new ConnectionAdapter(logger);
   const channels = new HelperChannels({
     logger,
     // The refresh found no helper image (see helperBuilds above).
@@ -313,6 +315,8 @@ async function activateExtension(
           stateVolume: REMOTE_MONITOR_VOLUME,
           // The shared VS Code server store of the engine, which the worker mounts read-write.
           vscodeVolume: VSCODE_STORE_VOLUME,
+          // The name of this window in the name of the worker's container.
+          windowName: () => connection.windowName(),
         },
         target,
       ),
@@ -349,7 +353,6 @@ async function activateExtension(
     timeZone: () => usableTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone),
     computerId,
   });
-  const connection = new ConnectionAdapter(logger);
   // The heartbeats of this window to the Monitor container of the engine of each devspace it uses, through
   // this window's worker of that engine (its operation `heartbeat`; the worker is made ready first); a missing monitor
   // is started again as the open starts it. `signal` aborts at the deadline of the heartbeat's attempt; it ends only
