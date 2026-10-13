@@ -12,7 +12,7 @@ import type { ExtensionSettings } from '../types';
 /** Whether the host access policy refuses the settings that need access to the computer, for one repository. */
 export type HostAccessChecks = 'on' | 'off';
 
-/** The key of the setting below the section devspace. */
+/** The key of the setting below the section devspaces. */
 export const HOST_ACCESS_CHECKS_OFF_SETTING = 'hostAccessChecksOff';
 
 /**

@@ -26,7 +26,7 @@ VS Code installs the Dev Containers extension with it. To install a `.vsix` file
 Version 0.2.1 and older named the Docker objects of Devspaces `devspace-…` and their labels `nimblescape.devspace.…`. Later versions name them `devspaces-…` and `nimblescape.devspaces.…`, and they do not use the objects of the older versions: the sidebar does not show a devspace of an older version, and a start of its repository creates a new devspace that clones the repository again.
 
 1. Before the update, push the changes in each devspace.
-2. After the update, remove on each Docker engine the containers, volumes, images, and networks of the older version: their names start with `devspace-` (without `s`), for example the Monitor container and volume `devspace-monitor`, the volumes `devspace-vscode` and `devspace-helper-cache`, the image `devspace-helper`, and the containers, volumes, images, and Compose networks of each devspace.
+2. After the update, remove the objects of the older version on each Docker engine before you start a devspace, because the host access checks of the new version do not protect them. These are the containers, volumes, images, and networks whose names start with `devspace-` (without `s`): the Monitor container and volume `devspace-monitor`, the volumes `devspace-vscode` and `devspace-helper-cache`, the images `devspace-helper` and `devspace-monitor`, and the containers, volumes, images, and Compose networks of each devspace.
 3. Rename your settings and keybindings as described in [Settings](#settings).
 
 All computers that use one Docker engine need the same version: an older version does not see the devspaces of a newer one, and the other way round.
