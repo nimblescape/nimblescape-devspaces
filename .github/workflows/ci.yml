@@ -183,6 +183,7 @@ jobs:
       - name: Run the integration tests against Docker
         env:
           DEVSPACE_TEST_GROUP: ${{ matrix.group }}
+          DEVSPACE_TEST_GROUP_COUNT: ${{ strategy.job-total }}
         run: npm run test:docker
 
   vscode:

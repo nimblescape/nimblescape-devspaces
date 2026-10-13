@@ -12,7 +12,8 @@ const TEST_FILES = 'test/docker/**/*.test.ts';
  * The groups of test files that CI runs side by side, each on a runner and engine of its own (DEVSPACE_TEST_GROUP, the
  * matrix of the job "docker" in .github/workflows/ci.yml); each takes about the same time by the times of the files in
  * CI. The group `other` runs every file that no group here names, so a new test file always runs in CI. Without
- * DEVSPACE_TEST_GROUP, every file runs.
+ * DEVSPACE_TEST_GROUP, every file runs. The matrix names these groups and `other`, each once: CI passes the number of
+ * its jobs (DEVSPACE_TEST_GROUP_COUNT), so a group that the matrix leaves out fails every job.
  */
 const TEST_GROUPS = new Map<string, string[]>([
   ['monitor', ['test/docker/remoteMonitor.test.ts', 'test/docker/workerBatch.test.ts']],
@@ -20,15 +21,18 @@ const TEST_GROUPS = new Map<string, string[]>([
 ]);
 
 /** The test files of DEVSPACE_TEST_GROUP: `include`, and what to leave out of it. */
-function testGroup(group: string | undefined): { include: string[]; exclude: string[] } {
+function testGroup(group: string | undefined, count: string | undefined): { include: string[]; exclude: string[] } {
   if (group === undefined || group === '') return { include: [TEST_FILES], exclude: [] };
+  if (count !== undefined && count !== String(TEST_GROUPS.size + 1)) {
+    throw new Error(`CI runs ${count} groups of Docker tests, but vitest.docker.config.mts has ${TEST_GROUPS.size + 1} (${[...TEST_GROUPS.keys(), 'other'].join(', ')}).`);
+  }
   if (group === 'other') return { include: [TEST_FILES], exclude: [...TEST_GROUPS.values()].flat() };
   const files = TEST_GROUPS.get(group);
   if (files === undefined) throw new Error(`DEVSPACE_TEST_GROUP=${group} names no group (${[...TEST_GROUPS.keys(), 'other'].join(', ')}).`);
   return { include: files, exclude: [] };
 }
 
-const group = testGroup(process.env.DEVSPACE_TEST_GROUP);
+const group = testGroup(process.env.DEVSPACE_TEST_GROUP, process.env.DEVSPACE_TEST_GROUP_COUNT);
 
 // Integration tests against the real Docker engine (npm run test:docker). `npm test` does not run them.
 export default defineConfig({
