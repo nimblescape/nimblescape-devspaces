@@ -22,7 +22,7 @@ const T0 = Date.parse('2026-10-09T10:00:00Z');
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-11h2r1-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-11h2r1-'));
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -120,7 +120,7 @@ describe('the HTTPS of the VS Code part', () => {
         return {};
       },
     };
-    const deps = vscodeBackgroundDeps({ DEVSPACE_VSCODE_STORE: 'devspace-vscode' }, engine, () => {});
+    const deps = vscodeBackgroundDeps({ DEVSPACE_VSCODE_STORE: 'devspaces-vscode' }, engine, () => {});
     const controller = new AbortController();
     const request = deps!.store.transport.request({ method: 'GET', url: 'https://127.0.0.1:1/', headers: {} }, controller.signal);
     await request.catch(() => undefined);

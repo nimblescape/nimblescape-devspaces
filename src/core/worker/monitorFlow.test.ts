@@ -40,7 +40,7 @@ describe('the commands of the Monitor in the worker', () => {
 
   it('tells a missing or stopped monitor from another failure, and names the busy lock, a kill and the time limit', async () => {
     const answer = async (thrown: unknown) => sendHeartbeat(engineWith(() => Promise.reject(thrown)).engine, HEARTBEAT);
-    expect(await answer(new EngineError('No such container: devspace-monitor', 404))).toMatchObject({ ok: false, missing: true });
+    expect(await answer(new EngineError('No such container: devspaces-monitor', 404))).toMatchObject({ ok: false, missing: true });
     expect(await answer(new EngineError('Container 1234 is not running', 409))).toMatchObject({ ok: false, missing: true });
     expect(await answer(new EngineError('Container 1234 is paused', 409))).toMatchObject({ ok: false, missing: false });
     expect(await answer(new Error('connect ENOENT'))).toEqual({ ok: false, missing: false, detail: 'connect ENOENT' });
@@ -77,11 +77,11 @@ describe('the commands of the Monitor in the worker', () => {
   it("removes Delete's record of the computer, and a test may name its own monitor container", async () => {
     const { engine, calls } = engineWith(async () => result(0));
     await forgetRecord(engine, SOURCE, ID);
-    await sendHeartbeat(engine, HEARTBEAT, undefined, 'devspace-test-monitor');
+    await sendHeartbeat(engine, HEARTBEAT, undefined, 'devspaces-test-monitor');
     // The commands of the entries monitorForget and monitorHeartbeat.
     expect(calls.map((call) => [call.container, call.command])).toEqual([
       [REMOTE_MONITOR_CONTAINER, scriptCommand('monitorForget', [SOURCE, ID])],
-      ['devspace-test-monitor', scriptCommand('monitorHeartbeat', [JSON.stringify(HEARTBEAT)])],
+      ['devspaces-test-monitor', scriptCommand('monitorHeartbeat', [JSON.stringify(HEARTBEAT)])],
     ]);
   });
 

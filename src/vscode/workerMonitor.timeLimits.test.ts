@@ -14,7 +14,7 @@ import { workerMonitor, type TargetFlow } from './workerMonitor';
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
 const TARGET = { kind: 'remote', host: 'ssh://box', endpoint: 'ssh://box', context: 'box' } as DockerTarget;
 const LOCAL = { kind: 'local', host: '' } as DockerTarget;
-const DEVSPACE = { id: ID, repository: 'acme/api', containerName: 'devspace-acme-api-brave-noether' } as Devspace;
+const DEVSPACE = { id: ID, repository: 'acme/api', containerName: 'devspaces-acme-api-brave-noether' } as Devspace;
 
 function monitorWith(answer: () => unknown) {
   const calls: Parameters<TargetFlow>[] = [];

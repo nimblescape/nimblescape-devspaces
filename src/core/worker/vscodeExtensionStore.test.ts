@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 function store(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ext-store-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ext-store-'));
   temps.push(root);
   return root;
 }
@@ -92,7 +92,7 @@ describe('the record of an open', () => {
   it('refuses an invalid devspace ID and a link in place of its folder; the records skip junk files', async () => {
     const root = store();
     await expect(recordExtensions(root, '../x', [], [], 1)).rejects.toThrow('invalid');
-    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ext-elsewhere-'));
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ext-elsewhere-'));
     temps.push(elsewhere);
     fs.symlinkSync(elsewhere, path.join(root, 'extensions'));
     await expect(recordExtensions(root, ENV, [], [], 1)).rejects.toThrow('is not a folder');

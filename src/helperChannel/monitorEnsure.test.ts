@@ -17,7 +17,7 @@ import { contextSecrets } from './operationContext.testkit';
 import type { OperationContext } from './server';
 
 const SCRIPT = 'console.log("the monitor of the test")';
-const OWN: OwnHelper = { image: { tag: 'devspace-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
+const OWN: OwnHelper = { image: { tag: 'devspaces-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
 const IMAGES = { schedule: '7 6 * * *', timeZone: 'UTC' };
 const RUNNING_ID = 'feed'.padEnd(64, '1');
 
@@ -66,12 +66,12 @@ describe('the ensure of the Monitor in the worker', () => {
     const [spec] = specs;
     // The label names the tag. The container runs from the monitor tag of the pinned image, tagged first, and the
     // create checks that ID.
-    expect(tagged).toEqual([`${OWN.image.id} devspace-monitor:0123456789ab`]);
-    expect(spec.image).toBe('devspace-monitor:0123456789ab');
+    expect(tagged).toEqual([`${OWN.image.id} devspaces-monitor:0123456789ab`]);
+    expect(spec.image).toBe('devspaces-monitor:0123456789ab');
     expect(spec.imageId).toBe(OWN.image.id);
     expect(spec.labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, []));
     expect(spec.labels[LABEL_MONITOR_CREATE]).toMatch(/^[0-9a-f-]{36}$/);
-    expect(spec.mounts).toEqual({ socket: OWN.socket, volume: 'devspace-monitor', volumeTarget: '/state' });
+    expect(spec.mounts).toEqual({ socket: OWN.socket, volume: 'devspaces-monitor', volumeTarget: '/state' });
     // The monitor always has the default network (its background run reaches the update service of VS Code).
     expect(spec.network).toBe('default');
     expect(spec.command.slice(-2)).toEqual([bundleHash(SCRIPT), 'startMonitor']);
@@ -94,18 +94,18 @@ describe('the ensure of the Monitor in the worker', () => {
   // the worker's store is mounted read-write at /vscode.
   it('a permanent monitor with the store of the worker: its label part, unless-stopped, the store mount and its name', async () => {
     const { engine, specs } = engineWith({});
-    const own: OwnHelper = { ...OWN, vscodeStore: 'devspace-vscode' };
+    const own: OwnHelper = { ...OWN, vscodeStore: 'devspaces-vscode' };
     await monitorEnsureOperation(() => engine, async () => own, () => SCRIPT)({ images: { ...IMAGES, permanent: true } }, contextOf().context);
     // The part of the mode, and the label names the store that it mounts.
-    expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_LABEL_PART, vscodeStoreLabelPart('devspace-vscode')]));
+    expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_LABEL_PART, vscodeStoreLabelPart('devspaces-vscode')]));
     expect(specs[0].restartPolicy).toBe('unless-stopped');
-    expect(specs[0].mounts).toEqual({ socket: OWN.socket, volume: 'devspace-monitor', volumeTarget: '/state', store: { volume: 'devspace-vscode', target: '/vscode' } });
-    expect(specs[0].env).toEqual({ DEVSPACE_IMAGE_SCHEDULE: IMAGES.schedule, DEVSPACE_IMAGE_TZ: IMAGES.timeZone, DEVSPACE_MONITOR_PERMANENT: '1', DEVSPACE_VSCODE_STORE: 'devspace-vscode' });
+    expect(specs[0].mounts).toEqual({ socket: OWN.socket, volume: 'devspaces-monitor', volumeTarget: '/state', store: { volume: 'devspaces-vscode', target: '/vscode' } });
+    expect(specs[0].env).toEqual({ DEVSPACE_IMAGE_SCHEDULE: IMAGES.schedule, DEVSPACE_IMAGE_TZ: IMAGES.timeZone, DEVSPACE_MONITOR_PERMANENT: '1', DEVSPACE_VSCODE_STORE: 'devspaces-vscode' });
     // One that ends when idle: `on-failure`, no part, no variable of the mode.
     const idle = engineWith({});
     await monitorEnsureOperation(() => idle.engine, async () => own, () => SCRIPT)({ images: { ...IMAGES, permanent: false } }, contextOf().context);
     // The label names the store.
-    expect(idle.specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [vscodeStoreLabelPart('devspace-vscode')]));
+    expect(idle.specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [vscodeStoreLabelPart('devspaces-vscode')]));
     expect(idle.specs[0].restartPolicy).toBe('on-failure');
     expect(idle.specs[0].env).not.toHaveProperty('DEVSPACE_MONITOR_PERMANENT');
   });
@@ -174,7 +174,7 @@ describe('the image of the monitor container', () => {
     expect(parseMonitorEnsureValue(await monitorEnsureOperation(() => engine, async () => OWN, () => SCRIPT)({ images: IMAGES }, context))).toEqual({ outcome: 'created' });
     expect(specs[0].image).toBe(OWN.image.id);
     expect(specs[0].imageId).toBeUndefined();
-    expect(lines.some((line) => line.includes('could not be tagged as devspace-monitor:0123456789ab') && line.includes('no such image'))).toBe(true);
+    expect(lines.some((line) => line.includes('could not be tagged as devspaces-monitor:0123456789ab') && line.includes('no such image'))).toBe(true);
   });
 
   it('a worker whose tag is no helper tag: the image ID, nothing tagged', async () => {

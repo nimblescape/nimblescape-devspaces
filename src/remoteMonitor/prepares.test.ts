@@ -239,8 +239,8 @@ describe('the worker of the prepares', () => {
   let tempRoot: string;
 
   beforeEach(() => {
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-11k2c-state-'));
-    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-11k2c-tmp-'));
+    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-11k2c-state-'));
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-11k2c-tmp-'));
   });
 
   afterEach(() => {

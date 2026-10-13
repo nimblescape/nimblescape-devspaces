@@ -172,7 +172,7 @@ let github: FakeGitHub;
 let owners: string[];
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-incremental-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-incremental-'));
   file = path.join(dir, `repositories-${ACCOUNT_ID}.json`);
   github = new FakeGitHub();
   owners = [];

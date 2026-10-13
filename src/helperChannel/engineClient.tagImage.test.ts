@@ -21,7 +21,7 @@ describe('tagImage over the Engine API', () => {
   });
 
   async function serve(status: number) {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-tag-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-tag-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     const urls: string[] = [];
@@ -40,17 +40,17 @@ describe('tagImage over the Engine API', () => {
 
   it('splits the reference at its last colon and encodes the repository', async () => {
     const { engine, urls } = await serve(201);
-    await engine.tagImage('sha256:aaa', 'devspace-monitor:x:0123456789ab');
+    await engine.tagImage('sha256:aaa', 'devspaces-monitor:x:0123456789ab');
     await engine.tagImage('sha256:aaa', 'devspace&monitor:0123456789ab');
     expect(urls).toEqual([
-      '/images/sha256%3Aaaa/tag?repo=devspace-monitor%3Ax&tag=0123456789ab',
+      '/images/sha256%3Aaaa/tag?repo=devspaces-monitor%3Ax&tag=0123456789ab',
       '/images/sha256%3Aaaa/tag?repo=devspace%26monitor&tag=0123456789ab',
     ]);
   });
 
   it('accepts a 200 answer', async () => {
     const { engine, urls } = await serve(200);
-    await expect(engine.tagImage('sha256:aaa', 'devspace-monitor:0123456789ab')).resolves.toBeUndefined();
+    await expect(engine.tagImage('sha256:aaa', 'devspaces-monitor:0123456789ab')).resolves.toBeUndefined();
     expect(urls).toHaveLength(1);
   });
 
@@ -58,7 +58,7 @@ describe('tagImage over the Engine API', () => {
     const { engine, urls } = await serve(201);
     const aborted = new AbortController();
     aborted.abort();
-    await expect(engine.tagImage('sha256:aaa', 'devspace-monitor:0123456789ab', aborted.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(engine.tagImage('sha256:aaa', 'devspaces-monitor:0123456789ab', aborted.signal)).rejects.toMatchObject({ name: 'AbortError' });
     expect(urls).toEqual([]);
   });
 });

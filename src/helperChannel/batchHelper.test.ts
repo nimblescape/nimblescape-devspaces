@@ -372,7 +372,7 @@ describe('the secrets tmpfs after a step with a secret', () => {
   });
 
   it('a folder in the secrets tmpfs is removed with what it holds', async () => {
-    const secrets = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-secrets-'));
+    const secrets = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-secrets-'));
     try {
       fs.writeFileSync(path.join(secrets, 'github-token'), TOKEN);
       fs.mkdirSync(path.join(secrets, 'copy', 'deeper'), { recursive: true });
@@ -389,7 +389,7 @@ describe('the secrets tmpfs after a step with a secret', () => {
 
 describeUnix('the real processes of the helper', () => {
   it('runQuietProcess passes each argument as it is, with no shell', async () => {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-quiet-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-quiet-'));
     try {
       const file = path.join(folder, 'out');
       const argument = 'a b; echo injected > "$0" | x';
@@ -415,7 +415,7 @@ describeUnix('the real processes of the helper', () => {
   it(
     'a process outside the group that holds the pipes does not hold the step',
     async () => {
-      const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-escape-'));
+      const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-escape-'));
       const pidFile = path.join(folder, 'pid');
       let escaped: number | undefined;
       try {
@@ -662,7 +662,7 @@ describe.runIf(gnuFind && process.getuid?.() === 0)('the files of the Git user g
 
 describe('the override folder before a read step', () => {
   it('a read step starts without the files that earlier root steps left below OVERRIDE_FOLDER (a folder with files)', async () => {
-    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-override-'));
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-override-'));
     const override = path.join(temp, 'override');
     try {
       // What `up` or `build` of a Compose configuration leaves there: our configuration and a folder of files.
@@ -698,7 +698,7 @@ describe('the override folder before a read step', () => {
 
 describe('the override folder is cleared before a read step runs', () => {
   it('the files that a root step left below OVERRIDE_FOLDER are gone when the read step starts, not only after it', async () => {
-    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-override-'));
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-override-'));
     const override = path.join(temp, 'override');
     try {
       // What readConfiguration with Compose files leaves there as root: the model that composeHash writes to as well.
@@ -774,7 +774,7 @@ describe('CONFIG_FOLDER replaced by a link (the links of the owner)', () => {
    * a folder of the helper, for example the folder of the socket.
    */
   function volume(options: { configMode?: number; rootOwned?: boolean; afterLstat?: (file: string) => void; afterFstat?: () => void } = {}) {
-    const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-links-')));
+    const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-links-')));
     const config = path.join(base, 'workspaces', '.devspace+');
     const outside = path.join(base, 'outside');
     for (const folder of [path.join(base, 'workspaces', 'hello'), config, path.join(base, 'secrets'), outside]) fs.mkdirSync(folder, { recursive: true });

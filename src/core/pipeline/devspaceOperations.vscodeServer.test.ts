@@ -9,7 +9,7 @@ import { OP_OPEN, type OpenParams, type VscodeServerRef } from '../helperChannel
 import type { OperationFlow } from './devspaceOperations';
 import { ENV_ID, REPO, createHarness, seedDevspace } from './devspaceService.testkit';
 
-const OPENED = { devspaceId: ENV_ID, containerName: 'devspace-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
+const OPENED = { devspaceId: ENV_ID, containerName: 'devspaces-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
 const IMAGES = { schedule: '7 6 * * *', timeZone: 'UTC' };
 const SERVER: VscodeServerRef = { commit: '0123456789abcdef0123456789abcdef01234567', quality: 'stable' };
 

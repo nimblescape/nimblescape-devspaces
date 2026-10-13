@@ -27,7 +27,7 @@ const IMAGE_ID = /^(sha256:[0-9a-f]{1,64}|[0-9a-f]{64})$/i;
 
 /**
  * The repository of an image reference as Docker names it locally: Docker Hub's names without the registry and
- * without `library/` (`docker.io/library/devspace-1:2`, `index.docker.io/devspace-1`, and `devspace-1` all give `devspace-1`),
+ * without `library/` (`docker.io/library/devspaces-1:2`, `index.docker.io/devspaces-1`, and `devspaces-1` all give `devspaces-1`),
  * others with the registry. Lower case.
  */
 export function localImageRepository(reference: string): string {
@@ -58,7 +58,7 @@ function tooLongFinding(reference: string, what: string): HostAccessFinding {
  * (it can name any local image, also one of another account): `unsupported`; a reference longer than
  * MAX_REFERENCE_LENGTH: `unsupported`. `undefined` for any other reference. `what` names it in the item. Whether a name
  * refers to an image of the devspaces of another account is decided by the ID of the local image that it names, not
- * by its name (otherAccountImageItems): a name like `devspace-…` of a local image whose ID is not another account's is
+ * by its name (otherAccountImageItems): a name like `devspaces-…` of a local image whose ID is not another account's is
  * allowed; only a name of a devspace image that Docker found missing is decided by the name
  * (isOtherDevspaceImageName).
  */
@@ -195,7 +195,7 @@ export function imageInvalidReferenceItem(reference: string, what = 'image'): st
  * Docker Compose use to find and set up containers: the labels of the extension (EXTENSION_LABEL_KEYS),
  * `devcontainer.…`, and `com.docker.compose.…`, except `devcontainer.metadata`, the only label that the Dev Container
  * CLI puts on the images that it builds (CLI 0.89.0: `var EI="devcontainer.metadata"`; `devcontainer.local_folder` and
- * `devcontainer.config_file` are labels of containers). For example `LABEL nimblescape.devspace.compose-service=x` in a
+ * `devcontainer.config_file` are labels of containers). For example `LABEL nimblescape.devspaces.compose-service=x` in a
  * Dockerfile would hide the container from the lookups of the extension. Refused whatever the switch says
  * (HostAccessClass `protected`). The labels of the extension are all those with LABEL_PREFIX (isReservedLabel); labels
  * with the prefix `devspace.` are allowed: other tools use it on their images, and the extension never reads them. The
@@ -230,7 +230,7 @@ export interface OwnImageLabels {
 
 /**
  * The labels that the extension gives the images of the devspace `own` (imageRecordLabels of the devspace image,
- * and nimblescape.devspace.id of the images that Compose builds for it), with the values of `own`; the
+ * and nimblescape.devspaces.id of the images that Compose builds for it), with the values of `own`; the
  * build record with any value, only on the devspace image (the extension writes it after each build); the label of a
  * prepared image (LABEL_PREPARED) only empty, only on the devspace image. A container created from such an image
  * carries the same ID, repository, and owner as the devspace.
@@ -378,7 +378,7 @@ export interface DevspaceOwners {
 
 /**
  * DevspaceImageIds of `images` (the devspace images of the host, with their references `repository:tag` and the
- * label nimblescape.devspace.id that the extension gives the images it builds, `devspaceId`), by the
+ * label nimblescape.devspaces.id that the extension gives the images it builds, `devspaceId`), by the
  * owner accounts of the devspaces (`owners`: of the registry entries, and of the labels of the volumes of the host)
  * and the account `accountId`. An image with the label belongs to the devspace of that ID (an ID of no known owner
  * counts as another account's), unless one of its names is the name of a known devspace of another account; an image
@@ -433,7 +433,7 @@ export function hasUnknownDevspace(
 
 /**
  * The owner account of each devspace name (resourceName, in lower case) and of each devspace ID by the labels of
- * `volumes` (nimblescape.devspace.id, nimblescape.devspace.repository, and nimblescape.devspace.owner-id). A name
+ * `volumes` (nimblescape.devspaces.id, nimblescape.devspaces.repository, and nimblescape.devspaces.owner-id). A name
  * or ID whose volumes carry different owners is left out: its images count as another account's.
  */
 export function volumeOwners(volumes: ReadonlyArray<{ labels: Readonly<Record<string, string>> }>): { byName: Map<string, string>; byId: Map<string, string> } {

@@ -34,7 +34,7 @@ let root: string;
 let registry: DevspaceRegistry;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-restore-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-restore-'));
   registry = new DevspaceRegistry(new StoragePaths(root));
 });
 
@@ -78,9 +78,9 @@ describe('the restore of the registry from the volumes', () => {
   });
 
   it('a volume or container of the same name in another case is the same one', async () => {
-    await registry.add(entry(ID_A, 'acme/api', { volumeName: 'devspace-acme-api-x', containerName: 'devspace-acme-api-x' }));
-    const volume = entry(ID_B, 'acme/web', { volumeName: 'DEVSPACE-ACME-API-X', containerName: 'other' });
-    const container = entry(ID_C, 'acme/web', { volumeName: 'another', containerName: 'Devspace-Acme-Api-X' });
+    await registry.add(entry(ID_A, 'acme/api', { volumeName: 'devspaces-acme-api-x', containerName: 'devspaces-acme-api-x' }));
+    const volume = entry(ID_B, 'acme/web', { volumeName: 'DEVSPACES-ACME-API-X', containerName: 'other' });
+    const container = entry(ID_C, 'acme/web', { volumeName: 'another', containerName: 'Devspaces-Acme-Api-X' });
     expect(await registry.restore([volume, container])).toEqual({ added: 0, skipped: [] });
     expect(await registry.list()).toHaveLength(1);
   });

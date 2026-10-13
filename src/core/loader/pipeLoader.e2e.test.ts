@@ -75,7 +75,7 @@ describe('the pipe loader in a Node.js process', () => {
   const leftovers = (file: string) => (fs.existsSync(path.dirname(file)) ? fs.readdirSync(path.dirname(file)).filter((name) => name.endsWith('.tmp')) : []);
 
   beforeAll(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-loader-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-loader-'));
   });
 
   afterAll(() => {

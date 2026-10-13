@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// One `devspace-` prefix of the names of a devspace, for the names, the list of the devspace images
+// One `devspaces-` prefix of the names of a devspace, for the names, the list of the devspace images
 // (EngineDocker) and the image-ownership check of the host access policy (policy/images.ts).
 import { describe, expect, it } from 'vitest';
 import { RESOURCE_NAME_PREFIX, isDevspaceResourceName, resourceName } from './names';
@@ -13,8 +13,8 @@ import { EngineDocker } from './worker/engineDocker';
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
 
 describe('the resource prefix', () => {
-  it('is devspace-, the start of every name of a devspace', () => {
-    expect(RESOURCE_NAME_PREFIX).toBe('devspace-');
+  it('is devspaces-, the start of every name of a devspace', () => {
+    expect(RESOURCE_NAME_PREFIX).toBe('devspaces-');
     const name = resourceName('acme/api', ID);
     expect(name.startsWith(RESOURCE_NAME_PREFIX)).toBe(true);
     expect(isDevspaceResourceName(name)).toBe(true);
@@ -35,7 +35,7 @@ describe('the resource prefix', () => {
       ...unusedEngine(),
       images: async (filter) => (filters.push(filter), [{ id: 'sha256:a', repoTags: [`${RESOURCE_NAME_PREFIX}a:1`, 'devenx-a:1'], repoDigests: [], labels: {}, created: 'c' }]),
     });
-    expect(await docker.listDevspaceImages()).toEqual([{ id: 'sha256:a', tags: ['devspace-a:1'], createdAt: 'c' }]);
-    expect(filters).toEqual([{ reference: ['devspace-*'] }]);
+    expect(await docker.listDevspaceImages()).toEqual([{ id: 'sha256:a', tags: ['devspaces-a:1'], createdAt: 'c' }]);
+    expect(filters).toEqual([{ reference: ['devspaces-*'] }]);
   });
 });

@@ -32,13 +32,13 @@ function frame(stream: 1 | 2, text: string): Buffer {
 const READY = 'Monitor started';
 const ID = 'c0ffee'.repeat(10) + 'c0ff';
 const SPEC: MonitorRunSpec = {
-  name: 'devspace-monitor',
+  name: 'devspaces-monitor',
   image: 'sha256:' + 'a'.repeat(64),
-  labels: { 'nimblescape.devspace.monitor': 'label', 'nimblescape.devspace.monitor-create': 'nonce' },
+  labels: { 'nimblescape.devspaces.monitor': 'label', 'nimblescape.devspaces.monitor-create': 'nonce' },
   restartPolicy: 'on-failure',
   network: 'none',
   log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
-  mounts: { socket: '/var/run/docker.sock', volume: 'devspace-monitor', volumeTarget: '/state' },
+  mounts: { socket: '/var/run/docker.sock', volume: 'devspaces-monitor', volumeTarget: '/state' },
   env: { DEVSPACE_IMAGE_TZ: 'UTC' },
   command: ['node', '-e', 'loader', '/opt/devspace/monitor.js', 'hash', 'startMonitor'],
 };
@@ -59,7 +59,7 @@ describe('the attached create and the clock of the daemon over the Engine API', 
    * connection); `inputEnded` resolves when the client ended its input.
    */
   async function serve(answer: (call: Call) => { status: number; json?: unknown } | undefined, onInput: (socket: net.Socket, input: string) => void = () => {}) {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-attach-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-attach-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     const calls: Call[] = [];
@@ -113,7 +113,7 @@ describe('the attached create and the clock of the daemon over the Engine API', 
       `POST /containers/${ID}/attach`,
       `POST /containers/${ID}/start`,
     ]);
-    expect(calls[0].url).toBe('/containers/create?name=devspace-monitor');
+    expect(calls[0].url).toBe('/containers/create?name=devspaces-monitor');
     expect(calls[1].url).toBe(`/containers/${ID}/attach?stream=1&stdin=1&stdout=1&stderr=1`);
     expect(JSON.parse(calls[0].body)).toEqual({
       Image: SPEC.image,
@@ -132,7 +132,7 @@ describe('the attached create and the clock of the daemon over the Engine API', 
         CapDrop: ['ALL'],
         SecurityOpt: ['no-new-privileges'],
         LogConfig: { Type: 'json-file', Config: { 'max-size': '1m', 'max-file': '2' } },
-        Binds: ['/var/run/docker.sock:/var/run/docker.sock', 'devspace-monitor:/state'],
+        Binds: ['/var/run/docker.sock:/var/run/docker.sock', 'devspaces-monitor:/state'],
       },
     });
     expect(input()).toBe('"the script"\n');
@@ -157,19 +157,19 @@ describe('the attached create and the clock of the daemon over the Engine API', 
       ...SPEC,
       restartPolicy: 'unless-stopped',
       network: 'default',
-      mounts: { ...SPEC.mounts, store: { volume: 'devspace-vscode', target: '/vscode' } },
+      mounts: { ...SPEC.mounts, store: { volume: 'devspaces-vscode', target: '/vscode' } },
     };
     await engine.createAttached(spec, { input: 'x\n', readyText: READY, timeoutMs: 5_000 });
     const host = JSON.parse(calls[0].body).HostConfig;
     expect(host.RestartPolicy).toEqual({ Name: 'unless-stopped' });
-    expect(host.Binds).toEqual(['/var/run/docker.sock:/var/run/docker.sock', 'devspace-monitor:/state']);
-    expect(host.Mounts).toEqual([{ Type: 'volume', Source: 'devspace-vscode', Target: '/vscode', ReadOnly: false, VolumeOptions: { NoCopy: true } }]);
+    expect(host.Binds).toEqual(['/var/run/docker.sock:/var/run/docker.sock', 'devspaces-monitor:/state']);
+    expect(host.Mounts).toEqual([{ Type: 'volume', Source: 'devspaces-vscode', Target: '/vscode', ReadOnly: false, VolumeOptions: { NoCopy: true } }]);
     expect(host.CapDrop).toEqual(['ALL']);
     expect(host.PortBindings).toBeUndefined();
   });
 
   it('a name in use is a conflict; another refusal of the create is not; nothing is attached then', async () => {
-    const conflict = await serve(() => ({ status: 409, json: { message: 'Conflict. The container name "/devspace-monitor" is already in use by container "abc". You have to remove (or rename) that container to be able to reuse that name.' } }));
+    const conflict = await serve(() => ({ status: 409, json: { message: 'Conflict. The container name "/devspaces-monitor" is already in use by container "abc". You have to remove (or rename) that container to be able to reuse that name.' } }));
     expect(await conflict.engine.createAttached(SPEC, { input: 'x\n', readyText: READY, timeoutMs: 5_000 })).toMatchObject({ kind: 'exited', conflict: true });
     expect(conflict.calls).toHaveLength(1);
     const missing = await serve(() => ({ status: 404, json: { message: 'No such image: sha256:aaa' } }));
@@ -222,7 +222,7 @@ describe('the attached create and the clock of the daemon over the Engine API', 
       if (call.url.endsWith('/start')) return { status: 204 };
       return { status: 404, json: { message: 'unexpected' } };
     };
-    const spec = { ...SPEC, image: 'devspace-monitor:0123456789ab', imageId: PINNED };
+    const spec = { ...SPEC, image: 'devspaces-monitor:0123456789ab', imageId: PINNED };
     const same = await serve(answers(PINNED), (socket, given) => {
       if (given.endsWith('\n')) socket.write(frame(1, READY));
     });
@@ -234,7 +234,7 @@ describe('the attached create and the clock of the daemon over the Engine API', 
       `POST /containers/${ID}/start`,
     ]);
     // The ID is no field of the create.
-    expect(JSON.parse(same.calls[0].body).Image).toBe('devspace-monitor:0123456789ab');
+    expect(JSON.parse(same.calls[0].body).Image).toBe('devspaces-monitor:0123456789ab');
     expect(JSON.parse(same.calls[0].body)).not.toHaveProperty('imageId');
     const other = await serve(answers('sha256:' + 'c'.repeat(64)));
     expect(await other.engine.createAttached(spec, { input: 'x\n', readyText: READY, timeoutMs: 5_000 })).toEqual({
@@ -253,11 +253,11 @@ describe('the attached create and the clock of the daemon over the Engine API', 
 
   it('tags an image by its ID; a refusal fails; only a local repository:tag', async () => {
     const good = await serve(() => ({ status: 201 }));
-    await good.engine.tagImage('sha256:' + 'a'.repeat(64), 'devspace-monitor:0123456789ab');
-    expect(good.calls).toEqual([{ method: 'POST', url: `/images/sha256%3A${'a'.repeat(64)}/tag?repo=devspace-monitor&tag=0123456789ab`, body: '' }]);
+    await good.engine.tagImage('sha256:' + 'a'.repeat(64), 'devspaces-monitor:0123456789ab');
+    expect(good.calls).toEqual([{ method: 'POST', url: `/images/sha256%3A${'a'.repeat(64)}/tag?repo=devspaces-monitor&tag=0123456789ab`, body: '' }]);
     const refused = await serve(() => ({ status: 404, json: { message: 'No such image: sha256:aaa' } }));
-    await expect(refused.engine.tagImage('sha256:aaa', 'devspace-monitor:0123456789ab')).rejects.toThrow('No such image');
-    for (const reference of ['devspace-monitor', ':x', 'ghcr.io/acme/x:1', 'devspace-monitor@sha256:aa']) {
+    await expect(refused.engine.tagImage('sha256:aaa', 'devspaces-monitor:0123456789ab')).rejects.toThrow('No such image');
+    for (const reference of ['devspaces-monitor', ':x', 'ghcr.io/acme/x:1', 'devspaces-monitor@sha256:aa']) {
       await expect(refused.engine.tagImage('sha256:aaa', reference)).rejects.toThrow('is not a local repository:tag');
     }
     expect(refused.calls).toHaveLength(1);

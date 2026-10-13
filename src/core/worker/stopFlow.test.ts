@@ -15,7 +15,7 @@ import { STOP_CONTAINER_TIMEOUT_MS, stopFlow } from './stopFlow';
 import { MAX_STOPPED_SERVICES, MAX_STOP_FAILURE_LENGTH, parseStopValue } from '../helperChannel/protocol';
 
 const DEVSPACE_ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-const NAME = 'devspace-acme-api-brave-noether';
+const NAME = 'devspaces-acme-api-brave-noether';
 const FOLDER = '/workspaces/api';
 const NOW = '2026-10-03T23:00:00.000Z';
 

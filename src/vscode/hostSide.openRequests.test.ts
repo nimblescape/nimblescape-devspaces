@@ -165,14 +165,14 @@ describe('the registry writes of the open in the extension', () => {
     });
 
     it('the configuration leaves out a volume of another account, logged by this window; the build only an image of the devspace', async () => {
-      const own = { id: ID, repository: 'acme/api', volumeName: 'devspace-api', containerName: 'devspace-api', owner: { id: '42', login: 'octo' }, dockerHost: HOST } as Devspace;
-      const theirs = { id: 'e7', repository: 'acme/api', volumeName: 'devspace-theirs', containerName: 'devspace-theirs', owner: { id: '7', login: 'x' }, additionalVolumes: ['their-data'], dockerHost: HOST } as Devspace;
+      const own = { id: ID, repository: 'acme/api', volumeName: 'devspaces-api', containerName: 'devspaces-api', owner: { id: '42', login: 'octo' }, dockerHost: HOST } as Devspace;
+      const theirs = { id: 'e7', repository: 'acme/api', volumeName: 'devspaces-theirs', containerName: 'devspaces-theirs', owner: { id: '7', login: 'x' }, additionalVolumes: ['their-data'], dockerHost: HOST } as Devspace;
       const { host, warnings, file } = filed([own, theirs]);
       expect(await host.records.configuration(ID, { addVolumes: ['their-data', 'cache'] }, SCOPE)).toMatchObject({ additionalVolumes: ['cache'] });
       expect(warnings).toEqual(['The worker recorded the volume their-data for acme/api, which is left out: a devspace of another account uses it.']);
       await expect(host.records.configuration('e7', { cloned: true }, SCOPE)).rejects.toThrow('another account');
       expect(await host.records.build(ID, { kind: 'number', buildNumber: 4 }, SCOPE)).toMatchObject({ lastBuildNumber: 4 });
-      const record = { builtAt: '2026-10-04T12:00:00.000Z', devspaceImage: 'devspace-other:4', buildNumber: 4, configPath: DEFAULT, configHash: 'h', images: {}, features: {} };
+      const record = { builtAt: '2026-10-04T12:00:00.000Z', devspaceImage: 'devspaces-other:4', buildNumber: 4, configPath: DEFAULT, configHash: 'h', images: {}, features: {} };
       await expect(host.records.build(ID, { kind: 'record', record, dropRefused: false }, SCOPE)).rejects.toThrow('not one of an image of the devspace');
       expect(file().devspaces[0]).not.toHaveProperty('buildRecord');
     });

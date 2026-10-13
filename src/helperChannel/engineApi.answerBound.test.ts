@@ -26,7 +26,7 @@ describe('the bound of an answer of the Engine API', () => {
   // The bound is the most text that is kept, so an answer of exactly that many characters is kept whole and is not
   // truncated, with a bound of the request and with the default bound.
   it('keeps an answer of exactly its bound whole: not truncated', async () => {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-bound-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-bound-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     const OWN = 2 * 1024 * 1024;

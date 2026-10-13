@@ -72,7 +72,7 @@ function containerJson(p: {
     Created: p.created ?? '2026-09-24T10:00:00.000000000Z',
     Name: `/${p.name}`,
     State: { Status: p.status, Running: p.status === 'running' },
-    Config: { Image: p.image ?? 'devspace-3f2a9c1e:1', Labels: p.labels === undefined ? {} : p.labels },
+    Config: { Image: p.image ?? 'devspaces-3f2a9c1e:1', Labels: p.labels === undefined ? {} : p.labels },
     Image: 'sha256:abc',
   };
 }
@@ -91,18 +91,18 @@ describe('the containers of `docker container inspect`', () => {
     const info = read(
       containerJson({
         id: 'c1',
-        name: 'devspace-acme-api-3f2a9c1e',
+        name: 'devspaces-acme-api-3f2a9c1e',
         status: 'exited',
-        labels: { 'nimblescape.devspace.id': 'env-1', 'devcontainer.metadata': metadata },
+        labels: { 'nimblescape.devspaces.id': 'env-1', 'devcontainer.metadata': metadata },
       }),
     );
     expect(info).toEqual({
       id: 'c1',
-      name: 'devspace-acme-api-3f2a9c1e',
+      name: 'devspaces-acme-api-3f2a9c1e',
       state: 'stopped',
       rawState: 'exited',
-      labels: { 'nimblescape.devspace.id': 'env-1', 'devcontainer.metadata': metadata },
-      image: 'devspace-3f2a9c1e:1',
+      labels: { 'nimblescape.devspaces.id': 'env-1', 'devcontainer.metadata': metadata },
+      image: 'devspaces-3f2a9c1e:1',
       // The ID of the image (`Image`) is passed on.
       imageId: 'sha256:abc',
     });
@@ -117,12 +117,12 @@ describe('the containers of `docker container inspect`', () => {
         Id: 'c1',
         Created: '2026-09-24T10:00:00.000000000Z',
         Path: '/bin/sh',
-        Name: '/devspace-acme-api-3f2a9c1e',
+        Name: '/devspaces-acme-api-3f2a9c1e',
         State: { Status: 'running', Running: true, Pid: 42 },
         Image: image,
         HostConfig: { NetworkMode: 'bridge' },
         Mounts: [],
-        Config: { Image: 'devspace-acme-api-brave-noether:2', Labels: { 'nimblescape.devspace.id': 'env-1' } },
+        Config: { Image: 'devspaces-acme-api-brave-noether:2', Labels: { 'nimblescape.devspaces.id': 'env-1' } },
       };
       if (image === undefined) delete json.Image;
       return json;
@@ -131,7 +131,7 @@ describe('the containers of `docker container inspect`', () => {
     it('reads `Image` into imageId and `Config.Image` into image', () => {
       const info = read(inspected(imageId));
       expect(info?.imageId).toBe(imageId);
-      expect(info?.image).toBe('devspace-acme-api-brave-noether:2');
+      expect(info?.image).toBe('devspaces-acme-api-brave-noether:2');
     });
 
     it.each([
@@ -141,7 +141,7 @@ describe('the containers of `docker container inspect`', () => {
     ])('gives no imageId for %s `Image`', (_name, image) => {
       const info = read(inspected(image));
       expect(info?.id).toBe('c1');
-      expect(info?.image).toBe('devspace-acme-api-brave-noether:2');
+      expect(info?.image).toBe('devspaces-acme-api-brave-noether:2');
       expect(info).not.toHaveProperty('imageId');
     });
   });
@@ -154,7 +154,7 @@ describe('the containers of `docker container inspect`', () => {
       state: 'running',
       rawState: 'running',
       labels: {},
-      image: 'devspace-3f2a9c1e:1',
+      image: 'devspaces-3f2a9c1e:1',
       imageId: 'sha256:abc',
     });
   });
@@ -163,27 +163,27 @@ describe('the containers of `docker container inspect`', () => {
     const container = {
       ...containerJson({ id: 'c1', name: 'x', status: 'running' }),
       Mounts: [
-        { Type: 'volume', Name: 'devspace-acme-api-3f2a9c1e', Destination: '/workspaces' },
+        { Type: 'volume', Name: 'devspaces-acme-api-3f2a9c1e', Destination: '/workspaces' },
         { Type: 'volume', Name: 'api-node_modules', Destination: '/workspaces/api/node_modules' },
         { Type: 'bind', Source: '/tmp', Destination: '/tmp' },
         { Type: 'tmpfs', Destination: '/run' },
       ],
     };
-    expect(read(container)?.volumes).toEqual(['devspace-acme-api-3f2a9c1e', 'api-node_modules']);
+    expect(read(container)?.volumes).toEqual(['devspaces-acme-api-3f2a9c1e', 'api-node_modules']);
   });
 
   // The rule of the dev container (devContainerOf) is tested in devspaceContainers.test.ts.
 
   it('reads the subpaths of volumes that each container mounts', () => {
     const db = {
-      ...containerJson({ id: 'db1', name: 'devspace-3f2a9c1e-db-1', status: 'running', labels: { 'com.docker.compose.project': 'devspace-3f2a9c1e' } }),
+      ...containerJson({ id: 'db1', name: 'devspaces-3f2a9c1e-db-1', status: 'running', labels: { 'com.docker.compose.project': 'devspaces-3f2a9c1e' } }),
       // As Docker 27 prints a container that Compose created with a volume subpath: HostConfig.Mounts names the volume in
       // Source; Mounts (the mount points) has no subpath.
       HostConfig: {
         Mounts: [
           { Type: 'volume', Source: 'acme-api-3f2a9c1e', Target: '/var/lib/postgresql/data', VolumeOptions: { NoCopy: true, Subpath: 'api/data/pg' } },
           { Type: 'volume', Source: 'acme-api-3f2a9c1e', Target: '/init.sql', ReadOnly: true, VolumeOptions: { Subpath: 'api/init.sql' } },
-          { Type: 'volume', Source: 'devspace-3f2a9c1e_cache', Target: '/cache', VolumeOptions: {} },
+          { Type: 'volume', Source: 'devspaces-3f2a9c1e_cache', Target: '/cache', VolumeOptions: {} },
           { Type: 'bind', Source: '/etc/hosts', Target: '/x' },
         ],
       },
@@ -198,11 +198,11 @@ describe('the containers of `docker container inspect`', () => {
 
   it('reads the targets of the mounts of a container', () => {
     const dev = {
-      ...containerJson({ id: 'dev1', name: 'acme-api-3f2a9c1e', status: 'running', labels: { 'com.docker.compose.project': 'devspace-3f2a9c1e' } }),
+      ...containerJson({ id: 'dev1', name: 'acme-api-3f2a9c1e', status: 'running', labels: { 'com.docker.compose.project': 'devspaces-3f2a9c1e' } }),
       HostConfig: { Tmpfs: { '/workspaces/api/tmp': 'rw' } },
       Mounts: [
         { Type: 'volume', Name: 'acme-api-3f2a9c1e', Source: '/var/lib/docker/volumes/acme-api-3f2a9c1e/_data', Destination: '/workspaces', RW: true },
-        { Type: 'volume', Name: 'devspace-3f2a9c1e_pgdata', Source: '/var/lib/docker/volumes/devspace-3f2a9c1e_pgdata/_data', Destination: '/workspaces/api/.pgdata', RW: true },
+        { Type: 'volume', Name: 'devspaces-3f2a9c1e_pgdata', Source: '/var/lib/docker/volumes/devspaces-3f2a9c1e_pgdata/_data', Destination: '/workspaces/api/.pgdata', RW: true },
         { Type: 'bind', Source: '/home/me/.ssh', Destination: '/home/vscode/.ssh', RW: false },
         { Type: 'tmpfs', Destination: '/run/x' },
         { Type: 'volume', Name: 'broken' },
@@ -210,7 +210,7 @@ describe('the containers of `docker container inspect`', () => {
     };
     expect(read(dev)?.mountTargets).toEqual([
       { type: 'volume', volume: 'acme-api-3f2a9c1e', target: '/workspaces' },
-      { type: 'volume', volume: 'devspace-3f2a9c1e_pgdata', target: '/workspaces/api/.pgdata' },
+      { type: 'volume', volume: 'devspaces-3f2a9c1e_pgdata', target: '/workspaces/api/.pgdata' },
       // A read-only mount says so (RW false; the link of the shared VS Code server needs the store read-only).
       { type: 'bind', target: '/home/vscode/.ssh', readOnly: true },
       { type: 'tmpfs', target: '/run/x' },
@@ -222,15 +222,15 @@ describe('the containers of `docker container inspect`', () => {
     const dev = {
       ...containerJson({ id: 'dev1', name: 'acme-api-3f2a9c1e', status: 'running' }),
       Mounts: [
-        { Type: 'volume', Name: 'devspace-vscode', Source: '/var/lib/docker/volumes/devspace-vscode/_data', Destination: '/opt/devspace/vscode', RW: false },
-        { Type: 'volume', Name: 'devspace-vscode', Source: '/var/lib/docker/volumes/devspace-vscode/_data', Destination: '/opt/rw', RW: true },
-        { Type: 'volume', Name: 'devspace-vscode', Source: '/var/lib/docker/volumes/devspace-vscode/_data', Destination: '/opt/unknown' },
+        { Type: 'volume', Name: 'devspaces-vscode', Source: '/var/lib/docker/volumes/devspaces-vscode/_data', Destination: '/opt/devspace/vscode', RW: false },
+        { Type: 'volume', Name: 'devspaces-vscode', Source: '/var/lib/docker/volumes/devspaces-vscode/_data', Destination: '/opt/rw', RW: true },
+        { Type: 'volume', Name: 'devspaces-vscode', Source: '/var/lib/docker/volumes/devspaces-vscode/_data', Destination: '/opt/unknown' },
       ],
     };
     expect(read(dev)?.mountTargets).toEqual([
-      { type: 'volume', volume: 'devspace-vscode', target: '/opt/devspace/vscode', readOnly: true },
-      { type: 'volume', volume: 'devspace-vscode', target: '/opt/rw' },
-      { type: 'volume', volume: 'devspace-vscode', target: '/opt/unknown' },
+      { type: 'volume', volume: 'devspaces-vscode', target: '/opt/devspace/vscode', readOnly: true },
+      { type: 'volume', volume: 'devspaces-vscode', target: '/opt/rw' },
+      { type: 'volume', volume: 'devspaces-vscode', target: '/opt/unknown' },
     ]);
   });
 
@@ -238,7 +238,7 @@ describe('the containers of `docker container inspect`', () => {
     const V = 'acme-api-3f2a9c1e';
     const source = `/var/lib/docker/volumes/${V}/_data`;
     const dev = {
-      ...containerJson({ id: 'dev1', name: V, status: 'running', labels: { 'com.docker.compose.project': 'devspace-3f2a9c1e' } }),
+      ...containerJson({ id: 'dev1', name: V, status: 'running', labels: { 'com.docker.compose.project': 'devspaces-3f2a9c1e' } }),
       HostConfig: {
         Mounts: [
           { Type: 'volume', Source: V, Target: '/workspaces' },
@@ -272,9 +272,9 @@ describe('the containers of `docker container inspect`', () => {
 // The inspect JSON of volumes and networks, read directly (see above).
 describe('the volumes and networks of `docker volume inspect` and `docker network inspect`', () => {
   it('reads volumes with their labels, and skips a malformed entry', () => {
-    expect(toVolumeInfo({ Name: 'v1', Driver: 'local', Labels: { 'nimblescape.devspace.id': 'e1', 'nimblescape.devspace.repository': 'acme/api' } })).toEqual({
+    expect(toVolumeInfo({ Name: 'v1', Driver: 'local', Labels: { 'nimblescape.devspaces.id': 'e1', 'nimblescape.devspaces.repository': 'acme/api' } })).toEqual({
       name: 'v1',
-      labels: { 'nimblescape.devspace.id': 'e1', 'nimblescape.devspace.repository': 'acme/api' },
+      labels: { 'nimblescape.devspaces.id': 'e1', 'nimblescape.devspaces.repository': 'acme/api' },
     });
     expect(toVolumeInfo({ Name: 'v2', Driver: 'local', Labels: null })).toEqual({ name: 'v2', labels: {} });
     expect(toVolumeInfo({ Driver: 'broken' })).toBeUndefined();
@@ -282,10 +282,10 @@ describe('the volumes and networks of `docker volume inspect` and `docker networ
 
   it('reads networks with their labels and containers', () => {
     // With the ID of each network (empty when Docker prints none).
-    expect(toNetworkInfo({ Name: 'backend', Id: 'a1b2', Labels: { 'com.docker.compose.project': 'devspace-11111111' }, Containers: { c1: { Name: 'x' }, c2: { Name: 'y' } } })).toEqual({
+    expect(toNetworkInfo({ Name: 'backend', Id: 'a1b2', Labels: { 'com.docker.compose.project': 'devspaces-11111111' }, Containers: { c1: { Name: 'x' }, c2: { Name: 'y' } } })).toEqual({
       name: 'backend',
       id: 'a1b2',
-      labels: { 'com.docker.compose.project': 'devspace-11111111' },
+      labels: { 'com.docker.compose.project': 'devspaces-11111111' },
       containers: ['c1', 'c2'],
     });
     expect(toNetworkInfo({ Name: 'shared', Labels: null, Containers: {} })).toEqual({ name: 'shared', id: '', labels: {}, containers: [] });

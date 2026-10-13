@@ -53,7 +53,7 @@ describe('the refresh through the worker', () => {
   const docker = new BootstrapDocker(new NodeProcessRunner(), run.dockerPath, env, log);
   const targets = new DockerTargets(docker, env, log);
   const runLabel = `${TEST_RUN_LABEL}=${run.runId}`;
-  const names = { git: `devspace-refresh-git-${run.runId}`, stopped: `devspace-refresh-stopped-${run.runId}`, none: `devspace-refresh-none-${run.runId}`, other: `devspace-refresh-other-${run.runId}` };
+  const names = { git: `devspaces-refresh-git-${run.runId}`, stopped: `devspaces-refresh-stopped-${run.runId}`, none: `devspaces-refresh-none-${run.runId}`, other: `devspaces-refresh-other-${run.runId}` };
   const devspaces: StateDevspace[] = [
     { id: newDevspaceId(), containerName: names.git, volumeName: names.git, user: 'root', folder: '/workspaces/refresh', branch: true },
     { id: newDevspaceId(), containerName: names.stopped, volumeName: names.stopped, folder: '/workspaces/refresh', branch: true },

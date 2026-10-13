@@ -15,25 +15,25 @@ import { hasExactKeys, hasOnlyKeys, isRecord } from '../valueChecks';
 
 /**
  * The one Monitor container per Docker engine (never a container of a devspace: no
- * nimblescape.devspace.id).
+ * nimblescape.devspaces.id).
  */
-export const REMOTE_MONITOR_CONTAINER = 'devspace-monitor';
+export const REMOTE_MONITOR_CONTAINER = 'devspaces-monitor';
 /** The volume of its heartbeat records, mounted at REMOTE_MONITOR_STATE_DIR. */
-export const REMOTE_MONITOR_VOLUME = 'devspace-monitor';
+export const REMOTE_MONITOR_VOLUME = 'devspaces-monitor';
 /** Label of the container: 12 hex digits of sha256 of the script, the helper tag and the loader (remoteMonitorLabelValue). */
-export const LABEL_MONITOR = 'nimblescape.devspace.monitor';
+export const LABEL_MONITOR = 'nimblescape.devspaces.monitor';
 /**
  * A label with a random nonce per create of the monitor container (not part of
  * remoteMonitorLabelValue). A failed create removes only the container with its own nonce (`docker ps -aq --filter
  * label=…`, then `docker rm -f <id>`), never the container of the name, which may be that of another window by then.
  */
-export const LABEL_MONITOR_CREATE = 'nimblescape.devspace.monitor-create';
+export const LABEL_MONITOR_CREATE = 'nimblescape.devspaces.monitor-create';
 /**
  * The label of a permanent monitor with the ID of the computer that created it (not part of remoteMonitorLabelValue):
  * an ensure that wants a monitor that ends when idle replaces its own permanent one, never one that another computer
  * keeps (RemoteSessionMonitor).
  */
-export const LABEL_MONITOR_OWNER = 'nimblescape.devspace.monitor-owner';
+export const LABEL_MONITOR_OWNER = 'nimblescape.devspaces.monitor-owner';
 /**
  * Where the pipe loader stores the script (its own file system, so it matches the container version). A
  * restart of the container starts it from there without new input (resume); the `docker exec` subcommands run it too.

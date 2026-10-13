@@ -80,7 +80,7 @@ afterEach(() => {
 describe('no message at activation when Docker is missing', () => {
   it('activates with the sidebar visible and no Docker CLI without any notification, also when the view is shown again', async () => {
     vi.useRealTimers();
-    const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-activation-test-'));
+    const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-activation-test-'));
     const visibility = new fakeVscode.EventEmitter<{ visible: boolean }>();
     const view = { visible: true, onDidChangeVisibility: visibility.event, dispose() {} };
     const window = fakeVscode.window as unknown as Record<string, unknown>;

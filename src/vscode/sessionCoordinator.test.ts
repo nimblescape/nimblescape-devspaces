@@ -70,7 +70,7 @@ let harnesses: Harness[] = [];
 
 function createHarness(): Harness {
   // A sub-folder that does not exist yet: start() creates it.
-  const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-')), 'storage');
+  const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-')), 'storage');
   const paths = new StoragePaths(root);
   const clock = {
     time: T0,
@@ -194,11 +194,11 @@ describe('SessionCoordinator', () => {
   // The status file names the Docker context of the window's authority.
   it('writes the Docker context of the window into its status file, only for a window with a devspace', async () => {
     h.coordinator.dispose();
-    h.coordinator = h.create({ windowDockerContext: () => 'devspace-remote-5709ff28' });
+    h.coordinator = h.create({ windowDockerContext: () => 'devspaces-remote-5709ff28' });
     await h.coordinator.start(ID_A);
-    expect(readStatus(h)).toMatchObject({ devspaceId: ID_A, dockerContext: 'devspace-remote-5709ff28' });
+    expect(readStatus(h)).toMatchObject({ devspaceId: ID_A, dockerContext: 'devspaces-remote-5709ff28' });
     h.coordinator.dispose();
-    h.coordinator = h.create({ windowDockerContext: () => 'devspace-remote-5709ff28' });
+    h.coordinator = h.create({ windowDockerContext: () => 'devspaces-remote-5709ff28' });
     await h.coordinator.start(null);
     expect(readStatus(h)).not.toHaveProperty('dockerContext');
   });

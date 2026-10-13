@@ -14,7 +14,7 @@ import { ATOMIC_TEMPORARY_FILE } from './storageSweep';
 let root: string;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-computer-id-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-computer-id-'));
 });
 
 afterEach(() => {

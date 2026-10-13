@@ -33,14 +33,14 @@ import { composeRecordOf } from './recordRules';
 import { isRecord } from '../valueChecks';
 
 /**
- * True for a container of the current setup: its label nimblescape.devspace.container-version is CONTAINER_VERSION or
+ * True for a container of the current setup: its label nimblescape.devspaces.container-version is CONTAINER_VERSION or
  * newer. The pipeline creates a container without the label, or with an older value, again from its devspace image;
  * the volume stays. `configKnown`: the configuration of the repository can be read now. Then a container that was
- * created without it (label nimblescape.devspace.container-config=unknown) is not current either: it lacks the runArgs
+ * created without it (label nimblescape.devspaces.container-config=unknown) is not current either: it lacks the runArgs
  * and appPort of the configuration. While the configuration cannot be read, such a container is current, so it is only
  * started and not created again at every open. `hostAccessChecks`: the switch of the repository now (hostAccessChecks
  * in ../policy/hostAccessChecks.ts). While the checks are on, a container that was created while they were off (label
- * nimblescape.devspace.host-access=unrestricted, isUnrestrictedContainer) is not current: the pipeline creates it again
+ * nimblescape.devspaces.host-access=unrestricted, isUnrestrictedContainer) is not current: the pipeline creates it again
  * once the checks pass, and never starts it as it is. While they are off, the label does not matter: a container
  * created with the checks on has less access.
  */
@@ -58,7 +58,7 @@ export function containerIsCurrent(
 
 /**
  * True for a container that was created while the host access checks were off (label
- * nimblescape.devspace.host-access=unrestricted).
+ * nimblescape.devspaces.host-access=unrestricted).
  */
 export function isUnrestrictedContainer(labels: Readonly<Record<string, string>>): boolean {
   return labels[LABEL_HOST_ACCESS] === HOST_ACCESS_UNRESTRICTED;
@@ -211,9 +211,9 @@ export function recordDigests(
 export function nextBuildNumber(input: {
   lastBuildNumber?: number;
   recordBuildNumber?: number;
-  /** Local tags such as `devspace-3f2a9c1e:2`. */
+  /** Local tags such as `devspaces-3f2a9c1e:2`. */
   tags: readonly string[];
-  /** For example `devspace-3f2a9c1e`. */
+  /** For example `devspaces-3f2a9c1e`. */
   repository: string;
 }): number {
   let highest = Math.max(0, input.lastBuildNumber ?? 0, input.recordBuildNumber ?? 0);
@@ -525,7 +525,7 @@ export function serviceFoldersOf(env: Pick<Devspace, 'serviceFolders'>): string[
 /**
  * The paths of the repository that the existing containers of the other services of the Docker Compose devspace
  * mount (not the dev container: the container with the name of the devspace, or with the label of the devspace
- * and without nimblescape.devspace.compose-service; a container of the project without the labels of the devspace,
+ * and without nimblescape.devspaces.compose-service; a container of the project without the labels of the devspace,
  * for example of `docker compose run`, counts as another service), from their mounts of subpaths of the workspace
  * volume `volumeName` (ContainerInfo.volumeSubpaths): the subpath joined to WORKSPACES_ROOT, where the dev container
  * and the helper mount the volume. As composeUpModel records them: not a read-only mount, and only a path below the

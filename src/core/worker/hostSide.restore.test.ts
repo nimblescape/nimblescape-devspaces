@@ -33,7 +33,7 @@ function handlerOf(scope: { dockerHost?: string } = { dockerHost: '' }, op = OP_
   const restored: Devspace[][] = [];
   const warnings: string[] = [];
   const records = {
-    restore: async (entries: Devspace[]) => (restored.push(entries), { added: entries.length, skipped: ['devspace-x'] }),
+    restore: async (entries: Devspace[]) => (restored.push(entries), { added: entries.length, skipped: ['devspaces-x'] }),
   };
   const host = { questions: {}, records, state: {}, secrets: {}, connect: {} } as unknown as HostSide;
   const logger = { ...silentLogger, warn: (text: string) => warnings.push(text) };
@@ -53,10 +53,10 @@ describe('record restore', () => {
       serviceFolders: ['/workspaces/api/data/db'],
       serviceFoldersOverflow: true,
     };
-    expect(await restore([services])).toEqual({ value: { added: 1, skipped: ['devspace-x'] } });
+    expect(await restore([services])).toEqual({ value: { added: 1, skipped: ['devspaces-x'] } });
     expect(restored).toEqual([[services]]);
     // The volume name as Docker gives it (another case) is the one of the devspace.
-    expect(await restore([{ ...ENTRY, volumeName: NAME.toUpperCase(), containerName: NAME.toUpperCase() }])).toEqual({ value: { added: 1, skipped: ['devspace-x'] } });
+    expect(await restore([{ ...ENTRY, volumeName: NAME.toUpperCase(), containerName: NAME.toUpperCase() }])).toEqual({ value: { added: 1, skipped: ['devspaces-x'] } });
   });
 
   it('only the operation reconcile may send it', async () => {
@@ -69,7 +69,7 @@ describe('record restore', () => {
     await expect(handlerOf({}).restore([ENTRY])).rejects.toMatchObject({ code: 'invalid' });
     const remote = handlerOf({ dockerHost: 'ssh://box' });
     // An entry of another host is left out; the request is not refused.
-    expect(await remote.restore([ENTRY, { ...ENTRY, dockerHost: 'ssh://box' }])).toEqual({ value: { added: 1, skipped: ['devspace-x'] } });
+    expect(await remote.restore([ENTRY, { ...ENTRY, dockerHost: 'ssh://box' }])).toEqual({ value: { added: 1, skipped: ['devspaces-x'] } });
     expect(remote.restored).toEqual([[{ ...ENTRY, dockerHost: 'ssh://box' }]]);
     const local = handlerOf({ dockerHost: '' });
     // The local Docker is a missing field, never an empty one.
@@ -107,7 +107,7 @@ describe('record restore', () => {
     ['an ID that is no storage ID', { ...ENTRY, id: '../x' }],
     ['no repository name', { ...ENTRY, repository: 'acme' }],
     ['a repository with a control character', { ...ENTRY, repository: 'acme/a\u0001pi' }],
-    ['a volume of another name', { ...ENTRY, volumeName: 'devspace-acme-api-other', containerName: 'devspace-acme-api-other' }],
+    ['a volume of another name', { ...ENTRY, volumeName: 'devspaces-acme-api-other', containerName: 'devspaces-acme-api-other' }],
     ['a container of another name', { ...ENTRY, containerName: 'other' }],
     ['a volume of another devspace', { ...ENTRY, id: '6b1f0c2e-1d4a-4f5e-9a8b-7c6d5e4f3a2b' }],
     ['a configuration path outside .devcontainer', { ...ENTRY, configPath: '../x/devcontainer.json' }],
@@ -125,7 +125,7 @@ describe('record restore', () => {
   ])('leaves out %s, and restores the others', async (_name, odd) => {
     const other = { ...ENTRY, id: OTHER_ID, repository: 'acme/web', volumeName: OTHER_NAME, containerName: OTHER_NAME };
     const { restore, restored, warnings } = handlerOf();
-    expect(await restore([odd, other])).toEqual({ value: { added: 1, skipped: ['devspace-x'] } });
+    expect(await restore([odd, other])).toEqual({ value: { added: 1, skipped: ['devspaces-x'] } });
     expect(restored).toEqual([[other]]);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/^The worker restored an entry (of the volume [A-Za-z0-9_.-]+ )?that is left out: /);

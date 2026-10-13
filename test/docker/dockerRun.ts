@@ -4,7 +4,7 @@
 
 // Docker objects of the integration tests (npm run test:docker): the Docker CLI with a configuration of its own, snapshots
 // of the containers, volumes, and images of the engine, and the removal of what a test run created. Every object that a
-// test creates carries the label devspace-test.run=<run ID>, or uses a volume that carries it, so the cleanup never touches
+// test creates carries the label devspaces-test.run=<run ID>, or uses a volume that carries it, so the cleanup never touches
 // other objects of the user. This module does not import vitest: the global setup uses it too.
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
@@ -15,7 +15,7 @@ import * as path from 'path';
  * Label on every container, volume, and image that the tests create. Its value is the run ID. Not a key with the prefix
  * `devspace.`: the host access policy refuses such labels in the runArgs of a configuration.
  */
-export const TEST_RUN_LABEL = 'devspace-test.run';
+export const TEST_RUN_LABEL = 'devspaces-test.run';
 
 /**
  * Base image of the test configurations: the official Alpine image, from the Docker Hub mirror of Google
@@ -34,7 +34,7 @@ export const OLD_GIT_BASE_IMAGE = process.env.DEVSPACE_TEST_OLD_GIT_IMAGE ?? 'mi
 
 /** What the global setup passes to the test files (vitest `provide`/`inject`). */
 export interface DockerTestRun {
-  /** Value of the label devspace-test.run on the objects of this run. */
+  /** Value of the label devspaces-test.run on the objects of this run. */
   runId: string;
   /** Temporary folder of the run: storage folders, logs, the Docker configuration, the baseline. */
   runDir: string;
@@ -60,7 +60,7 @@ export function testDockerEnv(run: DockerTestRun): NodeJS.ProcessEnv {
 }
 
 /** Registry of the only `auths` entry of the Docker configuration of the tests: a name that never resolves (RFC 2606). */
-export const NO_CREDENTIALS_REGISTRY = 'devspace-test.invalid';
+export const NO_CREDENTIALS_REGISTRY = 'devspaces-test.invalid';
 
 /**
  * Creates a Docker configuration folder without credentials, credential helpers, or contexts. `docker build` needs the
@@ -252,7 +252,7 @@ export function unexpectedChanges(baseline: DockerSnapshot, current: DockerSnaps
 }
 
 /**
- * Removes the objects of a test run: the containers with the label devspace-test.run=<runId> and the containers that use a
+ * Removes the objects of a test run: the containers with the label devspaces-test.run=<runId> and the containers that use a
  * volume of the run (helper runs), then the images and the volumes with the label. Images are removed with force: they
  * are images of the run only. Returns a description of each removed object.
  */

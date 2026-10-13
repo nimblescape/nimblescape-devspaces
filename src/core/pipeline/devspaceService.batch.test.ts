@@ -75,7 +75,7 @@ let lockWaits: number[];
  * wait of the real lock does.
  */
 let onLockWait: (() => void) | undefined;
-const PINNED: HelperImageUse = { tag: 'devspace-helper:test', id: `sha256:${'4'.repeat(64)}` };
+const PINNED: HelperImageUse = { tag: 'devspaces-helper:test', id: `sha256:${'4'.repeat(64)}` };
 
 /**
  * The real WorkspaceHelper as the worker builds it, on its own image (PINNED) with its socket; it has no Docker port,

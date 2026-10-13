@@ -12,7 +12,7 @@ import type { BusyMark } from '../types';
 import type { OperationFlow } from './devspaceOperations';
 import { ENV_ID, OTHER_ID, PID, REPO, WINDOW_ID, createHarness, seedDevspace } from './devspaceService.testkit';
 
-const OPENED = { devspaceId: ENV_ID, containerName: 'devspace-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
+const OPENED = { devspaceId: ENV_ID, containerName: 'devspaces-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
 const IMAGES = { schedule: '7 6 * * *', timeZone: 'UTC' };
 
 async function rejection(promise: Promise<unknown>): Promise<unknown> {

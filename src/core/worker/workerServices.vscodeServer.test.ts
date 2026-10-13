@@ -18,30 +18,30 @@ const SERVER = { commit: '0123456789abcdef0123456789abcdef01234567', quality: 's
 const SOCKET = { Type: 'bind', Source: '/var/run/docker.sock', Destination: HELPER_DOCKER_SOCKET };
 
 function inspect(mounts: unknown[]) {
-  return { Image: IMAGE_ID, Config: { Image: 'devspace-helper:abc' }, Mounts: [SOCKET, ...mounts] };
+  return { Image: IMAGE_ID, Config: { Image: 'devspaces-helper:abc' }, Mounts: [SOCKET, ...mounts] };
 }
 
 describe("the store of the worker's own container", () => {
   it('is the name of the read-write volume at /vscode', () => {
     expect(VSCODE_STORE_DIR).toBe('/vscode');
-    expect(ownHelperOf(inspect([{ Type: 'volume', Name: 'devspace-vscode', Destination: '/vscode', RW: true }]))).toEqual({
-      image: { tag: 'devspace-helper:abc', id: IMAGE_ID },
+    expect(ownHelperOf(inspect([{ Type: 'volume', Name: 'devspaces-vscode', Destination: '/vscode', RW: true }]))).toEqual({
+      image: { tag: 'devspaces-helper:abc', id: IMAGE_ID },
       socket: '/var/run/docker.sock',
-      vscodeStore: 'devspace-vscode',
+      vscodeStore: 'devspaces-vscode',
     });
-    expect(ownHelperOf(inspect([{ Type: 'volume', Name: 'devspace-test-vscode-x', Destination: '/vscode', RW: true }]))?.vscodeStore).toBe('devspace-test-vscode-x');
+    expect(ownHelperOf(inspect([{ Type: 'volume', Name: 'devspaces-test-vscode-x', Destination: '/vscode', RW: true }]))?.vscodeStore).toBe('devspaces-test-vscode-x');
   });
 
   it.each([
     ['no such mount (the worker of an older argument list)', []],
-    ['a read-only volume', [{ Type: 'volume', Name: 'devspace-vscode', Destination: '/vscode', RW: false }]],
-    ['a volume whose RW is not known', [{ Type: 'volume', Name: 'devspace-vscode', Destination: '/vscode' }]],
+    ['a read-only volume', [{ Type: 'volume', Name: 'devspaces-vscode', Destination: '/vscode', RW: false }]],
+    ['a volume whose RW is not known', [{ Type: 'volume', Name: 'devspaces-vscode', Destination: '/vscode' }]],
     ['a bind mount', [{ Type: 'bind', Source: '/srv/vscode', Destination: '/vscode', RW: true }]],
-    ['another target', [{ Type: 'volume', Name: 'devspace-vscode', Destination: '/vscode2', RW: true }]],
+    ['another target', [{ Type: 'volume', Name: 'devspaces-vscode', Destination: '/vscode2', RW: true }]],
     ['a volume without a name', [{ Type: 'volume', Name: '', Destination: '/vscode', RW: true }]],
   ])('is none for %s; the rest of the own helper is read as before', (_name, mounts) => {
     const own = ownHelperOf(inspect(mounts));
-    expect(own).toEqual({ image: { tag: 'devspace-helper:abc', id: IMAGE_ID }, socket: '/var/run/docker.sock' });
+    expect(own).toEqual({ image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/var/run/docker.sock' });
   });
 });
 
@@ -54,7 +54,7 @@ describe('the shared VS Code server of the pipeline in the worker', () => {
       secretOf: () => undefined,
       forgetSecret: () => undefined,
       logger,
-      ownHelper: { image: { tag: 'devspace-helper:abc', id: IMAGE_ID }, socket: '/s.sock' },
+      ownHelper: { image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/s.sock' },
       dockerHost: '',
       owner: { windowId: 'w', pid: 1 },
       devspaceLock: async () => {
@@ -65,15 +65,15 @@ describe('the shared VS Code server of the pipeline in the worker', () => {
   }
 
   it('with the store and a server: the name of the store, and the server with its fetch', () => {
-    const all = deps({ ownHelper: { image: { tag: 't', id: IMAGE_ID }, socket: '/s', vscodeStore: 'devspace-vscode' }, vscodeServer: SERVER });
-    expect(all.vscodeStoreVolume).toBe('devspace-vscode');
+    const all = deps({ ownHelper: { image: { tag: 't', id: IMAGE_ID }, socket: '/s', vscodeStore: 'devspaces-vscode' }, vscodeServer: SERVER });
+    expect(all.vscodeStoreVolume).toBe('devspaces-vscode');
     expect(all.vscodeServer?.server).toEqual(SERVER);
     expect(typeof all.vscodeServer?.fetch).toBe('function');
   });
 
   it('with the store and no server: only the name of the store (the exemption of the policy, the exclusions)', () => {
-    const all = deps({ ownHelper: { image: { tag: 't', id: IMAGE_ID }, socket: '/s', vscodeStore: 'devspace-vscode' } });
-    expect(all.vscodeStoreVolume).toBe('devspace-vscode');
+    const all = deps({ ownHelper: { image: { tag: 't', id: IMAGE_ID }, socket: '/s', vscodeStore: 'devspaces-vscode' } });
+    expect(all.vscodeStoreVolume).toBe('devspaces-vscode');
     expect(all).not.toHaveProperty('vscodeServer');
   });
 
@@ -90,7 +90,7 @@ describe('the shared VS Code server of the pipeline in the worker', () => {
     const log: string[] = [];
     const asked: string[] = [];
     const engine = { ...unusedEngine(), architecture: async () => (asked.push('architecture'), 's390x') };
-    const all = deps({ engine, ownHelper: { image: { tag: 't', id: IMAGE_ID }, socket: '/s', vscodeStore: 'devspace-vscode' }, vscodeServer: SERVER }, log);
+    const all = deps({ engine, ownHelper: { image: { tag: 't', id: IMAGE_ID }, socket: '/s', vscodeStore: 'devspaces-vscode' }, vscodeServer: SERVER }, log);
     expect(await all.vscodeServer!.fetch(new AbortController().signal)).toBeUndefined();
     expect(asked).toEqual(['architecture']);
     expect(log).toEqual([`The VS Code server ${SERVER.commit} (stable) is not fetched into the shared store: the engine's architecture "s390x" has no server there.`]);

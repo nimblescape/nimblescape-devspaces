@@ -37,7 +37,7 @@ let stateDir: string;
 const started: ChildProcess[] = [];
 
 beforeAll(async () => {
-  buildDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-heartbeat-lock-build-'));
+  buildDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-heartbeat-lock-build-'));
   script = path.join(buildDir, 'monitor.js');
   await esbuild.build({
     stdin: {
@@ -61,7 +61,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-heartbeat-lock-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-heartbeat-lock-'));
 });
 
 afterEach(() => {

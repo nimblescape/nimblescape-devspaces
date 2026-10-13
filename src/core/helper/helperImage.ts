@@ -30,7 +30,7 @@ import { isHelperImageTag, isMonitorImageTag, monitorImageTag, readHelperState, 
 export const DEVCONTAINER_CLI_VERSION: string = __DEVCONTAINER_CLI_VERSION__;
 
 /** Repository part of the helper image tag. */
-export const HELPER_IMAGE_REPOSITORY = 'devspace-helper';
+export const HELPER_IMAGE_REPOSITORY = 'devspaces-helper';
 
 /**
  * The helper generation of this extension version, recorded per tag in helper.json (`generation`, for diagnosis) at
@@ -124,7 +124,7 @@ export function registryBaseDigest(
 }
 
 /**
- * `devspace-helper:<first 12 hex characters of sha256(Dockerfile content + CLI version + "\ngeneration " + helper
+ * `devspaces-helper:<first 12 hex characters of sha256(Dockerfile content + CLI version + "\ngeneration " + helper
  * generation)>`. Line endings are normalized, so that a checkout with CRLF line endings gives the same tag. The helper
  * generation (HELPER_GENERATION) is part of the hash.
  */
@@ -711,7 +711,7 @@ async function removeHelperImage(m: Maintenance, image: ImageInfo, reference: st
 }
 
 /**
- * At most once per day: of the images with the label nimblescape.devspace.helper=true, except the image of the current
+ * At most once per day: of the images with the label nimblescape.devspaces.helper=true, except the image of the current
  * tag, it removes dangling images, and helper tags that no window of this installation used for 7 days. A helper tag
  * that the state does not know is foreign (another extension version, possibly of another installation of VS Code with
  * its own helper.json, which never writes `lastUsedAt` here): it gets a grace period of 7 days, so old windows during
@@ -760,7 +760,7 @@ async function cleanUpIfDue(m: Maintenance, currentId: string): Promise<void> {
     }
     // A monitor tag whose helper tag is not on its image (removed, or moved by a rebuild) is removed.
     for (const tag of image.tags.filter(isMonitorImageTag)) {
-      const helperTag = `devspace-helper:${tag.slice('devspace-monitor:'.length)}`;
+      const helperTag = `devspaces-helper:${tag.slice('devspaces-monitor:'.length)}`;
       if (image.tags.includes(helperTag)) continue;
       m.logger.info(`The tag ${tag} of the Monitor is no longer on its workspace helper image. It is removed.`);
       await removeHelperImage(m, image, tag, currentId);

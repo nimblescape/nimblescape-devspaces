@@ -70,7 +70,7 @@ import {
 } from './harness';
 import { monitorOfUser, removeTestMonitor, seedTestMonitorRun, workerWindow, type WorkerWindow } from './workerWindow';
 
-const REPOSITORY = 'devspace-test/tiny';
+const REPOSITORY = 'devspaces-test/tiny';
 const FOLDER = '/workspaces/tiny';
 const CONFIG_PATH = '.devcontainer/devcontainer.json';
 const REMOTE_USER = 'dev';
@@ -271,7 +271,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     const guarded = baseline.images.some((image) => image.tags.map(familiarName).includes(familiarName(TEST_BASE_IMAGE)));
     if (guarded) {
       baselineBaseId = cli.image(TEST_BASE_IMAGE)?.Id;
-      cli.ok(['create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, '--name', `devspace-test-guard-${run.runId}`, TEST_BASE_IMAGE, 'true']);
+      cli.ok(['create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, '--name', `devspaces-test-guard-${run.runId}`, TEST_BASE_IMAGE, 'true']);
     }
 
     // The helper image through the harness.
@@ -358,7 +358,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     if (pulled && (pulled.RepoTags ?? []).length === 0) cli.run(['image', 'rm', pulled.Id]);
   }
 
-  it('first open: builds devspace-<short>:1 and starts the container', async () => {
+  it('first open: builds devspaces-<short>:1 and starts the container', async () => {
     const progress = new RecordingProgress();
     const events = ui.events.length;
     const mark = logMark();
@@ -420,12 +420,12 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
   });
 
   it('container-only Git: the variables, the label, the token file, and the Git configuration of the container', () => {
-    expect(cli.container(containerName)?.Config.Labels?.['nimblescape.devspace.container-version']).toBe(String(CONTAINER_VERSION));
+    expect(cli.container(containerName)?.Config.Labels?.['nimblescape.devspaces.container-version']).toBe(String(CONTAINER_VERSION));
     // Docker accepts the labels of Docker Compose with empty values, so an image cannot give the container the project
     // of another Compose configuration.
     expect(cli.container(containerName)?.Config.Labels).toMatchObject({ 'com.docker.compose.project': '', 'com.docker.compose.service': '' });
     // The configuration path, for the restore after a lost registry.
-    expect(cli.container(containerName)?.Config.Labels?.['nimblescape.devspace.config-path']).toBe(CONFIG_PATH);
+    expect(cli.container(containerName)?.Config.Labels?.['nimblescape.devspaces.config-path']).toBe(CONFIG_PATH);
     const env = containerEnv();
     expect(env).toMatchObject({
       GIT_CONFIG_GLOBAL: '/workspaces/.devspace+/gitconfig',
@@ -636,7 +636,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     expect(execIn(REMOTE_USER, `cat ${GITHUB_TOKEN_FILE}`)).toBe(DUMMY_TOKEN);
   });
 
-  it('a container without the label nimblescape.devspace.container-version is not current and is created again, without a build', async () => {
+  it('a container without the label nimblescape.devspaces.container-version is not current and is created again, without a build', async () => {
     // A container of an older setup: the ID label, the workspace volume, no version label.
     cli.ok(['rm', '-f', containerName]);
     const oldId = cli.ok([
@@ -664,7 +664,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     expect(container?.Id).not.toBe(oldId);
     expect(container?.State.Running).toBe(true);
     expect(container?.Config.Image).toBe(`${imageRepository}:1`);
-    expect(container?.Config.Labels?.['nimblescape.devspace.container-version']).toBe(String(CONTAINER_VERSION));
+    expect(container?.Config.Labels?.['nimblescape.devspaces.container-version']).toBe(String(CONTAINER_VERSION));
     expect(containerEnv().GIT_CONFIG_GLOBAL).toBe('/workspaces/.devspace+/gitconfig');
     // The token is in the tmpfs of the new container.
     expect(execIn(REMOTE_USER, `cat ${GITHUB_TOKEN_FILE}`)).toBe(DUMMY_TOKEN);
@@ -850,15 +850,15 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     ],
   ])('host access: a configuration with %s is refused before any build; the volume stays', async (_name, extra, item) => {
     const id = newDevspaceId();
-    const name = resourceName('devspace-test/refused', id);
+    const name = resourceName('devspaces-test/refused', id);
     const config = JSON.stringify({ name: 'Refused', build: { dockerfile: 'Dockerfile' }, runArgs: ['--label', `${TEST_RUN_LABEL}=${run.runId}`], ...extra });
     const dockerfile = [`FROM ${TEST_BASE_IMAGE}`, `LABEL ${TEST_RUN_LABEL}=${run.runId}`].join('\n');
-    await createVolume(docker, name, { [LABEL_DEVSPACE_ID]: id, [LABEL_REPOSITORY]: 'devspace-test/refused', [TEST_RUN_LABEL]: run.runId });
+    await createVolume(docker, name, { [LABEL_DEVSPACE_ID]: id, [LABEL_REPOSITORY]: 'devspaces-test/refused', [TEST_RUN_LABEL]: run.runId });
     // The seed is a plain container of the helper image (runInVolume).
     const seeded = await runInVolume(docker, name, ['sh', '-c', SEED_SCRIPT, 'sh', '/workspaces/refused', config, dockerfile]);
     expect(seeded.exitCode, seeded.stderr).toBe(0);
     const now = isoTime(systemClock);
-    await registry.add({ id, repository: 'devspace-test/refused', configPath: CONFIG_PATH, volumeName: name, containerName: name, createdAt: now, lastUsedAt: now, owner: TEST_ACCOUNT });
+    await registry.add({ id, repository: 'devspaces-test/refused', configPath: CONFIG_PATH, volumeName: name, containerName: name, createdAt: now, lastUsedAt: now, owner: TEST_ACCOUNT });
     try {
       const progress = new RecordingProgress();
       const error = await timings.measure(`refuse ${item}`, () => service.openDevspaceInWorker(id, { progress }).then(() => undefined, (caught: unknown) => caught));
@@ -867,7 +867,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
       expect(error).toMatchObject({ code: 'hostAccess' });
       expect((error as Error).message).toContain(item);
       expect(progress.steps).not.toContain('preparing');
-      expect(cli.lines(['image', 'ls', '-q', devspaceImageRepository('devspace-test/refused', id)])).toEqual([]);
+      expect(cli.lines(['image', 'ls', '-q', devspaceImageRepository('devspaces-test/refused', id)])).toEqual([]);
       expect(cli.lines(['ps', '-a', '-q', '--filter', `label=${LABEL_DEVSPACE_ID}=${id}`])).toEqual([]);
       // The devspace keeps its volume.
       expect(cli.volume(name)).toBeDefined();
@@ -880,10 +880,10 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
 
   it('host access: a volume of a Docker Compose project is refused by its labels before any build; both volumes stay', async () => {
     // A volume of the run, labelled as Docker Compose labels the volumes of its projects (for example a database).
-    const composeVolume = `devspace-test-compose-${run.runId}_data`;
-    cli.ok(['volume', 'create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, '--label', 'com.docker.compose.project=devspace-test', '--label', 'com.docker.compose.volume=data', composeVolume]);
+    const composeVolume = `devspaces-test-compose-${run.runId}_data`;
+    cli.ok(['volume', 'create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, '--label', 'com.docker.compose.project=devspaces-test', '--label', 'com.docker.compose.volume=data', composeVolume]);
     const id = newDevspaceId();
-    const repository = 'devspace-test/compose-volume';
+    const repository = 'devspaces-test/compose-volume';
     const name = resourceName(repository, id);
     const config = JSON.stringify({
       name: 'Compose volume',
@@ -902,7 +902,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
       const progress = new RecordingProgress();
       const error = await service.openDevspaceInWorker(id, { progress }).then(() => undefined, (caught: unknown) => caught);
       expect(error).toMatchObject({ code: 'hostAccess' });
-      expect((error as Error).message).toContain(`volume ${composeVolume} of the Docker Compose project devspace-test`);
+      expect((error as Error).message).toContain(`volume ${composeVolume} of the Docker Compose project devspaces-test`);
       expect(progress.steps).not.toContain('preparing');
       expect(cli.lines(['image', 'ls', '-q', devspaceImageRepository(repository, id)])).toEqual([]);
       expect(cli.lines(['ps', '-a', '-q', '--filter', `volume=${composeVolume}`])).toEqual([]);
@@ -917,7 +917,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
 
   it('container-only Git with Git 2.30 (it ignores GIT_CONFIG_GLOBAL and GIT_CONFIG_COUNT): the token and the identity of the owner', async () => {
     const id = newDevspaceId();
-    const repository = 'devspace-test/old-git';
+    const repository = 'devspaces-test/old-git';
     const name = resourceName(repository, id);
     const config = JSON.stringify({ name: 'Old Git', build: { dockerfile: 'Dockerfile' }, remoteUser: REMOTE_USER, runArgs: ['--label', `${TEST_RUN_LABEL}=${run.runId}`] });
     const dockerfile = [`FROM ${OLD_GIT_BASE_IMAGE}`, 'RUN apk add --no-cache git && adduser -D dev', `LABEL ${TEST_RUN_LABEL}=${run.runId}`].join('\n');
@@ -958,7 +958,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
 
   it('host access: --platform linux/amd64, --cap-drop ALL, --rm, and -it pass; --rm and -it are not passed, and the user writes ~/.gitconfig', async () => {
     const id = newDevspaceId();
-    const repository = 'devspace-test/no-rights';
+    const repository = 'devspaces-test/no-rights';
     const name = resourceName(repository, id);
     const config = JSON.stringify({
       name: 'No rights',
@@ -1033,7 +1033,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     const events = ui.events.length;
     // The image has /run/devspace, so the volume (an anonymous one, filled from the image) has the folder too.
     await withDevspace(
-      'devspace-test/var-run-volume',
+      'devspaces-test/var-run-volume',
       ['-v', '/var/run'],
       async (name) => {
         expect(ui.since(events).some((event) => JSON.stringify(event).includes(Messages.gitSetupFailed))).toBe(true);
@@ -1046,7 +1046,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
   });
 
   it('with --cap-drop DAC_OVERRIDE and a user other than root, the token is written, a second open works, a sign-out removes it', async () => {
-    await withDevspace('devspace-test/no-dac-override', ['--cap-drop', 'DAC_OVERRIDE'], async (name, id) => {
+    await withDevspace('devspaces-test/no-dac-override', ['--cap-drop', 'DAC_OVERRIDE'], async (name, id) => {
       const asUser = (script: string) => cli.run(['exec', '-u', REMOTE_USER, name, 'sh', '-c', script]);
       expect(asUser(`cat ${GITHUB_TOKEN_FILE}`).out).toBe(DUMMY_TOKEN);
       // What the user may do in its folder, then a second open (the container runs).
@@ -1065,7 +1065,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
 
   it('host access checks off for the repository: a configuration with privileged: true starts; with the checks on again it is refused and not started', async () => {
     const id = newDevspaceId();
-    const repository = 'devspace-test/privileged';
+    const repository = 'devspaces-test/privileged';
     const name = resourceName(repository, id);
     const config = JSON.stringify({
       name: 'Privileged',
@@ -1082,13 +1082,13 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     await registry.add({ id, repository, configPath: CONFIG_PATH, volumeName: name, containerName: name, createdAt: now, lastUsedAt: now, owner: TEST_ACCOUNT });
     // The setting names the repository in another case: compared without case. The settings of the window, which the
     // open sends to the worker (its hostAccessChecks).
-    window.settings.hostAccessChecksOff = ['DevSpace-Test/Privileged'];
+    window.settings.hostAccessChecksOff = ['DevSpaces-Test/Privileged'];
     try {
       await timings.measure('first open with privileged: true, checks off', () => service.openDevspaceInWorker(id, { progress: new RecordingProgress() }));
       const container = cli.container(name);
       expect(container?.State.Running).toBe(true);
       expect(container?.HostConfig.Privileged).toBe(true);
-      expect(container?.Config.Labels?.['nimblescape.devspace.host-access']).toBe('unrestricted');
+      expect(container?.Config.Labels?.['nimblescape.devspaces.host-access']).toBe('unrestricted');
       // The worker logs it to its operation, whose log lines the window writes to its log.
       expect(fs.readFileSync(log.file, 'utf8')).toContain(`The host access checks are off for ${repository}`);
 
@@ -1110,8 +1110,8 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
   });
 
   it('two accounts, one repository: two volumes and two containers, each with the identity of its owner; both come back after a lost registry', async () => {
-    const repository = 'devspace-test/shared';
-    const second = { id: '4343', login: 'devspace-test-second' };
+    const repository = 'devspaces-test/shared';
+    const second = { id: '4343', login: 'devspaces-test-second' };
     // A second window of the same computer (its registry and session files), signed in with the second account, whose
     // workers share the state volume (the locks) of this file. A window ID of its own: it is another window. afterAll
     // closes it with the others.
@@ -1182,7 +1182,7 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
   });
 
   it('the safety check of a volume without the repository folder runs no batch helper and gives the recorded state', async () => {
-    const repository = 'devspace-test/empty';
+    const repository = 'devspaces-test/empty';
     const id = newDevspaceId();
     const name = resourceName(repository, id);
     const recorded = { branch: 'old', uncommittedFiles: 3, unpushedCommits: 2, stashes: 1, recordedAt: '2026-09-20T10:00:00.000Z' };

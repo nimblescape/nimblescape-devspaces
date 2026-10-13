@@ -10,7 +10,7 @@ import type { OperationFlow } from './devspaceOperations';
 import { describe, expect, it } from 'vitest';
 import { ENV_ID, OTHER_ACCOUNT, OTHER_ID, REPO, createHarness, seedDevspace } from './devspaceService.testkit';
 
-const OPENED = { devspaceId: ENV_ID, containerName: 'devspace-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
+const OPENED = { devspaceId: ENV_ID, containerName: 'devspaces-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
 const TARGET = { repository: REPO, defaultBranch: null, configPaths: ['.devcontainer/devcontainer.json'], trusted: true };
 
 function harness(answer: (h: ReturnType<typeof createHarness>) => Promise<unknown>) {

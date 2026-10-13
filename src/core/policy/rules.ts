@@ -228,7 +228,7 @@ export const RESERVED_COMPOSE_LABEL = /^com\.docker\.compose\./i;
 
 /**
  * The labels that the override configuration adds to runArgs itself, with their values. The merged configuration of an
- * existing container holds them too, also `nimblescape.devspace.host-access=unrestricted` of a container created while
+ * existing container holds them too, also `nimblescape.devspaces.host-access=unrestricted` of a container created while
  * the host access checks were off, which must not block the open that creates it again once they are on.
  */
 export const OWN_LABELS: readonly string[] = [CONTAINER_VERSION_LABEL, CONTAINER_CONFIG_UNKNOWN_LABEL, HOST_ACCESS_UNRESTRICTED_LABEL];

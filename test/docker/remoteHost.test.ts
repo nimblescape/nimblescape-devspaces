@@ -6,7 +6,7 @@
 // SSH server in a container (test/docker/sshd: Alpine with openssh-server and the Docker CLI, key authentication only)
 // whose Docker socket is the socket of the engine of the runner. A test SSH config names it; a wrapper `ssh` first on
 // PATH adds `-F <config>`, so the Docker CLI's ssh uses it and the SSH config of the user is not touched. The context
-// of the host (named after the SSH alias, `devspace-test-remote`, with `ssh://devspace-test-remote` and the description
+// of the host (named after the SSH alias, `devspaces-test-remote`, with `ssh://devspaces-test-remote` and the description
 // of Devspaces) is created in a Docker configuration folder of this file only. Checked: the test of a host and the
 // plain reasons of its failures (unknown host key, login failed, unreachable), the context switch and the detection of
 // the remote mode, the open pipeline of a seeded devspace through the context (every Docker call goes through SSH:
@@ -62,8 +62,8 @@ import {
   testHelperImage } from './harness';
 import { monitorOfUser, removeTestMonitor, seedTestMonitorRun, testComputer, workerWindow, type WorkerWindow } from './workerWindow';
 
-const ALIAS = 'devspace-test-remote';
-const REPOSITORY = 'devspace-test/remote';
+const ALIAS = 'devspaces-test-remote';
+const REPOSITORY = 'devspaces-test/remote';
 const FOLDER = '/workspaces/remote';
 const CONFIG_PATH = '.devcontainer/devcontainer.json';
 const REMOTE_USER = 'dev';
@@ -94,8 +94,8 @@ describe('Docker on another computer through the Docker context', () => {
   const runner = new NodeProcessRunner();
   const timings = new Timings();
   const dir = path.join(run.runDir, 'remote-host');
-  const sshdImage = `devspace-test-sshd:${run.runId}`;
-  const sshdContainer = `devspace-test-sshd-${run.runId}`;
+  const sshdImage = `devspaces-test-sshd:${run.runId}`;
+  const sshdContainer = `devspaces-test-sshd-${run.runId}`;
   const devspaceId = newDevspaceId();
   const volumeName = resourceName(REPOSITORY, devspaceId);
   const containerName = volumeName;
@@ -129,7 +129,7 @@ describe('Docker on another computer through the Docker context', () => {
     const key = path.join(dir, 'id_ed25519');
     const otherKey = path.join(dir, 'other_ed25519');
     for (const file of [key, otherKey]) {
-      const generated = await runner.run(keygenPath, ['-q', '-t', 'ed25519', '-N', '', '-C', 'devspace-test', '-f', file]);
+      const generated = await runner.run(keygenPath, ['-q', '-t', 'ed25519', '-N', '', '-C', 'devspaces-test', '-f', file]);
       expect(generated.exitCode, generated.stderr).toBe(0);
     }
 
@@ -157,10 +157,10 @@ describe('Docker on another computer through the Docker context', () => {
       config,
       [
         `Host ${ALIAS}`, ...common, `  IdentityFile ${key}`, `  UserKnownHostsFile ${knownHosts}`,
-        'Host devspace-test-unknown-key', ...common, `  IdentityFile ${key}`, `  UserKnownHostsFile ${path.join(dir, 'empty_known_hosts')}`,
-        'Host devspace-test-wrong-key', ...common, `  IdentityFile ${otherKey}`, `  UserKnownHostsFile ${knownHosts}`,
+        'Host devspaces-test-unknown-key', ...common, `  IdentityFile ${key}`, `  UserKnownHostsFile ${path.join(dir, 'empty_known_hosts')}`,
+        'Host devspaces-test-wrong-key', ...common, `  IdentityFile ${otherKey}`, `  UserKnownHostsFile ${knownHosts}`,
         // A port on which nothing listens.
-        'Host devspace-test-closed', '  HostName 127.0.0.1', `  Port ${await freePort()}`, '  User root',
+        'Host devspaces-test-closed', '  HostName 127.0.0.1', `  Port ${await freePort()}`, '  User root',
         '',
       ].join('\n'),
     );
@@ -206,9 +206,9 @@ describe('Docker on another computer through the Docker context', () => {
   it('tests a host without questions, and names the reason of a failure', async () => {
     await expect(testRemoteDockerHost(docker, ALIAS, sshDeps())).resolves.toMatchObject({ ok: true, rootless: false });
     for (const [alias, problem] of [
-      ['devspace-test-unknown-key', 'hostKey'],
-      ['devspace-test-wrong-key', 'login'],
-      ['devspace-test-closed', 'unreachable'],
+      ['devspaces-test-unknown-key', 'hostKey'],
+      ['devspaces-test-wrong-key', 'login'],
+      ['devspaces-test-closed', 'unreachable'],
     ] as const) {
       const started = Date.now();
       const result = await testRemoteDockerHost(docker, alias, sshDeps(), { timeoutMs: 40_000 });

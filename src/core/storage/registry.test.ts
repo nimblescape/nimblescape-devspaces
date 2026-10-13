@@ -22,7 +22,7 @@ const OCTO: GitHubAccount = { id: '1001', login: 'octo' };
 const STAUSSH: GitHubAccount = { id: '2002', login: 'staussh' };
 
 function devspace(id: string, repository: string, extra: Partial<Devspace> = {}): Devspace {
-  const name = `devspace-${repository.replace('/', '-').toLowerCase()}-${id.slice(0, 8)}`;
+  const name = `devspaces-${repository.replace('/', '-').toLowerCase()}-${id.slice(0, 8)}`;
   return {
     id,
     repository,
@@ -58,7 +58,7 @@ function readRaw(): Record<string, unknown> {
 }
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   paths = new StoragePaths(root);
 });
 
@@ -168,7 +168,7 @@ describe('DevspaceRegistry reading', () => {
         {
           ...devspace('e3', 'o/c'),
           gitSummary: { branch: 'main', uncommittedFiles: -1, unpushedCommits: 0, stashes: 0, recordedAt: 'x' },
-          buildRecord: { devspaceImage: 'devspace-e3:1' },
+          buildRecord: { devspaceImage: 'devspaces-e3:1' },
           busy: { operation: 'rebuild', since: 'x', pid: 0, windowId: 'w' },
           remoteUser: 5,
           shutdownActionNone: 'yes',
@@ -303,12 +303,12 @@ describe('DevspaceRegistry reading', () => {
 
   it('finds devspaces by container name, with or without the leading slash', async () => {
     const env = devspace(ID_A, 'o/r');
-    writeRaw({ version: 1, devspaces: [env, { ...devspace(ID_B, 'o/b'), containerName: '/devspace-b' }] });
+    writeRaw({ version: 1, devspaces: [env, { ...devspace(ID_B, 'o/b'), containerName: '/devspaces-b' }] });
     const registry = new DevspaceRegistry(paths);
     await expect(registry.findByContainerName(env.containerName)).resolves.toMatchObject({ id: ID_A });
     await expect(registry.findByContainerName(`/${env.containerName}`)).resolves.toMatchObject({ id: ID_A });
-    await expect(registry.findByContainerName('devspace-b')).resolves.toMatchObject({ id: ID_B });
-    await expect(registry.findByContainerName('/devspace-x')).resolves.toBeUndefined();
+    await expect(registry.findByContainerName('devspaces-b')).resolves.toMatchObject({ id: ID_B });
+    await expect(registry.findByContainerName('/devspaces-x')).resolves.toBeUndefined();
   });
 
   it('throws when the file exists but cannot be read', async () => {

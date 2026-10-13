@@ -20,7 +20,7 @@ const WAIT = 'a background run is running; the Monitor exits after its end.';
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-ph2r3-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-ph2r3-'));
 });
 
 afterEach(() => {
@@ -39,7 +39,7 @@ describe('the ticks of an idle monitor while a background run runs', () => {
     fs.mkdirSync(store);
     const vscode = {
       store: { root: store },
-      storeVolume: 'devspace-vscode',
+      storeVolume: 'devspaces-vscode',
       // The monitor's volume of the run (the extension lists) is the temporary state folder of the test, as main gives
       // its own to vscodeBackgroundDeps; never the real /state.
       extensionStateDir: stateDir,

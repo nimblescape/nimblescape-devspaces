@@ -41,8 +41,8 @@ describe('the engine of the ensure of the Monitor over the Engine API', () => {
       createdAt: undefined,
     });
     const inspect = vi.fn(async () => INSPECT as unknown);
-    expect(await with_({ inspect }).inspect('devspace-monitor')).toMatchObject({ exists: true, id: ID });
-    expect(inspect).toHaveBeenCalledWith('container', 'devspace-monitor', expect.any(AbortSignal));
+    expect(await with_({ inspect }).inspect('devspaces-monitor')).toMatchObject({ exists: true, id: ID });
+    expect(inspect).toHaveBeenCalledWith('container', 'devspaces-monitor', expect.any(AbortSignal));
   });
 
   it('an inspect that fails rejects with its cause; one past its time limit with "no answer in time"; a cancel passes', async () => {
@@ -83,9 +83,9 @@ describe('the engine of the ensure of the Monitor over the Engine API', () => {
   it('the stored script: the SHA-256 of the file read through the archive endpoint, definite evidence that there is none, or unknown', async () => {
     const script = Buffer.from('console.log("monitor")');
     const containerFile = vi.fn(async () => script as Buffer | 'missing' | undefined);
-    expect(await with_({ containerFile }).storedScript('devspace-monitor')).toEqual({ hash: createHash('sha256').update(script).digest('hex') });
+    expect(await with_({ containerFile }).storedScript('devspaces-monitor')).toEqual({ hash: createHash('sha256').update(script).digest('hex') });
     // Up to the longest script that the loader takes, in bytes of UTF-8.
-    expect(containerFile).toHaveBeenCalledWith('devspace-monitor', REMOTE_MONITOR_SCRIPT_PATH, MAX_STORED_SCRIPT_BYTES, expect.any(AbortSignal));
+    expect(containerFile).toHaveBeenCalledWith('devspaces-monitor', REMOTE_MONITOR_SCRIPT_PATH, MAX_STORED_SCRIPT_BYTES, expect.any(AbortSignal));
     expect(MAX_STORED_SCRIPT_BYTES).toBe(3 * MAX_BUNDLE_LINE_LENGTH);
     const answers: [string, Buffer | 'missing' | undefined | Error, unknown][] = [
       ['an empty file', Buffer.alloc(0), { hash: createHash('sha256').digest('hex') }],
@@ -96,7 +96,7 @@ describe('the engine of the ensure of the Monitor over the Engine API', () => {
     ];
     for (const [what, answer, expected] of answers) {
       const engine = with_({ containerFile: async () => (answer instanceof Error ? Promise.reject(answer) : answer) });
-      expect(await engine.storedScript('devspace-monitor'), what).toEqual(expected);
+      expect(await engine.storedScript('devspaces-monitor'), what).toEqual(expected);
     }
     const controller = new AbortController();
     controller.abort();
@@ -105,8 +105,8 @@ describe('the engine of the ensure of the Monitor over the Engine API', () => {
 
   it('the IDs with a label, stopped ones included; undefined when the list fails', async () => {
     const containerIds = vi.fn(async () => [ID]);
-    expect(await with_({ containerIds }).idsWithLabel('nimblescape.devspace.monitor-create=n1')).toEqual([ID]);
-    expect(containerIds).toHaveBeenCalledWith({ label: ['nimblescape.devspace.monitor-create=n1'] }, expect.any(AbortSignal));
+    expect(await with_({ containerIds }).idsWithLabel('nimblescape.devspaces.monitor-create=n1')).toEqual([ID]);
+    expect(containerIds).toHaveBeenCalledWith({ label: ['nimblescape.devspaces.monitor-create=n1'] }, expect.any(AbortSignal));
     expect(await with_({ containerIds: async () => Promise.reject(new Error('down')) }).idsWithLabel('x=y')).toBeUndefined();
   });
 

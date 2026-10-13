@@ -52,7 +52,7 @@ class Engine implements HelperImageDocker {
 let dir: string;
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-11ier1-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-11ier1-'));
   fs.writeFileSync(path.join(dir, 'Dockerfile'), DOCKERFILE);
 });
 

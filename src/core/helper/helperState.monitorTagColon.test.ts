@@ -6,9 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { isMonitorImageTag } from './helperState';
 
 describe('isMonitorImageTag: the colon after the prefix', () => {
-  it('needs the colon after devspace-monitor', () => {
-    expect(isMonitorImageTag('devspace-monitor:0123456789ab')).toBe(true);
-    expect(isMonitorImageTag('devspace-monitor-0123456789ab')).toBe(false);
-    expect(isMonitorImageTag('devspace-monitor/0123456789ab')).toBe(false);
+  it('needs the colon after devspaces-monitor', () => {
+    expect(isMonitorImageTag('devspaces-monitor:0123456789ab')).toBe(true);
+    expect(isMonitorImageTag('devspaces-monitor-0123456789ab')).toBe(false);
+    expect(isMonitorImageTag('devspaces-monitor/0123456789ab')).toBe(false);
   });
 });

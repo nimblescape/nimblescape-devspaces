@@ -11,7 +11,7 @@ import { ENV_ID, OTHER_ACCOUNT, OTHER_ID, createHarness, seedDevspace } from './
 
 const SOURCE = '0123456789abcdef0123456789abcdef';
 const IMAGES = { schedule: '7 6 * * *', timeZone: 'UTC' };
-const OPENED = { devspaceId: ENV_ID, containerName: 'devspace-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
+const OPENED = { devspaceId: ENV_ID, containerName: 'devspaces-acme-api-c', remoteWorkspaceFolder: '/workspaces/api' };
 const DIGEST = `sha256:${'a'.repeat(64)}`;
 
 function harness(overrides: Pick<DevspaceOperationsDeps, 'imageReferencesInUse'> = {}) {

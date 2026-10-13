@@ -134,7 +134,7 @@ describe('the registry writes of the open as requests', () => {
       for (const id of ['a'.repeat(12), CONTAINER]) {
         expect(await ask('lifecycleMark', ID, { set: id })).toMatchObject({ lifecycleIncomplete: id });
       }
-      for (const change of [{ set: 'a'.repeat(11) }, { set: 'a'.repeat(65) }, { set: 'g'.repeat(12) }, { set: 'devspace-api' }, { set: CONTAINER, by: 'x' }, {}, 'set', null]) {
+      for (const change of [{ set: 'a'.repeat(11) }, { set: 'a'.repeat(65) }, { set: 'g'.repeat(12) }, { set: 'devspaces-api' }, { set: CONTAINER, by: 'x' }, {}, 'set', null]) {
         await expect(ask('lifecycleMark', ID, change)).rejects.toMatchObject({ code: 'invalid' });
       }
       await expect(ask('lifecycleMark', ID, 'clear', 'more')).rejects.toMatchObject({ code: 'invalid' });

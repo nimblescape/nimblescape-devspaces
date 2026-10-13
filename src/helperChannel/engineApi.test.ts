@@ -129,7 +129,7 @@ describe('engineApi over a Unix socket', () => {
   });
 
   async function serve(handler: http.RequestListener): Promise<EngineApi> {
-    folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-engine-'));
+    folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-engine-'));
     const socket = path.join(folder, 'docker.sock');
     const server = http.createServer(handler);
     servers.push(server);

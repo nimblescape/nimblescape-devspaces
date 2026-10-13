@@ -94,7 +94,7 @@ describe.skipIf(process.platform !== 'linux')('stopLocker with real processes', 
   const started: ChildProcess[] = [];
 
   beforeEach(() => {
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-stop-lock-'));
+    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-stop-lock-'));
   });
 
   afterEach(() => {

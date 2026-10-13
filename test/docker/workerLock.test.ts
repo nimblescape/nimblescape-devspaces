@@ -22,7 +22,7 @@ import { TEST_BASE_IMAGE, TEST_RUN_LABEL, removeRunObjects } from './dockerRun';
 import { FakeUi, RecordingProgress, TEST_ACCOUNT, dockerTestContext, testHelperImage } from './harness';
 import { monitorOfUser, removeTestMonitor, seedTestMonitorRun, testComputer, workerWindow, type WorkerWindow } from './workerWindow';
 
-const REPOSITORY = 'devspace-test/worker-lock';
+const REPOSITORY = 'devspaces-test/worker-lock';
 
 describe('the devspace lock with real workers', () => {
   const context = dockerTestContext('workerLock');

@@ -86,7 +86,7 @@ function fakeEngine(dir: string) {
       calls.push(`${req.method} ${url.pathname}${url.search}`);
       const json = (status: number, value?: unknown) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(value === undefined ? '' : JSON.stringify(value));
       const volume = /^\/volumes\/([^/]+)$/.exec(url.pathname);
-      if (req.method === 'GET' && volume) return volume[1] === 'devspace-missing' ? json(404, { message: 'get devspace-missing: no such volume' }) : json(200, { Name: decodeURIComponent(volume[1]) });
+      if (req.method === 'GET' && volume) return volume[1] === 'devspaces-missing' ? json(404, { message: 'get devspaces-missing: no such volume' }) : json(200, { Name: decodeURIComponent(volume[1]) });
       if (req.method === 'GET' && url.pathname === '/containers/json') {
         const labels = (JSON.parse(url.searchParams.get('filters') ?? '{}') as { label?: string[] }).label ?? [];
         const found = [...containers.values()].filter((container) => labels.every((label) => { const [key, value] = label.split('='); return container.body.Labels[key] === value; }));
@@ -163,7 +163,7 @@ function fakeEngine(dir: string) {
   return engine;
 }
 
-const VOLUME = 'devspace-e2e-volume';
+const VOLUME = 'devspaces-e2e-volume';
 const IMAGE = `sha256:${'b'.repeat(64)}`;
 const SOCKET = '/var/run/docker.sock';
 const SLOW_TEST_MS = 40_000;
@@ -248,7 +248,7 @@ describeUnix('the batch helper of the worker in Node.js processes', () => {
   }
 
   beforeAll(async () => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-batch-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-batch-'));
     fs.mkdirSync(path.join(dir, 'bin'));
     fs.writeFileSync(path.join(dir, 'bin', 'docker'), FAKE_DOCKER, { mode: 0o755 });
     env = { ...process.env, PATH: `${path.join(dir, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`, FAKE_DOCKER_LOG: path.join(dir, 'calls.log') };
@@ -296,10 +296,10 @@ describeUnix('the batch helper of the worker in Node.js processes', () => {
       ],
     });
     // The inspect of the volume and one attached create over the Engine API.
-    expect(creates()).toEqual([`POST /containers/create?name=devspace-batch-${value.session}`]);
+    expect(creates()).toEqual([`POST /containers/create?name=devspaces-batch-${value.session}`]);
     expect(calls()[before]).toBe(`GET /volumes/${VOLUME}`);
     const created = engine.created.at(-1)!;
-    expect(created.body.Labels['nimblescape.devspace.channel-step']).toBe(value.session);
+    expect(created.body.Labels['nimblescape.devspaces.channel-step']).toBe(value.session);
     expect(created.body.HostConfig.AutoRemove).toBe(true);
     // The helper is the same script, loaded by its own pipe loader with the entry of the helper.
     expect(created.body.Cmd.slice(-3)).toEqual(['/opt/devspace/batch.js', bundleHash(script), 'startBatchHelper']);
@@ -315,7 +315,7 @@ describeUnix('the batch helper of the worker in Node.js processes', () => {
     // The session was closed when the operation ended: the helper ended, and the worker looked for what was left by the
     // session label: the list by the session label over the Engine API.
     await waitUntil(() => ended() === 1, 'the end of the helper');
-    const filters = encodeURIComponent(JSON.stringify({ label: [`nimblescape.devspace.channel-step=${value.session}`] }));
+    const filters = encodeURIComponent(JSON.stringify({ label: [`nimblescape.devspaces.channel-step=${value.session}`] }));
     expect(calls()).toContain(`GET /containers/json?all=true&filters=${filters}`);
     expect(engine.containers.size).toBe(0);
     // The worker ran no `docker` process.
@@ -327,9 +327,9 @@ describeUnix('the batch helper of the worker in Node.js processes', () => {
   it('refuses a missing volume and starts no helper', { timeout: SLOW_TEST_MS }, async () => {
     const before = calls().length;
     const { channel } = await worker();
-    await expect(batch(channel, { volume: 'devspace-missing', image: IMAGE, socket: SOCKET })).rejects.toMatchObject({ code: 'missingVolume' });
+    await expect(batch(channel, { volume: 'devspaces-missing', image: IMAGE, socket: SOCKET })).rejects.toMatchObject({ code: 'missingVolume' });
     // The inspect over the Engine API.
-    expect(calls().slice(before)).toEqual(['GET /volumes/devspace-missing']);
+    expect(calls().slice(before)).toEqual(['GET /volumes/devspaces-missing']);
     channel.close();
   });
 
@@ -342,7 +342,7 @@ describeUnix('the batch helper of the worker in Node.js processes', () => {
     controller.abort();
     expect(await done).toMatchObject({ name: 'AbortError' });
     await waitUntil(() => !running(helperPid), 'the end of the helper after the cancel');
-    const filters = encodeURIComponent(JSON.stringify({ label: [`nimblescape.devspace.channel-step=${session}`] }));
+    const filters = encodeURIComponent(JSON.stringify({ label: [`nimblescape.devspaces.channel-step=${session}`] }));
     await waitUntil(() => calls().includes(`GET /containers/json?all=true&filters=${filters}`), 'the list by the session label');
     channel.close();
   });

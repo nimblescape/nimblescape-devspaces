@@ -27,7 +27,7 @@ afterEach(() => {
 
 /** A sandbox whose fake /etc/passwd has `lines` (each home must be in the sandbox), with the server in its store. */
 function sandbox(lines: (root: string) => string[]) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-vscode-link-probe-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-vscode-link-probe-'));
   temps.push(root);
   const store = path.join(root, 'store');
   const server = path.join(store, 'server', 'stable', 'linux-x64', COMMIT);

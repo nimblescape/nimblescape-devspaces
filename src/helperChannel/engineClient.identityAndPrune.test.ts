@@ -13,7 +13,7 @@ import { dockerEngine } from './engineClient';
 
 function fake(answer: EngineAnswer) {
   const api: EngineApi = async () => answer;
-  return dockerEngine(api, engineHijack(path.join(os.tmpdir(), 'devspace-no-socket')));
+  return dockerEngine(api, engineHijack(path.join(os.tmpdir(), 'devspaces-no-socket')));
 }
 
 describe('identity and pruneContainers in detail', () => {

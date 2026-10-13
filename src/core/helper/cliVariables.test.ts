@@ -80,7 +80,7 @@ function loadCli(): CliSubstitution {
 
 const cli = loadCli();
 const REPOSITORY_FOLDER = '/workspaces/api';
-const ID_LABELS = { 'nimblescape.devspace.id': '3f2a9c1e-0000-4000-8000-000000000001' };
+const ID_LABELS = { 'nimblescape.devspaces.id': '3f2a9c1e-0000-4000-8000-000000000001' };
 const ENV = { HOME: '/root', FOO: 'bar', EMPTY: '' };
 
 /** What `devcontainer up` does with an entry of the image metadata: Fo (local variables), then tg (${devcontainerId}). */
@@ -89,10 +89,10 @@ function cliUp(value: unknown, context: { localWorkspaceFolder?: string; contain
 }
 
 const CASES: Array<[string, unknown]> = [
-  ['a default for an unset variable (M1)', 'source=${localEnv:NOPE:devspace-other-abcdef12},target=/x,type=volume'],
-  ['env as an alias of localEnv (M1)', 'source=${env:NOPE:devspace-helper-cache},target=/c,type=volume'],
-  ['the object form (M1)', { source: '${localEnv:NOPE:devspace-other-abcdef12}', target: '/x', type: 'volume' }],
-  ['a foreign name built from the basename (M1)', 'source=devspace-${localWorkspaceFolderBasename}-abcdef12,target=/x,type=volume'],
+  ['a default for an unset variable (M1)', 'source=${localEnv:NOPE:devspaces-other-abcdef12},target=/x,type=volume'],
+  ['env as an alias of localEnv (M1)', 'source=${env:NOPE:devspaces-helper-cache},target=/c,type=volume'],
+  ['the object form (M1)', { source: '${localEnv:NOPE:devspaces-other-abcdef12}', target: '/x', type: 'volume' }],
+  ['a foreign name built from the basename (M1)', 'source=devspaces-${localWorkspaceFolderBasename}-abcdef12,target=/x,type=volume'],
   ['node_modules of the repository', 'source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume'],
   ['docker-in-docker', { source: 'dind-var-lib-docker-${devcontainerId}', target: '/var/lib/docker', type: 'volume' }],
   ['shell history', 'source=${devcontainerId}-bashhistory,target=/commandhistory,type=volume'],
@@ -108,7 +108,7 @@ const CASES: Array<[string, unknown]> = [
   ['containerEnv of a new container', '${containerEnv:PATH}'],
   ['unknown names', '${unknown}|${}|${UNKNOWN:x}'],
   ['no variable', 'type=tmpfs,target=/tmp'],
-  ['a result is not substituted again in the same pass', '${localEnv:NOPE:$}{localEnv:NOPE:devspace-other-abcdef12}'],
+  ['a result is not substituted again in the same pass', '${localEnv:NOPE:$}{localEnv:NOPE:devspaces-other-abcdef12}'],
   ['the non-greedy pattern', '${localEnv:NOPE:${localEnv:HOME}}'],
   ['a result that names devcontainerId is resolved by the second pass', '${localEnv:NOPE:$}{devcontainerId}|${localEnv:NOPE:${devcontainerId}}'],
   ['keys stay, values of objects and arrays are substituted', { '${localEnv:FOO}': ['${localEnv:FOO}', 1, true, null, { a: '${localWorkspaceFolderBasename}' }] }],
@@ -151,9 +151,9 @@ describe(`cliVariables: as Dev Container CLI ${CLI_VERSION} substitutes`, () => 
 
   it('the concrete results of the M1 vectors and of the common patterns', () => {
     const variables = helperCliVariables('acme/api');
-    expect(substituteCliVariables('source=${localEnv:NOPE:devspace-other-abcdef12},target=/x', variables)).toBe('source=devspace-other-abcdef12,target=/x');
-    expect(substituteCliVariables('${env:NOPE:devspace-helper-cache}', variables)).toBe('devspace-helper-cache');
-    expect(substituteCliVariables('devspace-${localWorkspaceFolderBasename}-abcdef12', variables)).toBe('devspace-api-abcdef12');
+    expect(substituteCliVariables('source=${localEnv:NOPE:devspaces-other-abcdef12},target=/x', variables)).toBe('source=devspaces-other-abcdef12,target=/x');
+    expect(substituteCliVariables('${env:NOPE:devspaces-helper-cache}', variables)).toBe('devspaces-helper-cache');
+    expect(substituteCliVariables('devspaces-${localWorkspaceFolderBasename}-abcdef12', variables)).toBe('devspaces-api-abcdef12');
     expect(substituteCliVariables('source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules', variables)).toBe(
       'source=api-node_modules,target=/workspaces/api/node_modules',
     );
@@ -175,12 +175,12 @@ describe('cliVariables: the process of the CLI in the workspace helper', () => {
     // HOME is known (/root, HELPER_KNOWN_ENV), the others may be set.
     for (const name of ['PATH', 'HOSTNAME', 'NODE_VERSION', 'YARN_VERSION', 'PWD', 'OLDPWD', 'SHLVL', '_', 'TERM', 'HTTP_PROXY', 'no_proxy']) {
       expect(mayBeSetInHelper(name)).toBe(true);
-      expect(substituteCliVariables(`\${localEnv:${name}:devspace-other-abcdef12}`, variables)).toBe(`\${localEnv:${name}:devspace-other-abcdef12}`);
+      expect(substituteCliVariables(`\${localEnv:${name}:devspaces-other-abcdef12}`, variables)).toBe(`\${localEnv:${name}:devspaces-other-abcdef12}`);
       expect(substituteCliVariables(`\${env:${name}}`, variables)).toBe(`\${env:${name}}`);
     }
     expect(HELPER_PROCESS_ENV_NAMES).toContain('HOME');
     expect(mayBeSetInHelper('HOME')).toBe(true);
-    expect(substituteCliVariables('${localEnv:HOME:devspace-other-abcdef12}|${env:HOME}', variables)).toBe('/root|/root');
+    expect(substituteCliVariables('${localEnv:HOME:devspaces-other-abcdef12}|${env:HOME}', variables)).toBe('/root|/root');
   });
 
   it('resolves the other variables to their default or to an empty text, as the CLI does for a variable that is not set', () => {
@@ -245,7 +245,7 @@ describe('the placeholder of ${devcontainerId}', () => {
   it('is shaped like the ID of the CLI, and named like no volume of Devspaces', () => {
     expect(DEVCONTAINER_ID_PLACEHOLDER).toMatch(/^[0-9a-v]{52}$/);
     expect(cli.Q_(ID_LABELS)).toMatch(/^[0-9a-v]{52}$/);
-    for (const name of [DEVCONTAINER_ID_PLACEHOLDER, `x-${DEVCONTAINER_ID_PLACEHOLDER}`, `devspace-x-${DEVCONTAINER_ID_PLACEHOLDER}`]) {
+    for (const name of [DEVCONTAINER_ID_PLACEHOLDER, `x-${DEVCONTAINER_ID_PLACEHOLDER}`, `devspaces-x-${DEVCONTAINER_ID_PLACEHOLDER}`]) {
       expect(isDevspaceResourceName(name)).toBe(false);
       expect(isDevContainersCloneVolumeName(name)).toBe(false);
       expect(name).not.toBe(HELPER_CACHE_VOLUME);
@@ -338,7 +338,7 @@ describe('the known variables of the helper process', () => {
     expect(spec.command.filter((arg) => arg === '--user' || arg === '-u' || arg.startsWith('--user=') || arg.startsWith('HOME='))).toEqual([]);
     for (const step of [
       batchStepCommand('readConfiguration', { repository: 'o/r', configPath: 'a.json', devspaceId: 'e', merged: true }),
-      batchStepCommand('build', { repository: 'o/r', configPath: 'a.json', imageName: 'devspace-x:1' }),
+      batchStepCommand('build', { repository: 'o/r', configPath: 'a.json', imageName: 'devspaces-x:1' }),
       batchStepCommand('up', { repository: 'o/r', override: {}, devspaceId: 'e', removeExistingContainer: false }),
       batchStepCommand('runUserCommands', { repository: 'o/r', override: {}, devspaceId: 'e', containerId: 'c'.repeat(64) }),
     ]) {
@@ -443,7 +443,7 @@ describe('devcontainerIdOf: `${devcontainerId}` as Dev Container CLI 0.89.0 comp
   it('devspaceDevcontainerId: the ID for the single id label that the pipeline passes', () => {
     const id = '3f2a9c1e-0000-4000-8000-000000000001';
     expect(devspaceDevcontainerId(id)).toBe(cli.Q_(ID_LABELS));
-    expect(devspaceDevcontainerId(id)).toBe(cliId([`nimblescape.devspace.id=${id}`]));
+    expect(devspaceDevcontainerId(id)).toBe(cliId([`nimblescape.devspaces.id=${id}`]));
     expect(devspaceDevcontainerId(id)).not.toBe(DEVCONTAINER_ID_PLACEHOLDER);
     expect(devspaceDevcontainerId(id)).not.toBe(devspaceDevcontainerId('7c1d2e3f-1111-4222-8333-444444444444'));
   });

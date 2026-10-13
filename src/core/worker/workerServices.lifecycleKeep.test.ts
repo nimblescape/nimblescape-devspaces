@@ -22,7 +22,7 @@ function helperWith(container: EngineContainer | undefined) {
     secretOf: () => undefined,
     forgetSecret: () => undefined,
     logger: silentLogger,
-    ownHelper: { image: { tag: 'devspace-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/s.sock' },
+    ownHelper: { image: { tag: 'devspaces-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/s.sock' },
     dockerHost: '',
     owner: { windowId: 'w', pid: 1 },
     devspaceLock: async () => {
@@ -34,10 +34,10 @@ function helperWith(container: EngineContainer | undefined) {
 
 describe('whether a container runs, in the worker', () => {
   it('is read over the engine, never through a Docker CLI', async () => {
-    const running = helperWith({ id: ID, name: 'devspace-x', state: 'running', rawState: 'running', labels: {}, image: 'i' });
+    const running = helperWith({ id: ID, name: 'devspaces-x', state: 'running', rawState: 'running', labels: {}, image: 'i' });
     expect(await running.runs).toBe(true);
     expect(running.asked).toEqual([ID]);
-    expect(await helperWith({ id: ID, name: 'devspace-x', state: 'stopped', rawState: 'exited', labels: {}, image: 'i' }).runs).toBe(false);
+    expect(await helperWith({ id: ID, name: 'devspaces-x', state: 'stopped', rawState: 'exited', labels: {}, image: 'i' }).runs).toBe(false);
     expect(await helperWith(undefined).runs).toBe(false);
   });
 });

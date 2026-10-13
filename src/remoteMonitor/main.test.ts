@@ -91,7 +91,7 @@ const NO_ENGINE = 'connect ECONNREFUSED /var/run/docker.sock';
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-'));
 });
 
 afterEach(() => {
@@ -351,14 +351,14 @@ describe('readRecords', () => {
 describe('remoteContainersOf', () => {
   it('reads the containers of the engine and skips those without a valid id or devspace id', () => {
     const listed = [
-      listedContainer(DEV_ID, 'running', 'devspace-api', A),
-      listedContainer(DB_ID, 'exited', 'devspace-api-db-1', A, 'db'),
+      listedContainer(DEV_ID, 'running', 'devspaces-api', A),
+      listedContainer(DB_ID, 'exited', 'devspaces-api-db-1', A, 'db'),
       listedContainer(DEV_ID, 'running', 'foreign', 'not-an-id'),
       listedContainer('zz', 'running', 'x', A),
     ];
     expect(remoteContainersOf(listed)).toEqual([
-      { id: DEV_ID, state: 'running', name: 'devspace-api', devspaceId: A, composeService: '' },
-      { id: DB_ID, state: 'exited', name: 'devspace-api-db-1', devspaceId: A, composeService: 'db' },
+      { id: DEV_ID, state: 'running', name: 'devspaces-api', devspaceId: A, composeService: '' },
+      { id: DB_ID, state: 'exited', name: 'devspaces-api-db-1', devspaceId: A, composeService: 'db' },
     ]);
   });
 
@@ -367,9 +367,9 @@ describe('remoteContainersOf', () => {
   // devspace is never one of them.
   it('keeps the state word of the engine, and skips a container without the label of a devspace', () => {
     const states = ['paused', 'restarting', 'created', 'exited', 'dead', 'removing'];
-    expect(remoteContainersOf(states.map((state) => listedContainer(DEV_ID, state, 'devspace-api', A))).map((container) => container.state)).toEqual(states);
-    expect(remoteContainersOf([{ ...listedContainer(DEV_ID, 'running', 'devspace-api', A), labels: {} }])).toEqual([]);
-    expect(remoteContainersOf([{ ...listedContainer(DEV_ID, 'running', 'devspace-api', A), labels: { [LABEL_DEVSPACE_ID]: A.toUpperCase() } }])).toEqual([]);
+    expect(remoteContainersOf(states.map((state) => listedContainer(DEV_ID, state, 'devspaces-api', A))).map((container) => container.state)).toEqual(states);
+    expect(remoteContainersOf([{ ...listedContainer(DEV_ID, 'running', 'devspaces-api', A), labels: {} }])).toEqual([]);
+    expect(remoteContainersOf([{ ...listedContainer(DEV_ID, 'running', 'devspaces-api', A), labels: { [LABEL_DEVSPACE_ID]: A.toUpperCase() } }])).toEqual([]);
   });
 });
 
@@ -404,7 +404,7 @@ describe('RemoteMonitorLoop', () => {
     lines = [];
     calls = [];
     stopResults = new Map();
-    ps = [listedContainer(DB_ID, 'running', 'devspace-api-db-1', A, 'db'), listedContainer(DEV_ID, 'running', 'devspace-api', A)];
+    ps = [listedContainer(DB_ID, 'running', 'devspaces-api-db-1', A, 'db'), listedContainer(DEV_ID, 'running', 'devspaces-api', A)];
     beforeRemove = undefined;
     loop = new RemoteMonitorLoop({
       // A fake engine; each call is recorded as `containers` (the list of the containers, containerSummaries) with its
@@ -445,7 +445,7 @@ describe('RemoteMonitorLoop', () => {
     writeRecord(SOURCE, A, { at: T0 - 30 * MINUTE, keepRunning: false, limitSeconds: 600 });
     expect(await tickAt(T0)).toEqual([]);
     // The list of the engine by the label of a devspace.
-    expect(calls[0]).toEqual(['containers', 'nimblescape.devspace.id']);
+    expect(calls[0]).toEqual(['containers', 'nimblescape.devspaces.id']);
     expect(lines.some((line) => line.includes('nothing is stopped until'))).toBe(true);
     for (let time = T0 + REMOTE_TICK_MS; time < T0 + REMOTE_GRACE_MS; time += REMOTE_TICK_MS) expect(await tickAt(time)).toEqual([]);
     expect(await tickAt(T0 + REMOTE_GRACE_MS)).toEqual([A]);
@@ -496,7 +496,7 @@ describe('RemoteMonitorLoop', () => {
       'Docker does not answer; nothing is stopped while it does not answer. Docker did not answer within 30 seconds.',
     ]);
     expect(calls.filter((call) => call[0] === 'stop')).toEqual([]);
-    ps = [listedContainer(DEV_ID, 'running', 'devspace-api', A)];
+    ps = [listedContainer(DEV_ID, 'running', 'devspaces-api', A)];
     expect(await tickAt(T0 + 2 * REMOTE_GRACE_MS + REMOTE_TICK_MS)).toEqual([]);
     expect(await tickAt(T0 + 2 * REMOTE_GRACE_MS + 2 * REMOTE_TICK_MS)).toEqual([]);
     expect(lines.filter((line) => line === 'Docker answers again.')).toHaveLength(1);
@@ -504,7 +504,7 @@ describe('RemoteMonitorLoop', () => {
 
   it('a container that is gone when it is stopped (404) counts as stopped, and nothing is logged as failed', async () => {
     writeRecord(SOURCE, A, { at: T0 - 30 * MINUTE, keepRunning: false, limitSeconds: 600 });
-    stopResults.set(DEV_ID, new EngineError('No such container: devspace-api', 404));
+    stopResults.set(DEV_ID, new EngineError('No such container: devspaces-api', 404));
     for (let time = T0; time < T0 + REMOTE_GRACE_MS; time += REMOTE_TICK_MS) await tickAt(time);
     expect(await tickAt(T0 + REMOTE_GRACE_MS)).toEqual([A]);
     // The dev container first, then the other one of the devspace.
@@ -516,7 +516,7 @@ describe('RemoteMonitorLoop', () => {
     writeRecord(SOURCE, A, { at: T0 - 30 * MINUTE, keepRunning: false, limitSeconds: 600 });
     stopResults.set(DEV_ID, abortError());
     for (let time = T0; time <= T0 + REMOTE_GRACE_MS + 2 * REMOTE_TICK_MS; time += REMOTE_TICK_MS) expect(await tickAt(time)).toEqual([]);
-    expect(lines.filter((line) => line.includes('could not be stopped'))).toEqual(['The container devspace-api could not be stopped: Docker did not answer within 60 seconds.']);
+    expect(lines.filter((line) => line.includes('could not be stopped'))).toEqual(['The container devspaces-api could not be stopped: Docker did not answer within 60 seconds.']);
     // Each tick past the grace tried the dev container again (and the other container of the devspace after it).
     expect(calls.filter((call) => call[0] === 'stop' && call[1] === DEV_ID)).toHaveLength(3);
     stopResults.clear();
@@ -772,7 +772,7 @@ describe('RemoteMonitorLoop', () => {
     const DAY = 24 * 60 * MINUTE;
     const THIRD = '1'.repeat(32);
     let clock = T0 - 8 * DAY;
-    let listed: EngineContainerSummary[] = [listedContainer('c'.repeat(64), 'exited', 'devspace-b', B)];
+    let listed: EngineContainerSummary[] = [listedContainer('c'.repeat(64), 'exited', 'devspaces-b', B)];
     writeRecord(SOURCE, B, { at: T0 - 9 * DAY, keepRunning: false, limitSeconds: 600 });
     writeRecord(OTHER, B, { at: T0 + 6 * DAY, keepRunning: false, limitSeconds: 600 });
     const attempts: string[] = [];
@@ -912,7 +912,7 @@ describe('RemoteMonitorLoop over the real port', () => {
   // the stop without a time, and the answers 304 (it stopped meanwhile) and 404 (it is gone), each counted as stopped.
   it('stops over the real port: the list with all=1 and the label filter, its state, the stop without a time; 304 and 404 count as stopped', async () => {
     writeRecord(SOURCE, A, { at: T0 - 30 * MINUTE, keepRunning: false, limitSeconds: 600 });
-    const { engine, requests } = engineOver([entryOf(DB_ID, 'devspace-api-db-1', A, 'db'), entryOf(DEV_ID, 'devspace-api', A)], { [DEV_ID]: 304, [DB_ID]: 404 });
+    const { engine, requests } = engineOver([entryOf(DB_ID, 'devspaces-api-db-1', A, 'db'), entryOf(DEV_ID, 'devspaces-api', A)], { [DEV_ID]: 304, [DB_ID]: 404 });
     const lines: string[] = [];
     const { at } = await pastGrace(engine, lines);
     requests.length = 0;
@@ -925,8 +925,8 @@ describe('RemoteMonitorLoop over the real port', () => {
       `POST /containers/${DB_ID}/stop`,
     ]);
     expect(lines.filter((line) => line.startsWith('Stopping the container'))).toEqual([
-      `Stopping the container devspace-api of ${A}: no computer sent a heartbeat for ${30 + REMOTE_GRACE_MS / MINUTE} minutes (limit 10 minutes).`,
-      `Stopping the container devspace-api-db-1 of ${A}: no computer sent a heartbeat for ${30 + REMOTE_GRACE_MS / MINUTE} minutes (limit 10 minutes).`,
+      `Stopping the container devspaces-api of ${A}: no computer sent a heartbeat for ${30 + REMOTE_GRACE_MS / MINUTE} minutes (limit 10 minutes).`,
+      `Stopping the container devspaces-api-db-1 of ${A}: no computer sent a heartbeat for ${30 + REMOTE_GRACE_MS / MINUTE} minutes (limit 10 minutes).`,
     ]);
     expect(lines.filter((line) => line.includes('could not be stopped') || line.includes('does not answer'))).toEqual([]);
   });
@@ -935,7 +935,7 @@ describe('RemoteMonitorLoop over the real port', () => {
   // ps` showed it; the loop never inspects, so it keeps no other devspace of the engine from its stop.
   it('a container whose inspect fails (500) keeps no other devspace from its stop: the loop never inspects', async () => {
     writeRecord(SOURCE, A, { at: T0 - 30 * MINUTE, keepRunning: false, limitSeconds: 600 });
-    const { engine, requests } = engineOver([entryOf(BROKEN, 'devspace-broken', B), entryOf(DEV_ID, 'devspace-api', A)]);
+    const { engine, requests } = engineOver([entryOf(BROKEN, 'devspaces-broken', B), entryOf(DEV_ID, 'devspaces-api', A)]);
     const lines: string[] = [];
     const { at } = await pastGrace(engine, lines);
     expect(await at(T0 + REMOTE_GRACE_MS)).toEqual([A]);
@@ -971,7 +971,7 @@ describe('RemoteMonitorLoop: the devspace lock of a stop', () => {
     attempts = [];
     onLocked = undefined;
     stopFails = undefined;
-    ps = [listedContainer(DB_ID, 'running', 'devspace-api-db-1', A, 'db'), listedContainer(DEV_ID, 'running', 'devspace-api', A)];
+    ps = [listedContainer(DB_ID, 'running', 'devspaces-api-db-1', A, 'db'), listedContainer(DEV_ID, 'running', 'devspaces-api', A)];
     loop = new RemoteMonitorLoop({
       // A fake engine. The events name its list by the label filter (`ps`, `ps label=…=<id>`), and its stop.
       engine: {
@@ -1017,7 +1017,7 @@ describe('RemoteMonitorLoop: the devspace lock of a stop', () => {
   it('locks, lists the containers of the devspace again, stops the dev container first, then releases', async () => {
     await pastGrace();
     expect(await tickAt(T0 + REMOTE_GRACE_MS)).toEqual([A]);
-    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspace.id=${A}`, `stop ${DEV_ID}`, `stop ${DB_ID}`, 'release']);
+    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspaces.id=${A}`, `stop ${DEV_ID}`, `stop ${DB_ID}`, 'release']);
   });
 
   it('a busy lock: no stop in this tick, logged once per busy streak; a free lock at a later tick stops it', async () => {
@@ -1039,7 +1039,7 @@ describe('RemoteMonitorLoop: the devspace lock of a stop', () => {
     await pastGrace();
     onLocked = () => writeRecord(OTHER, A, { at: T0 + REMOTE_GRACE_MS, keepRunning: false, limitSeconds: 600 });
     expect(await tickAt(T0 + REMOTE_GRACE_MS)).toEqual([]);
-    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspace.id=${A}`, 'release']);
+    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspaces.id=${A}`, 'release']);
     expect(lines).toContain(`${A} is not stopped: a heartbeat or another change came before its lock was taken.`);
   });
 
@@ -1053,7 +1053,7 @@ describe('RemoteMonitorLoop: the devspace lock of a stop', () => {
 
   it('containers that stopped before the lock was taken: nothing to stop, released', async () => {
     await pastGrace();
-    onLocked = () => (ps = [listedContainer(DEV_ID, 'exited', 'devspace-api', A)]);
+    onLocked = () => (ps = [listedContainer(DEV_ID, 'exited', 'devspaces-api', A)]);
     expect(await tickAt(T0 + REMOTE_GRACE_MS)).toEqual([]);
     expect(events.filter((event) => event.startsWith('stop'))).toEqual([]);
     expect(events.at(-1)).toBe('release');
@@ -1064,19 +1064,19 @@ describe('RemoteMonitorLoop: the devspace lock of a stop', () => {
     // The list of the engine fails.
     onLocked = () => (ps = new Error(NO_ENGINE));
     expect(await tickAt(T0 + REMOTE_GRACE_MS)).toEqual([]);
-    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspace.id=${A}`, 'release']);
+    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspaces.id=${A}`, 'release']);
     expect(lines.some((line) => line.startsWith(`${A} is not stopped: its containers could not be listed again.`))).toBe(true);
     expect(lines).toContain(`${A} is not stopped: its containers could not be listed again. ${NO_ENGINE}`);
 
-    ps = [listedContainer(DEV_ID, 'running', 'devspace-api', A)];
+    ps = [listedContainer(DEV_ID, 'running', 'devspaces-api', A)];
     onLocked = undefined;
     stopFails = new Error('the engine broke');
     events = [];
     expect(await tickAt(T0 + REMOTE_GRACE_MS + REMOTE_TICK_MS)).toEqual([]);
-    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspace.id=${A}`, `stop ${DEV_ID}`, 'release']);
+    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspaces.id=${A}`, `stop ${DEV_ID}`, 'release']);
     // A stop that the engine rejects is a failed stop (logged once per series, tried again at the next tick). The lock
     // is released after it.
-    expect(lines).toContain('The container devspace-api could not be stopped: the engine broke');
+    expect(lines).toContain('The container devspaces-api could not be stopped: the engine broke');
 
     // The records folder is replaced by a file under the lock: readRecords fails.
     stopFails = undefined;
@@ -1086,7 +1086,7 @@ describe('RemoteMonitorLoop: the devspace lock of a stop', () => {
       fs.writeFileSync(heartbeatDir(stateDir), 'not a folder');
     };
     expect(await tickAt(T0 + REMOTE_GRACE_MS + 2 * REMOTE_TICK_MS)).toEqual([]);
-    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspace.id=${A}`, 'release']);
+    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspaces.id=${A}`, 'release']);
   });
 
   it('a lock that cannot be opened or taken: no stop, logged once per streak', async () => {
@@ -1107,7 +1107,7 @@ describe('RemoteMonitorLoop: the devspace lock of a stop', () => {
   // the tick is still stopped, and the removal pass of the tick starts.
   it('a devspace decided again to "no stop" does not end the tick: the next one is stopped, the removals start', async () => {
     const OTHER_DEV = 'c'.repeat(64);
-    ps = [listedContainer(DEV_ID, 'running', 'devspace-api', A), listedContainer(OTHER_DEV, 'running', 'devspace-web', B)];
+    ps = [listedContainer(DEV_ID, 'running', 'devspaces-api', A), listedContainer(OTHER_DEV, 'running', 'devspaces-web', B)];
     writeRecord(SOURCE, B, { at: T0 - 30 * MINUTE, keepRunning: false, limitSeconds: 600 });
     // An old record of a devspace without any container: `forget` of the tick.
     const C = '00000000-0000-4000-8000-00000000000c';
@@ -1125,10 +1125,10 @@ describe('RemoteMonitorLoop: the devspace lock of a stop', () => {
     expect(events).toEqual([
       'ps',
       `lock ${A}`,
-      `ps label=nimblescape.devspace.id=${A}`,
+      `ps label=nimblescape.devspaces.id=${A}`,
       'release',
       `lock ${B}`,
-      `ps label=nimblescape.devspace.id=${B}`,
+      `ps label=nimblescape.devspaces.id=${B}`,
       `stop ${OTHER_DEV}`,
       'release',
     ]);
@@ -1140,7 +1140,7 @@ describe('RemoteMonitorLoop: the devspace lock of a stop', () => {
     await pastGrace();
     onLocked = () => (now += 2 * REMOTE_GAP_MS);
     expect(await tickAt(T0 + REMOTE_GRACE_MS)).toEqual([A]);
-    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspace.id=${A}`, `stop ${DEV_ID}`, `stop ${DB_ID}`, 'release']);
+    expect(events).toEqual(['ps', `lock ${A}`, `ps label=nimblescape.devspaces.id=${A}`, `stop ${DEV_ID}`, `stop ${DB_ID}`, 'release']);
   });
 });
 
@@ -1179,7 +1179,7 @@ describe('monitor.js run: the lock files of the volume', () => {
       // A fake engine (its list and its stop).
       engine: {
         ...unusedEngine(),
-        containerSummaries: async () => [listedContainer(DEV_ID, 'running', 'devspace-api', A)],
+        containerSummaries: async () => [listedContainer(DEV_ID, 'running', 'devspaces-api', A)],
         stop: async (id) => void stops.push(`stop ${id}`),
       },
       exec: (_file, _args, _options, callback) => callback(null, 'removed\n', ''),
@@ -1327,12 +1327,12 @@ describe('monitor.js run: the exit when idle', () => {
   // `created` for ever; with only stale records the monitor exits after the idle time.
   it('exits for a lone created container with only stale records', async () => {
     writeRecord(SOURCE, A, { at: T0 - 2 * MINUTE, keepRunning: false, limitSeconds: 60 });
-    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'created', 'devspace-api', A)) });
+    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'created', 'devspaces-api', A)) });
     expect(await monitor.result).toBe(0);
     expect(monitor.mono()).toBeGreaterThanOrEqual(REMOTE_IDLE_EXIT_MS);
     expect(monitor.mono()).toBeLessThan(REMOTE_IDLE_EXIT_MS + 2 * REMOTE_TICK_MS);
     // Without any record too.
-    const bare = startRun({ ps: () => listed(listedContainer(DEV_ID, 'created', 'devspace-api', B)) });
+    const bare = startRun({ ps: () => listed(listedContainer(DEV_ID, 'created', 'devspaces-api', B)) });
     expect(await bare.result).toBe(0);
     expect(bare.mono()).toBeLessThan(REMOTE_IDLE_EXIT_MS + 2 * REMOTE_TICK_MS);
   });
@@ -1340,11 +1340,11 @@ describe('monitor.js run: the exit when idle', () => {
   // An old keep counts only through a container of it that runs.
   it('exits for an old keep whose devspace has only a created container; a running one keeps it', async () => {
     writeRecord(SOURCE, A, { at: T0 - 60 * MINUTE, keepRunning: true, limitSeconds: 60 });
-    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'created', 'devspace-api', A)) });
+    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'created', 'devspaces-api', A)) });
     expect(await monitor.result).toBe(0);
     expect(monitor.mono()).toBeLessThan(REMOTE_IDLE_EXIT_MS + 2 * REMOTE_TICK_MS);
     // A running one keeps it (running counts on its own).
-    const running = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspace-api', A)), maxTicks: 100 });
+    const running = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspaces-api', A)), maxTicks: 100 });
     await vi.waitFor(() => expect(running.ticks()).toBe(100));
     expect(await pending(running.result)).toBe('pending');
   });
@@ -1352,7 +1352,7 @@ describe('monitor.js run: the exit when idle', () => {
   it('exits for an old keep whose devspace has only ended containers', async () => {
     // Keep Running When Closed stays in the records after a Stop: it must not keep the monitor for ever.
     writeRecord(SOURCE, A, { at: T0 - 60 * MINUTE, keepRunning: true, limitSeconds: 60 });
-    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'exited', 'devspace-api', A)) });
+    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'exited', 'devspaces-api', A)) });
     expect(await monitor.result).toBe(0);
     expect(monitor.mono()).toBeLessThan(REMOTE_IDLE_EXIT_MS + 2 * REMOTE_TICK_MS);
   });
@@ -1363,24 +1363,24 @@ describe('monitor.js run: the exit when idle', () => {
     writeRecord(SOURCE, A, { at: T0, keepRunning: false, limitSeconds: 600 });
     let running = true;
     const monitor = startRun({
-      ps: () => (running ? listed(listedContainer(DEV_ID, 'running', 'devspace-api', A)) : listed()),
+      ps: () => (running ? listed(listedContainer(DEV_ID, 'running', 'devspaces-api', A)) : listed()),
       onStop: () => (running = false),
     });
     expect(await monitor.result).toBe(0);
     expect(monitor.events).toEqual([`lock ${A}`, `stop ${DEV_ID}`, 'release', 'exit']);
-    expect(monitor.out()).toContain(`Stopping the container devspace-api of ${A}: no computer sent a heartbeat`);
+    expect(monitor.out()).toContain(`Stopping the container devspaces-api of ${A}: no computer sent a heartbeat`);
     // The stop came after the limit of the record (10 minutes), the exit the idle time after the stop.
     expect(monitor.mono()).toBeGreaterThanOrEqual(10 * MINUTE + REMOTE_IDLE_EXIT_MS);
   });
 
   it('exits with 0 also when only stopped labelled containers exist', async () => {
-    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'exited', 'devspace-api', A)) });
+    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'exited', 'devspaces-api', A)) });
     expect(await monitor.result).toBe(0);
   });
 
   it('does not exit while a labelled container runs, also one that a record keeps running', async () => {
     writeRecord(SOURCE, A, { at: T0, keepRunning: true, limitSeconds: 600 });
-    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspace-api', A)), maxTicks: 100 });
+    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspaces-api', A)), maxTicks: 100 });
     await vi.waitFor(() => expect(monitor.ticks()).toBe(100));
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.out()).not.toContain('exits');
@@ -1388,7 +1388,7 @@ describe('monitor.js run: the exit when idle', () => {
 
   it('does not exit while a labelled container runs and the records cannot be read', async () => {
     fs.writeFileSync(heartbeatDir(stateDir), 'not a folder');
-    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspace-api', A)), maxTicks: 100 });
+    const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspaces-api', A)), maxTicks: 100 });
     await vi.waitFor(() => expect(monitor.ticks()).toBe(100));
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.out()).toContain('The heartbeat records could not be read');
@@ -1397,7 +1397,7 @@ describe('monitor.js run: the exit when idle', () => {
   // Paused and restarting containers count as running.
   it('does not exit while a labelled container is paused or restarting', async () => {
     for (const state of ['paused', 'restarting']) {
-      const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, state, 'devspace-api', A)), maxTicks: 100 });
+      const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, state, 'devspaces-api', A)), maxTicks: 100 });
       await vi.waitFor(() => expect(monitor.ticks()).toBe(100));
       expect(monitor.mono()).toBeGreaterThan(REMOTE_IDLE_EXIT_MS);
       expect(await pending(monitor.result)).toBe('pending');
@@ -1445,7 +1445,7 @@ describe('monitor.js run: the exit when idle', () => {
     let running = true;
     // The stop takes 4 minutes; after it the container is gone.
     const monitor = startRun({
-      ps: () => (running ? listed(listedContainer(DEV_ID, 'running', 'devspace-api', A)) : listed()),
+      ps: () => (running ? listed(listedContainer(DEV_ID, 'running', 'devspaces-api', A)) : listed()),
       stopMs: 4 * MINUTE,
       onStop: () => (running = false),
     });

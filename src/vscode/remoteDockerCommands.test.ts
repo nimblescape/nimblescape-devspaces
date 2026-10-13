@@ -123,7 +123,7 @@ function create(): RemoteDockerCommands {
 beforeEach(() => {
   resetFakeVscode();
   vi.clearAllMocks();
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-ui-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-ui-'));
   cli = new FakeCli();
   state = new RemoteDockerState(path.join(dir, 'remote-docker.json'));
   runner = { run: vi.fn(async () => ok('/run/user/1000')) };

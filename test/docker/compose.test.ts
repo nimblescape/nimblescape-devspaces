@@ -10,7 +10,7 @@
 // from the workspace volume (volume.subpath), the volumes of the project and of `mounts` with our labels; the refusal
 // of a privileged service before any build; Stop of both; open again without a build. The host name of the dev
 // container; Delete (all containers, the network, and the images of the project; the data volumes of the services only
-// when the user ticks them); the label nimblescape.devspace.host-access=unrestricted on every container, and ports as
+// when the user ticks them); the label nimblescape.devspaces.host-access=unrestricted on every container, and ports as
 // the model writes them, while the host access checks are off for the repository. The operations are the flows of the
 // worker, as the window sends them (workerWindow.ts); Delete asks its questions through the requests of its check
 // (deleteCheckInWorker), as the window does. The opens make sure of the real Monitor.
@@ -129,11 +129,11 @@ describe('open pipeline for a Docker Compose configuration', () => {
     const name = resourceName(repository, id);
     return { repository, id, name, project: composeProjectName(repository, id), folder: `/workspaces/${repository.split('/')[1]}` };
   }
-  const app = devspace('devspace-test/tiny-compose');
-  const refused = devspace('devspace-test/refused-compose');
-  const unrestricted = devspace('devspace-test/unrestricted-compose');
+  const app = devspace('devspaces-test/tiny-compose');
+  const refused = devspace('devspaces-test/refused-compose');
+  const unrestricted = devspace('devspaces-test/unrestricted-compose');
   // A `mounts` entry that the Dev Container CLI would write as a bind of the Docker socket.
-  const tmpfsSource = devspace('devspace-test/tmpfs-source-compose');
+  const tmpfsSource = devspace('devspaces-test/tmpfs-source-compose');
   const TMPFS_SOURCE_MOUNT = 'type=tmpfs,src=/var/run/docker.sock,dst=/var/run/docker.sock';
   const HISTORY_MOUNT = 'source=history-${devcontainerId},target=/history,type=volume';
   let apiVersion: string;
@@ -258,7 +258,7 @@ ${extra}volumes:
     await seed(tmpfsSource, composeFile(), [TMPFS_SOURCE_MOUNT]);
     // Delete removes the base images that no build record uses any more; a stopped container of the base image keeps it
     // for the other tests and for the baseline of the engine (Docker does not remove an image that a container uses).
-    cli.ok(['create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, '--name', `devspace-test-compose-guard-${run.runId}`, TEST_BASE_IMAGE, 'true']);
+    cli.ok(['create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, '--name', `devspaces-test-compose-guard-${run.runId}`, TEST_BASE_IMAGE, 'true']);
   });
 
   afterAll(async () => {
@@ -324,7 +324,7 @@ ${extra}volumes:
     expect(dev?.Config.Image).toBe(`${devspaceImageRepository(app.repository, app.id)}:1`);
     expect(dev?.Config.Labels).toMatchObject({
       [LABEL_DEVSPACE_ID]: app.id,
-      'nimblescape.devspace.container-version': String(CONTAINER_VERSION),
+      'nimblescape.devspaces.container-version': String(CONTAINER_VERSION),
       'com.docker.compose.project': app.project,
       'com.docker.compose.service': 'app',
     });
@@ -369,16 +369,16 @@ ${extra}volumes:
     expect(details?.Mounts.find((mount) => mount.Destination === '/data')).toMatchObject({ Type: 'volume', Name: `${app.project}_dbdata` });
     expect(cli.volume(`${app.project}_dbdata`)?.Labels).toMatchObject({ [LABEL_DEVSPACE_ID]: app.id, [LABEL_VOLUME]: VOLUME_KIND_COMPOSE });
     // The data volume of db carries the label of the data of a service; the cache of the dev service does not.
-    expect(cli.volume(`${app.project}_dbdata`)?.Labels?.['nimblescape.devspace.service-data']).toBe('true');
-    expect(cli.volume(`${app.project}_cache`)?.Labels?.['nimblescape.devspace.service-data']).toBeUndefined();
-    // Every container gets nimblescape.devspace.host-access=checked from the model, whatever its image says.
+    expect(cli.volume(`${app.project}_dbdata`)?.Labels?.['nimblescape.devspaces.service-data']).toBe('true');
+    expect(cli.volume(`${app.project}_cache`)?.Labels?.['nimblescape.devspaces.service-data']).toBeUndefined();
+    // Every container gets nimblescape.devspaces.host-access=checked from the model, whatever its image says.
     expect(dev?.Config.Labels?.[LABEL_HOST_ACCESS]).toBe('checked');
     expect(details?.Config.Labels?.[LABEL_HOST_ACCESS]).toBe('checked');
     // The dev container carries the configuration path, for the restore after a lost registry. Only the dev service
     // gets it; on the other services a changed selection would change their Compose config hash and recreate them
     // (their container file system would be lost).
-    expect(dev?.Config.Labels?.['nimblescape.devspace.config-path']).toBe(CONFIG_PATH);
-    expect(details?.Config.Labels?.['nimblescape.devspace.config-path']).toBeUndefined();
+    expect(dev?.Config.Labels?.['nimblescape.devspaces.config-path']).toBe(CONFIG_PATH);
+    expect(details?.Config.Labels?.['nimblescape.devspaces.config-path']).toBeUndefined();
     // Compose puts labels on its containers that images never have (isComposeContainer).
     expect(dev?.Config.Labels?.['com.docker.compose.container-number']).toBeDefined();
 
@@ -492,7 +492,7 @@ ${extra}volumes:
     expect(await registry.get(app.id)).toBeUndefined();
   });
 
-  it.skipIf(skipped)('labels every container nimblescape.devspace.host-access=unrestricted and keeps the ports while the checks are off', async () => {
+  it.skipIf(skipped)('labels every container nimblescape.devspaces.host-access=unrestricted and keeps the ports while the checks are off', async () => {
     if (!supportsVolumeSubpath(apiVersion)) return;
     settings.hostAccessChecksOff = [unrestricted.repository];
     try {
@@ -509,7 +509,7 @@ ${extra}volumes:
     expect(ports.length).toBeGreaterThan(0);
     expect(ports.some((binding) => !binding.startsWith('127.0.0.1:'))).toBe(true);
 
-    // With the checks on again, the next open creates the containers again with nimblescape.devspace.host-access=checked
+    // With the checks on again, the next open creates the containers again with nimblescape.devspaces.host-access=checked
     // (the model sets the label on every service, so an image label cannot claim "unrestricted"), the port on
     // 127.0.0.1.
     await service.openDevspaceInWorker(unrestricted.id, { progress: new RecordingProgress() });

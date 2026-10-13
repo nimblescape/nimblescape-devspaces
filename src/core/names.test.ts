@@ -147,13 +147,13 @@ function labelKeysInCode(files: readonly string[], prefix: string): Array<{ key:
 const FOREIGN_TEST_LABELS = new Set(['devspace.', 'devspace.fingerprint', 'devspace.inputs', 'devspace.environment-id', 'devspace.compose-service']);
 
 /**
- * The IDs of the extension in VS Code (commands, settings, views, context keys) start with `devspace.` too. They are no
- * labels: every `devspace.…` text of package.json, and the few IDs that the code gives VS Code without declaring them
+ * The IDs of the extension in VS Code (commands, settings, views, context keys) start with `devspaces.`. They are no
+ * labels: every `devspaces.…` text of package.json, and the few IDs that the code gives VS Code without declaring them
  * there (the status bar item, the webview type, the focus command of the view, the context keys of the Docker setup, a
  * command name that must not exist).
  */
 const VSCODE_IDS: ReadonlySet<string> = new Set([
-  ...(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8').match(/devspace\.[A-Za-z0-9._-]*[A-Za-z0-9]/g) ?? []),
+  ...(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8').match(/devspaces\.[A-Za-z0-9._-]*[A-Za-z0-9]/g) ?? []),
   'devspaces.status',
   'devspaces.repositoryGroupsEditor',
   'devspaces.repositories.focus',
@@ -173,8 +173,8 @@ describe('EXTENSION_LABEL_KEYS', () => {
   });
 
   it('holds the keys in lower case, each with LABEL_PREFIX', () => {
-    expect(LABEL_PREFIX).toBe('nimblescape.devspace.');
-    for (const key of EXTENSION_LABEL_KEYS) expect(key).toMatch(/^nimblescape\.devspace\.[a-z0-9][a-z0-9-]*$/);
+    expect(LABEL_PREFIX).toBe('nimblescape.devspaces.');
+    for (const key of EXTENSION_LABEL_KEYS) expect(key).toMatch(/^nimblescape\.devspaces\.[a-z0-9][a-z0-9-]*$/);
   });
 
   it('holds exactly the labels of the extension', () => {
@@ -214,38 +214,46 @@ describe('EXTENSION_LABEL_KEYS', () => {
 
   it('leaves no label with the prefix devspace. in the code, only in the tests of labels of other tools', () => {
     // Another tool named devspace labels its images devspace.…; the extension uses none of these.
-    const found = labelKeysInCode(codeFiles(true), 'devspace.').filter(({ key }) => !VSCODE_IDS.has(key));
+    const found = labelKeysInCode(codeFiles(true), 'devspace.');
     expect(found.filter(({ file }) => !file.endsWith('.test.ts'))).toEqual([]);
     expect(found.filter(({ key }) => !FOREIGN_TEST_LABELS.has(key))).toEqual([]);
     expect(found.some(({ key }) => key === 'devspace.fingerprint')).toBe(true);
   });
+
+  it('leaves no label with the prefix devspaces. in the code: each key with it is an ID of the extension in VS Code', () => {
+    // A label of the extension starts with LABEL_PREFIX; a key without `nimblescape.` would not be refused by the policy.
+    // The tests find the IDs by the prefix alone.
+    const found = labelKeysInCode(codeFiles(true), 'devspaces.').filter(({ key }) => !VSCODE_IDS.has(key));
+    expect(found.filter(({ key, file }) => !(key === 'devspaces.' && file.endsWith('.test.ts')))).toEqual([]);
+    expect(VSCODE_IDS.has('devspaces.start')).toBe(true);
+  });
 });
 
-// One name for every resource of a devspace, devspace-<owner>-<repo>-<adjective>-<scientist>.
+// One name for every resource of a devspace, devspaces-<owner>-<repo>-<adjective>-<scientist>.
 describe('resourceName', () => {
   const ID = '11111111-2222-4333-8444-555555555555';
 
-  it('is devspace-<owner>-<repository>-<pair of the devspace ID>', () => {
-    expect(resourceName('acme/api', ID)).toBe(`devspace-acme-api-${namePair(ID)}`);
-    expect(resourceName('acme/api', ID)).toMatch(/^devspace-acme-api-[a-z]+-[a-z]+$/);
+  it('is devspaces-<owner>-<repository>-<pair of the devspace ID>', () => {
+    expect(resourceName('acme/api', ID)).toBe(`devspaces-acme-api-${namePair(ID)}`);
+    expect(resourceName('acme/api', ID)).toMatch(/^devspaces-acme-api-[a-z]+-[a-z]+$/);
   });
 
   it('is the same for the same ID and differs by the ID and the repository', () => {
     expect(resourceName('acme/api', ID)).toBe(resourceName('acme/api', ID));
     expect(resourceName('acme/web', ID)).not.toBe(resourceName('acme/api', ID));
-    expect(resourceName('acme/api', '22222222-2222-4222-8222-222222222222')).toBe('devspace-acme-api-noble-berners');
+    expect(resourceName('acme/api', '22222222-2222-4222-8222-222222222222')).toBe('devspaces-acme-api-noble-berners');
   });
 
   it('is in lower case, each run of other characters than [a-z0-9] one -', () => {
-    expect(resourceName('Acme/My.Repo_Name', ID)).toBe(`devspace-acme-my-repo-name-${namePair(ID)}`);
-    expect(resourceName('o/name-with--dashes---', ID)).toBe(`devspace-o-name-with-dashes-${namePair(ID)}`);
-    expect(resourceName('-x/._y', ID)).toBe(`devspace-x-y-${namePair(ID)}`);
+    expect(resourceName('Acme/My.Repo_Name', ID)).toBe(`devspaces-acme-my-repo-name-${namePair(ID)}`);
+    expect(resourceName('o/name-with--dashes---', ID)).toBe(`devspaces-o-name-with-dashes-${namePair(ID)}`);
+    expect(resourceName('-x/._y', ID)).toBe(`devspaces-x-y-${namePair(ID)}`);
   });
 
   it('has at most 63 characters: a long owner and repository are shortened, the pair is kept', () => {
     const name = resourceName(`${'a'.repeat(40)}/${'b'.repeat(40)}`, ID);
     expect(name.length).toBeLessThanOrEqual(63);
-    expect(name.startsWith(`devspace-${'a'.repeat(20)}`)).toBe(true);
+    expect(name.startsWith(`devspaces-${'a'.repeat(20)}`)).toBe(true);
     expect(name.endsWith(`-${namePair(ID)}`)).toBe(true);
     expect(isDevspaceResourceName(name)).toBe(true);
     // A cut that ends in a separator drops it.
@@ -257,7 +265,7 @@ describe('resourceName', () => {
   });
 
   it('names an owner and repository of only separators `x`', () => {
-    expect(resourceName('-/_', ID)).toBe(`devspace-x-${namePair(ID)}`);
+    expect(resourceName('-/_', ID)).toBe(`devspaces-x-${namePair(ID)}`);
     expect(isDevspaceResourceName(resourceName('-/_', ID))).toBe(true);
   });
 
@@ -272,8 +280,8 @@ describe('isDevspaceResourceName', () => {
 
   it('refuses `_` and `.` in the name (resourceName never writes them)', () => {
     const name = resourceName('acme/api', ID);
-    expect(isDevspaceResourceName(name.replace('devspace-acme-', 'devspace-acme_'))).toBe(false);
-    expect(isDevspaceResourceName(name.replace('devspace-acme-', 'devspace-acme.'))).toBe(false);
+    expect(isDevspaceResourceName(name.replace('devspaces-acme-', 'devspaces-acme_'))).toBe(false);
+    expect(isDevspaceResourceName(name.replace('devspaces-acme-', 'devspaces-acme.'))).toBe(false);
   });
 
   it.each(['acme/api', 'Acme/My.Repo_Name', 'a/b', 'devspace/x', `${'a'.repeat(40)}/${'b'.repeat(40)}`])('takes the name of a devspace of %s', (repository) => {
@@ -281,16 +289,16 @@ describe('isDevspaceResourceName', () => {
   });
 
   it.each([
-    'devspace-tools-node_modules',
-    'devspace-tools',
-    'devspace-cache',
-    'devspace-helper-cache',
-    'devspace-acme-api',
-    'devspace-acme-api-3f2a9c1e',
-    'devspace-acme-api-tidy',
-    'devspace-acme-api-tidy-nobody',
-    'devspace-acme-api-nobody-berners',
-    'devspace-acme-api-tidy-berners_data',
+    'devspaces-tools-node_modules',
+    'devspaces-tools',
+    'devspaces-cache',
+    'devspaces-helper-cache',
+    'devspaces-acme-api',
+    'devspaces-acme-api-3f2a9c1e',
+    'devspaces-acme-api-tidy',
+    'devspaces-acme-api-tidy-nobody',
+    'devspaces-acme-api-nobody-berners',
+    'devspaces-acme-api-tidy-berners_data',
     'acme-api-tidy-berners',
     'x-devspace-acme-api-tidy-berners',
     '',
@@ -299,7 +307,7 @@ describe('isDevspaceResourceName', () => {
   });
 
   it('ignores the case', () => {
-    expect(isDevspaceResourceName('DEVSPACE-ACME-API-TIDY-BERNERS')).toBe(true);
+    expect(isDevspaceResourceName('DEVSPACES-ACME-API-TIDY-BERNERS')).toBe(true);
     expect(isDevspaceResourceName(resourceName('acme/api', ID).toUpperCase())).toBe(true);
   });
 });
@@ -308,50 +316,50 @@ describe('workerContainerName', () => {
   /** The names that Docker takes for a container. */
   const DOCKER_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]+$/;
 
-  it('is devspace-worker-<window>-<number>', () => {
-    expect(workerContainerName('api', 1)).toBe('devspace-worker-api-1');
-    expect(workerContainerName('my-project', 1)).toBe('devspace-worker-my-project-1');
+  it('is devspaces-worker-<window>-<number>', () => {
+    expect(workerContainerName('api', 1)).toBe('devspaces-worker-api-1');
+    expect(workerContainerName('my-project', 1)).toBe('devspaces-worker-my-project-1');
   });
 
   it('is in lower case, letters without accents, each run of other characters than [a-z0-9] one -', () => {
-    expect(workerContainerName('My Project (2)', 1)).toBe('devspace-worker-my-project-2-1');
-    expect(workerContainerName('Übung_Café.Web', 1)).toBe('devspace-worker-ubung-cafe-web-1');
-    expect(workerContainerName('--a..b--', 1)).toBe('devspace-worker-a-b-1');
+    expect(workerContainerName('My Project (2)', 1)).toBe('devspaces-worker-my-project-2-1');
+    expect(workerContainerName('Übung_Café.Web', 1)).toBe('devspaces-worker-ubung-cafe-web-1');
+    expect(workerContainerName('--a..b--', 1)).toBe('devspaces-worker-a-b-1');
     // Letters without an accent to remove get plain letters.
-    expect(workerContainerName('Straße Øl Łódź', 1)).toBe('devspace-worker-strasse-ol-lodz-1');
-    expect(workerContainerName('Æ Œ Đ Ð', 1)).toBe('devspace-worker-ae-oe-d-d-1');
-    expect(workerContainerName('Işık Þór Ħ Ŧ Ŋ', 1)).toBe('devspace-worker-isik-thor-h-t-n-1');
+    expect(workerContainerName('Straße Øl Łódź', 1)).toBe('devspaces-worker-strasse-ol-lodz-1');
+    expect(workerContainerName('Æ Œ Đ Ð', 1)).toBe('devspaces-worker-ae-oe-d-d-1');
+    expect(workerContainerName('Işık Þór Ħ Ŧ Ŋ', 1)).toBe('devspaces-worker-isik-thor-h-t-n-1');
   });
 
   it('names a window without a name, or with a name of no [a-z0-9], window', () => {
-    for (const name of ['', '---', '工作区', ' ']) expect(workerContainerName(name, 1)).toBe('devspace-worker-window-1');
+    for (const name of ['', '---', '工作区', ' ']) expect(workerContainerName(name, 1)).toBe('devspaces-worker-window-1');
   });
 
-  it('is short: a longer window name is cut to 24 characters at the end of a word, so the name has at most 43 up to 99', () => {
-    expect(workerContainerName('nimblescape-devspaces', 1)).toBe('devspace-worker-nimblescape-devspaces-1');
-    expect(workerContainerName('nimblescape-markdown-comment-links', 1)).toBe('devspace-worker-nimblescape-markdown-1');
-    expect(workerContainerName('devcontainer-classroom-web-advanced', 1)).toBe('devspace-worker-devcontainer-classroom-1');
+  it('is short: a longer window name is cut to 24 characters at the end of a word, so the name has at most 44 up to 99', () => {
+    expect(workerContainerName('nimblescape-devspaces', 1)).toBe('devspaces-worker-nimblescape-devspaces-1');
+    expect(workerContainerName('nimblescape-markdown-comment-links', 1)).toBe('devspaces-worker-nimblescape-markdown-1');
+    expect(workerContainerName('devcontainer-classroom-web-advanced', 1)).toBe('devspaces-worker-devcontainer-classroom-1');
     // A word that ends exactly at the cut is kept; the separator after it is dropped.
-    expect(workerContainerName(`${'a'.repeat(11)}-${'b'.repeat(12)}-c`, 1)).toBe(`devspace-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
+    expect(workerContainerName(`${'a'.repeat(11)}-${'b'.repeat(12)}-c`, 1)).toBe(`devspaces-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
     // A first word longer than 24 characters is cut within it.
-    expect(workerContainerName('x'.repeat(80), 1)).toBe(`devspace-worker-${'x'.repeat(24)}-1`);
-    expect(workerContainerName(`${'x'.repeat(30)}-y`, 99)).toHaveLength(43);
+    expect(workerContainerName('x'.repeat(80), 1)).toBe(`devspaces-worker-${'x'.repeat(24)}-1`);
+    expect(workerContainerName(`${'x'.repeat(30)}-y`, 99)).toHaveLength(44);
     // So is a long word after words of less than half of the room, so that they are not all that is left.
-    expect(workerContainerName('a-verylongrepositorynames-service', 1)).toBe('devspace-worker-a-verylongrepositoryname-1');
-    expect(workerContainerName(`${'a'.repeat(11)}-${'b'.repeat(20)}`, 1)).toBe(`devspace-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
-    expect(workerContainerName(`${'a'.repeat(12)}-${'b'.repeat(20)}`, 1)).toBe(`devspace-worker-${'a'.repeat(12)}-1`);
+    expect(workerContainerName('a-verylongrepositorynames-service', 1)).toBe('devspaces-worker-a-verylongrepositoryname-1');
+    expect(workerContainerName(`${'a'.repeat(11)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-worker-${'a'.repeat(11)}-${'b'.repeat(12)}-1`);
+    expect(workerContainerName(`${'a'.repeat(12)}-${'b'.repeat(20)}`, 1)).toBe(`devspaces-worker-${'a'.repeat(12)}-1`);
     // A cut within a word never ends in a separator.
-    expect(workerContainerName(`a-${'b'.repeat(21)}-cc`, 1)).toBe(`devspace-worker-a-${'b'.repeat(21)}-1`);
+    expect(workerContainerName(`a-${'b'.repeat(21)}-cc`, 1)).toBe(`devspaces-worker-a-${'b'.repeat(21)}-1`);
   });
 
   it('ends in its number, so it never has the shape of a name of a devspace', () => {
-    expect(workerContainerName('api', 12)).toBe('devspace-worker-api-12');
+    expect(workerContainerName('api', 12)).toBe('devspaces-worker-api-12');
     // A window name that ends like a devspace name (`<adjective>-<scientist>`).
     const window = 'api-tidy-berners';
-    expect(isDevspaceResourceName(`devspace-worker-${window}`)).toBe(true);
+    expect(isDevspaceResourceName(`devspaces-worker-${window}`)).toBe(true);
     for (const number of [1, 2, 10, 99]) {
       const name = workerContainerName(window, number);
-      expect(name).toBe(`devspace-worker-api-tidy-berners-${number}`);
+      expect(name).toBe(`devspaces-worker-api-tidy-berners-${number}`);
       expect(name).toMatch(DOCKER_NAME);
       expect(isDevspaceResourceName(name)).toBe(false);
     }
@@ -361,16 +369,16 @@ describe('workerContainerName', () => {
 describe('freeWorkerNumber', () => {
   it('is the lowest number from 1 that no container name and no tried start has', () => {
     expect(freeWorkerNumber('api', [], new Set())).toBe(1);
-    expect(freeWorkerNumber('api', ['devspace-worker-api-1', 'devspace-worker-api-3'], new Set())).toBe(2);
-    expect(freeWorkerNumber('api', ['devspace-worker-api-1', 'devspace-worker-api-3'], new Set([2]))).toBe(4);
+    expect(freeWorkerNumber('api', ['devspaces-worker-api-1', 'devspaces-worker-api-3'], new Set())).toBe(2);
+    expect(freeWorkerNumber('api', ['devspaces-worker-api-1', 'devspaces-worker-api-3'], new Set([2]))).toBe(4);
     expect(freeWorkerNumber('api', [], new Set([1]))).toBe(2);
   });
 
   it('counts only the names of the same window part, compared as workerContainerName writes them', () => {
     // Other windows, and a window name that differs only in what the window part drops.
-    expect(freeWorkerNumber('API', ['devspace-worker-web-1', 'devspace-worker-api-2-1', 'devspace-worker-api', ''], new Set())).toBe(1);
-    expect(freeWorkerNumber('My API', ['devspace-worker-my-api-1'], new Set())).toBe(2);
-    expect(freeWorkerNumber('', ['devspace-worker-window-1', 'devspace-worker-window-2'], new Set())).toBe(3);
+    expect(freeWorkerNumber('API', ['devspaces-worker-web-1', 'devspaces-worker-api-2-1', 'devspaces-worker-api', ''], new Set())).toBe(1);
+    expect(freeWorkerNumber('My API', ['devspaces-worker-my-api-1'], new Set())).toBe(2);
+    expect(freeWorkerNumber('', ['devspaces-worker-window-1', 'devspaces-worker-window-2'], new Set())).toBe(3);
   });
 });
 
@@ -385,6 +393,6 @@ describe('the names derived from resourceName', () => {
 
   it('the devspace image is <resourceName>:<build number>', () => {
     expect(devspaceImageName('acme/api', ID, 3)).toBe(`${resourceName('acme/api', ID)}:3`);
-    expect(devspaceImageName('acme/api', ID, 1)).toBe('devspace-acme-api-tidy-berners:1');
+    expect(devspaceImageName('acme/api', ID, 1)).toBe('devspaces-acme-api-tidy-berners:1');
   });
 });

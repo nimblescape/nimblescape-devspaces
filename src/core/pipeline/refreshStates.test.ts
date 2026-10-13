@@ -52,7 +52,7 @@ describe('readDevspaceStates', () => {
     // No branch of a devspace whose branch was not asked for (another account).
     const containers = execs.map((exec) => exec.container);
     // The IDs of these dev containers.
-    expect([...containers].sort()).toEqual(['devspace-api', 'devspace-detached', 'devspace-git-fails'].map(fixtureContainerId).sort());
+    expect([...containers].sort()).toEqual(['devspaces-api', 'devspaces-detached', 'devspaces-git-fails'].map(fixtureContainerId).sort());
     const ops = REFRESH_DEVSPACES.find((env) => env.id === ENV_OPS)!.containerName;
     expect(containers).not.toContain(ops);
     expect(containers).not.toContain(fixtureContainerId(ops));
@@ -75,14 +75,14 @@ describe('readDevspaceStates', () => {
         volumeSubpaths: [],
         mountTargets: [],
       });
-      const pair = [dev('devspace-dup', true), dev('devspace-dup-old', false)];
+      const pair = [dev('devspaces-dup', true), dev('devspaces-dup-old', false)];
       const docker: StateDocker = {
         listDevspaceContainers: async () => (order === 'running first' ? pair : [...pair].reverse()),
         listDevspaceVolumes: async () => [{ name: 'v-dup', labels: {} }],
         volumeExists: async () => true,
         exec: async () => ({ exitCode: 0, stdout: 'main\n', stderr: '', timedOut: false }),
       };
-      const env: StateDevspace = { id: 'env-dup', containerName: 'devspace-dup', volumeName: 'v-dup', folder: '/workspaces/r', branch: false };
+      const env: StateDevspace = { id: 'env-dup', containerName: 'devspaces-dup', volumeName: 'v-dup', folder: '/workspaces/r', branch: false };
       const states = await readDevspaceStates(docker, [env]);
       expect(states.runtime.get('env-dup')?.container).toBe('running');
     });
@@ -141,7 +141,7 @@ describe('readDevspaceStates', () => {
 });
 
 describe('readDevspaceStates: the dev container by the rule', () => {
-  const env: StateDevspace = { id: 'env-u4', containerName: 'devspace-u4', volumeName: 'v-u4', folder: '/workspaces/u4', branch: true };
+  const env: StateDevspace = { id: 'env-u4', containerName: 'devspaces-u4', volumeName: 'v-u4', folder: '/workspaces/u4', branch: true };
   const listed = (id: string, name: string, state: 'running' | 'stopped', created?: string): ListedContainer => ({
     id,
     name,
@@ -162,7 +162,7 @@ describe('readDevspaceStates: the dev container by the rule', () => {
 
   it('the state of the named dev container while another dev container runs; that one sets servicesRunning, so Stop is offered', async () => {
     const execs: string[] = [];
-    const states = await readDevspaceStates(docker([listed('id-named', env.containerName, 'stopped'), listed('id-other', 'devspace-u4-old', 'running', '2026-10-08T09:00:00Z')], execs), [env]);
+    const states = await readDevspaceStates(docker([listed('id-named', env.containerName, 'stopped'), listed('id-other', 'devspaces-u4-old', 'running', '2026-10-08T09:00:00Z')], execs), [env]);
     expect(states.runtime.get(env.id)).toEqual({ container: 'stopped', volume: true, servicesRunning: true });
     expect(states.branches.size).toBe(0);
     expect(execs).toEqual([]);
@@ -171,10 +171,10 @@ describe('readDevspaceStates: the dev container by the rule', () => {
   it('without the named one: the newest running dev container by its time, its branch read by its ID; another running one sets servicesRunning', async () => {
     const execs: string[] = [];
     const containers = [
-      listed('id-older', 'devspace-a', 'running', '2026-10-08T08:00:00Z'),
+      listed('id-older', 'devspaces-a', 'running', '2026-10-08T08:00:00Z'),
       // Half a second later than id-text, which sorts after it as text.
-      listed('id-newer', 'devspace-b', 'running', '2026-10-08T09:00:00.5Z'),
-      listed('id-text', 'devspace-c', 'running', '2026-10-08T09:00:00Z'),
+      listed('id-newer', 'devspaces-b', 'running', '2026-10-08T09:00:00.5Z'),
+      listed('id-text', 'devspaces-c', 'running', '2026-10-08T09:00:00Z'),
     ];
     const states = await readDevspaceStates(docker(containers, execs), [env]);
     expect(states.runtime.get(env.id)).toEqual({ container: 'running', volume: true, servicesRunning: true });
@@ -184,7 +184,7 @@ describe('readDevspaceStates: the dev container by the rule', () => {
 
   it('the named running dev container alone: no servicesRunning, its branch by its ID', async () => {
     const execs: string[] = [];
-    const states = await readDevspaceStates(docker([listed('id-named', env.containerName, 'running'), listed('id-old', 'devspace-u4-old', 'stopped', '2026-10-08T09:00:00Z')], execs), [env]);
+    const states = await readDevspaceStates(docker([listed('id-named', env.containerName, 'running'), listed('id-old', 'devspaces-u4-old', 'stopped', '2026-10-08T09:00:00Z')], execs), [env]);
     expect(states.runtime.get(env.id)).toEqual({ container: 'running', volume: true });
     expect(execs).toEqual(['id-named']);
   });

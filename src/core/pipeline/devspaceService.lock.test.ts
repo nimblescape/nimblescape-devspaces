@@ -291,7 +291,7 @@ describe('Start, Rebuild, Select configuration and Clone again under the devspac
     // The read of whose the workspace volume is (workspaceVolumeOwnership).
     const inspectVolumes = h.docker.inspectVolumes.bind(h.docker);
     h.docker.inspectVolumes = async (names) => {
-      if (names.length === 1 && names[0].startsWith('devspace-')) events.push(`docker volume inspect${lockedSuffix(names[0])}`);
+      if (names.length === 1 && names[0].startsWith('devspaces-')) events.push(`docker volume inspect${lockedSuffix(names[0])}`);
       return inspectVolumes(names);
     };
     const createVolume = h.docker.createVolume.bind(h.docker);

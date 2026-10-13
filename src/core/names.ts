@@ -13,22 +13,22 @@ import { LABEL_MONITOR_CREATE, LABEL_MONITOR_OWNER, LABEL_MONITOR } from './remo
  * command line of `docker run`).
  */
 /** Label of the container of a channel (its value: channelLabelValue). */
-export const LABEL_HELPER_CHANNEL = 'nimblescape.devspace.helper-channel';
+export const LABEL_HELPER_CHANNEL = 'nimblescape.devspaces.helper-channel';
 /**
  * The label of the containers that an operation starts and removes by it, never by a name: the session label of a batch
- * helper (`nimblescape.devspace.channel-step=<session>`, channelStepLabel), which the worker removes by that label
+ * helper (`nimblescape.devspaces.channel-step=<session>`, channelStepLabel), which the worker removes by that label
  * (src/helperChannel/batch.ts).
  */
-export const LABEL_CHANNEL_STEP = 'nimblescape.devspace.channel-step';
+export const LABEL_CHANNEL_STEP = 'nimblescape.devspaces.channel-step';
 
 /**
  * The prefix of every label key of the extension (EXTENSION_LABEL_KEYS), with the name of its publisher: other tools
  * use `devspace.…` too (for example `devspace.fingerprint` of an image tool named devspace), so that prefix alone could
  * collide with their labels.
  */
-export const LABEL_PREFIX = 'nimblescape.devspace.';
+export const LABEL_PREFIX = 'nimblescape.devspaces.';
 
-export const LABEL_DEVSPACE_ID = 'nimblescape.devspace.id';
+export const LABEL_DEVSPACE_ID = 'nimblescape.devspaces.id';
 
 /**
  * The `--id-label` of every run of the Dev Container CLI for the devspace `devspaceId` (read-configuration and
@@ -37,19 +37,19 @@ export const LABEL_DEVSPACE_ID = 'nimblescape.devspace.id';
 export function devspaceIdLabel(devspaceId: string): string {
   return `${LABEL_DEVSPACE_ID}=${devspaceId}`;
 }
-export const LABEL_REPOSITORY = 'nimblescape.devspace.repository';
+export const LABEL_REPOSITORY = 'nimblescape.devspaces.repository';
 /** Volume label: the GitHub user ID of the account that created the devspace. */
-export const LABEL_OWNER_ID = 'nimblescape.devspace.owner-id';
+export const LABEL_OWNER_ID = 'nimblescape.devspaces.owner-id';
 /**
  * Volume label of the additional volumes that the extension creates before `up` (the named volumes that a configuration
- * mounts), with the value VOLUME_KIND_ADDITIONAL. Such a volume also carries nimblescape.devspace.id,
- * nimblescape.devspace.owner-id, and nimblescape.devspace.repository of its devspace: only these labels make a volume
+ * mounts), with the value VOLUME_KIND_ADDITIONAL. Such a volume also carries nimblescape.devspaces.id,
+ * nimblescape.devspaces.owner-id, and nimblescape.devspaces.repository of its devspace: only these labels make a volume
  * the devspace's own (isOwnVolume).
  */
-export const LABEL_VOLUME = 'nimblescape.devspace.volume';
+export const LABEL_VOLUME = 'nimblescape.devspaces.volume';
 export const VOLUME_KIND_ADDITIONAL = 'additional';
 /**
- * nimblescape.devspace.volume of a named volume of the Compose project of a devspace (`<project>_<key>`, composeProjectName, the
+ * nimblescape.devspaces.volume of a named volume of the Compose project of a devspace (`<project>_<key>`, composeProjectName, the
  * data of its services, for example of a database): created by the extension before `up` with the labels of the
  * devspace, never shared with another devspace, and removed by Delete only when the user asks for it.
  */
@@ -57,19 +57,19 @@ export const VOLUME_KIND_COMPOSE = 'compose';
 /**
  * Volume label, with the value SERVICE_DATA: a volume that the extension created before `up` for a service of Docker
  * Compose other than the dev service (it holds the data of that service, for example of a database), whatever its
- * nimblescape.devspace.volume. Delete lists such a volume in the question about the data of the services, none ticked,
+ * nimblescape.devspaces.volume. Delete lists such a volume in the question about the data of the services, none ticked,
  * also after a lost registry (reconcileFromVolumes restores Devspace.serviceVolumes from it).
  */
-export const LABEL_SERVICE_DATA = 'nimblescape.devspace.service-data';
+export const LABEL_SERVICE_DATA = 'nimblescape.devspaces.service-data';
 export const SERVICE_DATA = 'true';
 /**
  * Container label of the containers of a Compose devspace other than the dev container: the name of their service.
- * They carry nimblescape.devspace.id too, so Stop, the Monitor, and Delete find them; the lookup of
+ * They carry nimblescape.devspaces.id too, so Stop, the Monitor, and Delete find them; the lookup of
  * the dev container skips them.
  */
-export const LABEL_COMPOSE_SERVICE = 'nimblescape.devspace.compose-service';
+export const LABEL_COMPOSE_SERVICE = 'nimblescape.devspaces.compose-service';
 /** Container label: the version of the container setup (CONTAINER_VERSION). */
-export const LABEL_CONTAINER_VERSION = 'nimblescape.devspace.container-version';
+export const LABEL_CONTAINER_VERSION = 'nimblescape.devspaces.container-version';
 /**
  * Version of the container setup. A container without the label, or with an older value, is not current
  * (containerIsCurrent): it is created again from its devspace image, and the volume stays. Raise it when a change of
@@ -80,7 +80,7 @@ export const CONTAINER_VERSION = 1;
  * Container label: `unknown` when the container was created without the configuration of the repository (it could not
  * be read), so without its runArgs and appPort. Such a container is created again once the configuration can be read.
  */
-export const LABEL_CONTAINER_CONFIG = 'nimblescape.devspace.container-config';
+export const LABEL_CONTAINER_CONFIG = 'nimblescape.devspaces.container-config';
 export const CONTAINER_CONFIG_UNKNOWN = 'unknown';
 /**
  * Container label: the path of the configuration of the repository that the container was created for
@@ -89,7 +89,7 @@ export const CONTAINER_CONFIG_UNKNOWN = 'unknown';
  * isConfigPathLabelValue takes the path. reconcileFromVolumes restores the configuration path of an entry from it after
  * a lost registry; without it, the entry gets the default configuration.
  */
-export const LABEL_CONFIG_PATH = 'nimblescape.devspace.config-path';
+export const LABEL_CONFIG_PATH = 'nimblescape.devspaces.config-path';
 /** `--label` value of the override configuration of a single container: LABEL_CONFIG_PATH with its value. */
 export function configPathLabel(configPath: string): string {
   return `${LABEL_CONFIG_PATH}=${configPath}`;
@@ -114,12 +114,12 @@ export const CONTAINER_CONFIG_UNKNOWN_LABEL = `${LABEL_CONTAINER_CONFIG}=${CONTA
  * devspaces.hostAccessChecksOff), with the value HOST_ACCESS_UNRESTRICTED. Once the checks are on again, such a
  * container is not current (containerIsCurrent): it is created again after the checks pass.
  */
-export const LABEL_HOST_ACCESS = 'nimblescape.devspace.host-access';
+export const LABEL_HOST_ACCESS = 'nimblescape.devspaces.host-access';
 export const HOST_ACCESS_UNRESTRICTED = 'unrestricted';
 /** `--label` value of the override configuration of a container created while the host access checks were off. */
 export const HOST_ACCESS_UNRESTRICTED_LABEL = `${LABEL_HOST_ACCESS}=${HOST_ACCESS_UNRESTRICTED}`;
 /**
- * nimblescape.devspace.host-access of a container of Docker Compose that was created while the host access checks were
+ * nimblescape.devspaces.host-access of a container of Docker Compose that was created while the host access checks were
  * on: the model sets the label on every service explicitly, so that a label of the image (for example of a side service
  * that Compose builds during `up`) cannot decide it.
  */
@@ -136,21 +136,21 @@ export const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
  * container.
  */
 export const COMPOSE_CLEARED_LABELS: readonly string[] = ['com.docker.compose.project=', 'com.docker.compose.service='];
-export const LABEL_HELPER = 'nimblescape.devspace.helper';
-export const LABEL_HELPER_RUN = 'nimblescape.devspace.helper-run';
+export const LABEL_HELPER = 'nimblescape.devspaces.helper';
+export const LABEL_HELPER_RUN = 'nimblescape.devspaces.helper-run';
 /**
  * A label with a random nonce per build of BootstrapDocker.buildImage, by which it finds the ID of the image that the
  * build made (`docker image ls --filter label=…`).
  */
-export const LABEL_BUILD_ID = 'nimblescape.devspace.build-id';
+export const LABEL_BUILD_ID = 'nimblescape.devspaces.build-id';
 /**
  * A label of the devspace image (EngineDocker.labelImage, after each build), with the build record of that image as
- * JSON, next to nimblescape.devspace.id, nimblescape.devspace.repository, and
- * nimblescape.devspace.owner-id. The open of a devspace that another computer created, or of one restored after a
+ * JSON, next to nimblescape.devspaces.id, nimblescape.devspaces.repository, and
+ * nimblescape.devspaces.owner-id. The open of a devspace that another computer created, or of one restored after a
  * lost registry, takes the record from its newest image (imageBuildRecord), so its image check works as on the first
  * computer.
  */
-export const LABEL_BUILD_RECORD = 'nimblescape.devspace.build-record';
+export const LABEL_BUILD_RECORD = 'nimblescape.devspaces.build-record';
 /**
  * A label of the prepared devspace image (preparedImageName), which a background prepare builds before an open needs
  * it: as JSON its prepare key (the configuration and the digests of the update, as the open computes them: updateKey)
@@ -158,13 +158,14 @@ export const LABEL_BUILD_RECORD = 'nimblescape.devspace.build-record';
  * labels. The open uses the image only when all of them fit (preparedImageMismatch), and sets the label empty when it
  * takes the image over as its devspace image.
  */
-export const LABEL_PREPARED = 'nimblescape.devspace.prepared';
+export const LABEL_PREPARED = 'nimblescape.devspaces.prepared';
 /**
  * Every label key that the extension reads or writes (on containers, images, and volumes), each with LABEL_PREFIX, in
  * lower case. The host access policy refuses every key with LABEL_PREFIX in a configuration and on images
  * (isReservedLabel in ./policy/rules.ts), these and any later one: such a label would hide a container or volume from
  * the lookups of the extension, or make it look like one of another devspace. A test (names.test.ts) fails for a
- * label with LABEL_PREFIX in the code of src that is not in this set, and for a `devspace.…` label there.
+ * label with LABEL_PREFIX in the code of src that is not in this set, and for a `devspace.…` or `devspaces.…` label
+ * there (other than the IDs of the extension in VS Code).
  */
 export const EXTENSION_LABEL_KEYS: ReadonlySet<string> = new Set([
   LABEL_DEVSPACE_ID,
@@ -188,7 +189,7 @@ export const EXTENSION_LABEL_KEYS: ReadonlySet<string> = new Set([
   LABEL_HELPER_CHANNEL,
   LABEL_CHANNEL_STEP,
 ]);
-export const HELPER_CACHE_VOLUME = 'devspace-helper-cache';
+export const HELPER_CACHE_VOLUME = 'devspaces-helper-cache';
 /**
  * Mount point of the cache volume HELPER_CACHE_VOLUME in the workspace helper (`--user-data-folder` of the CLI).
  * Assumption: the CLI keeps data there that is useful across helper runs. CLI 0.89.0 downloads Features into a new
@@ -246,7 +247,7 @@ export const GH_VOLUME_CONFIG_FILE = `${GH_VOLUME_FOLDER}/config.yml`;
  * policy protects the name (a repository never mounts it) and reserves the target. It is never a devspace's volume:
  * never created with the labels of a devspace, never recorded, never offered at Delete.
  */
-export const VSCODE_STORE_VOLUME = 'devspace-vscode';
+export const VSCODE_STORE_VOLUME = 'devspaces-vscode';
 /** The mount point of the store in the worker (read-write). */
 export const VSCODE_STORE_DIR = '/vscode';
 /** The mount point of the store in a dev container (read-only); no configuration may mount at or below it. */
@@ -281,12 +282,12 @@ const MAX_NAME_LENGTH = 63;
  * The start of the name of everything of a devspace (resourceName), by which the extension finds its images
  * (EngineDocker.listDevspaceImages) and the host access policy tells a devspace image (devspaceImageNames).
  */
-export const RESOURCE_NAME_PREFIX = 'devspace-';
+export const RESOURCE_NAME_PREFIX = 'devspaces-';
 
 /**
  * Name of everything of a devspace: the workspace volume, the dev container, the repository of the devspace
  * image, and the Docker Compose project (so also the names that Compose derives from it):
- * `devspace-<owner>-<repository>-<adjective>-<scientist>`, with the pair of the devspace ID (namePair). Lower case,
+ * `devspaces-<owner>-<repository>-<adjective>-<scientist>`, with the pair of the devspace ID (namePair). Lower case,
  * every run of other characters than `[a-z0-9]` as one `-` (an image repository and a Compose project allow no `.` or
  * `_` next to each other), at most 63 characters: a long `<owner>-<repository>` is shortened, the pair is always kept.
  * The full devspace ID is only in the labels.
@@ -303,8 +304,8 @@ export function resourceName(repository: string, devspaceId: string): string {
 }
 
 /**
- * Whether `name` has the shape of a name of a devspace (resourceName): `devspace-<…>-<adjective>-<scientist>`, in any
- * case. Other names that start with `devspace-` (for example `devspace-tools-node_modules` of a repository `devspace-tools`)
+ * Whether `name` has the shape of a name of a devspace (resourceName): `devspaces-<…>-<adjective>-<scientist>`, in any
+ * case. Other names that start with `devspaces-` (for example `devspaces-tools-node_modules` of a repository `devspaces-tools`)
  * are names of the repository.
  */
 export function isDevspaceResourceName(name: string): boolean {
@@ -313,14 +314,14 @@ export function isDevspaceResourceName(name: string): boolean {
 }
 
 /**
- * The start of the name of a worker container (workerContainerName): `devspace-worker-`. openHelperChannel lists the
+ * The start of the name of a worker container (workerContainerName): `devspaces-worker-`. openHelperChannel lists the
  * containers whose name contains it when a worker name is in use.
  */
 export const WORKER_NAME_PREFIX = `${RESOURCE_NAME_PREFIX}worker-`;
 
 /**
- * The longest window part of a worker name (workerContainerName), so that a worker name is short: at most 43
- * characters up to a number of two digits (`devspace-worker-` 16, the window part, `-` and the number).
+ * The longest window part of a worker name (workerContainerName), so that a worker name is short: at most 44
+ * characters up to a number of two digits (`devspaces-worker-` 17, the window part, `-` and the number).
  */
 const WORKER_WINDOW_LENGTH = 24;
 
@@ -368,7 +369,7 @@ function workerWindow(windowName: string): string {
 }
 
 /**
- * The short name of a worker container, `devspace-worker-<window>-<number>`, so that `docker ps` tells which VS Code
+ * The short name of a worker container, `devspaces-worker-<window>-<number>`, so that `docker ps` tells which VS Code
  * window a worker belongs to: `<window>` is workerWindow of `windowName`, and `<number>` (from 1) keeps the workers of
  * windows with the same name on one engine apart (two windows of one folder, two devspaces of one repository, windows
  * of two computers on one remote engine, and the next worker of a window while Docker still removes the last one).
@@ -381,7 +382,7 @@ export function workerContainerName(windowName: string, number: number): string 
   return `${workerNameStart(windowName)}${number}`;
 }
 
-/** A worker name for `windowName` (workerContainerName) without its number: `devspace-worker-<window>-`. */
+/** A worker name for `windowName` (workerContainerName) without its number: `devspaces-worker-<window>-`. */
 function workerNameStart(windowName: string): string {
   return `${WORKER_NAME_PREFIX}${workerWindow(windowName)}-`;
 }

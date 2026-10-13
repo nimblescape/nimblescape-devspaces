@@ -59,7 +59,7 @@ const hasDash = hasProgram('dash', ['-c', 'true']);
 
 const tempDirs: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   tempDirs.push(dir);
   return dir;
 }
@@ -142,7 +142,7 @@ describe('shell scripts', () => {
   });
 
   it.each([
-    ['CLONE_SCRIPT', cloneCommand('acme/api', `devspace-test-${process.pid}-missing`)],
+    ['CLONE_SCRIPT', cloneCommand('acme/api', `devspaces-test-${process.pid}-missing`)],
   ])('%s refuses to write the token when the secrets folder is not a tmpfs mount', (_name, command) => {
     const result = runSh(command, 'secret-token-value');
     expect(result.status).toBe(3);
@@ -476,7 +476,7 @@ describe('COMPOSE_MODEL_SCRIPT with a fake docker', () => {
       'shift',
       'if [ "$1 $2" = "version --short" ]; then echo 2.29.1; exit 0; fi',
       'case "$*" in',
-      '  *"-p devspace-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;;',
+      '  *"-p devspaces-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;;',
       'esac',
       `printf '%s\\n' "$PWD" "$COMPOSE_PROJECT_NAME" "$@" > '${argsFile}'`,
       'if [ -n "\${FAKE_ERROR:-}" ]; then printf \'%s\\n\' "$FAKE_ERROR" >&2; exit 15; fi',
@@ -2426,7 +2426,7 @@ describe('folders of the repository for the bind mounts of Docker Compose', () =
       },
     };
     const bin = path.join(dir, 'bin');
-    write(path.join(bin, 'docker'), '#!/bin/sh\nshift\nif [ "$1 $2" = "version --short" ]; then echo 2.29.1; exit 0; fi\ncase "$*" in *"-p devspace-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;; esac\nprintf \'%s\\n\' "$FAKE_MODEL"\n');
+    write(path.join(bin, 'docker'), '#!/bin/sh\nshift\nif [ "$1 $2" = "version --short" ]; then echo 2.29.1; exit 0; fi\ncase "$*" in *"-p devspaces-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;; esac\nprintf \'%s\\n\' "$FAKE_MODEL"\n');
     fs.chmodSync(path.join(bin, 'docker'), 0o755);
     const env = {
       ...process.env,
@@ -2458,7 +2458,7 @@ describe('folders of the repository for the bind mounts of Docker Compose', () =
     const bind = (source: string) => ({ type: 'bind', source, target: `/t${source.length}` });
     const model = { name: PROJECT, services: { db: { image: 'postgres:16', volumes: [bind(`${repo}/data/pg/16`), bind(`${repo}/plain/x/`), bind(`${repo}/data`)] } } };
     const bin = path.join(dir, 'bin');
-    write(path.join(bin, 'docker'), '#!/bin/sh\nshift\nif [ "$1 $2" = "version --short" ]; then echo 2.29.1; exit 0; fi\ncase "$*" in *"-p devspace-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;; esac\nprintf \'%s\\n\' "$FAKE_MODEL"\n');
+    write(path.join(bin, 'docker'), '#!/bin/sh\nshift\nif [ "$1 $2" = "version --short" ]; then echo 2.29.1; exit 0; fi\ncase "$*" in *"-p devspaces-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;; esac\nprintf \'%s\\n\' "$FAKE_MODEL"\n');
     fs.chmodSync(path.join(bin, 'docker'), 0o755);
     const env = {
       ...process.env,
@@ -2527,7 +2527,7 @@ describe('folders of the repository for the bind mounts of Docker Compose', () =
       },
     };
     const bin = path.join(dir, 'bin');
-    write(path.join(bin, 'docker'), '#!/bin/sh\nshift\nif [ "$1 $2" = "version --short" ]; then echo 2.29.1; exit 0; fi\ncase "$*" in *"-p devspace-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;; esac\nprintf \'%s\\n\' "$FAKE_MODEL"\n');
+    write(path.join(bin, 'docker'), '#!/bin/sh\nshift\nif [ "$1 $2" = "version --short" ]; then echo 2.29.1; exit 0; fi\ncase "$*" in *"-p devspaces-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;; esac\nprintf \'%s\\n\' "$FAKE_MODEL"\n');
     fs.chmodSync(path.join(bin, 'docker'), 0o755);
     const env = {
       ...process.env,
@@ -2704,7 +2704,7 @@ describe('CREATE_FOLDERS_SCRIPT and the links of the owner', () => {
 
 describe('COMPOSE_HASH_SCRIPT (recreate offer)', () => {
   it('writes the model to the path of up and runs docker compose config --hash with the project name', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-hash-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-hash-'));
     try {
       // A fake `docker` that prints its arguments and the model it finds at the path.
       const bin = path.join(dir, 'bin');

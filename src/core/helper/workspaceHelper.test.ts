@@ -43,7 +43,7 @@ const TOKEN = 'gho_0123456789abcdefSECRET';
 /**
  * The worker's own helper image, from which every step runs.
  */
-const OWN: HelperImageUse = { tag: 'devspace-helper:own', id: `sha256:${'b'.repeat(64)}` };
+const OWN: HelperImageUse = { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` };
 /** The source of the socket mount of the engine (HelperDeps.socket, the worker's own). */
 const SOCKET = '/var/run/docker.sock';
 
@@ -84,7 +84,7 @@ class FakeDocker {
  * session.
  */
 function commandOf(args: string[]): string[] {
-  const index = args.findIndex((arg) => /^devspace-helper:/.test(arg) || /^sha256:[0-9a-f]{64}$/.test(arg));
+  const index = args.findIndex((arg) => /^devspaces-helper:/.test(arg) || /^sha256:[0-9a-f]{64}$/.test(arg));
   expect(index).toBeGreaterThan(0);
   return args.slice(index + 1);
 }
@@ -229,7 +229,7 @@ function createHelper(): WorkspaceHelper {
 }
 
 /** The image reference of each `docker run` from index `from` on. */
-const references = (from = 0) => docker.runs.slice(from).map((run) => run.args.find((arg) => arg.startsWith('sha256:') || arg.startsWith('devspace-helper:')));
+const references = (from = 0) => docker.runs.slice(from).map((run) => run.args.find((arg) => arg.startsWith('sha256:') || arg.startsWith('devspaces-helper:')));
 
 beforeEach(() => {
   docker = new FakeDocker();
@@ -276,7 +276,7 @@ describe('WorkspaceHelper with the image of an open', () => {
   });
 
   describe('every public method runs the helper image of the open that it gets as `image`', () => {
-    const OVERRIDE = { image: 'devspace-x:1' };
+    const OVERRIDE = { image: 'devspaces-x:1' };
     const cases: Array<[string, (helper: WorkspaceHelper, image: HelperImageUse) => Promise<unknown>]> = [
       ['run', (helper, image) => helperStep(helper, { image })],
       ['clone', (helper, image) => helper.clone({ volumeName: 'vol', repository: 'o/a', token: TOKEN, image })],
@@ -291,10 +291,10 @@ describe('WorkspaceHelper with the image of an open', () => {
         (helper, image) =>
           helper.readConfiguration({ volumeName: 'vol', repository: 'o/a', configPath: '.devcontainer/devcontainer.json', devspaceId: 'e', merged: false, override: OVERRIDE, image }),
       ],
-      ['build', (helper, image) => helper.build({ volumeName: 'vol', repository: 'o/a', configPath: '.devcontainer/devcontainer.json', imageName: 'devspace-x:1', image })],
+      ['build', (helper, image) => helper.build({ volumeName: 'vol', repository: 'o/a', configPath: '.devcontainer/devcontainer.json', imageName: 'devspaces-x:1', image })],
       [
         'build (with an override)',
-        (helper, image) => helper.build({ volumeName: 'vol', repository: 'o/a', configPath: '.devcontainer/devcontainer.json', imageName: 'devspace-x:1', override: OVERRIDE, image }),
+        (helper, image) => helper.build({ volumeName: 'vol', repository: 'o/a', configPath: '.devcontainer/devcontainer.json', imageName: 'devspaces-x:1', override: OVERRIDE, image }),
       ],
       ['composeModel', (helper, image) => helper.composeModel({ volumeName: 'vol', repository: 'o/a', files: ['/workspaces/a/compose.yaml'], project: 'p', image })],
       ['composeServiceHashes', (helper, image) => helper.composeServiceHashes({ volumeName: 'vol', repository: 'o/a', model: '{}', project: 'p', image })],
@@ -592,7 +592,7 @@ describe('WorkspaceHelper Dev Container CLI calls', () => {
       '--config',
       '/workspaces/api/.devcontainer/devcontainer.json',
       '--id-label',
-      'nimblescape.devspace.id=3f2a9c1e-5b7d',
+      'nimblescape.devspaces.id=3f2a9c1e-5b7d',
       '--include-merged-configuration',
     ]);
   });
@@ -786,7 +786,7 @@ describe('WorkspaceHelper Dev Container CLI calls', () => {
       '--override-config',
       OVERRIDE_CONFIG_PATH,
       '--id-label',
-      'nimblescape.devspace.id=3f2a9c1e-5b7d',
+      'nimblescape.devspaces.id=3f2a9c1e-5b7d',
       '--user-data-folder',
       '/devspace-cache',
       '--update-remote-user-uid-default',
@@ -829,7 +829,7 @@ describe('WorkspaceHelper Dev Container CLI calls', () => {
       '--override-config',
       OVERRIDE_CONFIG_PATH,
       '--id-label',
-      'nimblescape.devspace.id=3f2a9c1e-5b7d',
+      'nimblescape.devspaces.id=3f2a9c1e-5b7d',
       '--container-id',
       'c1c1c1c1c1c1',
       '--user-data-folder',
@@ -956,7 +956,7 @@ describe('WorkspaceHelper Docker Compose runs', () => {
       '--config',
       '/workspaces/api/.devcontainer/devcontainer.json',
       '--id-label',
-      'nimblescape.devspace.id=3f2a9c1e-5b7d',
+      'nimblescape.devspaces.id=3f2a9c1e-5b7d',
       '--override-config',
       OVERRIDE_CONFIG_PATH,
     ]);
@@ -1047,7 +1047,7 @@ describe('WorkspaceHelper Docker Compose runs', () => {
       '--override-config',
       OVERRIDE_CONFIG_PATH,
       '--id-label',
-      'nimblescape.devspace.id=3f2a9c1e-5b7d',
+      'nimblescape.devspaces.id=3f2a9c1e-5b7d',
       '--container-id',
       'c1c1c1c1c1c1',
       '--user-data-folder',
@@ -1292,13 +1292,13 @@ describe('no volume step outside the batch scope of an operation', () => {
   it('every volume step outside a scope throws an internal error and starts no container, builds nothing, and runs nothing', async () => {
     // The helper of the worker.
     const helper = plainHelper();
-    const OVERRIDE = { image: 'devspace-x:1' };
+    const OVERRIDE = { image: 'devspaces-x:1' };
     const calls: Array<[string, () => Promise<unknown>]> = [
       ['clone', () => helper.clone({ volumeName: 'vol', repository: 'o/a', token: TOKEN })],
       ['readConfigFiles', () => helper.readConfigFiles({ volumeName: 'vol', repository: 'o/a', configPath: '.devcontainer/devcontainer.json' })],
       ['listConfigurations', () => helper.listConfigurations({ volumeName: 'vol', repository: 'o/a' })],
       ['readConfiguration', () => helper.readConfiguration({ volumeName: 'vol', repository: 'o/a', configPath: '.devcontainer/devcontainer.json', devspaceId: 'e' })],
-      ['build', () => helper.build({ volumeName: 'vol', repository: 'o/a', configPath: '.devcontainer/devcontainer.json', imageName: 'devspace-x:1' })],
+      ['build', () => helper.build({ volumeName: 'vol', repository: 'o/a', configPath: '.devcontainer/devcontainer.json', imageName: 'devspaces-x:1' })],
       ['composeModel', () => helper.composeModel({ volumeName: 'vol', repository: 'o/a', files: ['/workspaces/a/compose.yaml'], project: 'p' })],
       ['composeServiceHashes', () => helper.composeServiceHashes({ volumeName: 'vol', repository: 'o/a', model: '{}', project: 'p' })],
       ['createRepositoryFolders', () => helper.createRepositoryFolders({ volumeName: 'vol', repository: 'o/a', folders: ['/workspaces/a/data'] })],

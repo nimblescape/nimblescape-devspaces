@@ -28,7 +28,7 @@ afterEach(() => {
 
 /** A sandbox with the store and a folder outside of it. */
 function sandbox(): { root: string; outside: string } {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ext-store-pH3R1-'));
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ext-store-pH3R1-'));
   temps.push(base);
   const root = path.join(base, 'store');
   const outside = path.join(base, 'outside');

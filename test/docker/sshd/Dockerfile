@@ -19,6 +19,6 @@ RUN apk add --no-cache openssh-server docker-cli \
  && if /usr/sbin/sshd -t -o PerSourcePenalties=no; then echo 'PerSourcePenalties no' >> /etc/ssh/sshd_config; \
     elif /usr/sbin/sshd -t -o PerSourcePenaltyExemptList=0.0.0.0/0,::/0; then echo 'PerSourcePenaltyExemptList 0.0.0.0/0,::/0' >> /etc/ssh/sshd_config; fi \
  && /usr/sbin/sshd -t
-LABEL devspace-test.purpose=remote-docker-host
+LABEL devspaces-test.purpose=remote-docker-host
 EXPOSE 22
 CMD ["sh", "-c", "mkdir -p /root/.ssh && printf '%s\\n' \"$AUTHORIZED_KEY\" > /root/.ssh/authorized_keys && chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys && exec /usr/sbin/sshd -D -e"]

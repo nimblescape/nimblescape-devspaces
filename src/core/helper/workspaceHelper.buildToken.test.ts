@@ -16,7 +16,7 @@ import { DevcontainerCommandError } from './devcontainerCli';
 import { WorkspaceHelper } from './workspaceHelper';
 
 const TOKEN = 'gho_0123456789abcdefBUILDtoken';
-const RESULT = '{"outcome":"success","imageName":"devspace-x:1"}\n';
+const RESULT = '{"outcome":"success","imageName":"devspaces-x:1"}\n';
 
 type Script = (kind: BatchStepKind, options: BatchStepOptions) => Partial<RunResult>;
 
@@ -38,9 +38,9 @@ function lockOf(script: Script): HeldDevspaceLock {
 }
 
 function build(script: Script, output: string[]) {
-  const helper = new WorkspaceHelper({ logger: silent, ownImage: { tag: 'devspace-helper:own', id: `sha256:${'b'.repeat(64)}` }, socket: '/var/run/docker.sock', containerRuns: async () => true });
+  const helper = new WorkspaceHelper({ logger: silent, ownImage: { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` }, socket: '/var/run/docker.sock', containerRuns: async () => true });
   return runWithBatchScope(lockOf(script), 'vol', silent, () =>
-    helper.build({ volumeName: 'vol', repository: 'acme/api', configPath: '.devcontainer/devcontainer.json', imageName: 'devspace-x:1', token: TOKEN, onOutput: (text) => output.push(text) }),
+    helper.build({ volumeName: 'vol', repository: 'acme/api', configPath: '.devcontainer/devcontainer.json', imageName: 'devspaces-x:1', token: TOKEN, onOutput: (text) => output.push(text) }),
   );
 }
 
@@ -56,7 +56,7 @@ describe('devcontainer build masks the token of the open', () => {
       options.onOutput?.('stdout', RESULT);
       return { stdout: `progress line\n${RESULT}`, stderr: `#5 GH_TOKEN=${TOKEN} done\n` };
     }, output);
-    expect(result).toEqual({ outcome: 'success', imageName: 'devspace-x:1' });
+    expect(result).toEqual({ outcome: 'success', imageName: 'devspaces-x:1' });
     expect(secrets).toEqual([{ [SECRET_TOKEN]: TOKEN }]);
     const text = output.join('');
     expect(text).not.toContain(TOKEN.slice(0, 9));

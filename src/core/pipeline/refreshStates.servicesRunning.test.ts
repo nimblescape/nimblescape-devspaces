@@ -9,7 +9,7 @@ import type { ListedContainer } from '../docker/dockerObjects';
 import { LABEL_DEVSPACE_ID } from '../names';
 import { readDevspaceStates, type StateDocker, type StateDevspace } from './refreshStates';
 
-const ENV: StateDevspace = { id: 'env-r1', containerName: 'devspace-r1', volumeName: 'v-r1', folder: '/workspaces/r1', branch: true };
+const ENV: StateDevspace = { id: 'env-r1', containerName: 'devspaces-r1', volumeName: 'v-r1', folder: '/workspaces/r1', branch: true };
 
 function listed(id: string, name: string, state: 'running' | 'stopped', created?: string): ListedContainer {
   return {
@@ -38,7 +38,7 @@ describe('servicesRunning is another container than the dev container of the rul
   // container, not "another container of the devspace", so the answer has no servicesRunning.
   it('a lone running dev container of another name: running, its branch by its ID, and no servicesRunning', async () => {
     const execs: string[] = [];
-    const states = await readDevspaceStates(docker([listed('id-renamed', 'devspace-r1-again', 'running', '2026-10-08T09:00:00Z')], execs), [ENV]);
+    const states = await readDevspaceStates(docker([listed('id-renamed', 'devspaces-r1-again', 'running', '2026-10-08T09:00:00Z')], execs), [ENV]);
     expect(states.runtime.get(ENV.id)).toEqual({ container: 'running', volume: true });
     expect(execs).toEqual(['id-renamed']);
     expect(states.branches.get(ENV.id)).toBe('branch-of-id-renamed');

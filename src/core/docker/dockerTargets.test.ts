@@ -18,7 +18,7 @@ interface Call {
 /** A Docker CLI whose current context the test changes (`context`), like `docker context use` in another terminal. */
 class FakeDockerCli implements ProcessRunner {
   readonly calls: Call[] = [];
-  contexts: Record<string, string> = { default: 'unix:///var/run/docker.sock', 'desktop-linux': 'unix:///home/me/.docker/desktop/docker.sock', 'devspace-remote-26f8567f': 'ssh://box' };
+  contexts: Record<string, string> = { default: 'unix:///var/run/docker.sock', 'desktop-linux': 'unix:///home/me/.docker/desktop/docker.sock', 'devspaces-remote-26f8567f': 'ssh://box' };
   context = 'default';
   inspectFails = false;
 
@@ -56,8 +56,8 @@ describe('DockerTargets.resolve (remote mode detection from the current context)
 
   it('reads an ssh:// context as the remote host after ssh://', async () => {
     const { targets, cli } = setup();
-    cli.context = 'devspace-remote-26f8567f';
-    await expect(targets.resolve()).resolves.toEqual({ kind: 'remote', host: 'box', endpoint: 'ssh://box', context: 'devspace-remote-26f8567f' });
+    cli.context = 'devspaces-remote-26f8567f';
+    await expect(targets.resolve()).resolves.toEqual({ kind: 'remote', host: 'box', endpoint: 'ssh://box', context: 'devspaces-remote-26f8567f' });
     await expect(targets.host()).resolves.toBe('box');
   });
 
@@ -84,7 +84,7 @@ describe('DockerTargets.resolve (remote mode detection from the current context)
   it('reads the context again for each operation, not once for ever', async () => {
     const { targets, cli } = setup();
     await expect(targets.host()).resolves.toBe('');
-    cli.context = 'devspace-remote-26f8567f';
+    cli.context = 'devspaces-remote-26f8567f';
     await expect(targets.host()).resolves.toBe('box');
   });
 });
@@ -94,7 +94,7 @@ describe('DockerTargets.withOperation (an operation keeps the host it started wi
   // the target after the operation ended, also when the context was switched meanwhile.
   it('background work pinned to the target of an operation keeps it after the operation ended', async () => {
     const { targets, cli } = setup();
-    cli.context = 'devspace-remote-26f8567f';
+    cli.context = 'devspaces-remote-26f8567f';
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     let later: Promise<string | undefined> | undefined;
@@ -118,7 +118,7 @@ describe('DockerTargets.withOperation (an operation keeps the host it started wi
 
   it('reads the target once; a switch in the middle does not move the operation', async () => {
     const { targets, cli, docker } = setup();
-    cli.context = 'devspace-remote-26f8567f';
+    cli.context = 'devspaces-remote-26f8567f';
     await targets.withOperation(async () => {
       expect(operationDockerTarget()?.host).toBe('box');
       // The user runs `docker context use default` meanwhile.
@@ -134,7 +134,7 @@ describe('DockerTargets.withOperation (an operation keeps the host it started wi
     expect(inspects).toHaveLength(1);
     // Every Docker call of the operation names the context it started with.
     const ps = cli.calls.find((call) => call.args[0] === 'ps');
-    expect(ps?.options.env?.DOCKER_CONTEXT).toBe('devspace-remote-26f8567f');
+    expect(ps?.options.env?.DOCKER_CONTEXT).toBe('devspaces-remote-26f8567f');
     expect(ps?.options.env).not.toHaveProperty('DOCKER_HOST');
     // The next operation reads the new context.
     await targets.withOperation(async () => {
@@ -156,7 +156,7 @@ describe('DockerTargets.withOperation (an operation keeps the host it started wi
 
   it('keeps an explicit environment of a call (docker --config for a pull) as the caller built it', async () => {
     const { targets, cli, docker } = setup();
-    cli.context = 'devspace-remote-26f8567f';
+    cli.context = 'devspaces-remote-26f8567f';
     await targets.withOperation(() => docker.run(['--config', '/tmp/x', 'pull', 'img'], { env: { DOCKER_HOST: 'ssh://box' } }));
     const pull = cli.calls.find((call) => call.args.includes('pull'));
     expect(pull?.options.env).toEqual({ DOCKER_HOST: 'ssh://box' });
@@ -164,7 +164,7 @@ describe('DockerTargets.withOperation (an operation keeps the host it started wi
 
   it('a timer that an operation started reads the context again after the operation ended', async () => {
     const { targets, cli, docker } = setup();
-    cli.context = 'devspace-remote-26f8567f';
+    cli.context = 'devspaces-remote-26f8567f';
     let later: Promise<string> | undefined;
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => {
@@ -190,7 +190,7 @@ describe('DockerTargets.onDidResolve', () => {
     const seen: string[] = [];
     const remove = targets.onDidResolve((target) => seen.push(`${target.kind}:${target.host}`));
     await targets.resolve();
-    cli.context = 'devspace-remote-26f8567f';
+    cli.context = 'devspaces-remote-26f8567f';
     await targets.resolve();
     remove();
     await targets.resolve();
@@ -214,7 +214,7 @@ describe('DockerTargets.resolve with overlapping reads', () => {
   it('does not let an older read that finishes later overwrite a newer one', async () => {
     const results = [
       { exitCode: 0, stdout: JSON.stringify({ Name: 'default', Endpoints: { docker: { Host: 'unix:///var/run/docker.sock' } } }), stderr: '', timedOut: false },
-      { exitCode: 0, stdout: JSON.stringify({ Name: 'devspace-remote-26f8567f', Endpoints: { docker: { Host: 'ssh://box' } } }), stderr: '', timedOut: false },
+      { exitCode: 0, stdout: JSON.stringify({ Name: 'devspaces-remote-26f8567f', Endpoints: { docker: { Host: 'ssh://box' } } }), stderr: '', timedOut: false },
     ];
     const gates: Array<(value: RunResult) => void> = [];
     const docker = { isInstalled: () => true, run: async (): Promise<RunResult> => new Promise<RunResult>((resolve) => gates.push(resolve)) };
@@ -236,7 +236,7 @@ describe('DockerTargets.resolve with overlapping reads', () => {
 describe('DockerTargets.ofContext', () => {
   it('reads the named context, not the current one, and changes neither `last` nor tells a listener', async () => {
     const { targets, cli } = setup();
-    cli.context = 'devspace-remote-26f8567f';
+    cli.context = 'devspaces-remote-26f8567f';
     const seen: string[] = [];
     targets.onDidResolve((target) => seen.push(target.host));
     await expect(targets.ofContext('desktop-linux')).resolves.toEqual({

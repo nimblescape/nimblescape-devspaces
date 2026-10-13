@@ -41,7 +41,7 @@ describe('the mask of the secret input of an exec', () => {
 
   /** An engine whose exec writes `output` once its input ended; `hangInspect` leaves the inspect without an answer. */
   async function serve(output: Buffer, hangInspect = false) {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-mask-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-mask-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     const server = http.createServer((req, res) => {

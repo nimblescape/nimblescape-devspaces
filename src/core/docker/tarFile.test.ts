@@ -113,7 +113,7 @@ describe('firstTarFile', () => {
   });
 
   it.skipIf(spawnSync('tar', ['--version'], { stdio: 'ignore' }).error !== undefined)('reads an archive that the tar program wrote', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-tar-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-tar-'));
     try {
       fs.writeFileSync(path.join(dir, 'passwd'), DATA);
       const written = spawnSync('tar', ['--format=ustar', '-cf', '-', '-C', dir, 'passwd']);

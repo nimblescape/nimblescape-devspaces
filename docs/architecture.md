@@ -13,13 +13,13 @@ flowchart LR
     DC["Dev Containers extension"]
   end
   subgraph ENG["Docker engine (local or over SSH)"]
-    W["Worker<br/>devspace-worker-…"]
-    B["Batch helper<br/>devspace-batch-…"]
-    SM["Monitor<br/>devspace-monitor"]
+    W["Worker<br/>devspaces-worker-…"]
+    B["Batch helper<br/>devspaces-batch-…"]
+    SM["Monitor<br/>devspaces-monitor"]
     DEV["Dev container"]
     V[("Workspace volume")]
-    ST[("devspace-monitor<br/>volume")]
-    VS[("devspace-vscode<br/>store")]
+    ST[("devspaces-monitor<br/>volume")]
+    VS[("devspaces-vscode<br/>store")]
   end
   GH["GitHub API"]
   REG["Image registries"]
@@ -59,16 +59,16 @@ Its parts:
 
 ### The worker and the helper channel
 
-The worker is a container per window and Docker engine, `devspace-worker-<window>-<number>`, so that `docker ps` shows which window it belongs to. `<window>` is the name that the title of the window starts with: the name of its saved workspace file, else the name of its first folder (in a devspace, the repository folder), else `window`; in lower case with only letters, digits, and `-`, and cut to at most 24 characters, at the end of a word where that keeps at least 12, so that a worker name is short (at most 43 characters up to the number 99). The number tells apart the workers of windows with the same name on one engine (two windows of one folder, two devspaces of one repository, or the windows of two computers that use one remote engine). A worker starts with the number 1. When Docker refuses the name because another container has it, the extension lists the containers of the engine and starts the worker with the lowest free number (the next number when the list fails); an open fails when Docker has refused 10 names. The helper channel is its connection to the extension: the standard input and output of the `docker run` with which the extension starts it, with the Docker CLI over the engine's Docker context:
+The worker is a container per window and Docker engine, `devspaces-worker-<window>-<number>`, so that `docker ps` shows which window it belongs to. `<window>` is the name that the title of the window starts with: the name of its saved workspace file, else the name of its first folder (in a devspace, the repository folder), else `window`; in lower case with only letters, digits, and `-`, and cut to at most 24 characters, at the end of a word where that keeps at least 12, so that a worker name is short (at most 44 characters up to the number 99). The number tells apart the workers of windows with the same name on one engine (two windows of one folder, two devspaces of one repository, or the windows of two computers that use one remote engine). A worker starts with the number 1. When Docker refuses the name because another container has it, the extension lists the containers of the engine and starts the worker with the lowest free number (the next number when the list fails); an open fails when Docker has refused 10 names. The helper channel is its connection to the extension: the standard input and output of the `docker run` with which the extension starts it, with the Docker CLI over the engine's Docker context:
 
 ```text
-docker run --rm -i --pull never --name devspace-worker-<window>-<number>
-  --label nimblescape.devspace.helper-run=true --label nimblescape.devspace.helper-channel=<protocol>-<hash>
+docker run --rm -i --pull never --name devspaces-worker-<window>-<number>
+  --label nimblescape.devspaces.helper-run=true --label nimblescape.devspaces.helper-channel=<protocol>-<hash>
   --network bridge --log-driver none --cap-drop ALL --security-opt no-new-privileges
   --mount type=bind,source=<engine socket>,target=/var/run/docker.sock
-  --mount type=volume,source=devspace-monitor,target=/state
-  --mount type=volume,source=devspace-vscode,target=/vscode,volume-nocopy
-  devspace-helper:<tag> node -e <pipe loader> /opt/devspace/channel.js <sha256> startChannel
+  --mount type=volume,source=devspaces-monitor,target=/state
+  --mount type=volume,source=devspaces-vscode,target=/vscode,volume-nocopy
+  devspaces-helper:<tag> node -e <pipe loader> /opt/devspace/channel.js <sha256> startChannel
 ```
 
 The extension and the worker talk over the standard input and output of that `docker run`, one JSON message per line (`src/core/helperChannel/protocol.ts`). Both sides check every message strictly. After `hello` (protocol version 3), the worker answers `probe` with the version and identity of its engine, and runs `sweep`, which prunes stopped helper containers older than 10 minutes.
@@ -83,7 +83,7 @@ The extension and the worker talk over the standard input and output of that `do
 
 ### The helper image
 
-All containers of Devspaces run from one image per engine, `devspace-helper:<12 hex>`, built locally from `resources/helper/Dockerfile`: Node.js 24 on Debian, Git, the Docker CLI with Buildx and Compose, tini, `flock`, `setpriv`, the user `devspace-git`, and the Dev Container CLI of the exact version that `package.json` pins as a devDependency. The tag is a hash of the Dockerfile, the CLI version, and a generation number, so a change of any of them builds a new image.
+All containers of Devspaces run from one image per engine, `devspaces-helper:<12 hex>`, built locally from `resources/helper/Dockerfile`: Node.js 24 on Debian, Git, the Docker CLI with Buildx and Compose, tini, `flock`, `setpriv`, the user `devspace-git`, and the Dev Container CLI of the exact version that `package.json` pins as a devDependency. The tag is a hash of the Dockerfile, the CLI version, and a generation number, so a change of any of them builds a new image.
 
 The extension builds a missing image in the background after an installation or update, before an open needs it, and when a refresh finds it missing on an engine that answers ("Devspaces: preparing <host>…" in the status bar). A Start, Stop, or Delete builds it at once. While the image is missing, the rows of that engine show `State unknown`. The maintenance runs when a worker is prepared for an open, and in the background prebuild: a weekly check of the base image's digest, a rebuild with `--pull --no-cache` when the check found a newer base (only with `updateImagesOnConnect` on; a rebuild that takes longer than 15 minutes counts as failed), and a daily cleanup of helper images that no window used for 7 days. Its state is in `helper.json` (local engine) and `helper-remote-<hash>.json` (each remote engine).
 
@@ -95,13 +95,13 @@ The worker's bundle, `dist/helperChannel.js`, carries two more scripts as text: 
 
 ### The batch helper
 
-The worker starts before any devspace is chosen, and a running container cannot get a volume mounted later. So the steps that need the volume of a devspace run in **one batch helper per operation** (`devspace-batch-<session>`), which the worker starts over the Engine API with that volume, the pinned helper image, and the helper's cache volume (`devspace-helper-cache`). It checks first that the volume exists, so a mount never creates an empty volume without labels.
+The worker starts before any devspace is chosen, and a running container cannot get a volume mounted later. So the steps that need the volume of a devspace run in **one batch helper per operation** (`devspaces-batch-<session>`), which the worker starts over the Engine API with that volume, the pinned helper image, and the helper's cache volume (`devspaces-helper-cache`). It checks first that the volume exists, so a mount never creates an empty volume without labels.
 
 Its steps are the fixed kinds of `src/core/helper/batchSteps.ts`: `clone`, `readFiles`, `listConfigs`, `readConfiguration`, `build`, `composeModel`, `composeHash`, `createFolders`, `up`, `runUserCommands`, `gitFiles`, `ownershipFix`, and `repositoryOwnershipFix`. The worker sends a kind and its parameters; the helper checks them strictly and builds the command itself. It never runs a command line that it was sent. The clone runs as the user `devspace-git`; the steps that read the repository run as the owner of the repository folder; the steps that need Docker run as root (see [security.md](security.md#trust-boundaries)). The build and `up` run the Dev Container CLI, which uses the Docker CLI and Docker Compose of the helper.
 
 ### The Monitor
 
-Each engine has one Monitor, the container `devspace-monitor`, made from the helper image under the second tag `devspace-monitor:<12 hex>`. It has the label `nimblescape.devspace.monitor`, no published port, no capabilities, `no-new-privileges`, outbound network on the default network, and a JSON log of at most 2 × 1 MB. It mounts the engine's socket, its volume `devspace-monitor` at `/state`, and the store `devspace-vscode` at `/vscode`.
+Each engine has one Monitor, the container `devspaces-monitor`, made from the helper image under the second tag `devspaces-monitor:<12 hex>`. It has the label `nimblescape.devspaces.monitor`, no published port, no capabilities, `no-new-privileges`, outbound network on the default network, and a JSON log of at most 2 × 1 MB. It mounts the engine's socket, its volume `devspaces-monitor` at `/state`, and the store `devspaces-vscode` at `/vscode`.
 
 The worker makes sure that it runs (`monitorEnsure`, and at every open): it creates it when it is missing, and replaces it when its script, image, or mode differs. An open that cannot ensure the monitor is refused. On every engine, local or remote, the monitor runs permanently with the restart policy `unless-stopped`, unless `stopMonitorWhenIdle` is on: then it has `on-failure` and exits after 5 minutes without a running devspace (never during a background run). A permanent monitor carries the ID of the computer that created it (the label `monitor-owner`). An ensure with `stopMonitorWhenIdle` on replaces only its own computer's permanent monitor and keeps one that another computer owns, so a computer with the setting on never replaces a permanent monitor that another computer created; when the computer that created it turns the setting on, it replaces it, and a computer with the setting off makes it permanent again at its next ensure. A replacement ends a background run that runs in it; the next monitor runs it again, because its end was never stored.
 
@@ -126,15 +126,15 @@ The open asks the registries for the current digests of the images and Features 
 A **prepare** (`DevspaceService.prepare`) builds the next image of a devspace before an open needs it. It runs the steps of the open up to the build, without any UI, token, or credential, and without changing a container:
 
 - It skips a devspace without a volume, without a valid build record, with a configuration on another branch or with another hash than the record's, with the host access checks off, or whose configuration the policy refuses. It checks the image references of the build record first, so a devspace where nothing moved costs no helper and no build.
-- It pulls the changed images anonymously and builds the new image as `devspace-<…>:prepared` (for Docker Compose, only the image of the dev service; the other built services get `:prepared-<service>`), with `--frozen-lockfile` when the repository has a `devcontainer-lock.json`, so a prepare never writes into the working copy.
-- The prepared image carries the label `nimblescape.devspace.prepared`: the key of the update (the configuration and the digests, as the open computes them) and the ID of the helper image.
+- It pulls the changed images anonymously and builds the new image as `devspaces-<…>:prepared` (for Docker Compose, only the image of the dev service; the other built services get `:prepared-<service>`), with `--frozen-lockfile` when the repository has a `devcontainer-lock.json`, so a prepare never writes into the working copy.
+- The prepared image carries the label `nimblescape.devspaces.prepared`: the key of the update (the configuration and the digests, as the open computes them) and the ID of the helper image.
 - A prepare holds a prepare lock of its own (`locks/<id>.prepare.lock`), never the devspace lock. It stops after 30 minutes; a build that failed or was stopped records its key (`<id>.prepare.stopped`), so the same update is not tried again. A Delete stops a running prepare first (`<id>.prepare.stop`).
 
 At an open that updates a devspace (after **Continue** or **Update Now**), the **swap** takes the prepared image when its labels fit the open's own key, devspace, and helper image: it becomes the next numbered image, without a pull or a build. While a prepare of the devspace runs, the open waits for its lock, in steps of a minute. Every check of the open runs on the prepared image as on a built one. An image that does not fit is removed with the old images.
 
 ### The shared VS Code server and extension store
 
-One volume per engine, `devspace-vscode`, holds the VS Code servers and the extension packages that all dev containers of the engine share. Only the worker and the monitor write it, each file under a lock in `locks/`. A dev container that an open of the official VS Code build creates mounts it read-only at `/opt/devspace/vscode`.
+One volume per engine, `devspaces-vscode`, holds the VS Code servers and the extension packages that all dev containers of the engine share. Only the worker and the monitor write it, each file under a lock in `locks/`. A dev container that an open of the official VS Code build creates mounts it read-only at `/opt/devspace/vscode`.
 
 - `server/<quality>/<platform>/<commit>/`: an unpacked server, for `linux-x64` or `linux-arm64`. The open sends the commit and quality of the window's VS Code (only for the official build); the worker downloads a missing server from the VS Code update service, checks its SHA-256, and moves it into place. Before the window connects, the worker links `~/.vscode-server/bin/<commit>` in the dev container to it, as the remote user, so the Dev Containers extension installs no server. A failure never fails the open: the Dev Containers extension then installs the server as usual.
 - `extensions/<universal|linux-x64|linux-arm64>/<publisher.name-version>.vsix`: extension packages. Each open records the extensions of the devspace (`customizations.vscode.extensions` of the merged configuration, and the user's `dev.containers.defaultExtensions`); the monitor downloads them in its background run. Before the window connects, the worker copies the matching packages into the container's `~/.vscode-server/extensionsCache`, from where the VS Code server installs them without a download. An open never downloads an extension and never waits for one.
@@ -147,15 +147,15 @@ The Monitor stops devspaces by records in its volume, never by asking the window
 - **Release.** When a window closes, switches, or leaves a devspace, it records the Git state of the devspace (`recordGitState`) and sends a release: a record with a limit of 5 minutes. At a close, this must finish within 2 seconds of `deactivate()`. A lost release leaves the long limit of the last heartbeat.
 - **Keep.** **Keep Running When Closed**, **Close and Keep Running**, `stopOnClose` off, and a respected `"shutdownAction": "none"` make the heartbeats say *keep running*, and the window sends no release.
 - **Stop.** A manual **Stop** first sends a *stop now* record. The monitor stops the devspace at its next tick, about 15 seconds later, unless a newer record of any computer came since. The window's own `stop` operation runs at the same time and is usually first.
-- **Rules** (`src/remoteMonitor/rules.ts`). The monitor ticks every 15 seconds. For each devspace with a running container, the newest record of any computer decides: keep running, or stop once its limit passed. A release never shortens the live record of another computer. After the monitor starts, or after a pause of the engine, it stops nothing for 5 minutes, so that the windows can send again. It never acts on a devspace that nobody sent a record for, or on a container without the label `nimblescape.devspace.id`. Before a stop it takes the devspace lock without waiting; a held lock moves the stop to a later tick.
+- **Rules** (`src/remoteMonitor/rules.ts`). The monitor ticks every 15 seconds. For each devspace with a running container, the newest record of any computer decides: keep running, or stop once its limit passed. A release never shortens the live record of another computer. After the monitor starts, or after a pause of the engine, it stops nothing for 5 minutes, so that the windows can send again. It never acts on a devspace that nobody sent a record for, or on a container without the label `nimblescape.devspaces.id`. Before a stop it takes the devspace lock without waiting; a held lock moves the stop to a later tick.
 
 The monitor stops the dev container first, then the other containers of the devspace. It records no Git state; the window does that at its release, and the next open records it again.
 
 ### Locks
 
-- **Devspace lock**: `/state/locks/<devspace id>.lock` in the volume `devspace-monitor`, which every worker and the monitor mount. The flows `open`, `listConfigurations`, `stop`, and `delete` take it with `flock` on the engine, and hold it until the flow ends, also while a question to the user is open. Another window or computer waits 10 seconds for it, then is refused with a message that the devspace is busy. The lock files are opened without following links and are never deleted. A process that ends frees its lock.
+- **Devspace lock**: `/state/locks/<devspace id>.lock` in the volume `devspaces-monitor`, which every worker and the monitor mount. The flows `open`, `listConfigurations`, `stop`, and `delete` take it with `flock` on the engine, and hold it until the flow ends, also while a question to the user is open. Another window or computer waits 10 seconds for it, then is refused with a message that the devspace is busy. The lock files are opened without following links and are never deleted. A process that ends frees its lock.
 - **Prepare lock**: `/state/locks/<devspace id>.prepare.lock`, held by a prepare.
-- **Store locks**: `devspace-vscode/locks/`, one per server version and per extension package, so that two windows and the monitor never download the same file twice.
+- **Store locks**: `devspaces-vscode/locks/`, one per server version and per extension package, so that two windows and the monitor never download the same file twice.
 - **Records lock**: `/state/.heartbeats.lock` for the heartbeat records.
 - **Local registry lock**: the read-modify-write of `registry.json` runs under a lock folder created with `mkdir`; a lock older than 10 seconds counts as stale.
 
@@ -198,7 +198,7 @@ The **remembered check result** lets an open skip the two runs of `devcontainer 
 9. **Container setup**: write the token into `/run/devspace`, write the Git files and a missing `~/.gitconfig`, fix the ownership of the workspace, run the lifecycle commands with `devcontainer run-user-commands`, link the VS Code server, seed the extensions, and record the Git state.
 10. **Connect**: the operation records a pending connection for the other windows of this computer, and returns the container, the remote user, and the folder. The lock is released, and the extension opens the folder URI. The window's own heartbeats follow.
 
-A container whose setup version (`nimblescape.devspace.container-version`) is older than the extension's is created again from its image; so is a container created while the configuration could not be read, or while the host access checks were off and they are on now. A damaged container (for example one whose `/etc/passwd` lacks the user) is created again only after the user confirms.
+A container whose setup version (`nimblescape.devspaces.container-version`) is older than the extension's is created again from its image; so is a container created while the configuration could not be read, or while the host access checks were off and they are on now. A damaged container (for example one whose `/etc/passwd` lacks the user) is created again only after the user confirms.
 
 ### Stop
 
@@ -228,22 +228,22 @@ VS Code restores the windows of the last session; a restored window that was con
 | Place | What |
 |---|---|
 | Global storage of the extension (your computer) | The local records above. |
-| Workspace volume `devspace-<owner>-<repo>-<adjective>-<scientist>` | The clone under `/workspaces/<name>`, and `/workspaces/.devspace+` with `gitconfig`, `credentials.gitconfig`, `docker/`, and `gh/config.yml`. |
+| Workspace volume `devspaces-<owner>-<repo>-<adjective>-<scientist>` | The clone under `/workspaces/<name>`, and `/workspaces/.devspace+` with `gitconfig`, `credentials.gitconfig`, `docker/`, and `gh/config.yml`. |
 | Additional named volumes | Volumes that the configuration mounts; Devspaces creates them with the labels of the devspace. |
-| Volume `devspace-monitor` (`/state`) | Heartbeat records (`heartbeats/`), locks (`locks/`), the image references in use, the registry answers, the image bookkeeping of the monitor, the schedule state (`cache-run.json`, `run-now.json`), the extension lists of the opens (`extensions/`), and the stored worker scripts (`worker-scripts/`). |
-| Volume `devspace-vscode` | The shared VS Code servers and extension packages. |
-| Volume `devspace-helper-cache` | The user data folder of the Dev Container CLI in the batch helper. |
+| Volume `devspaces-monitor` (`/state`) | Heartbeat records (`heartbeats/`), locks (`locks/`), the image references in use, the registry answers, the image bookkeeping of the monitor, the schedule state (`cache-run.json`, `run-now.json`), the extension lists of the opens (`extensions/`), and the stored worker scripts (`worker-scripts/`). |
+| Volume `devspaces-vscode` | The shared VS Code servers and extension packages. |
+| Volume `devspaces-helper-cache` | The user data folder of the Dev Container CLI in the batch helper. |
 | Dev container | `/run/devspace` (tmpfs: `github-token`, `gh/hosts.yml`), `/opt/devspace/vscode` (the store, read-only), and `~/.vscode-server/bin/<commit>` (a link into the store). |
 
 ## Naming
 
 - **Devspace ID**: a random UUID, which appears only in labels. Its *pair* `<adjective>-<scientist>` comes from the SHA-256 of the ID (`src/core/namePairs.ts`); an ID whose pair is in use on the engine is not taken.
-- **Resource name**: `devspace-<owner>-<repo>-<adjective>-<scientist>`, lower case, at most 63 characters. It names the workspace volume, the dev container, the repository of the devspace's images (`:<build number>`, `:prepared`, `:prepared-<service>`), and the Docker Compose project (and so the names that Compose derives from it).
-- **Own objects of Devspaces**: the helper image `devspace-helper:<12 hex>` with its second tag `devspace-monitor:<12 hex>`, the worker containers `devspace-worker-<window>-<number>` (for example `devspace-worker-api-1` for the window of a devspace of the repository `acme/api`, and `devspace-worker-api-2` for a second such window on the same engine), the batch helpers `devspace-batch-<session>`, the container and volume `devspace-monitor`, and the volumes `devspace-vscode` and `devspace-helper-cache`.
+- **Resource name**: `devspaces-<owner>-<repo>-<adjective>-<scientist>`, lower case, at most 63 characters. It names the workspace volume, the dev container, the repository of the devspace's images (`:<build number>`, `:prepared`, `:prepared-<service>`), and the Docker Compose project (and so the names that Compose derives from it).
+- **Own objects of Devspaces**: the helper image `devspaces-helper:<12 hex>` with its second tag `devspaces-monitor:<12 hex>`, the worker containers `devspaces-worker-<window>-<number>` (for example `devspaces-worker-api-1` for the window of a devspace of the repository `acme/api`, and `devspaces-worker-api-2` for a second such window on the same engine), the batch helpers `devspaces-batch-<session>`, the container and volume `devspaces-monitor`, and the volumes `devspaces-vscode` and `devspaces-helper-cache`.
 - **Docker context of a remote host**: the SSH alias or host name, with `-<adjective>-<scientist>` of the host only when that name is taken by another context.
 - **Container host name**: the repository name in lower case, so that the shell prompt shows it.
 
-**Labels.** Every label key of Devspaces starts with `nimblescape.devspace.` (the set is `EXTENSION_LABEL_KEYS` in `src/core/names.ts`; a test fails for any other key with that prefix). The host access policy refuses these keys in a configuration.
+**Labels.** Every label key of Devspaces starts with `nimblescape.devspaces.` (the set is `EXTENSION_LABEL_KEYS` in `src/core/names.ts`; a test fails for any other key with that prefix). The host access policy refuses these keys in a configuration.
 
 | Label | On | Meaning |
 |---|---|---|

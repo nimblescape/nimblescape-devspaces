@@ -100,7 +100,7 @@ describe('the prepare lock of the open in the worker', () => {
     expect(prepareLockFilePath(ID)).toBe(`/state/locks/${ID}.prepare.lock`);
     expect(path.posix.dirname(prepareLockFilePath(ID))).toBe(path.posix.dirname(lockFilePath(ID)));
     expect(prepareLockFilePath(ID)).not.toBe(lockFilePath(ID));
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-prepare-lock-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-prepare-lock-'));
     try {
       const fd = openPrepareLockFile(root, ID);
       fs.closeSync(fd);

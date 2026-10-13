@@ -260,7 +260,7 @@ export function childPrepareWorker(deps: ChildWorkerDeps): PrepareWorker {
   const start = deps.start ?? ((file, args, options) => new NodeProcessRunner().start(file, args, options));
   return {
     async open(): Promise<PrepareSession> {
-      const folder = await fs.promises.mkdtemp(path.join(deps.tempRoot ?? os.tmpdir(), 'devspace-prepare-'));
+      const folder = await fs.promises.mkdtemp(path.join(deps.tempRoot ?? os.tmpdir(), 'devspaces-prepare-'));
       const remove = () => fs.promises.rm(folder, { recursive: true, force: true }).catch(() => undefined);
       const [, ...args] = loaderCommand({ path: path.join(folder, 'channel.js'), hash: deps.hash, entry: CHANNEL_ENTRY });
       const child = start(deps.node ?? process.execPath, args, { env: { PATH: PREPARE_WORKER_PATH }, cwd: folder });

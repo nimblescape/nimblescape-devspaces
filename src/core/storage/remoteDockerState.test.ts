@@ -12,7 +12,7 @@ let dir: string;
 let state: RemoteDockerState;
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-state-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-state-'));
   state = new RemoteDockerState(path.join(dir, 'remote-docker.json'));
 });
 

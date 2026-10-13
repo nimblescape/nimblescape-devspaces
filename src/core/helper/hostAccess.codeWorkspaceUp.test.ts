@@ -42,9 +42,9 @@ describe('a repository named *.code-workspace at `up`', () => {
   const repository = 'mallory/x.code-workspace';
   const folder = '/workspaces/x.code-workspace';
   const mount = 'type=volume,source=${localWorkspaceFolderBasename}-node_modules,target=/steal';
-  const victim = { 'nimblescape.devspace.id': 'victimenv', 'nimblescape.devspace.owner-id': '2', 'nimblescape.devspace.volume': 'additional' };
+  const victim = { 'nimblescape.devspaces.id': 'victimenv', 'nimblescape.devspaces.owner-id': '2', 'nimblescape.devspaces.volume': 'additional' };
   const input = {
-    ownVolume: 'devspace-x.code-workspace-11111111',
+    ownVolume: 'devspaces-x.code-workspace-11111111',
     devspace: { id: 'attackerenv', ownerId: '1' },
     variables: helperCliVariables(repository),
     metadata: [{ mounts: [mount] }],

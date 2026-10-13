@@ -689,7 +689,7 @@ describe('named secrets and requests: values, redefined names and limits', () =>
 // The operation tokenRemove in the worker, with its requests to the extension.
 describe('the tokenRemove operation', () => {
   const DEVSPACE_ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-  const CONTAINER = 'devspace-acme-api-brave-noether';
+  const CONTAINER = 'devspaces-acme-api-brave-noether';
   const base = {
     signal: new AbortController().signal,
     progress: () => {},
@@ -703,7 +703,7 @@ describe('the tokenRemove operation', () => {
       name: CONTAINER,
       state: running ? ('running' as const) : ('stopped' as const),
       rawState: running ? 'running' : 'exited',
-      labels: { 'nimblescape.devspace.id': DEVSPACE_ID },
+      labels: { 'nimblescape.devspaces.id': DEVSPACE_ID },
       image: 'img:1',
     };
     return {
@@ -821,7 +821,7 @@ describe('the checks of tokenRemove', () => {
   });
 
   it('takes a devspace ID and a container name, and nothing else', () => {
-    const params = { devspaceId: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d', containerName: 'devspace-acme-api-brave-noether' };
+    const params = { devspaceId: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d', containerName: 'devspaces-acme-api-brave-noether' };
     expect(parseTokenRemoveParams(params)).toEqual(params);
     for (const value of [null, [], { ...params, more: 1 }, { ...params, devspaceId: 'a.b' }, { ...params, containerName: '-x' }, { ...params, containerName: 1 }]) {
       expect(parseTokenRemoveParams(value), JSON.stringify(value)).toBeUndefined();

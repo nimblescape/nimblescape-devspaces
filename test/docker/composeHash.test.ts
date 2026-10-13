@@ -5,7 +5,7 @@
 // Recreate offer: the premise of the direct check before the Compose `up` of a recreation. The hash that
 // COMPOSE_HASH_SCRIPT prints for a service (docker compose config --hash, without the engine) equals the label
 // com.docker.compose.config-hash of the container that `up` created from the same model, also for a model file in
-// another folder; a changed label of the service (for example nimblescape.devspace.host-access after the checks were
+// another folder; a changed label of the service (for example nimblescape.devspaces.host-access after the checks were
 // turned off) changes it; and with equal hashes and image IDs, an `up` after the removal of the dev container creates
 // only the dev container and keeps the container of the other service. Runs the Compose of this computer (the pipeline
 // runs the same script in the workspace helper, whose Compose also runs `up`).
@@ -19,7 +19,7 @@ import { dockerTestContext } from './harness';
 
 describe('the configuration hash of Docker Compose (recreate offer)', () => {
   const { run, env, cli, log } = dockerTestContext('composeHash');
-  const project = `devspace-hash-${run.runId}`;
+  const project = `devspaces-hash-${run.runId}`;
   const folder = path.join(run.runDir, 'compose-hash');
   const upFile = path.join(folder, 'up', 'compose.json');
   /** Anonymous volumes of removed containers, which `down -v` does not see. */
@@ -36,7 +36,7 @@ describe('the configuration hash of Docker Compose (recreate offer)', () => {
           image: TEST_BASE_IMAGE,
           init: true,
           command: ['sleep', '601'],
-          labels: { ...labels, 'nimblescape.devspace.host-access': hostAccess },
+          labels: { ...labels, 'nimblescape.devspaces.host-access': hostAccess },
           volumes: [{ type: 'volume', source: 'data', target: '/data' }],
         },
         // A service of a profile (started through runServices).
@@ -88,7 +88,7 @@ describe('the configuration hash of Docker Compose (recreate offer)', () => {
     expect(computed.get('tools')).toBe(container('tools')?.Config.Labels?.['com.docker.compose.config-hash']);
     expect(computed.get('tools')).toMatch(/^[0-9a-f]{64}$/);
     expect(db?.Config.Labels?.['com.docker.compose.image']).toBe(cli.image(TEST_BASE_IMAGE)?.Id);
-    // Another value of nimblescape.devspace.host-access gives another hash, so Compose would create the container
+    // Another value of nimblescape.devspaces.host-access gives another hash, so Compose would create the container
     // again.
     expect(hashes(model('unrestricted')).get('db')).not.toBe(computed.get('db'));
 

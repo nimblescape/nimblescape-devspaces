@@ -13,7 +13,7 @@ import { silentLogger } from '../ports';
 import { runWithBatchScope } from './batchScope';
 import { WorkspaceHelper } from './workspaceHelper';
 
-const OWN = { tag: 'devspace-helper:own', id: `sha256:${'b'.repeat(64)}` };
+const OWN = { tag: 'devspaces-helper:own', id: `sha256:${'b'.repeat(64)}` };
 
 class SocketLock implements HeldDevspaceLock {
   readonly devspaceId = 'e';

@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 function folder(name: string): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `devspace-ext-pH3R2-${name}-`));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `devspaces-ext-pH3R2-${name}-`));
   temps.push(dir);
   return dir;
 }

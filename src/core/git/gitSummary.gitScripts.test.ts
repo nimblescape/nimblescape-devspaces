@@ -19,7 +19,7 @@ const GIT_ENV = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: o
 
 const tempDirs: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   tempDirs.push(dir);
   return dir;
 }

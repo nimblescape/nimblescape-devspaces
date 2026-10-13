@@ -14,7 +14,7 @@ import { EngineDocker } from './engineDocker';
 import { windowStateFlow } from './windowStateFlow';
 
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-const NAME = 'devspace-acme-api-brave-noether';
+const NAME = 'devspaces-acme-api-brave-noether';
 
 function container(labels: Record<string, string>, state: 'running' | 'stopped' = 'running'): EngineContainer {
   return { id: 'a'.repeat(64), name: NAME, state, rawState: state === 'running' ? 'running' : 'exited', labels: { [LABEL_DEVSPACE_ID]: ID, ...labels }, image: 'img', created: '2026-10-03T10:00:00Z' };
@@ -108,7 +108,7 @@ describe('the reads of an attached window in the worker: failures and outdated c
 
   it('the labels of the dev container decide, never those of a service of Docker Compose', async () => {
     const dev = container(CURRENT);
-    const service: EngineContainer = { ...container({ [LABEL_CONTAINER_VERSION]: '0', [LABEL_COMPOSE_SERVICE]: 'db' }), id: 'b'.repeat(64), name: 'devspace-acme-api-db-1' };
+    const service: EngineContainer = { ...container({ [LABEL_CONTAINER_VERSION]: '0', [LABEL_COMPOSE_SERVICE]: 'db' }), id: 'b'.repeat(64), name: 'devspaces-acme-api-db-1' };
     const port: DockerEngine = {
       ...unusedEngine(),
       container: async (reference) => [dev, service].find((each) => each.name === reference),
@@ -120,7 +120,7 @@ describe('the reads of an attached window in the worker: failures and outdated c
   // The container of the window decides, not another dev container of the devspace.
   it('the labels of the container of the window decide, also when another dev container of the devspace runs', async () => {
     const own: EngineContainer = { ...container(CURRENT, 'stopped') };
-    const other: EngineContainer = { ...container({ [LABEL_CONTAINER_VERSION]: '0' }), id: 'c'.repeat(64), name: 'devspace-acme-api-other' };
+    const other: EngineContainer = { ...container({ [LABEL_CONTAINER_VERSION]: '0' }), id: 'c'.repeat(64), name: 'devspaces-acme-api-other' };
     const port: DockerEngine = {
       ...unusedEngine(),
       container: async (reference) => [own, other].find((each) => each.name === reference),
@@ -141,7 +141,7 @@ describe('the reads of an attached window by the rule of the dev container', () 
   // The window is attached to the container of its name: when that one is gone, its state is missing (it reconnects
   // through the open, which connects to the container of the rule), never the state of another container.
   it('the named container is missing and another dev container runs: missing, and no read of the other one', async () => {
-    const other: EngineContainer = { ...container({ [LABEL_CONTAINER_VERSION]: '0' }), id: 'c'.repeat(64), name: 'devspace-acme-api-other' };
+    const other: EngineContainer = { ...container({ [LABEL_CONTAINER_VERSION]: '0' }), id: 'c'.repeat(64), name: 'devspaces-acme-api-other' };
     const execs: string[] = [];
     const port: DockerEngine = {
       ...unusedEngine(),
@@ -156,7 +156,7 @@ describe('the reads of an attached window by the rule of the dev container', () 
 
   it('the named container is stopped while another dev container runs: the named one, and no branch', async () => {
     const own = container(CURRENT, 'stopped');
-    const other: EngineContainer = { ...container(CURRENT), id: 'c'.repeat(64), name: 'devspace-acme-api-other', created: '2026-10-08T09:00:00Z' };
+    const other: EngineContainer = { ...container(CURRENT), id: 'c'.repeat(64), name: 'devspaces-acme-api-other', created: '2026-10-08T09:00:00Z' };
     const execs: string[] = [];
     const port: DockerEngine = {
       ...unusedEngine(),
@@ -173,7 +173,7 @@ describe('the reads of an attached window by the rule of the dev container', () 
 // about another container (which it does not read), at each of its reads.
 describe('the window state and the log of the rule', () => {
   it('logs nothing when the container of the window is gone and another dev container runs', async () => {
-    const other: EngineContainer = { ...container(CURRENT), id: 'c'.repeat(64), name: 'devspace-acme-api-other' };
+    const other: EngineContainer = { ...container(CURRENT), id: 'c'.repeat(64), name: 'devspaces-acme-api-other' };
     const lines: string[] = [];
     const logger = { ...silentLogger, info: (line: string) => lines.push(line), warn: (line: string) => lines.push(line) };
     const port: DockerEngine = { ...unusedEngine(), containers: async () => [other], exec: async () => ({ exitCode: 0, stdout: 'main\n', stderr: '', timedOut: false }) };

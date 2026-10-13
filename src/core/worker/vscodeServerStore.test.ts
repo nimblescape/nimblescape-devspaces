@@ -37,7 +37,7 @@ const SERVER = { commit: '0123456789abcdef0123456789abcdef01234567', quality: 's
 const DOWNLOAD = 'https://vscode.download.prss.microsoft.com/dbazure/download/stable/0123/vscode-server-linux-x64.tar.gz';
 
 const temps: string[] = [];
-function tempDir(prefix = 'devspace-vscode-store-'): string {
+function tempDir(prefix = 'devspaces-vscode-store-'): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   temps.push(dir);
   return dir;
@@ -48,7 +48,7 @@ afterEach(() => {
 
 /** A server archive as the update service has it: one top folder with `bin/code-server`, `node` and more. */
 function archive(options: { node?: boolean; top?: string } = {}): Buffer {
-  const dir = tempDir('devspace-vscode-archive-');
+  const dir = tempDir('devspaces-vscode-archive-');
   const top = path.join(dir, options.top ?? 'vscode-server-linux-x64');
   fs.mkdirSync(path.join(top, 'bin'), { recursive: true });
   fs.mkdirSync(path.join(top, 'out'), { recursive: true });

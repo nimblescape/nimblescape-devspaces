@@ -40,15 +40,15 @@ const WINDOW = 'window-1';
 const PID = 4242;
 
 const LOCAL: DockerTarget = { kind: 'local', host: '', endpoint: 'unix:///var/run/docker.sock', context: 'default' };
-const REMOTE: DockerTarget = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'devspace-remote-11111111' };
+const REMOTE: DockerTarget = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'devspaces-remote-11111111' };
 
 function devspace(id: string, repository: string, extra: Partial<Devspace> = {}): Devspace {
   return {
     id,
     repository,
     configPath: '.devcontainer/devcontainer.json',
-    volumeName: `devspace-${id}`,
-    containerName: `devspace-${id}`,
+    volumeName: `devspaces-${id}`,
+    containerName: `devspaces-${id}`,
     owner: { id: '1', login: 'octo' },
     createdAt: '2026-10-01T10:00:00.000Z',
     ...extra,
@@ -255,7 +255,7 @@ describe('WindowHeartbeats', () => {
     h.devspaces.push(devspace(ID_A, 'acme/api'));
     h.state.connected = ID_A;
     let missing = true;
-    h.state.answer = () => (missing ? { ok: false, missing: true, detail: 'No such container: devspace-monitor' } : { ok: true });
+    h.state.answer = () => (missing ? { ok: false, missing: true, detail: 'No such container: devspaces-monitor' } : { ok: true });
     h.state.repair = async () => {
       missing = false;
     };
@@ -311,7 +311,7 @@ describe('WindowHeartbeats', () => {
     h.devspaces.push(devspace(ID_A, 'acme/api', { dockerHost: 'build-box' }));
     h.state.connected = ID_A;
     h.settings.stopAfterMinutes = 5;
-    h.state.answer = () => ({ ok: false, missing: true, detail: 'No such container: devspace-monitor' });
+    h.state.answer = () => ({ ok: false, missing: true, detail: 'No such container: devspaces-monitor' });
     h.state.repair = async () => {
       throw new Error('docker run failed: no space left on device');
     };
@@ -750,7 +750,7 @@ describe('WindowHeartbeats', () => {
       expect(h.repairs).toEqual([]);
       // 10 minutes from the start of the streak, 15 seconds passed.
       expect(h.warnings).toEqual([Messages.heartbeatsFailing('acme/api', describeDockerHost(''), 9)]);
-      expect(h.logs.some((line) => line.includes(`its container devspace-${ID_A} is not on the local Docker`))).toBe(true);
+      expect(h.logs.some((line) => line.includes(`its container devspaces-${ID_A} is not on the local Docker`))).toBe(true);
       // Each tick checks again (the engine is resolved again too); one warning per streak.
       expect(h.containerChecks).toHaveLength(2);
       expect(h.engineCalls).toEqual([ID_A, ID_A]);
@@ -968,7 +968,7 @@ describe('WindowHeartbeats rules found by mutation: deadlines, engines and the p
     busy: { operation: 'update' as const, since: new Date(T0).toISOString(), pid: PID, windowId: WINDOW, ...extra },
   });
   const failed = (detail = 'timed out'): HeartbeatSendResult => ({ ok: false, missing: false, detail });
-  const missingMonitor: HeartbeatSendResult = { ok: false, missing: true, detail: 'No such container: devspace-monitor' };
+  const missingMonitor: HeartbeatSendResult = { ok: false, missing: true, detail: 'No such container: devspaces-monitor' };
 
   describe('attempts, containers and engines', () => {
     it('sendFor fails at once for a call of a tick that passed its deadline, and sends nothing', async () => {
@@ -1481,7 +1481,7 @@ describe('WindowHeartbeats rules found by mutation: deadlines, engines and the p
   // The wait exists only to avoid repeated builds of the helper image; it never holds back a heartbeat that needs no
   // build.
   describe('only a failed build backs off, and never a heartbeat whose image is present', () => {
-    const IMAGE = { tag: 'devspace-helper:0123456789ab', id: 'sha256:1111' };
+    const IMAGE = { tag: 'devspaces-helper:0123456789ab', id: 'sha256:1111' };
     type Image = typeof IMAGE;
 
     /** A heartbeat's send that prepares the worker like extension.ts does (ensureImagePresent, presentImage in the wait). */

@@ -54,7 +54,7 @@ let clock: FakeClock;
 let files: SessionFiles;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   paths = new StoragePaths(root);
   clock = new FakeClock();
   files = new SessionFiles(paths, clock);
@@ -350,7 +350,7 @@ describe('validators', () => {
     expect(isWindowStatus({ ...status(WIN_1), updatedAt: 'later' })).toBe(false);
     expect(isWindowStatus([])).toBe(false);
     // An optional, non-empty Docker context.
-    expect(isWindowStatus({ ...status(WIN_1), dockerContext: 'devspace-remote-5709ff28' })).toBe(true);
+    expect(isWindowStatus({ ...status(WIN_1), dockerContext: 'devspaces-remote-5709ff28' })).toBe(true);
     expect(isWindowStatus({ ...status(WIN_1), dockerContext: '' })).toBe(false);
     expect(isWindowStatus({ ...status(WIN_1), dockerContext: 3 })).toBe(false);
     expect(isPendingConnection({ devspaceId: ENV_A, windowId: WIN_1, createdAt: '2026-09-24T17:40:15Z' })).toBe(true);

@@ -8,7 +8,7 @@ import { attachDiagnostics } from './attachDiagnostics';
 import { dockerTargetOf, remoteContextNames } from './dockerHost';
 import { operationDockerTarget, runWithDockerTarget } from './dockerTargets';
 
-const NAME = 'devspace-acme-api-a1b2c3d4';
+const NAME = 'devspaces-acme-api-a1b2c3d4';
 // The Docker context of a host is named after it (remoteContextNames).
 const CONTEXT = remoteContextNames('build-box')[0];
 

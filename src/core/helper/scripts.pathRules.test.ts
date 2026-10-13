@@ -16,7 +16,7 @@ import { WRITE_AND_RUN_SCRIPT, createFoldersCommand, readFilesCommand } from './
 const tempDirs: string[] = [];
 function tempDir(): string {
   // The real path: the scripts compare real paths (a temporary folder may be a link, as /tmp on macOS).
-  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-')));
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-')));
   tempDirs.push(dir);
   return dir;
 }

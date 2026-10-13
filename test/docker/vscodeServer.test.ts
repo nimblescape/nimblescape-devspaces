@@ -22,7 +22,7 @@ import { RecordingProgress, TEST_ACCOUNT, createVolume, dockerTestContext, runIn
 import { monitorOfUser as engineHadMonitor, removeTestMonitor, seedTestMonitorRun, workerWindow } from './workerWindow';
 
 const NAME = 'vscodeServer';
-const REPOSITORY = 'devspace-test/vscode-server';
+const REPOSITORY = 'devspaces-test/vscode-server';
 const FOLDER = '/workspaces/vscode-server';
 const CONFIG_PATH = '.devcontainer/devcontainer.json';
 const REMOTE_USER = 'dev';
@@ -55,7 +55,7 @@ chmod 644 "/workspaces/extensions/universal/$3"
 `;
 
 /** The extension that devcontainer.json names, and its cache name in the store. */
-const EXTENSION = 'devspace-test.fake-extension';
+const EXTENSION = 'devspaces-test.fake-extension';
 const EXTENSION_FILE = `${EXTENSION}-1.0.0`;
 
 describe('the shared VS Code server of an open through a real worker', () => {

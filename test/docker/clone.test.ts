@@ -29,7 +29,7 @@ describe(`clone of ${REPOSITORY}`, () => {
   const docker = new BootstrapDocker(new NodeProcessRunner(), run.dockerPath, env, log);
   // The helper of the worker, on the helper image of the tests as its own image; set in beforeAll.
   let helper: WorkspaceHelper;
-  const volumeName = `devspace-test-clone-${run.runId}`;
+  const volumeName = `devspaces-test-clone-${run.runId}`;
   const timings = new Timings();
   // The batch helper of the worker runs the steps, started from the test process (inProcessBatches), not through the
   // lock of a worker.

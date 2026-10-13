@@ -32,7 +32,7 @@ describe('the link checks the mount of the container of the open', () => {
     t.docker.findContainer = async (devspaceId, containerName) => {
       const found = await find(devspaceId, containerName);
       if (found === undefined || !(new Error().stack ?? '').includes('linkVscodeServer')) return found;
-      return { ...found, id: 'f'.repeat(64), name: 'devspace-other-container', mountTargets: [STORE_MOUNT] };
+      return { ...found, id: 'f'.repeat(64), name: 'devspaces-other-container', mountTargets: [STORE_MOUNT] };
     };
     const scripts: string[] = [];
     const exec = t.docker.exec.bind(t.docker);

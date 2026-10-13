@@ -28,7 +28,7 @@ describe('Docker configuration of the tests', () => {
     }
     const probe = new DockerCli(run.dockerPath, { ...env, PATH: `${bin}${path.delimiter}${env.PATH ?? ''}` });
     // A registry that does not exist: the CLI looks up the credentials for it, then the pull fails at the name resolution.
-    const result = probe.run(['pull', 'devspace-credential-probe.invalid/probe:1']);
+    const result = probe.run(['pull', 'devspaces-credential-probe.invalid/probe:1']);
     log.info(`docker pull of the probe: exit code ${result.code}: ${result.err}`);
     expect(result.code).not.toBe(0);
     expect(fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '').toBe('');

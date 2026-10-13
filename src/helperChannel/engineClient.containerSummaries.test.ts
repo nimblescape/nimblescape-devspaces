@@ -27,18 +27,18 @@ describe('DockerEngine.containerSummaries', () => {
     const { engine, requests } = fake((request) =>
       request.path.startsWith('/containers/json')
         ? ok([
-            { Id: DEV, Names: ['/devspace-api'], State: 'running', Labels: { 'nimblescape.devspace.id': 'e1' }, Status: 'Up 5 minutes' },
-            { Id: DB, Names: ['/devspace-api-db-1', '/other/alias'], State: 'exited', Labels: { 'nimblescape.devspace.id': 'e1', 'nimblescape.devspace.compose-service': 'db' } },
+            { Id: DEV, Names: ['/devspaces-api'], State: 'running', Labels: { 'nimblescape.devspaces.id': 'e1' }, Status: 'Up 5 minutes' },
+            { Id: DB, Names: ['/devspaces-api-db-1', '/other/alias'], State: 'exited', Labels: { 'nimblescape.devspaces.id': 'e1', 'nimblescape.devspaces.compose-service': 'db' } },
           ])
         : // An inspect of either container would fail (a broken layer): the list never asks for one.
           ok({ message: 'RWLayer of container is unexpectedly nil' }, 500),
     );
-    expect(await engine.containerSummaries('nimblescape.devspace.id=e1')).toEqual([
-      { id: DEV, name: 'devspace-api', state: 'running', labels: { 'nimblescape.devspace.id': 'e1' } },
-      { id: DB, name: 'devspace-api-db-1', state: 'exited', labels: { 'nimblescape.devspace.id': 'e1', 'nimblescape.devspace.compose-service': 'db' } },
+    expect(await engine.containerSummaries('nimblescape.devspaces.id=e1')).toEqual([
+      { id: DEV, name: 'devspaces-api', state: 'running', labels: { 'nimblescape.devspaces.id': 'e1' } },
+      { id: DB, name: 'devspaces-api-db-1', state: 'exited', labels: { 'nimblescape.devspaces.id': 'e1', 'nimblescape.devspaces.compose-service': 'db' } },
     ]);
     expect(requests.map((request) => `${request.method} ${decodeURIComponent(request.path)}`)).toEqual([
-      'GET /containers/json?all=1&filters={"label":["nimblescape.devspace.id=e1"]}',
+      'GET /containers/json?all=1&filters={"label":["nimblescape.devspaces.id=e1"]}',
     ]);
   });
 
@@ -79,8 +79,8 @@ describe('the bound of the answers of the lists', () => {
 // (the name goes into the log lines of the stops of the Monitor).
 describe('the name of a container in the list of the engine', () => {
   it('takes its own name before an alias of a legacy link, else the first one, else none', () => {
-    expect(containerName(['/aaa/db', '/devspace-api-db-1'])).toBe('devspace-api-db-1');
-    expect(containerName(['/devspace-api'])).toBe('devspace-api');
+    expect(containerName(['/aaa/db', '/devspaces-api-db-1'])).toBe('devspaces-api-db-1');
+    expect(containerName(['/devspaces-api'])).toBe('devspaces-api');
     expect(containerName(['/aaa/db'])).toBe('aaa/db');
     expect(containerName([])).toBe('');
   });

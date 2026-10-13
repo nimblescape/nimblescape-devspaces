@@ -28,7 +28,7 @@ const shell = !spawnSync('dash', ['-c', 'true'], { stdio: 'ignore' }).error ? 'd
 
 const tempDirs: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-token-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-token-test-'));
   tempDirs.push(dir);
   return dir;
 }

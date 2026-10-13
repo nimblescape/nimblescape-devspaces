@@ -86,7 +86,7 @@ describe('the registry writes of the open in the worker', () => {
   });
 
   describe('the entry of a first open, its removal, the configuration and the build records', () => {
-    const record = { devspaceImage: 'devspace-acme-api-x:2', buildNumber: 2 } as BuildRecord;
+    const record = { devspaceImage: 'devspaces-acme-api-x:2', buildNumber: 2 } as BuildRecord;
     const refused = { configPath: '.devcontainer/devcontainer.json', items: 'x' } as RefusedUpdate;
 
     it('sends each one as its request: the ID, repository and configuration of the entry only, and the kind of the build first', async () => {
@@ -97,7 +97,7 @@ describe('the registry writes of the open in the worker', () => {
       await records.configuration(ID, { addVolumes: ['v1'], cloned: true });
       await records.build(ID, { kind: 'number', buildNumber: 3 });
       await records.build(ID, { kind: 'record', record, dropRefused: true });
-      await records.build(ID, { kind: 'rebaseline', devspaceImage: 'devspace-acme-api-x:2', configHash: 'h', version: '2.40.0' });
+      await records.build(ID, { kind: 'rebaseline', devspaceImage: 'devspaces-acme-api-x:2', configHash: 'h', version: '2.40.0' });
       await records.build(ID, { kind: 'refused', refusedUpdate: refused });
       expect(requests.map(({ kind, call, args }) => [kind, call, ...args])).toEqual([
         ['record', 'createDevspace', { id: ID, repository: 'acme/api', configPath: '.devcontainer/devcontainer.json' }],
@@ -105,7 +105,7 @@ describe('the registry writes of the open in the worker', () => {
         ['record', 'configuration', ID, { addVolumes: ['v1'], cloned: true }],
         ['record', 'build', ID, 'number', 3],
         ['record', 'build', ID, 'record', record, true],
-        ['record', 'build', ID, 'rebaseline', 'devspace-acme-api-x:2', 'h', '2.40.0'],
+        ['record', 'build', ID, 'rebaseline', 'devspaces-acme-api-x:2', 'h', '2.40.0'],
         ['record', 'build', ID, 'refused', refused],
       ]);
     });

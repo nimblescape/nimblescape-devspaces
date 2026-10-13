@@ -37,7 +37,7 @@ describe('the shared extension cache of the pipeline in the worker, probe', () =
       secretOf: () => undefined,
       forgetSecret: () => undefined,
       logger: silentLogger,
-      ownHelper: { image: { tag: 'devspace-helper:abc', id: IMAGE_ID }, socket: '/s.sock', vscodeStore: 'devspace-vscode' },
+      ownHelper: { image: { tag: 'devspaces-helper:abc', id: IMAGE_ID }, socket: '/s.sock', vscodeStore: 'devspaces-vscode' },
       dockerHost: '',
       owner: { windowId: 'w', pid: 1 },
       devspaceLock: async () => {

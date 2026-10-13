@@ -28,7 +28,7 @@ const C1 = commit(1);
 const C2 = commit(2);
 const C3 = commit(3);
 const C4 = commit(4);
-const STORE = 'devspace-vscode';
+const STORE = 'devspaces-vscode';
 const STORE_MOUNT = { type: 'volume', volume: STORE, target: '/opt/devspace/vscode', readOnly: true as const };
 const METADATA = JSON.stringify([{ remoteUser: 'vscode' }]);
 const version = (n: number, quality = 'stable') => `${quality}-linux-x64-${commit(n)}`;
@@ -67,9 +67,9 @@ function harness(options: {
   lock?: (name: string) => StoreLockAttempt | undefined;
   state?: CacheRunState;
 }) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-background-11h2r1-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-background-11h2r1-'));
   temps.push(root);
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-background-11h2r1-state-'));
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-background-11h2r1-state-'));
   temps.push(stateDir);
   const log: string[] = [];
   const requests: HttpRequest[] = [];
@@ -245,7 +245,7 @@ describe('the removal of a version', () => {
   it('a link in the place of a version is no version: it stays, and so does its target', async () => {
     const h = harness({ commits: { stable: [C4, C3, C2, C1] } });
     for (const n of [2, 3, 4]) await readyServer(h.root, { commit: commit(n), quality: 'stable' });
-    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-background-11h2r1-outside-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-background-11h2r1-outside-'));
     temps.push(outside);
     fs.writeFileSync(path.join(outside, 'keep'), 'x');
     const link = serverFolder(h.root, { commit: C1, quality: 'stable' }, 'linux-x64');

@@ -38,7 +38,7 @@ import {
 const DOCKERFILE = 'FROM node:22-bookworm-slim\n';
 const TAG = helperImageTag(DOCKERFILE);
 /** A remote SSH engine for the background prebuild. */
-const REMOTE_TARGET: DockerTarget = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'devspace-build-box' };
+const REMOTE_TARGET: DockerTarget = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'devspaces-build-box' };
 
 type BuildOptions = Parameters<HelperImageDocker['buildImage']>[0];
 
@@ -134,7 +134,7 @@ function createImages(): HelperImages {
 }
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   fs.writeFileSync(path.join(dir, 'Dockerfile'), DOCKERFILE);
   docker = new FakeDocker();
   logger = new RecordingLogger();
@@ -567,7 +567,7 @@ describe('HelperImages keeps the helper image of each engine apart for overlappi
 
 describe('HelperImages without a previous helper image', () => {
   /** A helper image of an older extension version that this installation built. It is never used. */
-  const OLDER = 'devspace-helper:0123456789ab';
+  const OLDER = 'devspaces-helper:0123456789ab';
   const START = Date.parse('2026-09-24T12:00:00Z');
 
   function setup() {
@@ -867,7 +867,7 @@ describe('HelperImages.prebuildImage and HelperPrebuild (background prebuild)', 
     expect(docker.builds).toHaveLength(1);
     // A new remote host has no record yet: it is due and its Docker is asked (the fake Docker of this test has the tag
     // already, so it is found there).
-    const other: DockerTarget = { kind: 'remote', host: 'other-box', endpoint: 'ssh://other-box', context: 'devspace-other-box' };
+    const other: DockerTarget = { kind: 'remote', host: 'other-box', endpoint: 'ssh://other-box', context: 'devspaces-other-box' };
     expect(await prebuild(stateHelper(engine), { dockerRunning: running }).start(other)).toBe('present');
     expect(running).toHaveBeenCalledWith(other, expect.any(AbortSignal));
     expect(fs.existsSync(helperStatePathFor(statePath(), 'other-box'))).toBe(true);

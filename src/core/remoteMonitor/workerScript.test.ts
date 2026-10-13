@@ -78,7 +78,7 @@ describe('the worker script in the volume', () => {
 });
 
 describe('the ensure of the Monitor with the worker script', () => {
-  const OWN = { image: { tag: 'devspace-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` }, socket: '/var/run/docker.sock' };
+  const OWN = { image: { tag: 'devspaces-helper:0123456789ab', id: `sha256:${'a'.repeat(64)}` }, socket: '/var/run/docker.sock' };
   const IMAGES = { schedule: '7 6 * * *', timeZone: 'UTC' };
 
   function engine(specs: MonitorRunSpec[]): DockerEngine {

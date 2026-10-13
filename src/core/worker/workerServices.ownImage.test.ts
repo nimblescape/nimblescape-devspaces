@@ -16,7 +16,7 @@ import { unusedEngine } from './dockerEngine.testkit';
 import type { HostSide } from './hostSide';
 import { workerServiceDeps } from './workerServices';
 
-const OWN = { tag: 'devspace-helper:abc', id: `sha256:${'a'.repeat(64)}` };
+const OWN = { tag: 'devspaces-helper:abc', id: `sha256:${'a'.repeat(64)}` };
 /** The socket of a rootless engine, so that a default socket (/var/run/docker.sock) would show. */
 const SOCKET = '/run/user/1000/docker.sock';
 

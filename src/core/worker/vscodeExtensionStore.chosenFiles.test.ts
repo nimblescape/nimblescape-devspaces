@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 function folder(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ext-store-pH3R2-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ext-store-pH3R2-'));
   temps.push(root);
   return root;
 }

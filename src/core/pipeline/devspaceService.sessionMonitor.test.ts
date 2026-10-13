@@ -146,7 +146,7 @@ describe('the Monitor in the open pipeline', () => {
   });
 
   it.each<[string, () => Promise<{ ok: true } | { ok: false; detail: string }>]>([
-    ['fails', async () => ({ ok: false, detail: 'No such container: devspace-monitor' })],
+    ['fails', async () => ({ ok: false, detail: 'No such container: devspaces-monitor' })],
     ['throws', async () => Promise.reject(new Error('Docker Desktop is not installed.'))],
   ])('a first heartbeat that %s is a warning, and the open goes on', async (_name, heartbeat) => {
     const { h } = setup(REMOTE, { heartbeat });

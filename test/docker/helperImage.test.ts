@@ -36,14 +36,14 @@ function ago(ms: number): string {
   return new Date(Date.now() - ms).toISOString();
 }
 
-/** A helper tag of another extension version: `devspace-helper:<12 hex characters>`, random, so no image has it yet. */
+/** A helper tag of another extension version: `devspaces-helper:<12 hex characters>`, random, so no image has it yet. */
 function otherHelperTag(): string {
-  return `devspace-helper:${crypto.randomBytes(6).toString('hex')}`;
+  return `devspaces-helper:${crypto.randomBytes(6).toString('hex')}`;
 }
 
 /**
  * The real BootstrapDocker, limited to the images of this run: the listing of the helper images shows only images with
- * the label devspace-test.run=<run ID>, and the removal of any other image fails (the helper logs the failure; the test
+ * the label devspaces-test.run=<run ID>, and the removal of any other image fails (the helper logs the failure; the test
  * checks that none was tried). It records the builds and the removals. The Docker port of HelperImages.
  */
 class RunScopedDocker implements HelperImageDocker {
@@ -133,7 +133,7 @@ describe('workspace helper image: weekly refresh and daily cleanup', () => {
   function dummyHelperImage(name: string, dummyTag?: string): string {
     const args = ['build', '-q', '--label', `${LABEL_HELPER}=true`, '--label', `${TEST_RUN_LABEL}=${run.runId}`];
     if (dummyTag) args.push('-t', dummyTag);
-    return cli.ok([...args, '-'], `FROM scratch\nLABEL devspace-test.dummy=${name}\n`);
+    return cli.ok([...args, '-'], `FROM scratch\nLABEL devspaces-test.dummy=${name}\n`);
   }
 
   beforeAll(() => {
@@ -221,7 +221,7 @@ describe('workspace helper image: weekly refresh and daily cleanup', () => {
     const unused = otherHelperTag();
     const recent = otherHelperTag();
     const unknown = otherHelperTag();
-    const otherRepository = `devspace-test-other-${run.runId}:1`;
+    const otherRepository = `devspaces-test-other-${run.runId}:1`;
     const unusedId = dummyHelperImage('unused', unused);
     dummyHelperImage('recent', recent);
     dummyHelperImage('unknown', unknown);

@@ -13,10 +13,10 @@ import {
   REMOTE_SCHEME,
 } from './authority';
 
-const NAME = 'devspace-acme-university-api-3f2a9c1e';
-// hex of {"containerName":"/devspace-acme-university-api-3f2a9c1e"}, as Dev Containers 0.470.0 builds it.
+const NAME = 'devspaces-acme-university-api-3f2a9c1e';
+// hex of {"containerName":"/devspaces-acme-university-api-3f2a9c1e"}, as Dev Containers 0.470.0 builds it.
 const HEX =
-  '7b22636f6e7461696e65724e616d65223a222f64657673706163652d61636d652d756e69766572736974792d6170692d3366326139633165227d';
+  '7b22636f6e7461696e65724e616d65223a222f6465767370616365732d61636d652d756e69766572736974792d6170692d3366326139633165227d';
 
 function hexOf(text: string): string {
   return Buffer.from(text, 'utf8').toString('hex');
@@ -43,10 +43,10 @@ describe('encodeAuthority', () => {
 
 // Dev Containers' own attach to a container on another Docker host writes this form.
 describe('Docker context in the authority', () => {
-  const OWN_FORM = '{"containerName":"/devspace-majikmate-module-oop-a1b86a08","settings":{"context":"devspace-remote-2e9f507b"}}';
+  const OWN_FORM = '{"containerName":"/devspaces-majikmate-module-oop-a1b86a08","settings":{"context":"devspaces-remote-2e9f507b"}}';
 
   it('encodes the context exactly as the Dev Containers extension does', () => {
-    expect(encodeAuthority('devspace-majikmate-module-oop-a1b86a08', 'devspace-remote-2e9f507b')).toBe(`attached-container+${hexOf(OWN_FORM)}`);
+    expect(encodeAuthority('devspaces-majikmate-module-oop-a1b86a08', 'devspaces-remote-2e9f507b')).toBe(`attached-container+${hexOf(OWN_FORM)}`);
   });
 
   it('leaves settings out without a context', () => {
@@ -59,13 +59,13 @@ describe('Docker context in the authority', () => {
 
   it('decodes the name and the context, and the name alone for decodeAuthority', () => {
     const authority = `attached-container+${hexOf(OWN_FORM)}`;
-    expect(decodeAuthorityParts(authority)).toEqual({ containerName: 'devspace-majikmate-module-oop-a1b86a08', dockerContext: 'devspace-remote-2e9f507b' });
-    expect(decodeAuthority(authority)).toBe('devspace-majikmate-module-oop-a1b86a08');
+    expect(decodeAuthorityParts(authority)).toEqual({ containerName: 'devspaces-majikmate-module-oop-a1b86a08', dockerContext: 'devspaces-remote-2e9f507b' });
+    expect(decodeAuthority(authority)).toBe('devspaces-majikmate-module-oop-a1b86a08');
     expect(decodeAuthorityParts(`attached-container+${HEX}`)).toEqual({ containerName: NAME });
   });
 
   it('puts the context into the folder URI', () => {
-    expect(folderUriParts(NAME, '/workspaces/api', 'devspace-remote-2e9f507b').authority).toBe(encodeAuthority(NAME, 'devspace-remote-2e9f507b'));
+    expect(folderUriParts(NAME, '/workspaces/api', 'devspaces-remote-2e9f507b').authority).toBe(encodeAuthority(NAME, 'devspaces-remote-2e9f507b'));
   });
 });
 
@@ -75,7 +75,7 @@ describe('decodeAuthority', () => {
   });
 
   it('round-trips encodeAuthority', () => {
-    for (const name of ['a', 'devspace-o-r-12345678', 'x.y_z-1', 'ünïcode-name']) {
+    for (const name of ['a', 'devspaces-o-r-12345678', 'x.y_z-1', 'ünïcode-name']) {
       expect(decodeAuthority(encodeAuthority(name))).toBe(name);
     }
   });

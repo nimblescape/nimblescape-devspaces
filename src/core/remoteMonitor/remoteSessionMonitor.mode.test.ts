@@ -15,7 +15,7 @@ import { LABEL_MONITOR_OWNER, PERMANENT_LABEL_PART, remoteMonitorLabelValue, vsc
 import { RemoteSessionMonitor, monitorLabel } from './remoteSessionMonitor';
 
 const SCRIPT = 'console.log("monitor")';
-const TAG = 'devspace-helper:0123456789ab';
+const TAG = 'devspaces-helper:0123456789ab';
 const SOCKET = '/var/run/docker.sock';
 const ID = 'feed'.padEnd(64, '1');
 const IMAGES = { schedule: '17', timeZone: 'UTC' };
@@ -73,7 +73,7 @@ describe('the container of the Monitor by its mode', () => {
     expect(permanent.restartPolicy).toBe('unless-stopped');
     expect(permanent.env.DEVSPACE_MONITOR_PERMANENT).toBe('1');
     expect(permanent.labels[LABEL_MONITOR_OWNER]).toBe(ME);
-    expect(LABEL_MONITOR_OWNER).toBe('nimblescape.devspace.monitor-owner');
+    expect(LABEL_MONITOR_OWNER).toBe('nimblescape.devspaces.monitor-owner');
     expect(PERMANENT).toBe(remoteMonitorLabelValue(SCRIPT, TAG, [PERMANENT_LABEL_PART]));
     expect(IDLE).toBe(remoteMonitorLabelValue(SCRIPT, TAG, []));
     expect(PERMANENT).not.toBe(IDLE);
@@ -96,11 +96,11 @@ describe('the container of the Monitor by its mode', () => {
 
   it('mounts the store of the worker read-write at /vscode and names it; without one, no store', () => {
     const { engine } = fakeEngine([{ exists: false }]);
-    const spec = monitorOf(engine, false, 'devspace-test-vscode').runSpec(TAG, SOCKET, IDLE, SCRIPT, IMAGES);
-    expect(spec.mounts).toEqual({ socket: SOCKET, volume: 'devspace-monitor', volumeTarget: '/state', store: { volume: 'devspace-test-vscode', target: '/vscode' } });
-    expect(spec.env.DEVSPACE_VSCODE_STORE).toBe('devspace-test-vscode');
+    const spec = monitorOf(engine, false, 'devspaces-test-vscode').runSpec(TAG, SOCKET, IDLE, SCRIPT, IMAGES);
+    expect(spec.mounts).toEqual({ socket: SOCKET, volume: 'devspaces-monitor', volumeTarget: '/state', store: { volume: 'devspaces-test-vscode', target: '/vscode' } });
+    expect(spec.env.DEVSPACE_VSCODE_STORE).toBe('devspaces-test-vscode');
     const without = monitorOf(engine, false).runSpec(TAG, SOCKET, IDLE, SCRIPT, IMAGES);
-    expect(without.mounts).toEqual({ socket: SOCKET, volume: 'devspace-monitor', volumeTarget: '/state' });
+    expect(without.mounts).toEqual({ socket: SOCKET, volume: 'devspaces-monitor', volumeTarget: '/state' });
     expect(without.env).not.toHaveProperty('DEVSPACE_VSCODE_STORE');
   });
 
@@ -111,7 +111,7 @@ describe('the container of the Monitor by its mode', () => {
     ] as const) {
       const { engine, specs } = fakeEngine([{ exists: false }]);
       expect(await monitorOf(engine, permanent).ensureOrThrow(TAG, SOCKET)).toBe('created');
-      expect(specs[0].labels['nimblescape.devspace.monitor']).toBe(label);
+      expect(specs[0].labels['nimblescape.devspaces.monitor']).toBe(label);
       expect(specs[0].labels[LABEL_MONITOR_OWNER]).toBe(permanent ? ME : undefined);
       expect(specs[0].restartPolicy).toBe(permanent ? 'unless-stopped' : 'on-failure');
     }
@@ -147,7 +147,7 @@ describe('the change of the mode at the next ensure', () => {
   });
 
   it('a name conflict of the create: a running permanent monitor of another computer counts as current for one that ends when idle', async () => {
-    const conflict: MonitorCreated = { kind: 'exited', detail: 'Conflict. The container name "/devspace-monitor" is already in use', conflict: true };
+    const conflict: MonitorCreated = { kind: 'exited', detail: 'Conflict. The container name "/devspaces-monitor" is already in use', conflict: true };
     const { engine, calls } = fakeEngine([{ exists: false }, running(PERMANENT, OTHER)], [conflict]);
     expect(await monitorOf(engine, false).ensureOrThrow(TAG, SOCKET)).toBe('running');
     expect(calls).toEqual(['inspect', 'create', 'inspect']);
@@ -166,7 +166,7 @@ describe('the owner of a permanent monitor', () => {
     expect(await monitorOf(engine, false).ensureOrThrow(TAG, SOCKET)).toBe('created');
     expect(calls).toEqual(['inspect', `remove ${ID}`, 'create']);
     expect(specs[0].restartPolicy).toBe('on-failure');
-    expect(specs[0].labels['nimblescape.devspace.monitor']).toBe(IDLE);
+    expect(specs[0].labels['nimblescape.devspaces.monitor']).toBe(IDLE);
   });
 
   it('an ensure with the setting on keeps a running permanent monitor of another computer, or of no known owner', async () => {
@@ -195,7 +195,7 @@ describe('the owner of a permanent monitor', () => {
     const first = fakeEngine([{ exists: false }]);
     await monitorOf(first.engine, true).ensureOrThrow(TAG, SOCKET);
     const owner = first.specs[0].labels[LABEL_MONITOR_OWNER];
-    const second = fakeEngine([running(first.specs[0].labels['nimblescape.devspace.monitor'], owner)]);
+    const second = fakeEngine([running(first.specs[0].labels['nimblescape.devspaces.monitor'], owner)]);
     expect(await monitorOf(second.engine, false, undefined, OTHER).ensureOrThrow(TAG, SOCKET)).toBe('running');
     expect(second.calls).toEqual(['inspect']);
   });
@@ -203,25 +203,25 @@ describe('the owner of a permanent monitor', () => {
 
 // The store that the monitor mounts is part of its label.
 describe('the store in the label of the monitor', () => {
-  const WITH_STORE = monitorLabel(SCRIPT, TAG, 'permanent', 'devspace-vscode');
+  const WITH_STORE = monitorLabel(SCRIPT, TAG, 'permanent', 'devspaces-vscode');
 
   it('the label names the store; without one, none', () => {
-    expect(WITH_STORE).toBe(remoteMonitorLabelValue(SCRIPT, TAG, [PERMANENT_LABEL_PART, vscodeStoreLabelPart('devspace-vscode')]));
-    expect(monitorLabel(SCRIPT, TAG, 'idle', 'devspace-vscode')).toBe(remoteMonitorLabelValue(SCRIPT, TAG, [vscodeStoreLabelPart('devspace-vscode')]));
-    expect(new Set([WITH_STORE, PERMANENT, monitorLabel(SCRIPT, TAG, 'permanent', 'devspace-other')]).size).toBe(3);
+    expect(WITH_STORE).toBe(remoteMonitorLabelValue(SCRIPT, TAG, [PERMANENT_LABEL_PART, vscodeStoreLabelPart('devspaces-vscode')]));
+    expect(monitorLabel(SCRIPT, TAG, 'idle', 'devspaces-vscode')).toBe(remoteMonitorLabelValue(SCRIPT, TAG, [vscodeStoreLabelPart('devspaces-vscode')]));
+    expect(new Set([WITH_STORE, PERMANENT, monitorLabel(SCRIPT, TAG, 'permanent', 'devspaces-other')]).size).toBe(3);
   });
 
   it('an ensure with the store replaces a running monitor created without it (and the other way round); the same one stays', async () => {
     const without = fakeEngine([running(PERMANENT, ME)]);
-    expect(await monitorOf(without.engine, true, 'devspace-vscode').ensureOrThrow(TAG, SOCKET)).toBe('created');
-    expect(without.specs[0].labels['nimblescape.devspace.monitor']).toBe(WITH_STORE);
-    expect(without.specs[0].mounts.store).toEqual({ volume: 'devspace-vscode', target: '/vscode' });
+    expect(await monitorOf(without.engine, true, 'devspaces-vscode').ensureOrThrow(TAG, SOCKET)).toBe('created');
+    expect(without.specs[0].labels['nimblescape.devspaces.monitor']).toBe(WITH_STORE);
+    expect(without.specs[0].mounts.store).toEqual({ volume: 'devspaces-vscode', target: '/vscode' });
     const withStore = fakeEngine([running(WITH_STORE, ME)]);
     expect(await monitorOf(withStore.engine, true).ensureOrThrow(TAG, SOCKET)).toBe('created');
     const same = fakeEngine([running(WITH_STORE, ME)]);
-    expect(await monitorOf(same.engine, true, 'devspace-vscode').ensureOrThrow(TAG, SOCKET)).toBe('running');
+    expect(await monitorOf(same.engine, true, 'devspaces-vscode').ensureOrThrow(TAG, SOCKET)).toBe('running');
     // An ensure with the setting on and the store keeps the running permanent one of another computer with that store.
     const idle = fakeEngine([running(WITH_STORE, OTHER)]);
-    expect(await monitorOf(idle.engine, false, 'devspace-vscode').ensureOrThrow(TAG, SOCKET)).toBe('running');
+    expect(await monitorOf(idle.engine, false, 'devspaces-vscode').ensureOrThrow(TAG, SOCKET)).toBe('running');
   });
 });

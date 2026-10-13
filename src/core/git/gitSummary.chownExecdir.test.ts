@@ -30,7 +30,7 @@ describe.runIf(isRoot && gnuFind)('the ownership fixes of the batch helper with 
     ['RESUMED_NUMERIC_OWNERSHIP_FIX_SCRIPT', RESUMED_NUMERIC_OWNERSHIP_FIX_SCRIPT],
   ] as const) {
     it(`${name} never gives a file outside the folder the owner`, () => {
-      const base = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-execdir-'));
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-execdir-'));
       folders.push(base);
       const repo = path.join(base, 'repo');
       const outside = path.join(base, 'outside');

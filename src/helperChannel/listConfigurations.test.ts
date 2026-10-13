@@ -23,7 +23,7 @@ import { contextSecrets } from './operationContext.testkit';
 import { OperationError, type OperationContext } from './server';
 
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
-const VOLUME = 'devspace-acme-api-brave-noether';
+const VOLUME = 'devspaces-acme-api-brave-noether';
 const DEVSPACE = {
   id: ID,
   repository: 'acme/api',
@@ -34,7 +34,7 @@ const DEVSPACE = {
   createdAt: '2026-10-01T00:00:00.000Z',
   lastUsedAt: '2026-10-01T00:00:00.000Z',
 } as unknown as Devspace;
-const OWN: OwnHelper = { image: { tag: 'devspace-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
+const OWN: OwnHelper = { image: { tag: 'devspaces-helper:abc', id: `sha256:${'a'.repeat(64)}` }, socket: '/run/user/1000/docker.sock' };
 const PARAMS = { devspaceId: ID, dockerHost: '', owner: { windowId: 'window-1', pid: 4242 } };
 const PATHS = ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'];
 const CONTEXT = () =>

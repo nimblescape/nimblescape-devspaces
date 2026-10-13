@@ -61,9 +61,9 @@ describe('monitorCommand', () => {
     await sendMonitorSettings(engine, { settings: IMAGES }, signal);
     await sendMonitorSettings(engine, { inUse: { source: SOURCE, references: ['node:20'] } }, signal);
     expect(calls.map((call) => call.options?.signal)).toEqual([signal, signal]);
-    await forgetRecord(engine, SOURCE, ID, 'devspace-test-monitor');
+    await forgetRecord(engine, SOURCE, ID, 'devspaces-test-monitor');
     // The command of the entry monitorForget.
-    expect(calls[2]).toMatchObject({ container: 'devspace-test-monitor', command: scriptCommand('monitorForget', [SOURCE, ID]) });
+    expect(calls[2]).toMatchObject({ container: 'devspaces-test-monitor', command: scriptCommand('monitorForget', [SOURCE, ID]) });
     expect(calls[2].container).not.toBe(REMOTE_MONITOR_CONTAINER);
   });
 });

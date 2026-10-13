@@ -9,7 +9,7 @@ import { silentLogger } from '../core/ports';
 import type { Devspace } from '../core/types';
 import { WINDOW_RESTORE_TIMEOUT_MS, findWindowDevspace, restoreAfterPrebuild } from './windowDevspace';
 
-const ENTRY = { id: 'e1', containerName: 'devspace-acme-api-x' } as Devspace;
+const ENTRY = { id: 'e1', containerName: 'devspaces-acme-api-x' } as Devspace;
 
 function deps(options: { found?: Devspace[]; needsRestore?: boolean; installed?: boolean; added?: number | Error } = {}) {
   const found = [...(options.found ?? [])];
@@ -33,13 +33,13 @@ function deps(options: { found?: Devspace[]; needsRestore?: boolean; installed?:
 describe('the devspace of the window at its activation', () => {
   it('the registry knows it: no restore', async () => {
     const { all } = deps({ found: [ENTRY] });
-    expect(await findWindowDevspace('devspace-acme-api-x', all)).toBe(ENTRY);
+    expect(await findWindowDevspace('devspaces-acme-api-x', all)).toBe(ENTRY);
     expect(all.service.reconcileInWorker).not.toHaveBeenCalled();
   });
 
   it('a lost registry is restored by the worker, passively and within the time limit of the activation', async () => {
     const { all } = deps({ found: [undefined as unknown as Devspace, ENTRY], added: 1 });
-    expect(await findWindowDevspace('devspace-acme-api-x', all)).toBe(ENTRY);
+    expect(await findWindowDevspace('devspaces-acme-api-x', all)).toBe(ENTRY);
     const [options] = all.service.reconcileInWorker.mock.calls[0];
     expect(options.passive).toBe(true);
     expect(options.signal).toBeInstanceOf(AbortSignal);
@@ -70,12 +70,12 @@ describe('the devspace of the window at its activation', () => {
 
   it('finds the entry that the restore added before its time limit ended', async () => {
     const { all } = deps({ found: [undefined as unknown as Devspace, ENTRY], added: new Error('The operation was aborted due to timeout') });
-    expect(await findWindowDevspace('devspace-acme-api-x', all)).toBe(ENTRY);
+    expect(await findWindowDevspace('devspaces-acme-api-x', all)).toBe(ENTRY);
   });
 
   it('finds the entry that another window restored first, when this restore added none', async () => {
     const { all } = deps({ found: [undefined as unknown as Devspace, ENTRY], added: 0 });
-    expect(await findWindowDevspace('devspace-acme-api-x', all)).toBe(ENTRY);
+    expect(await findWindowDevspace('devspaces-acme-api-x', all)).toBe(ENTRY);
   });
 
   it('an unreadable registry never fails the activation (logged)', async () => {

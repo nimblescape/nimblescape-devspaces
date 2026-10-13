@@ -184,15 +184,15 @@ describe('limits and the label', () => {
   });
 
   it('labels the container with 12 hex digits of the script and the helper tag', () => {
-    const label = remoteMonitorLabelValue('script', 'devspace-helper:1');
+    const label = remoteMonitorLabelValue('script', 'devspaces-helper:1');
     expect(label).toMatch(/^[0-9a-f]{12}$/);
-    expect(remoteMonitorLabelValue('script', 'devspace-helper:1')).toBe(label);
-    expect(remoteMonitorLabelValue('script2', 'devspace-helper:1')).not.toBe(label);
-    expect(remoteMonitorLabelValue('script', 'devspace-helper:2')).not.toBe(label);
+    expect(remoteMonitorLabelValue('script', 'devspaces-helper:1')).toBe(label);
+    expect(remoteMonitorLabelValue('script2', 'devspaces-helper:1')).not.toBe(label);
+    expect(remoteMonitorLabelValue('script', 'devspaces-helper:2')).not.toBe(label);
     // The loader is part of the label, so every monitor of an older way of loading is replaced once.
-    const withLoader = createHash('sha256').update('script\ndevspace-helper:1\n', 'utf8').update(PIPE_LOADER, 'utf8').digest('hex');
+    const withLoader = createHash('sha256').update('script\ndevspaces-helper:1\n', 'utf8').update(PIPE_LOADER, 'utf8').digest('hex');
     expect(label).toBe(withLoader.slice(0, 12));
-    expect(label).not.toBe(createHash('sha256').update('script\ndevspace-helper:1', 'utf8').digest('hex').slice(0, 12));
+    expect(label).not.toBe(createHash('sha256').update('script\ndevspaces-helper:1', 'utf8').digest('hex').slice(0, 12));
   });
 
   it('names where the loader stores the script, its entry, and the line of its start', () => {

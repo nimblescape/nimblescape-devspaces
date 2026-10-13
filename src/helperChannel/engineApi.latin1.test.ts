@@ -23,7 +23,7 @@ describe('engineApi with latin1', () => {
   });
 
   it('answers a truncated body once it passed the bound, while the engine still sends, and closes the connection', async () => {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-latin1-'));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-latin1-'));
     folders.push(folder);
     const socketPath = path.join(folder, 'docker.sock');
     let closed = false;

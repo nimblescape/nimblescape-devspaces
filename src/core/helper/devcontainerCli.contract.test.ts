@@ -29,7 +29,7 @@ afterAll(() => {
 });
 
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   tempDirs.push(dir);
   return dir;
 }
@@ -106,7 +106,7 @@ function contractProblems(args: readonly string[], options: Map<string, Document
 
 describe('options of the helper against `devcontainer <command> --help`', () => {
   const folder = '/workspaces/api';
-  const idLabel = 'nimblescape.devspace.id=3f2a9c1e-0000-4000-8000-000000000000';
+  const idLabel = 'nimblescape.devspaces.id=3f2a9c1e-0000-4000-8000-000000000000';
 
   it('read-configuration', () => {
     // WorkspaceHelper.readConfiguration runs `devcontainer <args>` without a script.

@@ -21,7 +21,7 @@ describe('engineMonitor: an AbortError without a cancel', () => {
       expect(await with_({ systemTime: aborted }).daemonTime(signal)).toEqual({ reason: 'The operation was aborted.' });
       await expect(with_({ removeContainer: aborted }).remove(ID, signal)).rejects.toThrow('docker rm failed: The operation was aborted.');
       await expect(with_({ start: aborted }).start(ID, signal)).rejects.toThrow('docker start failed: The operation was aborted.');
-      expect(await with_({ containerFile: aborted }).storedScript('devspace-monitor', signal)).toBe('unknown');
+      expect(await with_({ containerFile: aborted }).storedScript('devspaces-monitor', signal)).toBe('unknown');
       expect(await with_({ containerIds: aborted }).idsWithLabel('a=b', signal)).toBeUndefined();
     }
   });

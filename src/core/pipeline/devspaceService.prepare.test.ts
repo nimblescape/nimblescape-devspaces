@@ -183,7 +183,7 @@ describe('the headless prepare', () => {
     });
 
     it('for a container created with the host access checks off', async () => {
-      await seedLabelled({ containerLabels: { 'nimblescape.devspace.container-version': '99', [LABEL_HOST_ACCESS]: HOST_ACCESS_UNRESTRICTED } });
+      await seedLabelled({ containerLabels: { 'nimblescape.devspaces.container-version': '99', [LABEL_HOST_ACCESS]: HOST_ACCESS_UNRESTRICTED } });
       await skipped('the host access checks are off for it (its container was created without them)');
     });
 

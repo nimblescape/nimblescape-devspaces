@@ -23,7 +23,7 @@ const DOWNLOAD = 'https://vscode.download.prss.microsoft.com/dbazure/download/st
 const NAME = `stable-linux-x64-${SERVER.commit}`;
 
 const temps: string[] = [];
-function tempDir(prefix = 'devspace-vscode-probe-'): string {
+function tempDir(prefix = 'devspaces-vscode-probe-'): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   temps.push(dir);
   return dir;
@@ -39,7 +39,7 @@ const sha256 = (data: Buffer): string => createHash('sha256').update(data).diges
 
 /** A server archive (one top folder with bin/code-server, node, out/main.js), plus what `extra` adds into the top folder. */
 function archive(extra: (top: string) => void = () => undefined, tarArgs: string[] = []): Buffer {
-  const dir = tempDir('devspace-vscode-probe-archive-');
+  const dir = tempDir('devspaces-vscode-probe-archive-');
   const top = path.join(dir, 'vscode-server-linux-x64');
   fs.mkdirSync(path.join(top, 'bin'), { recursive: true });
   fs.mkdirSync(path.join(top, 'out'), { recursive: true });
@@ -302,7 +302,7 @@ describe('the lock folder and tar', () => {
 
   /** A `tar` on the PATH that sleeps (a hung unpack). */
   function sleepingTar(): void {
-    const bin = tempDir('devspace-vscode-probe-bin-');
+    const bin = tempDir('devspaces-vscode-probe-bin-');
     fs.writeFileSync(path.join(bin, 'tar'), '#!/bin/sh\nexec sleep 30\n', { mode: 0o755 });
     process.env.PATH = `${bin}:${savedPath ?? '/usr/bin:/bin'}`;
   }

@@ -164,7 +164,7 @@ describe.skipIf(process.platform !== 'linux')('the lock of a devspace with real 
   const deps = (): LockDeps => ({ ...LOCK_DEPS, stateDir });
 
   beforeEach(() => {
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-devspace-lock-'));
+    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-devspace-lock-'));
   });
 
   afterEach(() => {
@@ -284,7 +284,7 @@ describe.skipIf(process.platform !== 'linux')('the lock of a devspace with real 
 // `stop` takes the lock of the devspace itself (takeDevspaceLock, the one way), runs Stop under it, and lets go
 // of it at its end, whatever the end.
 describe('the stop operation under its own lock', () => {
-  const NAME = 'devspace-acme-api-brave-noether';
+  const NAME = 'devspaces-acme-api-brave-noether';
   const PARAMS = { devspaceId: ID, containerName: NAME, folder: '/workspaces/api', user: 'dev', waitSeconds: 10 };
 
   function engineOf(stop: () => Promise<void> = async () => {}, events: string[] = [], execs: { command: readonly string[]; options: EngineExecOptions }[] = []): DockerEngine {
@@ -430,7 +430,7 @@ describe('the stop operation under its own lock', () => {
 });
 
 describe('the checks of stop', () => {
-  const PARAMS = { devspaceId: ID, containerName: 'devspace-acme-api-brave-noether', folder: '/workspaces/api', waitSeconds: 10 };
+  const PARAMS = { devspaceId: ID, containerName: 'devspaces-acme-api-brave-noether', folder: '/workspaces/api', waitSeconds: 10 };
   it('takes the parameters of a Stop, and nothing else', () => {
     expect(parseStopParams(PARAMS)).toEqual(PARAMS);
     expect(parseStopParams({ ...PARAMS, user: 'dev' })).toEqual({ ...PARAMS, user: 'dev' });

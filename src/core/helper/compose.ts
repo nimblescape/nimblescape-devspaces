@@ -493,12 +493,12 @@ export interface ComposeRewriteParams {
   /**
    * The switch of the host access checks of the repository (../policy/hostAccessChecks.ts), as the check used it.
    * `off`: the published ports keep the address that the model gives them, the mounts that only the class `computer`
-   * refuses stay as they are, and every container gets the label nimblescape.devspace.host-access=unrestricted
+   * refuses stay as they are, and every container gets the label nimblescape.devspaces.host-access=unrestricted
    * (containerIsCurrent); with the checks on, `checked`. Default `on`.
    */
   hostAccessChecks?: HostAccessChecks;
   /**
-   * The configuration path of the devspace, as the label nimblescape.devspace.config-path (LABEL_CONFIG_PATH) of the
+   * The configuration path of the devspace, as the label nimblescape.devspaces.config-path (LABEL_CONFIG_PATH) of the
    * dev service (not of the other services), when isConfigPathLabelValue takes it. Only the up model gets it.
    */
   configPath?: string;
@@ -798,18 +798,18 @@ function finish(model: ComposeModel): ComposeModel {
  * The model of `devcontainer up` (the only compose file of the override configuration, COMPOSE_MODEL_PATH), from the
  * checked merged model:
  * - `name`: the project of the devspace;
- * - every service: the label nimblescape.devspace.id, published ports on 127.0.0.1 only (decideServicePort),
+ * - every service: the label nimblescape.devspaces.id, published ports on 127.0.0.1 only (decideServicePort),
  *   mounts of repository files from the workspace volume (decideServiceMount), `pull_policy: missing`;
- * - the other services: the label nimblescape.devspace.compose-service, no `container_name`,
+ * - the other services: the label nimblescape.devspaces.compose-service, no `container_name`,
  *   `image: <project>-<service>` when Compose builds them;
  * - the dev service: the devspace image (`image`, no `build`, `pull_policy: never`), the name of the devspace
- *   (`container_name`), the label nimblescape.devspace.container-version, the workspace volume at WORKSPACES_ROOT (the
+ *   (`container_name`), the label nimblescape.devspaces.container-version, the workspace volume at WORKSPACES_ROOT (the
  *   templates' bind mount there is dropped), the host name of the repository (containerHostname) unless the service
  *   decides it (serviceDecidesHostname), and the tmpfs of the token, TOKEN_TMPFS, added to its `tmpfs`; with
  *   `vscodeStoreVolume`, the store read-only at VSCODE_STORE_TARGET;
  * - top-level `volumes`: each external, with its Docker name, plus the workspace volume (WORKSPACE_VOLUME_KEY), the
  *   volumes of `mountVolumeSources`, and the store (VSCODE_STORE_KEY);
- * - the label nimblescape.devspace.host-access on every service: `checked`, or with the host access checks off
+ * - the label nimblescape.devspaces.host-access on every service: `checked`, or with the host access checks off
  *   (`hostAccessChecks`) `unrestricted`; with the checks off also the published ports as the model has them, and the
  *   mounts that only the class `computer` refuses unchanged;
  * - each text escaped (`$$`), whatever the Compose version (the model holds the unescaped texts).

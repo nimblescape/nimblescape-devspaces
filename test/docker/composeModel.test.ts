@@ -30,7 +30,7 @@ import { composeAccessReport } from '../../src/core/policy';
 
 const DEVSPACE_ID = 'c0ffee00-0000-4000-8000-000000000000';
 /** The Compose project, the dev container, and the devspace image are named after the repository and the pair of the ID. */
-const REPOSITORY = 'devspace-test/app';
+const REPOSITORY = 'devspaces-test/app';
 const PROJECT = composeProjectName(REPOSITORY, DEVSPACE_ID);
 const CONTAINER_NAME = resourceName(REPOSITORY, DEVSPACE_ID);
 const IMAGE = devspaceImageName(REPOSITORY, DEVSPACE_ID, 1);
@@ -76,7 +76,7 @@ describe('model run of a Docker Compose configuration', () => {
   const docker = new BootstrapDocker(new NodeProcessRunner(), run.dockerPath, env, log);
   // The helper of the worker, on the helper image of the tests as its own image; set in beforeAll.
   let helper: WorkspaceHelper;
-  const volumeName = `devspace-test-compose-${run.runId}`;
+  const volumeName = `devspaces-test-compose-${run.runId}`;
   let apiVersion: string;
   // The batch helper of the worker runs the model, started from the test process (inProcessBatches), not through the
   // lock of a worker.
@@ -220,16 +220,16 @@ describe('model run of a Docker Compose configuration', () => {
   });
 
   it('reads the labels and the containers of a network, and leaves out a missing one', async () => {
-    const network = `devspace-test-backend-${run.runId}`;
-    cli.ok(['network', 'create', '--label', 'com.docker.compose.project=devspace-11111111', '--label', `${TEST_RUN_LABEL}=${run.runId}`, network]);
-    const container = cli.ok(['create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, '--label', 'nimblescape.devspace.id=other', '--network', network, TEST_BASE_IMAGE, 'true']);
+    const network = `devspaces-test-backend-${run.runId}`;
+    cli.ok(['network', 'create', '--label', 'com.docker.compose.project=devspaces-11111111', '--label', `${TEST_RUN_LABEL}=${run.runId}`, network]);
+    const container = cli.ok(['create', '--label', `${TEST_RUN_LABEL}=${run.runId}`, '--label', 'nimblescape.devspaces.id=other', '--network', network, TEST_BASE_IMAGE, 'true']);
     try {
       // The inspect by the Docker CLI of the test harness, read as the pipeline reads it (toNetworkInfo); a missing
       // network is left out.
-      expect(cli.run(['network', 'inspect', `devspace-test-missing-${run.runId}`]).code).not.toBe(0);
+      expect(cli.run(['network', 'inspect', `devspaces-test-missing-${run.runId}`]).code).not.toBe(0);
       const networks = (JSON.parse(cli.ok(['network', 'inspect', network])) as unknown[]).map(toNetworkInfo).filter((info) => info !== undefined);
       expect(networks).toHaveLength(1);
-      expect(networks[0]).toMatchObject({ name: network, labels: expect.objectContaining({ 'com.docker.compose.project': 'devspace-11111111' }) });
+      expect(networks[0]).toMatchObject({ name: network, labels: expect.objectContaining({ 'com.docker.compose.project': 'devspaces-11111111' }) });
       // A created container is attached only once it runs; the labels decide here.
       log.info(`Containers of ${network}: ${JSON.stringify(networks[0].containers)}`);
     } finally {
@@ -277,7 +277,7 @@ describe('model run of a Docker Compose configuration', () => {
     expect(again.services.db.ports).toEqual([expect.objectContaining({ target: 5432, host_ip: '127.0.0.1' })]);
     expect(again.volumes.pgdata).toMatchObject({ name: `${PROJECT}_pgdata`, external: true });
     expect(again.services.db.volumes).toContainEqual(
-      expect.objectContaining({ type: 'volume', source: 'devspace-workspace', target: '/init.sql', volume: expect.objectContaining({ subpath: 'app/init.sql' }) }),
+      expect.objectContaining({ type: 'volume', source: 'devspaces-workspace', target: '/init.sql', volume: expect.objectContaining({ subpath: 'app/init.sql' }) }),
     );
   });
 });

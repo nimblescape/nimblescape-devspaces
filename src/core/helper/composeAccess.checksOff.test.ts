@@ -118,10 +118,10 @@ const TABLE: Array<[string, ComposeAccessInput, string, HostAccessClass]> = [
   ['a volume of another program', input(() => undefined, { volumeLabels: { [`${PROJECT}_pgdata`]: { 'com.docker.compose.project': 'shop' } } }), `volume ${PROJECT}_pgdata of the Docker Compose project shop`, 'computer'],
   // Account separation, the GitHub token, the owner account, and items whose class is not clear.
   ['a volume of another devspace by its project name', input((m) => (m.volumes = { pgdata: { name: `${OTHER}_pgdata` } })), `volume ${OTHER}_pgdata of another devspace`, 'protected'],
-  ['a volume of another devspace by its labels', input(() => undefined, { volumeLabels: { [`${PROJECT}_pgdata`]: { 'nimblescape.devspace.id': 'other' } } }), `volume ${PROJECT}_pgdata of another devspace`, 'protected'],
+  ['a volume of another devspace by its labels', input(() => undefined, { volumeLabels: { [`${PROJECT}_pgdata`]: { 'nimblescape.devspaces.id': 'other' } } }), `volume ${PROJECT}_pgdata of another devspace`, 'protected'],
   ['a volume of a devspace of another account', input(() => undefined, { foreignVolumes: [`${PROJECT}_pgdata`] }), `volume ${PROJECT}_pgdata of another devspace`, 'protected'],
-  ['the cache volume of the workspace helper', input((m) => (m.volumes = { pgdata: { name: 'devspace-helper-cache' } })), 'volume devspace-helper-cache of the workspace helper', 'protected'],
-  ['the volume of the remote Monitor', input((m) => (m.volumes = { pgdata: { name: 'devspace-monitor' } })), 'volume devspace-monitor of the Monitor', 'protected'],
+  ['the cache volume of the workspace helper', input((m) => (m.volumes = { pgdata: { name: 'devspaces-helper-cache' } })), 'volume devspaces-helper-cache of the workspace helper', 'protected'],
+  ['the volume of the remote Monitor', input((m) => (m.volumes = { pgdata: { name: 'devspaces-monitor' } })), 'volume devspaces-monitor of the Monitor', 'protected'],
   ['a network of another devspace', input((m) => (m.networks = { other: { name: `${OTHER}_default`, external: true } })), `network ${OTHER}_default of another devspace`, 'protected'],
   ['network_mode of another devspace', input(service('db', { network_mode: `${OTHER}_default` })), `service db: network ${OTHER}_default of another devspace`, 'protected'],
   // The workspace volume does not hold the GitHub token (it is in the memory of the dev container).
@@ -152,7 +152,7 @@ const TABLE: Array<[string, ComposeAccessInput, string, HostAccessClass]> = [
   // Only the Dockerfile of the dev service must be read (the build writes its text); the other Dockerfiles are not
   // checked.
   ['a dev service whose Dockerfile could not be read', input(service('app', { image: undefined, build: { context: REPO } }), { dockerfiles: {} }), `service app: Dockerfile ${REPO}/Dockerfile (it could not be read, and the dev service is built from the text that Devspaces read)`, 'unsupported'],
-  // Image IDs. (The images named `devspace-…` are allowed, below.)
+  // Image IDs. (The images named `devspaces-…` are allowed, below.)
   ['an image ID', input(service('db', { image: `sha256:${'b'.repeat(64)}` })), `service db: image sha256:${'b'.repeat(64)} (an image ID; name the image)`, 'unsupported'],
   // A short prefix of an ID may be a name (the pipeline asks Docker); 64 hexadecimal characters are an ID by their
   // form.
@@ -178,7 +178,7 @@ const TABLE: Array<[string, ComposeAccessInput, string, HostAccessClass]> = [
   // is capped; one that cannot be read is refused.
   ['stop_grace_period soon', input(service('db', { stop_grace_period: 'soon' })), 'service db: stop_grace_period soon', 'unsupported'],
   ['an unknown key', input(service('db', { future: 1 })), 'service db: future', 'unsupported'],
-  ['a reserved label', input(service('db', { labels: { 'nimblescape.devspace.id': 'x' } })), 'service db: label nimblescape.devspace.id', 'unsupported'],
+  ['a reserved label', input(service('db', { labels: { 'nimblescape.devspaces.id': 'x' } })), 'service db: label nimblescape.devspaces.id', 'unsupported'],
   ['a repository file with an old engine', input(service('db', { volumes: [{ type: 'bind', source: `${REPO}/i.sql`, target: '/i' }] }), { engineApiVersion: '1.44' }), `service db: bind mount ${REPO}/i.sql → /i (needs Docker Engine 26 or newer)`, 'unsupported'],
 ];
 
@@ -199,7 +199,7 @@ describe('composeAccessClassification', () => {
 
   it('keeps the refusal that the switch does not lift when two rules name the same item', () => {
     // The same volume name in two keys: one of another program (computer), the same text never gets weaker.
-    const checked = input(() => undefined, { foreignVolumes: [`${PROJECT}_pgdata`], volumeLabels: { [`${PROJECT}_pgdata`]: { 'nimblescape.devspace.id': 'x' } } });
+    const checked = input(() => undefined, { foreignVolumes: [`${PROJECT}_pgdata`], volumeLabels: { [`${PROJECT}_pgdata`]: { 'nimblescape.devspaces.id': 'x' } } });
     expect(composeAccessReport(checked, false).hostAccess).toEqual([`volume ${PROJECT}_pgdata of another devspace`]);
   });
 
@@ -259,10 +259,10 @@ describe('the Dockerfiles of the services are not checked', () => {
   });
 });
 
-// The images named `devspace-…` are allowed by the policy, with the checks on and off, and still asked about
+// The images named `devspaces-…` are allowed by the policy, with the checks on and off, and still asked about
 // (composeImageReferences): the pipeline refuses a reference whose image is an image of the devspaces of another
 // account by its ID (otherAccountImageItems).
-describe('images named devspace-… are not refused by their name', () => {
+describe('images named devspaces-… are not refused by their name', () => {
   const ALLOWED = { hostAccess: [], unsupported: [] };
   it.each<[string, ComposeAccessInput, string]>([
     [`${OTHER}:3`, input(service('db', { image: `${OTHER}:3` })), `${OTHER}:3`],

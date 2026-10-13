@@ -35,7 +35,7 @@ afterEach(() => {
  * --short` prints 2.29.1, the probe prints a `$` unescaped (no `$$`), `config` prints the model.
  */
 function realPathsOf(model: (repo: string) => unknown): { repo: string; realPaths: Record<string, string | null> } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   tempDirs.push(dir);
   const repo = path.join(dir, 'repo');
   fs.mkdirSync(path.join(repo, 'layout'), { recursive: true });
@@ -45,7 +45,7 @@ function realPathsOf(model: (repo: string) => unknown): { repo: string; realPath
     'shift',
     'if [ "$1 $2" = "version --short" ]; then echo 2.29.1; exit 0; fi',
     'case "$*" in',
-    '  *"-p devspace-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;;',
+    '  *"-p devspaces-probe"*) cat > /dev/null; printf \'%s\\n\' "$FAKE_PROBE"; exit 0 ;;',
     'esac',
     'printf \'%s\\n\' "$FAKE_MODEL"',
   ].join('\n');

@@ -6,7 +6,7 @@
 // path as on a remote host: RemoteSessionMonitor.ensure with the workspace helper image and the socket of the engine).
 // The script is bundled from src/remoteMonitor/main.ts as the worker's bundle carries it (the module
 // `devspace:monitor-script` of scripts/workerScripts.mjs). The container, its volume, and the test containers have
-// names of this run; the test containers carry the label nimblescape.devspace.id with new ids, so the
+// names of this run; the test containers carry the label nimblescape.devspaces.id with new ids, so the
 // monitor acts on them. The tick of the monitor is shortened with DEVSPACE_MONITOR_TICK_MS (read only by main.ts).
 // Checked: a labeled container with a stale record is stopped; one whose record keeps it running is not; one with a
 // fresh heartbeat is not; one without any record is never touched; ensure on a running, a stopped, and a missing
@@ -118,8 +118,8 @@ async function waitUntil(condition: () => boolean, what: string, timeoutMs = 90_
 describe('the Monitor container of a remote Docker host', () => {
   const { run, env, cli, log } = dockerTestContext('remoteMonitor');
   const docker = new BootstrapDocker(new NodeProcessRunner(), run.dockerPath, env, log);
-  const containerName = `devspace-test-monitor-${run.runId}`;
-  const volumeName = `devspace-test-monitor-${run.runId}`;
+  const containerName = `devspaces-test-monitor-${run.runId}`;
+  const volumeName = `devspaces-test-monitor-${run.runId}`;
   const timings = new Timings();
   let script = '';
   let helperTag = '';
@@ -136,10 +136,10 @@ describe('the Monitor container of a remote Docker host', () => {
   const socket = helperDockerSocket(env, process.platform, run.dockerHost);
   const ids = { stale: crypto.randomUUID(), kept: crypto.randomUUID(), fresh: crypto.randomUUID(), unrecorded: crypto.randomUUID() };
   const names = {
-    stale: `devspace-test-monitor-stale-${run.runId}`,
-    kept: `devspace-test-monitor-kept-${run.runId}`,
-    fresh: `devspace-test-monitor-fresh-${run.runId}`,
-    unrecorded: `devspace-test-monitor-unrecorded-${run.runId}`,
+    stale: `devspaces-test-monitor-stale-${run.runId}`,
+    kept: `devspaces-test-monitor-kept-${run.runId}`,
+    fresh: `devspaces-test-monitor-fresh-${run.runId}`,
+    unrecorded: `devspaces-test-monitor-unrecorded-${run.runId}`,
   };
 
   /** A labeled container of a devspace that ends at once on SIGTERM (--init). */
@@ -260,7 +260,7 @@ describe('the Monitor container of a remote Docker host', () => {
   // keep of another computer says. The container has the label of the run (removeRunObjects).
   it('stops a devspace within a few ticks of a stopNow heartbeat, over an older keep', async () => {
     const id = crypto.randomUUID();
-    const name = `devspace-test-monitor-stopnow-${run.runId}`;
+    const name = `devspaces-test-monitor-stopnow-${run.runId}`;
     startDevspaceContainer(name, id);
     const before = Date.now() - 60_000;
     writeRecord(OTHER_SOURCE, id, { at: before, keepRunning: true, limitSeconds: 60, seq: before });
@@ -397,11 +397,11 @@ describe('the Monitor container of a remote Docker host', () => {
     const windowSource = crypto.randomBytes(16).toString('hex');
     const devspace = {
       id: crypto.randomUUID(),
-      repository: 'devspace-test/window-heartbeat',
+      repository: 'devspaces-test/window-heartbeat',
       configPath: '.devcontainer/devcontainer.json',
       volumeName: 'unused',
       containerName: 'unused',
-      owner: { id: '1', login: 'devspace-test' },
+      owner: { id: '1', login: 'devspaces-test' },
       createdAt: new Date().toISOString(),
     } as Devspace;
     const warnings: string[] = [];
@@ -467,8 +467,8 @@ describe('the Monitor container of a remote Docker host', () => {
     await waitUntil(() => running(containerName), 'the monitor');
     const closedId = crypto.randomUUID();
     const reloadedId = crypto.randomUUID();
-    const closedName = `devspace-test-monitor-closed-${run.runId}`;
-    const reloadedName = `devspace-test-monitor-reloaded-${run.runId}`;
+    const closedName = `devspaces-test-monitor-closed-${run.runId}`;
+    const reloadedName = `devspaces-test-monitor-reloaded-${run.runId}`;
     startDevspaceContainer(closedName, closedId);
     startDevspaceContainer(reloadedName, reloadedId);
     // The heartbeats and the release as the worker sends them (monitorFlow).
@@ -476,11 +476,11 @@ describe('the Monitor container of a remote Docker host', () => {
     const devspaceOf = (id: string, name: string): Devspace =>
       ({
         id,
-        repository: `devspace-test/${name}`,
+        repository: `devspaces-test/${name}`,
         configPath: '.devcontainer/devcontainer.json',
         volumeName: 'unused',
         containerName: name,
-        owner: { id: '1', login: 'devspace-test' },
+        owner: { id: '1', login: 'devspaces-test' },
         createdAt: new Date().toISOString(),
       }) as Devspace;
     const devspaces = [devspaceOf(closedId, closedName), devspaceOf(reloadedId, reloadedName)];
@@ -561,7 +561,7 @@ describe('the Monitor container of a remote Docker host', () => {
   // A tag of this run, so that the monitor tag of a real installation stays.
   it('runs from a tag of the pinned image, and a create from another image is removed before its start', async () => {
     const imageId = cli.ok(['image', 'inspect', '-f', '{{.Id}}', helperTag]);
-    const tag = `devspace-test-monitor-${run.runId}:0123456789ab`.toLowerCase();
+    const tag = `devspaces-test-monitor-${run.runId}:0123456789ab`.toLowerCase();
     try {
       await engine.tagImage(imageId, tag);
       expect(cli.ok(['image', 'inspect', '-f', '{{.Id}}', tag])).toBe(imageId);
@@ -594,7 +594,7 @@ describe('the Monitor container of a remote Docker host', () => {
 describe('the Monitor container: the devspace lock of its stops and its exit when idle', () => {
   const { run, env, cli, log } = dockerTestContext('remoteMonitor');
   const docker = new BootstrapDocker(new NodeProcessRunner(), run.dockerPath, env, log);
-  const containerName = `devspace-test-monitor-lock-${run.runId}`;
+  const containerName = `devspaces-test-monitor-lock-${run.runId}`;
   const socket = helperDockerSocket(env, process.platform, run.dockerHost);
   let script = '';
   let helperTag = '';
@@ -654,7 +654,7 @@ describe('the Monitor container: the devspace lock of its stops and its exit whe
 
   it('does not stop a devspace while a worker holds its lock, and stops it after the release', async () => {
     const id = crypto.randomUUID();
-    const name = `devspace-test-monitor-locked-${run.runId}`;
+    const name = `devspaces-test-monitor-locked-${run.runId}`;
     // Held by a container of the helper image on the state volume.
     const lock = await holdLockInContainer({ run, cli }, volumeName, helperTag, id);
     let released = false;
@@ -683,7 +683,7 @@ describe('the Monitor container: the devspace lock of its stops and its exit whe
   it('holds the lock during its stop, and a monitor killed while it holds the lock leaves no lock held', async () => {
     expect(['created', 'running', 'started']).toContain(await monitor.ensure(helperTag, socket));
     const id = crypto.randomUUID();
-    const name = `devspace-test-monitor-slow-${run.runId}`;
+    const name = `devspaces-test-monitor-slow-${run.runId}`;
     // `sleep` as PID 1 ignores SIGTERM: the `docker stop` of the monitor takes 10 s, under the lock.
     startDevspaceContainer(name, id, false);
     writeStaleRecord(id);
@@ -734,7 +734,7 @@ describe('the Monitor container: the devspace lock of its stops and its exit whe
     expect(running(containerName)).toBe(true);
     expect(logs()).not.toContain('the Monitor exits');
     // A computer with stopMonitorWhenIdle on keeps it, and its owner label names the other computer.
-    expect(cli.container(containerName)!.Config.Labels?.['nimblescape.devspace.monitor-owner']).toBe('b'.repeat(32));
+    expect(cli.container(containerName)!.Config.Labels?.['nimblescape.devspaces.monitor-owner']).toBe('b'.repeat(32));
     const idle = new RemoteSessionMonitor({ ...options, imageMaintenance: () => ({ schedule: '17', timeZone: 'UTC', permanent: false, computer: 'a'.repeat(32) }) });
     expect(await idle.ensure(helperTag, socket)).toBe('running');
     expect(cli.container(containerName)!.HostConfig.RestartPolicy?.Name).toBe('unless-stopped');

@@ -54,33 +54,33 @@ export interface HelperImageRecord {
 
 export interface HelperState {
   version: 1;
-  /** Helper tag (`devspace-helper:<12 hex characters>`) → record. */
+  /** Helper tag (`devspaces-helper:<12 hex characters>`) → record. */
   images: Record<string, HelperImageRecord>;
   /** Last cleanup of other helper images. */
   lastCleanupAt?: string;
 }
 
-const HELPER_TAG = /^devspace-helper:[0-9a-f]{12}$/;
+const HELPER_TAG = /^devspaces-helper:[0-9a-f]{12}$/;
 /** A full image ID. */
 const IMAGE_ID = /^sha256:[0-9a-f]{64}$/;
 
 /**
- * True for a tag that `helperImageTag` returns: `devspace-helper:<12 hex characters>`. The state keeps only such keys (so a
+ * True for a tag that `helperImageTag` returns: `devspaces-helper:<12 hex characters>`. The state keeps only such keys (so a
  * key is never `__proto__`), and the cleanup removes only such tags.
  */
 export function isHelperImageTag(tag: string): boolean {
   return HELPER_TAG.test(tag);
 }
 
-const MONITOR_TAG = /^devspace-monitor:[0-9a-f]{12}$/;
+const MONITOR_TAG = /^devspaces-monitor:[0-9a-f]{12}$/;
 
 /**
  * The second tag of a helper image that the Monitor container runs
- * from, so that it shows as `devspace-monitor:<hash>` (the hash of its helper tag) instead of an image ID. Undefined for
+ * from, so that it shows as `devspaces-monitor:<hash>` (the hash of its helper tag) instead of an image ID. Undefined for
  * a tag that is not a helper tag.
  */
 export function monitorImageTag(helperTag: string): string | undefined {
-  return isHelperImageTag(helperTag) ? `devspace-monitor:${helperTag.slice('devspace-helper:'.length)}` : undefined;
+  return isHelperImageTag(helperTag) ? `devspaces-monitor:${helperTag.slice('devspaces-helper:'.length)}` : undefined;
 }
 
 /** True for a tag that `monitorImageTag` returns; the helper cleanup removes such tags with their helper tag. */

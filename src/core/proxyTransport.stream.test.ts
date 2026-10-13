@@ -68,7 +68,7 @@ describe('the streamed GET of the worker', () => {
     let key: Buffer;
     let cert: Buffer;
     beforeAll(() => {
-      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-stream-tls-'));
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-stream-tls-'));
       execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost', '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem')], { stdio: 'ignore' });
       key = fs.readFileSync(path.join(dir, 'key.pem'));
       cert = fs.readFileSync(path.join(dir, 'cert.pem'));

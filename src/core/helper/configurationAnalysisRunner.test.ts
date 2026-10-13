@@ -42,7 +42,7 @@ let bundle: string;
 let bundleCode: string;
 
 beforeAll(() => {
-  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   bundle = path.join(outDir, 'configurationAnalysisWorker.js');
   // The bundle options of the worker's plugin (workerScriptsPlugin of scripts/workerScripts.mjs), but not minified and
   // written to a file.
@@ -178,7 +178,7 @@ describe('WorkerConfigurationAnalyzer', () => {
     }
     // Not empty: the results say something.
     expect(runAnalysisJob(jobs[0])).toMatchObject({ references: { images: ['mcr.microsoft.com/devcontainers/python:3.11'], features: ['ghcr.io/devcontainers/features/node:1'] } });
-    // A name like devspace-… is allowed; the pipeline refuses an image of another account by its ID.
+    // A name like devspaces-… is allowed; the pipeline refuses an image of another account by its ID.
     expect(runAnalysisJob(jobs[4]).report.hostAccess).toEqual(['service cache: privileged mode']);
   });
 

@@ -191,7 +191,7 @@ describe('the TLS names through the tunnel', () => {
     let cert: Buffer;
     const closers: (() => Promise<void>)[] = [];
     beforeAll(() => {
-      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-proxy-tls-'));
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-proxy-tls-'));
       execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost', '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem')], { stdio: 'ignore' });
       key = fs.readFileSync(path.join(dir, 'key.pem'));
       cert = fs.readFileSync(path.join(dir, 'cert.pem'));

@@ -7,7 +7,7 @@
 // containers and the heartbeat records and runs the stops.
 //
 // One tick:
-//   1. The containers with the label nimblescape.devspace.id, stopped ones included (the list of the engine
+//   1. The containers with the label nimblescape.devspaces.id, stopped ones included (the list of the engine
 //      over the Engine API, remoteContainersOf) and the records of the volume.
 //   2. `decision = decide({ now, containers, records, state })`. Keep `decision.state` for the next tick.
 //   3. The stop of each container of `decision.stop` (the dev container first), then removal of the files of
@@ -41,14 +41,14 @@ export const FUTURE_RECORD_TOLERANCE_MS = 5 * 60_000;
  */
 export const STOP_NOW_HOLD_MS = REMOTE_TICK_MS;
 
-/** A container with the label nimblescape.devspace.id, as the engine lists it (main.ts, remoteContainersOf). */
+/** A container with the label nimblescape.devspaces.id, as the engine lists it (main.ts, remoteContainersOf). */
 export interface RemoteContainer {
   id: string;
   /** Its state as the list of the engine names it (`State`, the `.State` of `docker ps`), for example `running` or `exited`. */
   state: string;
   name: string;
   devspaceId: string;
-  /** The label nimblescape.devspace.compose-service; empty for the dev container. */
+  /** The label nimblescape.devspaces.compose-service; empty for the dev container. */
   composeService: string;
 }
 
@@ -181,7 +181,7 @@ export function isRunningState(state: string): boolean {
  * devspace that stays, nor a keepRunning one with the same `at`; so are records without keepRunning older than
  * RECORD_MAX_AGE_MS for which a strictly newer record of the same devspace exists (`superseded`), except while a
  * keepRunning record of another source of the same devspace has an `at` not later than its own. The monitor never
- * acts on containers without the label nimblescape.devspace.id (the caller lists only those).
+ * acts on containers without the label nimblescape.devspaces.id (the caller lists only those).
  */
 export function decide(input: RemoteDecideInput): RemoteDecision {
   const { now } = input;
@@ -294,7 +294,7 @@ export function decide(input: RemoteDecideInput): RemoteDecision {
 }
 
 /**
- * The containers of one devspace in the order of the stop: the dev container (no nimblescape.devspace.compose-service)
+ * The containers of one devspace in the order of the stop: the dev container (no nimblescape.devspaces.compose-service)
  * first.
  */
 export function devContainerFirst(containers: readonly RemoteContainer[]): RemoteContainer[] {

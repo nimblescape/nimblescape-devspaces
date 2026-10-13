@@ -112,7 +112,7 @@ describe('parseSshConfig', () => {
   });
 
   it('reads the files of this computer', () => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-ssh-'));
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-ssh-'));
     try {
       fs.mkdirSync(path.join(home, '.ssh', 'hosts'), { recursive: true });
       fs.writeFileSync(path.join(home, '.ssh', 'config'), 'Include hosts/*\nHost local-one\n');

@@ -189,7 +189,7 @@ describe('dockerProcessEnv', () => {
 
 describe('isExecutableFile', () => {
   it.skipIf(process.platform === 'win32')('requires a regular, executable file', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
     try {
       const executable = path.join(dir, 'docker');
       const plain = path.join(dir, 'plain');

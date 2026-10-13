@@ -22,7 +22,7 @@ const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
 describe('a cancel of the worker lock while the real flock waits', () => {
   let stateDir = '';
   beforeEach(() => {
-    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-11i1-r2-'));
+    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-11i1-r2-'));
   });
   afterEach(() => {
     fs.rmSync(stateDir, { recursive: true, force: true });

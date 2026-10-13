@@ -10,7 +10,7 @@ import { scriptCommand, type ScriptExec } from '../worker/containerScripts';
 import type { EngineExecResult } from '../worker/dockerEngine';
 import { GIT_SUMMARY_TIMEOUT_MS, readGitSummary } from './refreshStates';
 
-const CONTAINER = { id: 'c'.repeat(64), name: 'devspace-acme-api-brave-noether' };
+const CONTAINER = { id: 'c'.repeat(64), name: 'devspaces-acme-api-brave-noether' };
 const NOW = '2026-10-10T12:00:00.000Z';
 
 function exec(answer: () => Partial<EngineExecResult> | Promise<never>): { docker: ScriptExec; calls: unknown[][] } {

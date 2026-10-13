@@ -89,10 +89,10 @@ async function openWith(
       },
       logger: { ...silentLogger, warn: (text) => warnings.push(text), info: (text) => infos.push(text) },
       script: async () => 'SCRIPT',
-      helperTag: async () => 'devspace-helper:abc',
+      helperTag: async () => 'devspaces-helper:abc',
       socketPath: async () => '/var/run/docker.sock',
-      stateVolume: 'devspace-monitor',
-      vscodeVolume: 'devspace-vscode',
+      stateVolume: 'devspaces-monitor',
+      vscodeVolume: 'devspaces-vscode',
       windowName: () => {
         windowReads++;
         return 'api';
@@ -136,7 +136,7 @@ describe('the bridge fallback of openHelperChannel', () => {
   it('the start without network takes the number 1 again (the refused start created no container), and the warning names the engine', async () => {
     const { networks, names, warnings, lists } = await open(() => refused('docker: Error response from daemon: network bridge not found.\n'));
     expect(networks).toEqual(['bridge', 'none']);
-    expect(names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-1']);
+    expect(names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-1']);
     expect(lists).toEqual([]);
     expect(warnings.join('\n')).toContain('The Docker engine build-box has no default bridge network');
   });
@@ -144,67 +144,67 @@ describe('the bridge fallback of openHelperChannel', () => {
 
 describe('the number of a worker name in use', () => {
   const IN_USE =
-    'docker: Error response from daemon: Conflict. The container name "/devspace-worker-api-1" is already in use by container "0123456789ab". You have to remove (or rename) that container to be able to reuse that name.\n';
+    'docker: Error response from daemon: Conflict. The container name "/devspaces-worker-api-1" is already in use by container "0123456789ab". You have to remove (or rename) that container to be able to reuse that name.\n';
 
   it('starts with 1, and lists the containers only when Docker refuses the name', async () => {
-    const { names, lists } = await openWith({ containers: ['devspace-worker-api-1'] });
-    expect(names).toEqual(['devspace-worker-api-1']);
+    const { names, lists } = await openWith({ containers: ['devspaces-worker-api-1'] });
+    expect(names).toEqual(['devspaces-worker-api-1']);
     expect(lists).toEqual([]);
   });
 
   it('takes the lowest number that no container has, with the same network, and the log says why', async () => {
-    const { networks, names, infos, lists } = await openWith({ containers: ['devspace-worker-api-1', 'devspace-worker-api-2', 'devspace-worker-web-3'] }, () => refused(IN_USE));
+    const { networks, names, infos, lists } = await openWith({ containers: ['devspaces-worker-api-1', 'devspaces-worker-api-2', 'devspaces-worker-web-3'] }, () => refused(IN_USE));
     expect(networks).toEqual(['bridge', 'bridge']);
-    expect(names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-3']);
+    expect(names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-3']);
     // One list without the worker, of the containers whose name contains the start of a worker name.
-    expect(lists).toEqual([['ps', '--all', '--filter', 'name=devspace-worker-', '--format', '{{.Names}}']]);
-    expect(infos.join('\n')).toContain('The worker name devspace-worker-api-1 is in use on build-box, so the worker starts as devspace-worker-api-3.');
+    expect(lists).toEqual([['ps', '--all', '--filter', 'name=devspaces-worker-', '--format', '{{.Names}}']]);
+    expect(infos.join('\n')).toContain('The worker name devspaces-worker-api-1 is in use on build-box, so the worker starts as devspaces-worker-api-3.');
     // A container with more than one name (legacy links) shows them in one line, separated by `,`.
-    const linked = await openWith({ containers: ['devspace-worker-api-1', 'devspace-worker-api-2,other/api'] }, () => refused(IN_USE));
-    expect(linked.names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-3']);
+    const linked = await openWith({ containers: ['devspaces-worker-api-1', 'devspaces-worker-api-2,other/api'] }, () => refused(IN_USE));
+    expect(linked.names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-3']);
   });
 
   it('takes the next number when the list fails, and never a number that Docker refused', async () => {
     const failed = await openWith({ listFails: true }, () => refused(IN_USE));
-    expect(failed.names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-2']);
+    expect(failed.names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-2']);
     expect(failed.infos.join('\n')).toContain('The containers on build-box could not be listed for the name of the worker (Cannot connect to the Docker daemon)');
     const late = await openWith({ listTimesOut: true }, () => refused(IN_USE));
-    expect(late.names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-2']);
+    expect(late.names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-2']);
     expect(late.infos.join('\n')).toContain('could not be listed for the name of the worker (no answer in time)');
     // A failed list after a good one keeps the good one.
-    const later = await openWith({ containers: ['devspace-worker-api-1', 'devspace-worker-api-2'], listFailsFrom: 1 }, () => refused(IN_USE), () => refused(IN_USE));
-    expect(later.names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-3', 'devspace-worker-api-4']);
+    const later = await openWith({ containers: ['devspaces-worker-api-1', 'devspaces-worker-api-2'], listFailsFrom: 1 }, () => refused(IN_USE), () => refused(IN_USE));
+    expect(later.names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-3', 'devspaces-worker-api-4']);
     // Another window took the free number between the list and the start.
-    expect((await openWith({ containers: ['devspace-worker-api-1'] }, () => refused(IN_USE), () => refused(IN_USE))).names).toEqual([
-      'devspace-worker-api-1',
-      'devspace-worker-api-2',
-      'devspace-worker-api-3',
+    expect((await openWith({ containers: ['devspaces-worker-api-1'] }, () => refused(IN_USE), () => refused(IN_USE))).names).toEqual([
+      'devspaces-worker-api-1',
+      'devspaces-worker-api-2',
+      'devspaces-worker-api-3',
     ]);
   });
 
   it('fails when Docker has refused 10 names, and says so', async () => {
     const refusals = Array.from({ length: 10 }, () => () => refused(IN_USE));
     const failure = open(...refusals);
-    await expect(failure).rejects.toMatchObject({ names: Array.from({ length: 10 }, (_, index) => `devspace-worker-api-${index + 1}`) });
+    await expect(failure).rejects.toMatchObject({ names: Array.from({ length: 10 }, (_, index) => `devspaces-worker-api-${index + 1}`) });
     await expect(failure).rejects.toThrow('Docker refused 10 names of the worker on build-box because other containers have them.');
   });
 
   it('the start without network keeps the numbers that Docker refused, and takes again a number refused for the network', async () => {
     const { networks, names, windowReads } = await open(() => refused(IN_USE), () => refused('docker: Error response from daemon: network bridge not found.\n'), () => refused(IN_USE));
     expect(networks).toEqual(['bridge', 'bridge', 'none', 'none']);
-    expect(names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-2', 'devspace-worker-api-2', 'devspace-worker-api-3']);
+    expect(names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-2', 'devspaces-worker-api-2', 'devspaces-worker-api-3']);
     // The window name is read once for the open.
     expect(windowReads).toBe(1);
   });
 
   it('the start without network takes the number from the last list of the engine', async () => {
     const { networks, names, lists } = await openWith(
-      { containers: ['devspace-worker-api-1', 'devspace-worker-api-2'] },
+      { containers: ['devspaces-worker-api-1', 'devspaces-worker-api-2'] },
       () => refused(IN_USE),
       () => refused('docker: Error response from daemon: network bridge not found.\n'),
     );
     expect(networks).toEqual(['bridge', 'bridge', 'none']);
-    expect(names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-3', 'devspace-worker-api-3']);
+    expect(names).toEqual(['devspaces-worker-api-1', 'devspaces-worker-api-3', 'devspaces-worker-api-3']);
     expect(lists).toHaveLength(1);
   });
 

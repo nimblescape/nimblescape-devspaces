@@ -9,7 +9,7 @@ import { silentLogger } from '../core/ports';
 import type { Devspace } from '../core/types';
 import { WINDOW_RESTORE_TIMEOUT_MS, findWindowDevspace, restoreAfterPrebuild } from './windowDevspace';
 
-const ENTRY = { id: 'e1', containerName: 'devspace-acme-api-x' } as Devspace;
+const ENTRY = { id: 'e1', containerName: 'devspaces-acme-api-x' } as Devspace;
 
 function deps(found: Array<Devspace | undefined>, added: number) {
   return {
@@ -29,7 +29,7 @@ describe('findWindowDevspace (mutation probes)', () => {
   it('the signal of the restore times out after WINDOW_RESTORE_TIMEOUT_MS', async () => {
     const timeout = vi.spyOn(AbortSignal, 'timeout');
     const all = deps([undefined, ENTRY], 1);
-    expect(await findWindowDevspace('devspace-acme-api-x', all)).toBe(ENTRY);
+    expect(await findWindowDevspace('devspaces-acme-api-x', all)).toBe(ENTRY);
     expect(timeout).toHaveBeenCalledWith(WINDOW_RESTORE_TIMEOUT_MS);
     expect(all.service.reconcileInWorker.mock.calls[0][0].signal).toBe(timeout.mock.results[0].value);
   });
@@ -37,7 +37,7 @@ describe('findWindowDevspace (mutation probes)', () => {
   // Nothing added here: the registry is read again all the same (another window may have restored it first).
   it('nothing restored: the registry is read again and its entry found', async () => {
     const all = deps([undefined, ENTRY], 0);
-    expect(await findWindowDevspace('devspace-acme-api-x', all)).toBe(ENTRY);
+    expect(await findWindowDevspace('devspaces-acme-api-x', all)).toBe(ENTRY);
     expect(all.registry.findByContainerName).toHaveBeenCalledTimes(2);
   });
 

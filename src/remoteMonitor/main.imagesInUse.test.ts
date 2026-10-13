@@ -21,7 +21,7 @@ const B = 'fedcba9876543210fedcba9876543210';
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-11k1-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-11k1-'));
 });
 afterEach(() => {
   vi.useRealTimers();

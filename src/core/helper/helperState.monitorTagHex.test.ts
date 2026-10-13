@@ -7,10 +7,10 @@ import { isMonitorImageTag, monitorImageTag } from './helperState';
 
 describe('isMonitorImageTag: lowercase hex characters', () => {
   it('accepts only lowercase hex characters after the prefix', () => {
-    expect(isMonitorImageTag('devspace-monitor:0123456789ab')).toBe(true);
-    expect(isMonitorImageTag('devspace-monitor:0123456789ag')).toBe(false);
-    expect(isMonitorImageTag('devspace-monitor:zzzzzzzzzzzz')).toBe(false);
-    expect(isMonitorImageTag('devspace-monitor:0123456789AB')).toBe(false);
-    expect(monitorImageTag('devspace-helper:zzzzzzzzzzzz')).toBeUndefined();
+    expect(isMonitorImageTag('devspaces-monitor:0123456789ab')).toBe(true);
+    expect(isMonitorImageTag('devspaces-monitor:0123456789ag')).toBe(false);
+    expect(isMonitorImageTag('devspaces-monitor:zzzzzzzzzzzz')).toBe(false);
+    expect(isMonitorImageTag('devspaces-monitor:0123456789AB')).toBe(false);
+    expect(monitorImageTag('devspaces-helper:zzzzzzzzzzzz')).toBeUndefined();
   });
 });

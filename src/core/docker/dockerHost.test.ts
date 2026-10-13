@@ -62,7 +62,7 @@ describe('classifyDockerEndpoint (SSH only for another computer)', () => {
   );
 
   it('keeps the context name only when a context decides the endpoint', () => {
-    expect(dockerTargetOf('ssh://box', 'devspace-remote-26f8567f')).toEqual({ kind: 'remote', host: 'box', endpoint: 'ssh://box', context: 'devspace-remote-26f8567f' });
+    expect(dockerTargetOf('ssh://box', 'devspaces-remote-26f8567f')).toEqual({ kind: 'remote', host: 'box', endpoint: 'ssh://box', context: 'devspaces-remote-26f8567f' });
     expect(dockerTargetOf('ssh://box', undefined)).toEqual({ kind: 'remote', host: 'box', endpoint: 'ssh://box' });
   });
 });
@@ -70,11 +70,11 @@ describe('classifyDockerEndpoint (SSH only for another computer)', () => {
 describe('parseContextInspect', () => {
   it('reads the name and the Docker endpoint of `docker context inspect --format {{json .}}`', () => {
     const stdout = JSON.stringify({
-      Name: 'devspace-remote-26f8567f',
+      Name: 'devspaces-remote-26f8567f',
       Metadata: { Description: 'x' },
       Endpoints: { docker: { Host: 'ssh://build-box', SkipTLSVerify: false } },
     });
-    expect(parseContextInspect(`${stdout}\n`)).toEqual({ name: 'devspace-remote-26f8567f', endpoint: 'ssh://build-box' });
+    expect(parseContextInspect(`${stdout}\n`)).toEqual({ name: 'devspaces-remote-26f8567f', endpoint: 'ssh://build-box' });
   });
 
   it('reads the first entry of a list, and gives an empty endpoint when none is set', () => {

@@ -49,7 +49,7 @@ const OTHER: GitHubAccount = { id: '2002', login: 'someone' };
 
 /** A devspace of the signed-in account OCTO, unless `overrides` names another owner. */
 function devspace(id: string, repository: string, overrides: Partial<Devspace> = {}): Devspace {
-  const name = `devspace-${repository.replace('/', '-')}`;
+  const name = `devspaces-${repository.replace('/', '-')}`;
   return {
     id,
     repository,
@@ -124,7 +124,7 @@ interface Harness {
 }
 
 function createHarness(): Harness {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   const clock = { now: () => NOW };
   const paths = new StoragePaths(root);
   paths.ensureDirectoriesSync();

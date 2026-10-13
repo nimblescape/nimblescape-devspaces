@@ -19,7 +19,7 @@ let bundle: string;
 let runner: PreviewWorkerRunner | undefined;
 
 beforeAll(() => {
-  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-test-'));
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   bundle = path.join(outDir, 'groupsPreviewWorker.js');
   // Same options as esbuild.mjs.
   buildSync({

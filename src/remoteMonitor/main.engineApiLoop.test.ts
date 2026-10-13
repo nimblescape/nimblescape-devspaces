@@ -25,7 +25,7 @@ const DEV_ID = 'a'.repeat(64);
 let stateDir: string;
 
 beforeEach(() => {
-  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-remote-monitor-11imr1-'));
+  stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-remote-monitor-11imr1-'));
 });
 
 afterEach(() => {
@@ -38,7 +38,7 @@ afterEach(() => {
  * state and labels.
  */
 function devContainer(rawState = 'running'): EngineContainerSummary {
-  return { id: DEV_ID, name: 'devspace-api', state: rawState, labels: { [LABEL_DEVSPACE_ID]: A } };
+  return { id: DEV_ID, name: 'devspaces-api', state: rawState, labels: { [LABEL_DEVSPACE_ID]: A } };
 }
 
 /** A record of A that is past its limit: A is to be stopped. */
@@ -105,8 +105,8 @@ describe('the loop of the Monitor over the Engine API', () => {
     expect(await at(T0 + 3 * REMOTE_TICK_MS)).toEqual([]);
     expect(await at(T0 + 4 * REMOTE_TICK_MS)).toEqual([]);
     expect(lines.filter((line) => line.includes('could not be stopped'))).toEqual([
-      'The container devspace-api could not be stopped: cannot stop',
-      'The container devspace-api could not be stopped: cannot stop it again',
+      'The container devspaces-api could not be stopped: cannot stop',
+      'The container devspaces-api could not be stopped: cannot stop it again',
     ]);
   });
 

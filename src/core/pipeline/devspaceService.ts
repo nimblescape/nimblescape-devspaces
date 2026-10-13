@@ -795,7 +795,7 @@ export function kindSwitchFailure(
 
 /**
  * Labels of an additional volume that the pipeline creates before `up`: those of the workspace volume, and
- * nimblescape.devspace.volume=additional. Only these labels make a volume the devspace's own (isOwnVolume).
+ * nimblescape.devspaces.volume=additional. Only these labels make a volume the devspace's own (isOwnVolume).
  */
 export function additionalVolumeLabels(devspace: Devspace): Record<string, string> {
   return { ...volumeLabels(devspace), [LABEL_VOLUME]: VOLUME_KIND_ADDITIONAL };
@@ -923,8 +923,8 @@ function durationText(ms: number): string {
 
 /**
  * Registry lost (reconcileFromVolumes): the entry that the workspace volume `volume` (with the label
- * nimblescape.devspace.id, and no nimblescape.devspace.volume) stands for, with the owner of its label
- * nimblescape.devspace.owner-id and the default configuration, at `now` on `dockerHost`; or why it is skipped
+ * nimblescape.devspaces.id, and no nimblescape.devspaces.volume) stands for, with the owner of its label
+ * nimblescape.devspaces.owner-id and the default configuration, at `now` on `dockerHost`; or why it is skipped
  * (`skipped`, the line of the log). Also the devspaces that a headless prepare knows (the worker's
  * engineDevspaceStore), which has no registry.
  */
@@ -1399,7 +1399,7 @@ export class DevspaceService extends OperationBase {
 
     let outcome: ContainerOutcome | undefined;
     // An entry without a build record (restored from its volumes, with the configuration path of the label
-    // nimblescape.devspace.config-path of its containers, or else the default one) whose containers are of the other
+    // nimblescape.devspaces.config-path of its containers, or else the default one) whose containers are of the other
     // kind than the configuration: the devspace switches only when the user says so (a rebuild), never by the build
     // of a first open. Also when the dev container of Docker Compose is gone but containers of its other services
     // exist, with a question of its own that names the switch and what it removes.
@@ -2050,7 +2050,7 @@ export class DevspaceService extends OperationBase {
    * (and image IDs) are returned also when other references are transient (which are logged, never turned into items);
    * AnalysisFailedError only when there is no definitive item. `hostAccess` (protected): the references whose image is
    * an image of the devspaces of another account on the Docker host of `env` and of none of its own account
-   * (otherAccountImageItems, by the image ID; hostDevspaceImageIds), not by the name `devspace-…`.
+   * (otherAccountImageItems, by the image ID; hostDevspaceImageIds), not by the name `devspaces-…`.
    */
   private async imageIdItems(
     env: Devspace,
@@ -2154,7 +2154,7 @@ export class DevspaceService extends OperationBase {
       return unread('images of the devspaces', DEVSPACE_IMAGES_UNREAD, error);
     }
     this.throwIfCancelled(signal);
-    // The label nimblescape.devspace.id of each image (one `docker image inspect`).
+    // The label nimblescape.devspaces.id of each image (one `docker image inspect`).
     let labels: Map<string, Record<string, string>>;
     try {
       labels = images.length === 0 ? new Map() : await this.deps.docker.imageLabelsOf(images.map((image) => image.id), signal);
@@ -3377,7 +3377,7 @@ export class DevspaceService extends OperationBase {
     imagePresent: boolean,
     loaded: LoadedConfiguration | undefined,
   ): Promise<ContainerOutcome> {
-    // A container of an older setup (label nimblescape.devspace.container-version) is created again from its
+    // A container of an older setup (label nimblescape.devspaces.container-version) is created again from its
     // devspace image, like a missing one. The volume stays. So is a container that was created without the
     // configuration (it could not be read then), once the configuration can be read: it lacks its runArgs and appPort.
     // So is a container that was created while the host access checks were off, once they are on again: it is created
@@ -3393,7 +3393,7 @@ export class DevspaceService extends OperationBase {
     if (container !== undefined && !outdated && compose && ctx.hostAccessChecks === 'on') {
       // The containers of the other services follow the same rule (containerIsCurrent): one that was created while the
       // checks were off makes the devspace outdated; `up` then creates the dev container again, and Compose the
-      // services whose model changed (the label nimblescape.devspace.host-access is gone from it).
+      // services whose model changed (the label nimblescape.devspaces.host-access is gone from it).
       const unrestricted = await this.unrestrictedServiceContainer(ctx);
       if (unrestricted) {
         outdated = true;
@@ -4095,7 +4095,7 @@ export class DevspaceService extends OperationBase {
    * project name of the devspace. When `up` creates the dev container (`createsContainer`, host access checks): the
    * model is checked again with the labels of its volumes now, the image metadata of the devspace image is checked,
    * and the named volumes of the model and of the `mounts` are created with the labels of the devspace
-   * (nimblescape.devspace.volume=compose for the volumes of the project, `additional` for the others). The Dev
+   * (nimblescape.devspaces.volume=compose for the volumes of the project, `additional` for the others). The Dev
    * Container CLI finds the dev container by the project and the service; `up` replaces only the dev container
    * (removeExistingContainer), and Compose recreates the other services whose model or image changed.
    */
@@ -4958,7 +4958,7 @@ export class DevspaceService extends OperationBase {
   /**
    * Before `up` creates the containers of a Docker Compose configuration: the named volumes of the model and the
    * volumes of the `mounts` (composeMountVolumes) that do not exist are created with the labels of the devspace, so
-   * that they are its own and our model can declare them external: nimblescape.devspace.volume=compose for a volume of
+   * that they are its own and our model can declare them external: nimblescape.devspaces.volume=compose for a volume of
    * the project (`<project>_<key>` of the model, the data of the services, and `<project>_<source>` of a `mounts`
    * entry, which the CLI puts into the project), `additional` for the other ones (a volume that the model or a mount
    * names itself, which another devspace of the same owner may share). A `compose` volume is never shared with
@@ -4998,8 +4998,8 @@ export class DevspaceService extends OperationBase {
 
   /**
    * The volumes of `names` that the pipeline records as additional volumes of `env`: existing volumes, other than the
-   * workspace volume, whose labels make them its own (isOwnVolume: nimblescape.devspace.id and
-   * nimblescape.devspace.owner-id), and existing additional volumes of other devspaces of the same owner
+   * workspace volume, whose labels make them its own (isOwnVolume: nimblescape.devspaces.id and
+   * nimblescape.devspaces.owner-id), and existing additional volumes of other devspaces of the same owner
    * (isSameOwnerAdditionalVolume), which the devspaces of one account share (for example
    * `${localWorkspaceFolderBasename}-node_modules` of a fork and its upstream repository). Such a record only protects
    * the shared volume: the Delete of the other devspace keeps a volume that another entry records, and the Delete of
@@ -5212,7 +5212,7 @@ export class DevspaceService extends OperationBase {
   /**
    * The networks of `names` (the references that the configuration writes) that exist (`docker network inspect`), each
    * under its reference (a name, an ID, or a unique prefix of an ID, resolveNetworkReference), with its name, its
-   * labels, and the devspaces of the containers attached to it (label nimblescape.devspace.id), of which
+   * labels, and the devspaces of the containers attached to it (label nimblescape.devspaces.id), of which
    * those of entries of the owner of `env`, for foreignNetworkItem.
    */
   private async networkStates(env: Devspace, names: readonly string[], entries: readonly Devspace[]): Promise<Record<string, NetworkState>> {
@@ -5937,7 +5937,7 @@ export class DevspaceService extends OperationBase {
   // Other operations
 
   /**
-   * The containers of the other services of a Docker Compose devspace (label nimblescape.devspace.compose-service) are
+   * The containers of the other services of a Docker Compose devspace (label nimblescape.devspaces.compose-service) are
    * removed, before `up` creates a single container for a configuration that no longer uses Docker Compose. Their
    * volumes stay.
    */
@@ -6024,7 +6024,7 @@ export class DevspaceService extends OperationBase {
   }
 
   /**
-   * A running container of another service of Docker Compose (label nimblescape.devspace.compose-service) is stopped
+   * A running container of another service of Docker Compose (label nimblescape.devspaces.compose-service) is stopped
    * before `docker rm -f` removes it (also a dev container), so that it can shut down cleanly (for example a database
    * whose volume is kept) instead of a SIGKILL. `docker stop` gives it its own stop time (`stop_grace_period`, which
    * the policy caps at 20 s, else 10 s). A failed stop is logged; the removal follows anyway.
@@ -6306,11 +6306,11 @@ export class DevspaceService extends OperationBase {
   }
 
   /**
-   * Registry lost: adds an entry for each volume with the label nimblescape.devspace.id that the registry
-   * lacks, with the owner of its label nimblescape.devspace.owner-id; a volume without a valid owner label is skipped.
+   * Registry lost: adds an entry for each volume with the label nimblescape.devspaces.id that the registry
+   * lacks, with the owner of its label nimblescape.devspaces.owner-id; a volume without a valid owner label is skipped.
    * A volume of a repository of which the owner account has a devspace already is not added: one devspace per
    * repository and account. The additional volumes of an entry are its own labelled volumes
-   * (nimblescape.devspace.volume, isOwnVolume), the additional volumes of other devspaces of the same owner that its
+   * (nimblescape.devspaces.volume, isOwnVolume), the additional volumes of other devspaces of the same owner that its
    * surviving container mounts (isSameOwnerAdditionalVolume), and the volumes without labels of Devspace that it
    * mounts (protectedMountedVolumes), which protect them from other accounts and from the Delete of the other
    * devspaces; Delete removes only the own ones. The entries have no build record, so the next connection with
@@ -6330,7 +6330,7 @@ export class DevspaceService extends OperationBase {
     const candidates: Devspace[] = [];
     const additional: VolumeInfo[] = [];
     for (const volume of volumes) {
-      // An additional volume (nimblescape.devspace.volume) joins the entry of its devspace below.
+      // An additional volume (nimblescape.devspaces.volume) joins the entry of its devspace below.
       if (volume.labels[LABEL_VOLUME] !== undefined) {
         additional.push(volume);
         continue;
@@ -6377,9 +6377,9 @@ export class DevspaceService extends OperationBase {
       ]);
       if (serviceFolders.folders.length > 0) candidate.serviceFolders = serviceFolders.folders;
       if (serviceFolders.overflow) candidate.serviceFoldersOverflow = true;
-      // The configuration path of the label nimblescape.devspace.config-path of its dev container, when it is a
+      // The configuration path of the label nimblescape.devspaces.config-path of its dev container, when it is a
       // configuration path of a repository (isConfigPathLabelValue); else the default one. Only the dev container (a
-      // container without nimblescape.devspace.compose-service) counts; the label of another service can come from its
+      // container without nimblescape.devspaces.compose-service) counts; the label of another service can come from its
       // image.
       const labelledPath = containers.find(
         (container) =>
@@ -6427,7 +6427,7 @@ export class DevspaceService extends OperationBase {
   /**
    * A new devspace ID. The names of a devspace end in the pair of its ID (namePair), and the pair is unique on
    * the Docker engine: an ID is not used when an entry of the registry or a volume of a devspace on the engine
-   * (nimblescape.devspace.id) has its pair, or when its volume or its container exists (`docker volume
+   * (nimblescape.devspaces.id) has its pair, or when its volume or its container exists (`docker volume
    * create` would take the existing volume, and a failed first open would remove it).
    */
   private async unusedDevspaceId(repository: string): Promise<string> {
@@ -6602,7 +6602,7 @@ export class DevspaceService extends OperationBase {
   }
 
   /**
-   * Whose the workspace volume of `env` is, by its label nimblescape.devspace.id: `own`, `missing`, or
+   * Whose the workspace volume of `env` is, by its label nimblescape.devspaces.id: `own`, `missing`, or
    * `foreign` (another devspace's, or a volume of its name without the label); `unreadable` when Docker cannot
    * answer. A volume of its name that is not its own is never used or removed by name.
    */
@@ -6680,7 +6680,7 @@ export class DevspaceService extends OperationBase {
 
   /**
    * Of the images `names` that Docker Compose built for `env` (BuildRecord.compose), those that carry the label
-   * nimblescape.devspace.id of `env`: a name `<project>-<service>` can also be the name of an image of
+   * nimblescape.devspaces.id of `env`: a name `<project>-<service>` can also be the name of an image of
    * another devspace whose name starts with `<project>-`, and such an image is never removed. An image whose labels
    * cannot be read is kept.
    */
@@ -6739,7 +6739,7 @@ export class DevspaceService extends OperationBase {
    * not answer.
    * - `additional`: the additional volumes that Delete would remove (removableVolumes), for the question of Delete: it
    *   lists only these, and keeps the others; without the volumes of a Docker Compose project
-   *   (nimblescape.devspace.volume=compose), which `serviceData` has for a question of their own.
+   *   (nimblescape.devspaces.volume=compose), which `serviceData` has for a question of their own.
    * - `serviceData`: the volumes of the Docker Compose project that Delete would remove: the data of its services,
    *   for example of a database. The question of Delete lists them apart, none ticked: they are removed only when the
    *   user ticks them.
@@ -6759,9 +6759,9 @@ export class DevspaceService extends OperationBase {
   /**
    * removableVolumes of the additional volumes of `devspaceId`, each with its kind: VOLUME_KIND_COMPOSE for a volume
    * that holds data of the services of Docker Compose (classified by use, whatever its label
-   * nimblescape.devspace.volume; a volume with `name:` in the model has the label `additional`): the label `compose`, a
+   * nimblescape.devspaces.volume; a volume with `name:` in the model has the label `additional`): the label `compose`, a
    * volume that the open recorded as mounted by another service (Devspace.serviceVolumes), or a volume that a
-   * container of another service mounts now. Otherwise its label nimblescape.devspace.volume.
+   * container of another service mounts now. Otherwise its label nimblescape.devspaces.volume.
    */
   private async removableVolumesByKind(devspaceId: string): Promise<Array<{ name: string; kind: string | undefined; possibly?: boolean }>> {
     const env = await this.deps.registry.get(devspaceId);
@@ -6774,7 +6774,7 @@ export class DevspaceService extends OperationBase {
         if (!isDevContainer(container, env.containerName)) for (const name of container.volumes ?? []) services.add(name);
       }
       // An entry that knows neither the volumes of its services nor its build (for example one restored from its
-      // volumes, or whose service volume Docker created at `up` without the label nimblescape.devspace.service-data):
+      // volumes, or whose service volume Docker created at `up` without the label nimblescape.devspaces.service-data):
       // every volume may hold the data of a service, so each goes to that question, none ticked (the conservative
       // side).
       const unknown = env.serviceVolumes === undefined && env.buildRecord === undefined;
@@ -6876,7 +6876,7 @@ export class DevspaceService extends OperationBase {
 
   /**
    * Delete and a failed first open of a Docker Compose devspace, after the containers with the label
-   * nimblescape.devspace.id: the containers of the project that have no such label (for example one-off
+   * nimblescape.devspaces.id: the containers of the project that have no such label (for example one-off
    * containers of `docker compose run`), the networks of the project, and the images that Compose built for it
    * (`<project>-<service>`, found by their names: the build record may be missing, after a failed first open or a lost
    * registry). Its volumes are the devspace's own and follow the rules of Delete (removeAdditionalVolumes). `quiet`:

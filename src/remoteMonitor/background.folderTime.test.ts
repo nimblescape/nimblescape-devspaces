@@ -38,9 +38,9 @@ function unmarkedServer(root: string, server: VscodeServerRef, accessedAt: numbe
 }
 
 function harness(options: { commits: string[]; ensure: boolean; slowWrite?: boolean }) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-background-ph2r3-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-background-ph2r3-'));
   temps.push(root);
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspace-background-ph2r3-state-'));
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-background-ph2r3-state-'));
   temps.push(stateDir);
   const log: string[] = [];
   const writes: string[] = [];
@@ -60,7 +60,7 @@ function harness(options: { commits: string[]; ensure: boolean; slowWrite?: bool
   };
   const vscode: VscodeBackgroundDeps = {
     store,
-    storeVolume: 'devspace-vscode',
+    storeVolume: 'devspaces-vscode',
     // The monitor's volume of the run (the extension lists) is a temporary folder, never the real /state (as in
     // background.test.ts).
     extensionStateDir: stateDir,

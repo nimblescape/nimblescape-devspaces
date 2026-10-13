@@ -143,13 +143,13 @@ describe('EngineDocker: volumes, images and containers over the port', () => {
       images: async (given) => {
         const reference = given.reference?.[0];
         if (reference === 'p-*') return [image(['p-app:<none>', 'p-app:1'])];
-        if (reference === 'devspace-*') return [image(['devspace-a:<none>', 'other:1', 'devspace-a:1']), image(['other:2'])];
+        if (reference === 'devspaces-*') return [image(['devspaces-a:<none>', 'other:1', 'devspaces-a:1']), image(['other:2'])];
         return [image(['r:<none>', 'r:1', 'rx:2'])];
       },
     };
     const docker = new EngineDocker(engine);
     expect(await docker.listProjectImages('p')).toEqual(['p-app:1']);
-    expect(await docker.listDevspaceImages()).toEqual([{ id: 'sha256:devspace-a:<none>,other:1,devspace-a:1', tags: ['devspace-a:1'], createdAt: 'c' }]);
+    expect(await docker.listDevspaceImages()).toEqual([{ id: 'sha256:devspaces-a:<none>,other:1,devspaces-a:1', tags: ['devspaces-a:1'], createdAt: 'c' }]);
     expect(await docker.listImageTags('r')).toEqual(['r:1']);
     // A cancel of the list of the devspace images is an AbortError.
     const controller = new AbortController();

@@ -96,7 +96,7 @@ export function parseBatchStepValue(value: unknown): BatchStepValue | undefined 
 
 /** The name of the container of a batch helper (never used to find or remove it: the session label is). */
 export function batchContainerName(session: string): string {
-  return `devspace-batch-${session}`;
+  return `devspaces-batch-${session}`;
 }
 
 /**

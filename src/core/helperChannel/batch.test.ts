@@ -27,13 +27,13 @@ const IMAGE = `sha256:${'0'.repeat(64)}`;
 
 describe('the batch messages', () => {
   it('checks the parameters of batch strictly', () => {
-    const good = { session: SESSION, volume: 'devspace-v', image: IMAGE, socket: '/run/user/1000/docker.sock' };
+    const good = { session: SESSION, volume: 'devspaces-v', image: IMAGE, socket: '/run/user/1000/docker.sock' };
     expect(parseBatchParams(good)).toEqual(good);
     for (const bad of [
       { ...good, session: 'x' },
       { ...good, volume: '-v' },
       { ...good, volume: 'a,b' },
-      { ...good, image: 'devspace-helper:abc' },
+      { ...good, image: 'devspaces-helper:abc' },
       { ...good, image: `sha256:${'0'.repeat(63)}` },
       { ...good, socket: 'docker.sock' },
       { ...good, socket: '/a,dst=/etc' },
@@ -75,15 +75,15 @@ describe('the batch messages', () => {
   it('starts the helper without a variable, with the session label and the pipe loader', () => {
     // The helper runs over the Engine API (DockerEngine.runAttached): the spec of its create (`--rm -i`, `--pull never`
     // and `--log-driver none` are runAttached's own), and the volume check is the inspect of the port.
-    expect(batchContainerName(SESSION)).toBe(`devspace-batch-${SESSION}`);
-    expect(batchRunSpec({ session: SESSION, volume: 'devspace-v', image: IMAGE, socket: '/var/run/docker.sock', scriptHash: 'f'.repeat(64) })).toEqual({
-      name: `devspace-batch-${SESSION}`,
+    expect(batchContainerName(SESSION)).toBe(`devspaces-batch-${SESSION}`);
+    expect(batchRunSpec({ session: SESSION, volume: 'devspaces-v', image: IMAGE, socket: '/var/run/docker.sock', scriptHash: 'f'.repeat(64) })).toEqual({
+      name: `devspaces-batch-${SESSION}`,
       image: IMAGE,
       command: loaderCommand({ path: BATCH_SCRIPT_PATH, hash: 'f'.repeat(64), entry: BATCH_ENTRY }),
-      labels: { 'nimblescape.devspace.helper-run': 'true', 'nimblescape.devspace.channel-step': SESSION },
+      labels: { 'nimblescape.devspaces.helper-run': 'true', 'nimblescape.devspaces.channel-step': SESSION },
       mounts: [
-        { type: 'volume', source: 'devspace-v', target: '/workspaces' },
-        { type: 'volume', source: 'devspace-helper-cache', target: '/devspace-cache' },
+        { type: 'volume', source: 'devspaces-v', target: '/workspaces' },
+        { type: 'volume', source: 'devspaces-helper-cache', target: '/devspace-cache' },
         { type: 'bind', source: '/var/run/docker.sock', target: BATCH_DOCKER_SOCKET },
       ],
       tmpfs: { '/run/devspace-secrets': 'rw,noexec,nosuid,nodev,size=1m,mode=0700' },

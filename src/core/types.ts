@@ -18,7 +18,7 @@ export interface GitSummary {
 /** Name of the current devspace image and the digests it was built from. */
 export interface BuildRecord {
   builtAt: string;
-  /** For example `devspace-majikmate-module-ts-curious-hopper:2` (devspaceImageName). */
+  /** For example `devspaces-majikmate-module-ts-curious-hopper:2` (devspaceImageName). */
   devspaceImage: string;
   /**
    * The full ID of devspaceImage as this computer built it (after its labels, DevspaceDocker.labelImage) or took
@@ -116,7 +116,7 @@ export interface Devspace {
   /**
    * Docker Compose: the named volumes that services other than the dev service mounted, recorded at each open from the
    * checked model (composeServiceVolumeNames) and kept once recorded. Delete lists these volumes as data of the
-   * services (none ticked), whatever their label nimblescape.devspace.volume, also when the configuration cannot be
+   * services (none ticked), whatever their label nimblescape.devspaces.volume, also when the configuration cannot be
    * read.
    */
   serviceVolumes?: string[];

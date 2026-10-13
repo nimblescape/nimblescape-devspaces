@@ -67,40 +67,40 @@ describe('configHash', () => {
 });
 
 describe('containerIsCurrent (containers of an older setup are created again)', () => {
-  // The current version is 1, here and in the expectations of nimblescape.devspace.container-version below.
+  // The current version is 1, here and in the expectations of nimblescape.devspaces.container-version below.
   it.each<[string, Record<string, string>, boolean]>([
-    ['the current version', { 'nimblescape.devspace.container-version': '1' }, true],
-    ['a newer version', { 'nimblescape.devspace.container-version': '2' }, true],
-    ['an older value (a label other than 1, below it)', { 'nimblescape.devspace.container-version': '0' }, false],
-    ['no label', { 'nimblescape.devspace.id': 'x' }, false],
-    ['an invalid label', { 'nimblescape.devspace.container-version': 'two' }, false],
-    ['an empty label', { 'nimblescape.devspace.container-version': '' }, false],
+    ['the current version', { 'nimblescape.devspaces.container-version': '1' }, true],
+    ['a newer version', { 'nimblescape.devspaces.container-version': '2' }, true],
+    ['an older value (a label other than 1, below it)', { 'nimblescape.devspaces.container-version': '0' }, false],
+    ['no label', { 'nimblescape.devspaces.id': 'x' }, false],
+    ['an invalid label', { 'nimblescape.devspaces.container-version': 'two' }, false],
+    ['an empty label', { 'nimblescape.devspaces.container-version': '' }, false],
   ])('%s', (_name, labels, expected) => {
     expect(containerIsCurrent(labels)).toBe(expected);
   });
 
   it('counts a container created without the configuration as current only while the configuration cannot be read', () => {
-    const provisional = { 'nimblescape.devspace.container-version': '1', 'nimblescape.devspace.container-config': 'unknown' };
+    const provisional = { 'nimblescape.devspaces.container-version': '1', 'nimblescape.devspaces.container-config': 'unknown' };
     expect(containerIsCurrent(provisional)).toBe(false);
     expect(containerIsCurrent(provisional, true)).toBe(false);
     expect(containerIsCurrent(provisional, false)).toBe(true);
-    expect(containerIsCurrent({ 'nimblescape.devspace.container-version': '1' }, false)).toBe(true);
-    expect(containerIsCurrent({ 'nimblescape.devspace.container-config': 'unknown' }, false)).toBe(false);
+    expect(containerIsCurrent({ 'nimblescape.devspaces.container-version': '1' }, false)).toBe(true);
+    expect(containerIsCurrent({ 'nimblescape.devspaces.container-config': 'unknown' }, false)).toBe(false);
   });
 });
 
 describe('containerIsCurrent and the switch of the host access checks', () => {
-  const unrestricted = { 'nimblescape.devspace.container-version': '1', 'nimblescape.devspace.host-access': 'unrestricted' };
+  const unrestricted = { 'nimblescape.devspaces.container-version': '1', 'nimblescape.devspaces.host-access': 'unrestricted' };
 
   it.each<[string, Record<string, string>, 'on' | 'off', boolean, boolean]>([
     // [name, labels, switch, current with the configuration known, current without it]
     ['a container of the checks-off time, checks on', unrestricted, 'on', false, false],
     ['a container of the checks-off time, checks off', unrestricted, 'off', true, true],
-    ['a container with the checks, checks on', { 'nimblescape.devspace.container-version': '1' }, 'on', true, true],
-    ['a container with the checks, checks off (it has less access)', { 'nimblescape.devspace.container-version': '1' }, 'off', true, true],
-    ['another value of the label, checks on', { 'nimblescape.devspace.container-version': '1', 'nimblescape.devspace.host-access': 'other' }, 'on', true, true],
-    ['an older version of the checks-off time, checks off', { 'nimblescape.devspace.container-version': '0', 'nimblescape.devspace.host-access': 'unrestricted' }, 'off', false, false],
-    ['a container of the checks-off time without the configuration, checks off', { ...unrestricted, 'nimblescape.devspace.container-config': 'unknown' }, 'off', false, true],
+    ['a container with the checks, checks on', { 'nimblescape.devspaces.container-version': '1' }, 'on', true, true],
+    ['a container with the checks, checks off (it has less access)', { 'nimblescape.devspaces.container-version': '1' }, 'off', true, true],
+    ['another value of the label, checks on', { 'nimblescape.devspaces.container-version': '1', 'nimblescape.devspaces.host-access': 'other' }, 'on', true, true],
+    ['an older version of the checks-off time, checks off', { 'nimblescape.devspaces.container-version': '0', 'nimblescape.devspaces.host-access': 'unrestricted' }, 'off', false, false],
+    ['a container of the checks-off time without the configuration, checks off', { ...unrestricted, 'nimblescape.devspaces.container-config': 'unknown' }, 'off', false, true],
   ])('%s', (_name, labels, checks, current, currentWithoutConfiguration) => {
     expect(containerIsCurrent(labels, true, checks)).toBe(current);
     expect(containerIsCurrent(labels, false, checks)).toBe(currentWithoutConfiguration);
@@ -109,8 +109,8 @@ describe('containerIsCurrent and the switch of the host access checks', () => {
   it('treats the checks as on by default', () => {
     expect(containerIsCurrent(unrestricted)).toBe(false);
     expect(isUnrestrictedContainer(unrestricted)).toBe(true);
-    expect(isUnrestrictedContainer({ 'nimblescape.devspace.container-version': '1' })).toBe(false);
-    expect(isUnrestrictedContainer({ 'nimblescape.devspace.host-access': 'Unrestricted' })).toBe(false);
+    expect(isUnrestrictedContainer({ 'nimblescape.devspaces.container-version': '1' })).toBe(false);
+    expect(isUnrestrictedContainer({ 'nimblescape.devspaces.host-access': 'Unrestricted' })).toBe(false);
   });
 });
 
@@ -253,7 +253,7 @@ describe('recordDigests', () => {
 });
 
 describe('nextBuildNumber', () => {
-  const repository = 'devspace-3f2a9c1e';
+  const repository = 'devspaces-3f2a9c1e';
 
   it('is one more than the highest number of registry, record, and local tags', () => {
     expect(nextBuildNumber({ tags: [], repository })).toBe(1);
@@ -262,7 +262,7 @@ describe('nextBuildNumber', () => {
   });
 
   it('ignores tags of other repositories and tags that are not numbers', () => {
-    expect(nextBuildNumber({ tags: ['devspace-other:50', `${repository}:latest`, `${repository}:7-uid`], repository })).toBe(1);
+    expect(nextBuildNumber({ tags: ['devspaces-other:50', `${repository}:latest`, `${repository}:7-uid`], repository })).toBe(1);
   });
 });
 
@@ -497,12 +497,12 @@ describe('isGitHubTokenRejected', () => {
 });
 
 describe('Docker Compose rules', () => {
-  const record = { builtAt: '', devspaceImage: 'devspace-3f2a9c1e:1', buildNumber: 1, configPath: 'c', configHash: 'h', images: {}, features: {} };
+  const record = { builtAt: '', devspaceImage: 'devspaces-3f2a9c1e:1', buildNumber: 1, configPath: 'c', configHash: 'h', images: {}, features: {} };
   const valid = { service: 'app', images: [], serviceImages: [], version: '2.40.3', inputsHash: 'sha256:x' };
 
   it.each([
     ['no compose part', undefined, undefined],
-    ['a valid part', { ...valid, images: ['devspace-3f2a9c1e-app'] }, { ...valid, images: ['devspace-3f2a9c1e-app'] }],
+    ['a valid part', { ...valid, images: ['devspaces-3f2a9c1e-app'] }, { ...valid, images: ['devspaces-3f2a9c1e-app'] }],
     ['no list of service images', { service: 'app', images: [], version: '2.40.3', inputsHash: 'sha256:x' }, undefined],
     ['no Compose version', { service: 'app', images: [], serviceImages: [], inputsHash: 'sha256:x' }, undefined],
     ['no hash of the files', { service: 'app', images: [], serviceImages: [], version: '2.40.3' }, undefined],
@@ -547,27 +547,27 @@ describe('Docker Compose rules', () => {
 
   it('isComposeContainer: only a container of the project of the devspace', () => {
     // A container of Compose also has a label that only containers have.
-    expect(isComposeContainer({ 'com.docker.compose.project': 'devspace-3f2a9c1e', 'com.docker.compose.container-number': '1' }, 'devspace-3f2a9c1e')).toBe(true);
-    expect(isComposeContainer({ 'com.docker.compose.project': 'devspace-3f2a9c1e', 'com.docker.compose.config-hash': 'x' }, 'devspace-3f2a9c1e')).toBe(true);
-    expect(isComposeContainer({ 'com.docker.compose.project': 'api_devcontainer', 'com.docker.compose.container-number': '1' }, 'devspace-3f2a9c1e')).toBe(false);
-    expect(isComposeContainer({}, 'devspace-3f2a9c1e')).toBe(false);
+    expect(isComposeContainer({ 'com.docker.compose.project': 'devspaces-3f2a9c1e', 'com.docker.compose.container-number': '1' }, 'devspaces-3f2a9c1e')).toBe(true);
+    expect(isComposeContainer({ 'com.docker.compose.project': 'devspaces-3f2a9c1e', 'com.docker.compose.config-hash': 'x' }, 'devspaces-3f2a9c1e')).toBe(true);
+    expect(isComposeContainer({ 'com.docker.compose.project': 'api_devcontainer', 'com.docker.compose.container-number': '1' }, 'devspaces-3f2a9c1e')).toBe(false);
+    expect(isComposeContainer({}, 'devspaces-3f2a9c1e')).toBe(false);
   });
 
   it('isComposeContainer: not by the labels that an image of the project gave a single container', () => {
-    const fromImage = { 'com.docker.compose.project': 'devspace-3f2a9c1e', 'com.docker.compose.service': 'app', 'com.docker.compose.version': '2.40.3' };
-    expect(isComposeContainer(fromImage, 'devspace-3f2a9c1e')).toBe(false);
+    const fromImage = { 'com.docker.compose.project': 'devspaces-3f2a9c1e', 'com.docker.compose.service': 'app', 'com.docker.compose.version': '2.40.3' };
+    expect(isComposeContainer(fromImage, 'devspaces-3f2a9c1e')).toBe(false);
   });
 
   it('composeMountVolumes: named volumes of mounts become volumes of the project, unless external', () => {
     expect(
-      composeMountVolumes('devspace-3f2a9c1e', [
+      composeMountVolumes('devspaces-3f2a9c1e', [
         ['source=cache,target=/cache,type=volume', 'source=/tmp,target=/tmp,type=bind', 'type=tmpfs,target=/run'],
         { source: 'shared', target: '/shared', type: 'volume', external: true },
         undefined,
         [{ source: 'cache', target: '/other', type: 'volume' }],
       ]),
       // With the sources that are no key of a Compose volume.
-    ).toEqual({ names: ['devspace-3f2a9c1e_cache', 'shared'], sources: ['cache'], skipped: [] });
+    ).toEqual({ names: ['devspaces-3f2a9c1e_cache', 'shared'], sources: ['cache'], skipped: [] });
   });
 
   it('composeMountVolumes: sources substituted as the CLI does at up, with the real ID; the rest is skipped', () => {
@@ -580,17 +580,17 @@ describe('Docker Compose rules', () => {
       ['source=${localEnv:TERM}-x,target=/x,type=volume', 'source=a@b,target=/y,type=volume'],
       { source: 'shared-${localEnv:TERM}', target: '/s', type: 'volume', external: true },
     ];
-    expect(composeMountVolumes('devspace-3f2a9c1e', mounts, variables)).toEqual({
-      names: [`devspace-3f2a9c1e_dind-var-lib-docker-${id}`, 'devspace-3f2a9c1e_api-node_modules'],
+    expect(composeMountVolumes('devspaces-3f2a9c1e', mounts, variables)).toEqual({
+      names: [`devspaces-3f2a9c1e_dind-var-lib-docker-${id}`, 'devspaces-3f2a9c1e_api-node_modules'],
       sources: [`dind-var-lib-docker-${id}`, 'api-node_modules'],
       skipped: ['${localEnv:TERM}-x', 'a@b', 'shared-${localEnv:TERM}'],
     });
     // Without the variables, a source with `${…}` is never a volume of the model (and never the placeholder of the checks).
-    const raw = composeMountVolumes('devspace-3f2a9c1e', mounts);
+    const raw = composeMountVolumes('devspaces-3f2a9c1e', mounts);
     expect(raw.sources).toEqual([]);
     expect(raw.names).toEqual([]);
-    expect(JSON.stringify(composeMountVolumes('devspace-3f2a9c1e', mounts, variables))).not.toContain(DEVCONTAINER_ID_PLACEHOLDER);
-    for (const source of composeMountVolumes('devspace-3f2a9c1e', mounts, variables).sources) expect(source).toMatch(COMPOSE_VOLUME_KEY);
+    expect(JSON.stringify(composeMountVolumes('devspaces-3f2a9c1e', mounts, variables))).not.toContain(DEVCONTAINER_ID_PLACEHOLDER);
+    for (const source of composeMountVolumes('devspaces-3f2a9c1e', mounts, variables).sources) expect(source).toMatch(COMPOSE_VOLUME_KEY);
   });
 });
 

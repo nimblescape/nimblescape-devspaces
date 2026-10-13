@@ -26,7 +26,7 @@ export interface DevspaceRuntimeState {
   volume: boolean;
   /**
    * `true` when any other container of the devspace than the dev container of the rule runs: a container of another
-   * service of Docker Compose (label nimblescape.devspace.compose-service) or another dev container; not set otherwise.
+   * service of Docker Compose (label nimblescape.devspaces.compose-service) or another dev container; not set otherwise.
    * Stop stays offered while it runs, also when the dev container is stopped (Stop stops them all). The name of the
    * field is part of the protocol.
    */

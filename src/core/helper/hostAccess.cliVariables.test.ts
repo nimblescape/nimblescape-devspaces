@@ -168,7 +168,7 @@ describe('${devcontainerId} with arguments, which the CLI replaces whole', () =>
   });
 
   it('reads a name that the ID replaces as the CLI makes it', () => {
-    // `devspace-other-${devcontainerId:x}` is not named like a workspace volume after `up` either.
+    // `devspaces-other-${devcontainerId:x}` is not named like a workspace volume after `up` either.
     const mounts = ['type=volume,src=dind-${devcontainerId:a,b},dst=/d', 'source=${devcontainerId}-history,target=/h,type=volume'];
     both((checksOn) => expect(hostAccessProblems({ ownVolume: OWN, variables, metadata: [{ mounts }] }, checksOn)).toEqual([]));
     // A name with the ID is never a volume whose labels are read or that is created before `up`.

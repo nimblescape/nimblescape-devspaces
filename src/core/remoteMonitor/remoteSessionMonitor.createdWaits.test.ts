@@ -10,7 +10,7 @@ import type { Logger } from '../ports';
 import type { MonitorEngine, MonitorInspected } from './monitorEngine';
 import { REMOTE_MONITOR_CONFLICT_WAITS_MS, REMOTE_MONITOR_CREATED_WAITS_MS, RemoteSessionMonitor } from './remoteSessionMonitor';
 
-const TAG = 'devspace-helper:0123456789ab';
+const TAG = 'devspaces-helper:0123456789ab';
 const SOCKET = '/var/run/docker.sock';
 const ID = 'feed'.padEnd(64, '1');
 const logger: Logger = { info: () => {}, warn: () => {}, error: () => {}, output: () => {} };

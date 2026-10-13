@@ -344,28 +344,28 @@ describe('channelRunArgs and openHelperChannel', () => {
     const hash = bundleHash('SCRIPT');
     // The state volume with the lock files is mounted too, and the shared VS Code server store.
     const args = channelRunArgs({
-      tag: 'devspace-helper:abc',
+      tag: 'devspaces-helper:abc',
       socketPath: '/run/user/1000/docker.sock',
-      stateVolume: 'devspace-monitor',
-      vscodeVolume: 'devspace-vscode',
-      containerName: 'devspace-worker-1',
+      stateVolume: 'devspaces-monitor',
+      vscodeVolume: 'devspaces-vscode',
+      containerName: 'devspaces-worker-1',
       label: '1-x',
       scriptHash: hash,
     });
     expect(args).toEqual([
-      'run', '--rm', '-i', '--pull', 'never', '--name', 'devspace-worker-1',
-      '--label', 'nimblescape.devspace.helper-run=true',
+      'run', '--rm', '-i', '--pull', 'never', '--name', 'devspaces-worker-1',
+      '--label', 'nimblescape.devspaces.helper-run=true',
       '--label', `${LABEL_HELPER_CHANNEL}=1-x`,
       // No log of the channel on the host; outbound network on the default bridge.
       '--network', 'bridge', '--log-driver', 'none', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
       '--mount', 'type=bind,source=/run/user/1000/docker.sock,target=/var/run/docker.sock',
       // The volume of the Monitor at /state, for the lock files.
-      '--mount', 'type=volume,source=devspace-monitor,target=/state',
+      '--mount', 'type=volume,source=devspaces-monitor,target=/state',
       // The shared VS Code server store of the engine, read-write at /vscode, with `volume-nocopy`: the store's content
       // never comes from an image.
-      '--mount', 'type=volume,source=devspace-vscode,target=/vscode,volume-nocopy',
+      '--mount', 'type=volume,source=devspaces-vscode,target=/vscode,volume-nocopy',
       // Pipe loading.
-      'devspace-helper:abc', 'node', '-e', PIPE_LOADER, '/opt/devspace/channel.js', hash, 'startChannel',
+      'devspaces-helper:abc', 'node', '-e', PIPE_LOADER, '/opt/devspace/channel.js', hash, 'startChannel',
     ]);
     // Neither a restart policy nor -d: the container lives only as long as its connection.
     expect(args).not.toContain('--restart');
@@ -414,18 +414,18 @@ describe('channelRunArgs and openHelperChannel', () => {
         runDirect: async () => ({ exitCode: 0, stdout: `${ENGINE}\n`, stderr: '', timedOut: false }),
         logger: silentLogger,
         script: async () => 'SCRIPT',
-        helperTag: async () => 'devspace-helper:abc',
+        helperTag: async () => 'devspaces-helper:abc',
         socketPath: async () => '/var/run/docker.sock',
-        stateVolume: 'devspace-monitor',
-        vscodeVolume: 'devspace-vscode',
+        stateVolume: 'devspaces-monitor',
+        vscodeVolume: 'devspaces-vscode',
         windowName: () => 'api',
       },
       REMOTE,
     );
     expect(started?.context).toBe(REMOTE.context);
-    expect(started?.args).toContain('devspace-helper:abc');
+    expect(started?.args).toContain('devspaces-helper:abc');
     // The worker is named by its window (workerContainerName).
-    expect(started?.args[started.args.indexOf('--name') + 1]).toBe('devspace-worker-api-1');
+    expect(started?.args[started.args.indexOf('--name') + 1]).toBe('devspaces-worker-api-1');
     expect(channel.isOpen).toBe(true);
     expect(written[0]).toBe(`${JSON.stringify('SCRIPT')}\n`);
     // Pipe loading: the loader gets the hash of that script, never the script.
@@ -486,10 +486,10 @@ describe('channelRunArgs and openHelperChannel', () => {
           runDirect: async () => ({ exitCode: 0, stdout: `${ENGINE}\n`, stderr: '', timedOut: false }),
           logger: { ...silentLogger, warn: (text) => warnings.push(text) },
           script: async () => 'SCRIPT',
-          helperTag: async () => 'devspace-helper:abc',
+          helperTag: async () => 'devspaces-helper:abc',
           socketPath: async () => '/var/run/docker.sock',
-          stateVolume: 'devspace-monitor',
-          vscodeVolume: 'devspace-vscode',
+          stateVolume: 'devspaces-monitor',
+          vscodeVolume: 'devspaces-vscode',
         },
         REMOTE,
       );
@@ -542,10 +542,10 @@ describe('channelRunArgs and openHelperChannel', () => {
         runDirect: async () => ({ exitCode: 0, stdout: `${ENGINE}\n`, stderr: '', timedOut: false }),
         logger: silentLogger,
         script: async () => script,
-        helperTag: async () => 'devspace-helper:abc',
+        helperTag: async () => 'devspaces-helper:abc',
         socketPath: async () => '/var/run/docker.sock',
-        stateVolume: 'devspace-monitor',
-        vscodeVolume: 'devspace-vscode',
+        stateVolume: 'devspaces-monitor',
+        vscodeVolume: 'devspaces-vscode',
       },
       REMOTE,
     );
@@ -581,7 +581,7 @@ describe('channelRunArgs and openHelperChannel', () => {
     };
     await expect(
       openHelperChannel(
-        { start: () => process, runDirect: directEngine, logger: silentLogger, script: async () => 'S', helperTag: async () => 't', socketPath: async () => '/s', stateVolume: 'devspace-monitor', vscodeVolume: 'devspace-vscode' },
+        { start: () => process, runDirect: directEngine, logger: silentLogger, script: async () => 'S', helperTag: async () => 't', socketPath: async () => '/s', stateVolume: 'devspaces-monitor', vscodeVolume: 'devspaces-vscode' },
         REMOTE,
       ),
     ).rejects.toThrow('The helper channel to build-box does not reach Docker: permission denied while trying to connect to the Docker daemon socket');
@@ -591,7 +591,7 @@ describe('channelRunArgs and openHelperChannel', () => {
   it('fails to open without a Docker CLI', async () => {
     await expect(
       openHelperChannel(
-        { start: () => undefined, runDirect: directEngine, logger: silentLogger, script: async () => 'S', helperTag: async () => 't', socketPath: async () => '/s', stateVolume: 'devspace-monitor', vscodeVolume: 'devspace-vscode' },
+        { start: () => undefined, runDirect: directEngine, logger: silentLogger, script: async () => 'S', helperTag: async () => 't', socketPath: async () => '/s', stateVolume: 'devspaces-monitor', vscodeVolume: 'devspaces-vscode' },
         REMOTE,
       ),
     ).rejects.toMatchObject({ code: 'open' });
@@ -646,8 +646,8 @@ describe('the engine identity at the open', () => {
         script: async () => 'S',
         helperTag: async () => 't',
         socketPath: async () => '/run/user/1000/docker.sock',
-        stateVolume: 'devspace-monitor',
-        vscodeVolume: 'devspace-vscode',
+        stateVolume: 'devspaces-monitor',
+        vscodeVolume: 'devspaces-vscode',
       },
       target,
     );
@@ -680,8 +680,8 @@ describe('the engine identity at the open', () => {
               script: async () => 'S',
               helperTag: async () => 't',
               socketPath: async () => '/var/run/docker.sock',
-              stateVolume: 'devspace-monitor',
-              vscodeVolume: 'devspace-vscode',
+              stateVolume: 'devspaces-monitor',
+              vscodeVolume: 'devspaces-vscode',
             },
             target,
           ),
@@ -738,8 +738,8 @@ describe('the engine identity as values', () => {
     script: async () => 'S',
     helperTag: async () => 't',
     socketPath: async () => '/var/run/docker.sock',
-    stateVolume: 'devspace-monitor',
-    vscodeVolume: 'devspace-vscode',
+    stateVolume: 'devspaces-monitor',
+    vscodeVolume: 'devspaces-vscode',
   });
 
   // Go's `{{json}}` escapes `&`, `<` and `>` (\u0026, \u003c, \u003e); the Engine API answers the plain value.
@@ -812,7 +812,7 @@ describe('the sweep at the open', () => {
       const lines: string[] = [];
       const logger: Logger = { ...silentLogger, info: (text) => lines.push(`info ${text}`), warn: (text) => lines.push(`warn ${text}`) };
       const channel = await openHelperChannel(
-        { start: () => worker.process, runDirect: directEngine, logger, script: async () => 'S', helperTag: async () => 't', socketPath: async () => '/s', stateVolume: 'devspace-monitor', vscodeVolume: 'devspace-vscode' },
+        { start: () => worker.process, runDirect: directEngine, logger, script: async () => 'S', helperTag: async () => 't', socketPath: async () => '/s', stateVolume: 'devspaces-monitor', vscodeVolume: 'devspaces-vscode' },
         REMOTE,
       );
       for (let i = 0; i < 20 && worker.sent.length < 2; i++) await new Promise((resolve) => setTimeout(resolve, 0));
