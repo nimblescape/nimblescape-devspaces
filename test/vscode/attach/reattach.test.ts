@@ -25,11 +25,16 @@ describe('the window of the devspace after a restart of VS Code', () => {
     if (failed) printLogs();
   });
 
-  it('connects again after the open pipeline of the restored window', async () => {
+  it('connects again, with or without a new run of the open pipeline', async () => {
     await connectedFolder();
     const log = channelLog('Devspaces');
-    assert.match(log, /The open pipeline of devspaces-test\/attach runs before it connects\./);
-    assert.match(log, /devspaces-test\/attach is ready in the container /);
+    // The open of the first start wrote the pending connection file at its end; the first status write of a window
+    // after that (every 15 seconds) removes it. When VS Code quit before that write, this start finds the file younger
+    // than PENDING_MAX_AGE_MS and does not run the pipeline again (src/vscode/activationRules.ts, pipelineJustRan).
+    const decision = log.match(/The open pipeline of devspaces-test\/attach (has just run for this window|runs before it connects)\./);
+    assert.ok(decision, 'The extension did not decide about the open pipeline of the restored window');
+    console.log(`    open pipeline at this start: ${decision[1]}`);
+    if (decision[1] === 'runs before it connects') assert.match(log, /devspaces-test\/attach is ready in the container /);
     const restored = log.match(/\d+ devspaces were restored from the labels of their volumes\./g) ?? [];
     console.log(`    restores from the volume labels at this start: ${restored.join(' ') || 'none'}`);
     assert.strictEqual(docker(['inspect', '-f', '{{.State.Status}}', containerName]).trim(), 'running');
