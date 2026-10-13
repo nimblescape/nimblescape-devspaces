@@ -139,7 +139,7 @@ describe('the number of a worker name in use', () => {
   const IN_USE =
     'docker: Error response from daemon: Conflict. The container name "/devspace-worker-api-1" is already in use by container "0123456789ab". You have to remove (or rename) that container to be able to reuse that name.\n';
 
-  it('starts with 1 and lists no container when the name is free', async () => {
+  it('starts with 1, and lists the containers only when Docker refuses the name', async () => {
     const { names, lists } = await openWith({ containers: ['devspace-worker-api-1'] });
     expect(names).toEqual(['devspace-worker-api-1']);
     expect(lists).toEqual([]);
@@ -152,6 +152,9 @@ describe('the number of a worker name in use', () => {
     // One list without the worker, of the containers whose name contains the start of a worker name.
     expect(lists).toEqual([['ps', '--all', '--filter', 'name=devspace-worker-', '--format', '{{.Names}}']]);
     expect(infos.join('\n')).toContain('The worker name devspace-worker-api-1 is in use on build-box, so the worker starts as devspace-worker-api-3.');
+    // A container with more than one name (legacy links) shows them in one line, separated by `,`.
+    const linked = await openWith({ containers: ['devspace-worker-api-1', 'devspace-worker-api-2,other/api'] }, () => refused(IN_USE));
+    expect(linked.names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-3']);
   });
 
   it('takes the next number when the list fails, and never a number that Docker refused', async () => {
@@ -180,6 +183,17 @@ describe('the number of a worker name in use', () => {
     const { networks, names } = await open(() => refused(IN_USE), () => refused('docker: Error response from daemon: network bridge not found.\n'), () => refused(IN_USE));
     expect(networks).toEqual(['bridge', 'bridge', 'none', 'none']);
     expect(names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-2', 'devspace-worker-api-2', 'devspace-worker-api-3']);
+  });
+
+  it('the start without network takes the number from the last list of the engine', async () => {
+    const { networks, names, lists } = await openWith(
+      { containers: ['devspace-worker-api-1', 'devspace-worker-api-2'] },
+      () => refused(IN_USE),
+      () => refused('docker: Error response from daemon: network bridge not found.\n'),
+    );
+    expect(networks).toEqual(['bridge', 'bridge', 'none']);
+    expect(names).toEqual(['devspace-worker-api-1', 'devspace-worker-api-3', 'devspace-worker-api-3']);
+    expect(lists).toHaveLength(1);
   });
 
   it('counts the refused names of both starts against the 10', async () => {
