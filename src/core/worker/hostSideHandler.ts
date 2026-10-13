@@ -355,7 +355,7 @@ async function question(host: HostSide, call: string, args: unknown[]): Promise<
     case 'confirmUntrustedRepository':
       return ui.confirmUntrustedRepository(strings(args, 1)[0]);
     case 'configurationChanged': {
-      // The second argument, when given, names what changed (ConfigurationChange).
+      // The second argument, when given, names what changed (ConfigurationChangeKind).
       const [repository] = strings(args, 1);
       const what = args.length === 2 ? args[1] : undefined;
       if (args.length > 2 || (what !== undefined && what !== 'defaultImage' && what !== 'source')) {

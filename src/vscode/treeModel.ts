@@ -136,7 +136,7 @@ export interface TreeInput {
   repositoryGroups?: readonly RepositoryGroupPattern[];
   /**
    * Results of single repository lookups on GitHub (`DiscoveryService.getRepository`) for devspaces whose repository
-   * the discovery does not list (it stores only repositories with a configuration on the default branch). Key: lower-case
+   * the discovery does not list (outside of its scan, or not visible to the account). Key: lower-case
    * `owner/name`. A `RepositoryInfo`: GitHub has the repository (no `not on GitHub`, Show on GitHub). `null`: GitHub
    * does not return it (not found, or no access), so the row shows `not on GitHub`.
    * When the map is given, a devspace whose repository is neither in the discovery nor in the map is unknown (for
@@ -410,7 +410,7 @@ export function rowActions(
     canDelete: hasDevspace && !(state === 'updating' && busyOperation === 'delete'),
     canRebuild: hasDevspace && state !== 'updating',
     multiConfig: (info?.configPaths.length ?? 0) > 1,
-    canChooseSource: (state !== 'connected' || hasDevspace) && state !== 'updating' && hasConfiguration(info),
+    canChooseSource: state !== 'updating' && hasConfiguration(info),
     onGitHub: info !== undefined,
   };
 }

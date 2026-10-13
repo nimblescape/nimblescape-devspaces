@@ -187,8 +187,8 @@ export interface PipelineUi {
   /** Security: first open of a repository of another owner. */
   confirmUntrustedRepository(repository: string): Promise<boolean>;
   /**
-   * The devcontainer.json changed since the last build; `what` `defaultImage`: the default image of the setting
-   * changed since the last build from one (the message names the default image).
+   * The devcontainer.json changed since the last build; `what` (ConfigurationChangeKind) names a changed default image
+   * or a selected source that the devspace was not built from (the message names it).
    */
   configurationChanged(repository: string, what?: ConfigurationChangeKind): Promise<'rebuildNow' | 'later'>;
   /**

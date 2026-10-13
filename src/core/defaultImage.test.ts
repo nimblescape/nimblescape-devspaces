@@ -32,8 +32,8 @@ describe('the default image of the settings', () => {
     expect(hasConfiguration(WITH_CONFIGURATION)).toBe(true);
     expect(hasConfiguration(WITHOUT_CONFIGURATION)).toBe(false);
     expect(startSource({ defaultImage: IMAGE, startWithDefaultImage: false }, WITHOUT_CONFIGURATION)).toEqual({ kind: 'defaultImage', image: IMAGE });
-    // Without a default image it has no source; the open reports the missing configuration.
-    expect(startSource({ defaultImage: '', startWithDefaultImage: false }, WITHOUT_CONFIGURATION)).toEqual({ kind: 'configuration' });
+    // Without a default image it has nothing to name: its devspace keeps the source of its last open.
+    expect(startSource({ defaultImage: '', startWithDefaultImage: false }, WITHOUT_CONFIGURATION)).toBeUndefined();
   });
 
   it('tells a source that differs from the one of the last open of a devspace', () => {
