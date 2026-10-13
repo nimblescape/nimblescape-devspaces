@@ -7,11 +7,15 @@ import { describe, expect, it } from 'vitest';
 import {
   CLOCK_RESET_MS,
   KEPT_SERVER_VERSIONS,
+  RUN_RETRY_DELAYS_MS,
   SERVER_UNUSED_MS,
   STORE_CLEANUP_INTERVAL_MS,
   cleanupDue,
+  isNetworkFailure,
   parseCacheRunState,
   qualitiesToFetch,
+  runRetryDelay,
+  runRetryDue,
   serversToRemove,
 } from './backgroundRules';
 
@@ -27,6 +31,96 @@ describe('the state of the background run', () => {
     expect(parseCacheRunState('not json')).toEqual({});
     expect(parseCacheRunState('[1]')).toEqual({});
     expect(parseCacheRunState('null')).toEqual({});
+  });
+
+  it('reads a retry only with its count of at least 1', () => {
+    expect(parseCacheRunState(JSON.stringify({ lastEndAt: 5, retryAt: 9, retries: 2 }))).toEqual({ lastEndAt: 5, retryAt: 9, retries: 2 });
+    expect(parseCacheRunState(JSON.stringify({ retryAt: 9 }))).toEqual({});
+    expect(parseCacheRunState(JSON.stringify({ retryAt: 9, retries: 0 }))).toEqual({});
+    expect(parseCacheRunState(JSON.stringify({ retryAt: 9, retries: 1.5 }))).toEqual({});
+    expect(parseCacheRunState(JSON.stringify({ retryAt: 9, retries: '1' }))).toEqual({});
+    expect(parseCacheRunState(JSON.stringify({ retryAt: -9, retries: 1 }))).toEqual({});
+    expect(parseCacheRunState(JSON.stringify({ retries: 1 }))).toEqual({});
+  });
+});
+
+describe('the retry of a run that did not reach the network', () => {
+  const MINUTE = 60_000;
+
+  it('waits 2, 5, 10, 20 and 30 minutes, then an hour for each further retry', () => {
+    expect(RUN_RETRY_DELAYS_MS).toEqual([2, 5, 10, 20, 30, 60].map((minutes) => minutes * MINUTE));
+    expect([1, 2, 3, 4, 5, 6, 7, 50].map(runRetryDelay)).toEqual([2, 5, 10, 20, 30, 60, 60, 60].map((minutes) => minutes * MINUTE));
+    // A count below 1 (never stored) waits as the first retry.
+    expect(runRetryDelay(0)).toBe(2 * MINUTE);
+  });
+
+  it('is due at its time, not before, and at once when its time lies far ahead (a corrected clock)', () => {
+    expect(runRetryDue(NOW, NOW)).toBe(true);
+    expect(runRetryDue(NOW - 1, NOW)).toBe(true);
+    expect(runRetryDue(NOW + 1, NOW)).toBe(false);
+    expect(runRetryDue(NOW + 60 * MINUTE + CLOCK_RESET_MS, NOW)).toBe(false);
+    expect(runRetryDue(NOW + 60 * MINUTE + CLOCK_RESET_MS + 1, NOW)).toBe(true);
+  });
+});
+
+describe('the failures of the network', () => {
+  const coded = (code: string) => Object.assign(new Error(`connect ${code} 1.2.3.4:443`), { code });
+
+  it.each([
+    ['no name resolution', coded('ENOTFOUND')],
+    ['a name resolution that failed for now', coded('EAI_AGAIN')],
+    ['a refused connection', coded('ECONNREFUSED')],
+    ['a connection that broke off', coded('ECONNRESET')],
+    ['an aborted connection', coded('ECONNABORTED')],
+    ['a connection without an answer', coded('ETIMEDOUT')],
+    ['an unreachable network', coded('ENETUNREACH')],
+    ['a network that is down', coded('ENETDOWN')],
+    ['an unreachable host', coded('EHOSTUNREACH')],
+    ['a host that is down', coded('EHOSTDOWN')],
+    ['a closed connection', coded('EPIPE')],
+    ['an abort', Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })],
+    ['a time limit', Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' })],
+    ['a pull without name resolution', new Error('Get "https://registry-1.docker.io/v2/": dial tcp: lookup registry-1.docker.io: no such host')],
+    ['a pull without an answer', new Error('Get "https://ghcr.io/v2/": dial tcp 140.82.1.1:443: i/o timeout')],
+    ['a pull with a refused connection', new Error('dial tcp 127.0.0.1:5000: connect: connection refused')],
+    ['a pull with a connection that broke off', new Error('read tcp 10.0.0.2:5000: read: connection reset by peer')],
+    ['a pull without network', new Error('dial tcp: connect: network is unreachable')],
+    ['a pull without a route', new Error('dial tcp 10.1.1.1:443: connect: no route to host')],
+    ['a pull with a slow TLS handshake', new Error('net/http: TLS handshake timeout')],
+    ['a pull with a slow registry', new Error('net/http: request canceled (Client.Timeout exceeded while awaiting headers)')],
+    ['a pull past its deadline', new Error('context deadline exceeded')],
+    ['a name resolution that failed for now (resolver)', new Error('lookup ghcr.io: Temporary failure in name resolution')],
+    ['a proxy without an answer', new Error('The proxy proxy.example of the Docker engine did not answer within 10 seconds.')],
+    ['a time limit of the monitor', new Error('no answer in time')],
+    ['a server error', new Error('the update service answered HTTP 503')],
+    ['a rate limit', new Error('the download answered HTTP 429')],
+    ['a message alone', 'dial tcp: lookup example: no such host'],
+    ['a cause', new Error('fetch failed', { cause: coded('ENOTFOUND') })],
+  ])('counts %s', (_label, error) => {
+    expect(isNetworkFailure(error)).toBe(true);
+  });
+
+  it.each([
+    ['an image that the registry does not have', new Error('manifest for example/app:1 not found: manifest unknown')],
+    ['a private image', new Error('pull access denied for example/private, repository does not exist or may require docker login')],
+    ['a version that is gone', new Error('the update service answered HTTP 404')],
+    ['a refused download', new Error('the download answered HTTP 403')],
+    ['a wrong checksum', new Error('the SHA-256 of the archive differs')],
+    ['a full disk', Object.assign(new Error('no space left on device'), { code: 'ENOSPC' })],
+    ['a missing file', Object.assign(new Error('no such file'), { code: 'ENOENT' })],
+    ['no error', undefined],
+    ['null', null],
+    ['a number', 503],
+    ['a word in another word', new Error('the field host_name_resolution_disabled')],
+  ])('does not count %s', (_label, error) => {
+    expect(isNetworkFailure(error)).toBe(false);
+  });
+
+  it('follows the causes at most 4 deep', () => {
+    let error: unknown = Object.assign(new Error('x'), { code: 'ENOTFOUND' });
+    for (let depth = 0; depth < 4; depth++) error = new Error('wrapped', { cause: error });
+    expect(isNetworkFailure(error)).toBe(true);
+    expect(isNetworkFailure(new Error('wrapped', { cause: error }))).toBe(false);
   });
 });
 

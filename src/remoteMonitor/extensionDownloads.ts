@@ -90,6 +90,11 @@ export interface ExtensionRunDeps {
   tryLock?: (cacheName: string) => Promise<StoreLockAttempt>;
   log: (message: string) => void;
   now: () => number;
+  /**
+   * Whether a failure is one of the network (isNetworkFailure of the background run, which then tries the run again);
+   * such a failure records no wait of a day for the extension. Without it: none is.
+   */
+  networkFailure?: (error: unknown) => boolean;
 }
 
 /** The locks of the store for the files of the cache (extensionLockFile; lock files are never removed). */
@@ -180,8 +185,13 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
   const due = wanted.filter((ref) => !extensionRetryWaits(failures.get(extensionEntryText(ref)), now));
   const waiting = wanted.length - due.length;
   const counts = { downloaded: 0, present: 0, failed: 0 };
-  const fail = (ref: ExtensionRef, why: string) => {
+  const fail = (ref: ExtensionRef, why: string, cause?: unknown) => {
     counts.failed++;
+    // A failure of the network waits for no day: the retry of the run tries it again.
+    if (cause !== undefined && deps.networkFailure?.(cause) === true) {
+      log(`The extension ${extensionEntryText(ref)} is not in the shared extension cache (${why}); the retry of the run tries it again.`);
+      return;
+    }
     failures.set(extensionEntryText(ref), now);
     log(`The extension ${extensionEntryText(ref)} is not in the shared extension cache (${why}); it is tried again after a day.`);
   };
@@ -200,6 +210,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
     try {
       answer = await query([...new Set(unpinned.map((ref) => ref.id))], true);
     } catch (error) {
+      deps.networkFailure?.(error);
       log(queryFailure(unpinned.length, error));
     }
     let fallbacks = 0;
@@ -242,7 +253,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
       const own = refs.filter((ref) => ref.id === id);
       const single = chunk.length > 1 && singleQueries++ < MAX_MARKETPLACE_SINGLE_QUERIES ? await ask([id]) : result;
       if ('answer' in single) decide(own, single.answer);
-      else for (const ref of own) fail(ref, `its query failed: ${message(single.error)}`);
+      else for (const ref of own) fail(ref, `its query failed: ${message(single.error)}`, single.error);
     }
   }
   // The chosen files, which the cleanup keeps and the seed of an entry without a pin prefers; an entry that this run
@@ -278,7 +289,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
       inStore(ref, chosen);
       if (outcome === 'downloaded') log(`Downloaded the extension ${chosen.cacheName} into the shared extension cache.`);
     } catch (error) {
-      fail(ref, error instanceof Error ? error.message : String(error));
+      fail(ref, error instanceof Error ? error.message : String(error), error);
     }
   }
   if (deferred > 0) log(`This run downloaded ${downloadedBytes} bytes, its bound; ${deferred} extension(s) are left for the next run.`);

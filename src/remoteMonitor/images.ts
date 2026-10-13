@@ -30,6 +30,7 @@ import { abortError } from '../core/ports';
 import { isListedRepository, parseImageReference, type ImageReferenceParts } from '../core/remoteMonitor/protocol';
 import { referenceText, type RegistryAnswer as TagAnswer } from '../core/remoteMonitor/registryAnswers';
 import type { EngineImage } from '../core/worker/dockerEngine';
+import { isNetworkFailure } from './backgroundRules';
 import { engineFailure, type ImageEngine } from './engine';
 
 /** Time from the start of the monitor to the first pass. */
@@ -314,6 +315,8 @@ export class ImageMaintenance {
    * a pass by the time limit of every request.
    */
   private unreachable = new Set<string>();
+  /** A pull of the current pass failed for the network (isNetworkFailure). */
+  private pullOffline = false;
   private skipLogged = new Set<string>();
 
   constructor(private readonly deps: ImageMaintenanceDeps) {}
@@ -355,8 +358,17 @@ export class ImageMaintenance {
 
   /**
    * One pass: the pulls of the references in use, then the removal of the images that nothing keeps. Never throws.
+   * Resolves false when it did not reach the network: a registry that it asked did not answer (`unreachable`), or a
+   * pull or the pass failed for the network (isNetworkFailure); else true (also without images in use).
    */
-  async pass(): Promise<void> {
+  async pass(): Promise<boolean> {
+    this.unreachable = new Set();
+    this.pullOffline = false;
+    await this.passOnce();
+    return this.unreachable.size === 0 && !this.pullOffline;
+  }
+
+  private async passOnce(): Promise<void> {
     const inUse = await this.inUse();
     if (inUse.references.length === 0) return;
     try {
@@ -370,7 +382,6 @@ export class ImageMaintenance {
         output: () => {},
       });
       this.confirmations = new Map();
-      this.unreachable = new Set();
       this.skipLogged = new Set();
       this.untaggedNow = new Set();
       if (this.deps.replaced) this.replaced = await this.deps.replaced.read();
@@ -424,6 +435,7 @@ export class ImageMaintenance {
       // The untagged images of this pass are the ones that the next pass may remove.
       this.seenUntagged = this.untaggedNow;
     } catch (error) {
+      if (isNetworkFailure(error)) this.pullOffline = true;
       this.deps.log(`The images could not be maintained: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       // No empty lists (the other repositories stay: pruneReplacedImages).
@@ -652,6 +664,7 @@ export class ImageMaintenance {
     try {
       await this.deps.engine.pull(reference, { signal: AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS) });
     } catch (error) {
+      if (isNetworkFailure(error)) this.pullOffline = true;
       this.deps.log(`${reference} could not be pulled: ${engineFailure(error, IMAGE_PULL_TIMEOUT_MS)}`);
       return false;
     }

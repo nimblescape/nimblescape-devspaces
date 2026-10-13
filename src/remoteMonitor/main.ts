@@ -75,7 +75,7 @@ import {
 } from '../core/remoteMonitor/protocol';
 import { engineFailure, socketEngine, type LoopEngine, type MonitorEngineParts, type VscodeEngine } from './engine';
 import { BACKGROUND_ENGINE_TIMEOUT_MS, BackgroundRun, type CacheRunStore, type VscodeBackgroundDeps } from './background';
-import { CLOCK_RESET_MS, parseCacheRunState, type CacheRunState } from './backgroundRules';
+import { CLOCK_RESET_MS, parseCacheRunState, runRetryDelay, runRetryDue, type CacheRunState } from './backgroundRules';
 import { DEFAULT_CACHE_UPDATE_SCHEDULE, cacheRunDue, parseCacheSchedule, type CacheSchedule as ParsedCacheSchedule } from '../core/remoteMonitor/cacheSettings';
 import { MONITOR_PERMANENT_ENV, MONITOR_VSCODE_STORE_ENV } from '../core/remoteMonitor/remoteSessionMonitor';
 import { REGISTRY_ANSWERS_FILE, registryAnswersText } from '../core/remoteMonitor/registryAnswers';
@@ -886,11 +886,19 @@ export async function writeRunRequest(stateDir: string, now: number): Promise<vo
  * run again at once: at its start it runs only when the run is due by that time (never ran: due). So a time of the
  * schedule that the monitor missed (it was down, the engine off, the computer asleep) runs once at its next check, and
  * a clock that jumps ahead runs once too. And a request of "Update All Images Now" (`runRequest`, RUN_NOW_FILE) runs
- * the run at a check whether it is due or not; one that comes during a run is kept for the check after it.
+ * the run at a check whether it is due or not; one that comes during a run is kept for the check after it. A run that
+ * did not reach the network (`pass` resolves false: a computer that woke up before its Wi-Fi or VPN, an engine without
+ * internet) does not count as a run: the end of the last run stays, and the run is tried again after runRetryDelay
+ * (2, 5, 10, 20, 30 minutes, then every hour) until one reaches it; the retry is kept in the volume too, so a restart of
+ * the monitor keeps it, and while it waits, its time alone decides the next run.
  */
 export class CacheSchedule {
   /** The end of the last run (the stored one at first; undefined: none is known). */
   private lastEndAt: number | undefined;
+  /** When a run that did not reach the network is tried again (the stored one at first; undefined: none waits). */
+  private retryAt: number | undefined;
+  /** How many runs in a row did not reach the network (0 while no retry waits). */
+  private retries = 0;
   private loaded = false;
   private running = false;
   /** A check that takes longer than a minute (a slow list of the images) is not joined. */
@@ -903,7 +911,8 @@ export class CacheSchedule {
       now: () => number;
       log: (message: string) => void;
       settings: Pick<CurrentCacheSettings, 'value' | 'refresh'>;
-      pass: () => Promise<void>;
+      /** The run; false when it did not reach the network (BackgroundRun.run). */
+      pass: () => Promise<boolean | void>;
       /** At each check while no pass runs (the IDs of the images of the repositories). */
       observe?: () => Promise<void>;
       /** The end of the last run in the volume. */
@@ -928,7 +937,10 @@ export class CacheSchedule {
     await this.deps.settings.refresh();
     if (!this.loaded) {
       this.loaded = true;
-      this.lastEndAt = (await this.deps.state.read().catch((): CacheRunState => ({}))).lastEndAt;
+      const stored = await this.deps.state.read().catch((): CacheRunState => ({}));
+      this.lastEndAt = stored.lastEndAt;
+      this.retryAt = stored.retryAt;
+      this.retries = stored.retries ?? 0;
     }
     if (!this.running && this.deps.observe) {
       this.observing = this.deps.observe().finally(() => (this.observing = undefined));
@@ -947,7 +959,9 @@ export class CacheSchedule {
     // A request is taken (removed) only here, while no run runs, so one that came during a run is kept for this check
     // after it.
     const requested = (await this.deps.runRequest?.take()) === true;
-    if (!requested && !cacheRunDue(this.deps.settings.value.parsed, this.lastEndAt, time, this.deps.settings.value.timeZone)) return;
+    const due = this.retryAt !== undefined ? runRetryDue(this.retryAt, time) : cacheRunDue(this.deps.settings.value.parsed, this.lastEndAt, time, this.deps.settings.value.timeZone);
+    if (!requested && !due) return;
+    if (!requested && this.retryAt !== undefined) this.deps.log(`The background run is tried again (retry ${this.retries}).`);
     if (requested) this.deps.log('"Update All Images Now" asked for the background run; it runs now.');
     await this.run();
     // The times of a cron schedule that came during the run are left out (logged); the end of the run counts, so no
@@ -986,17 +1000,32 @@ export class CacheSchedule {
   }
 
   private async runOnce(): Promise<void> {
+    // A run that throws (a failure of the monitor itself, not of the network) counts as a run, so it does not repeat.
+    let reached = true;
     try {
       // Not together with the observe of a check (both keep the store of IDs).
       await this.observing?.catch(() => undefined);
       await this.deps.settings.refresh();
-      await this.deps.pass();
+      reached = (await this.deps.pass()) !== false;
     } catch (error) {
       this.deps.log(`The background run failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.loaded = true;
-      this.lastEndAt = this.deps.now();
-      await this.deps.state.update({ lastEndAt: this.lastEndAt }).catch((error: unknown) => {
+      const end = this.deps.now();
+      let change: CacheRunState;
+      if (reached) {
+        this.lastEndAt = end;
+        this.retryAt = undefined;
+        this.retries = 0;
+        // Undefined fields are left out of the stored state (JSON), so a waiting retry goes.
+        change = { lastEndAt: end, retryAt: undefined, retries: undefined };
+      } else {
+        this.retries++;
+        this.retryAt = end + runRetryDelay(this.retries);
+        this.deps.log(`The background run did not reach the network; it is tried again at ${new Date(this.retryAt).toISOString()}.`);
+        change = { retryAt: this.retryAt, retries: this.retries };
+      }
+      await this.deps.state.update(change).catch((error: unknown) => {
         this.deps.log(`The end of the background run could not be stored: ${error instanceof Error ? error.message : String(error)}`);
       });
       // The run counts as running (busy) until its end is stored, so the idle exit never ends the process during that

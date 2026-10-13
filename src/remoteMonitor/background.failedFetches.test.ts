@@ -41,7 +41,10 @@ async function readyServer(root: string, server: VscodeServerRef, platform: Vsco
 
 function harness(options: {
   commits: Partial<Record<'stable' | 'insider', string[] | Error>>;
-  ensure: boolean;
+  /** The fetch of a server: ready, or not ready (false: no cause; `cause`: the cause that it reports first). */
+  ensure: boolean | { cause: unknown };
+  /** Part a (default: nothing to do). */
+  images?: () => Promise<boolean | void>;
   state?: CacheRunState;
   containerIds?: (signal: AbortSignal | undefined) => void;
   /** The processes of the containers that mount the store (each container: its process lines); default none. */
@@ -100,12 +103,16 @@ function harness(options: {
       locks.push(name);
       return { kind: 'locked', release: () => {} };
     },
-    ensure: async () => options.ensure,
+    ensure: async (deps) => {
+      if (typeof options.ensure === 'boolean') return options.ensure;
+      deps.onFailure?.(options.ensure.cause);
+      return false;
+    },
   };
   const run = new BackgroundRun({
     log: (message) => log.push(message),
     now: () => NOW,
-    images: async () => {},
+    images: options.images ?? (async () => {}),
     vscode: () => vscode,
     state: { read: async () => state, update: async (change) => void (state = { ...state, ...change }) },
   });
@@ -130,6 +137,60 @@ describe('the failed fetches that the run stores', () => {
     const h = harness({ commits: { stable: [commit(1)] }, ensure: true });
     await h.run.run();
     expect('failedFetches' in h.state()).toBe(false);
+  });
+});
+
+describe('a run that did not reach the network', () => {
+  const offline = Object.assign(new Error('getaddrinfo ENOTFOUND update.code.visualstudio.com'), { code: 'ENOTFOUND' });
+
+  it('resolves true when every part reached it, also when a fetch failed for the server version', async () => {
+    const h = harness({ commits: { stable: [commit(1)] }, ensure: { cause: new Error('the download answered HTTP 404') } });
+    expect(await h.run.run()).toBe(true);
+    expect(h.log).toContain('The background run ended.');
+    // A failure of the version waits a day, as before.
+    expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBe(NOW);
+  });
+
+  it('a fetch of the server that failed for the network: false, and the version does not wait a day', async () => {
+    const h = harness({ commits: { stable: [commit(1)] }, ensure: { cause: offline } });
+    expect(await h.run.run()).toBe(false);
+    expect(h.log).toContain('The background run ended without reaching the network.');
+    expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBeUndefined();
+  });
+
+  it('a fetch that failed without a cause waits a day and counts as reached (no evidence of the network)', async () => {
+    const h = harness({ commits: { stable: [commit(1)] }, ensure: false });
+    expect(await h.run.run()).toBe(true);
+    expect(h.state().failedFetches?.[`stable-linux-x64-${commit(1)}`]).toBe(NOW);
+  });
+
+  it('the update service that did not answer: false', async () => {
+    const h = harness({ commits: { stable: offline }, ensure: true });
+    expect(await h.run.run()).toBe(false);
+  });
+
+  it('the update service that answered with a refusal of the release list: true', async () => {
+    const h = harness({ commits: { stable: new Error('the update service answered HTTP 404') }, ensure: true });
+    expect(await h.run.run()).toBe(true);
+  });
+
+  it('an image pass that did not reach its registries: false; one that did, or one without an answer: true', async () => {
+    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => false }).run.run()).toBe(false);
+    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => true }).run.run()).toBe(true);
+    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => {} }).run.run()).toBe(true);
+  });
+
+  it('a part that throws for the network: false; for another cause: true', async () => {
+    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => Promise.reject(offline) }).run.run()).toBe(false);
+    expect(await harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => Promise.reject(new Error('a bug')) }).run.run()).toBe(true);
+  });
+
+  it('each run starts without the failures of the run before', async () => {
+    let reached = false;
+    const h = harness({ commits: { stable: [commit(1)] }, ensure: true, images: async () => reached });
+    expect(await h.run.run()).toBe(false);
+    reached = true;
+    expect(await h.run.run()).toBe(true);
   });
 });
 

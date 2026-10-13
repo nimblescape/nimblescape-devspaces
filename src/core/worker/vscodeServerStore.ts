@@ -113,6 +113,12 @@ export interface VscodeStoreDeps {
    * Dev Containers extension).
    */
   background?: boolean;
+  /**
+   * The cause of a fetch that failed (a time limit of the whole fetch as an Error named TimeoutError), before
+   * ensureServer resolves false; not for a cancel by its signal. The background run tells a failure of the network from
+   * one of the server version by it.
+   */
+  onFailure?: (cause: unknown) => void;
 }
 
 /** A failure of a fetch, with the text of its log line. */
@@ -183,6 +189,7 @@ async function ensureServerWithin(
         : error instanceof Error
           ? error.message
           : String(error);
+    if (!signal.aborted) deps.onFailure?.(limit.aborted ? Object.assign(new Error(why), { name: 'TimeoutError' }) : error);
     // The background run of the Monitor names no fallback (it fetches ahead of any open).
     const fallback = deps.background === true ? '' : '; the Dev Containers extension installs it in the container';
     deps.logger.warn(`The VS Code server ${name} for ${platform} could not be fetched into the shared store (${why})${fallback}.`);

@@ -58,7 +58,8 @@ describe('the registry requests of monitor.js run', () => {
     });
     await vi.waitFor(() => expect(out).toContain('first check in 1 s'));
     await vi.advanceTimersByTimeAsync(1_000);
-    await vi.waitFor(() => expect(out).toContain('The background run ended.'), { timeout: 4_000 });
+    // The registry refuses the connection, so the run did not reach the network and waits for its retry.
+    await vi.waitFor(() => expect(out).toContain('The background run ended without reaching the network.'), { timeout: 4_000 });
     expect(out).toContain('127.0.0.1:1/team/app:1 is not pulled in this pass: its registry does not confirm the tag (');
     expect(proxyReads).toBe(1);
   });
