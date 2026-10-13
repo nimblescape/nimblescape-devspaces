@@ -11,6 +11,7 @@
 //   development extension with the ID of the installed VSIX would be loaded in its place.
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -29,17 +30,25 @@ const dockerHost =
     ? 'npipe:////./pipe/nimblescape-devspaces-vscode-test'
     : 'unix:///nonexistent/nimblescape-devspaces-vscode-test.sock';
 
+/** The label that `vscode-test --label <label>` runs; undefined without --label (then every configuration runs). */
+const labelIndex = process.argv.indexOf('--label');
+const selectedLabel =
+  labelIndex >= 0 ? process.argv[labelIndex + 1] : process.argv.find((arg) => arg.startsWith('--label='))?.slice(8);
+/** Tells the user data folders of two checkouts on one computer apart. */
+const checkout = fileURLToPath(new URL('.', import.meta.url));
+const checkoutId = crypto.createHash('sha256').update(checkout).digest('hex').slice(0, 6);
+
 /**
- * A configuration with its own empty user data folder: the folder is removed before each run (the default of
- * @vscode/test-electron keeps it between runs), so the extension starts as after a fresh installation on every
- * computer, as on CI. Its path has a space and a letter outside ASCII, as the user folder of many users has. It is in
- * the temporary folder of the system, because VS Code puts its socket into the user data folder, and macOS allows
- * at most 103 characters in a socket path, which a folder below a checkout often exceeds. The downloaded VS Code and
+ * A configuration with its own empty user data folder: the folder is removed before each run of the configuration
+ * (the default of @vscode/test-electron keeps it between runs), so the extension starts as after a fresh installation
+ * on every computer, as on CI. Its path has a space and a letter outside ASCII, as the user folder of many users has.
+ * It is in the temporary folder of the system, because VS Code puts its socket into the user data folder, and macOS
+ * allows at most 103 bytes in a socket path, which a folder below a checkout often exceeds. The downloaded VS Code and
  * the installed extensions in .vscode-test/ stay.
  */
 function configuration(label, options) {
-  const userDataDir = path.join(os.tmpdir(), `devspaces ${label} ü`);
-  fs.rmSync(userDataDir, { recursive: true, force: true });
+  const userDataDir = path.join(os.tmpdir(), `devspaces ${label} ü ${checkoutId}`);
+  if (selectedLabel === undefined || selectedLabel === label) fs.rmSync(userDataDir, { recursive: true, force: true });
   return {
     label,
     files: 'out/test/vscode/**/*.test.js',
@@ -54,8 +63,14 @@ function configuration(label, options) {
       '--password-store=basic',
     ],
     // DEVSPACE_TEST_USER_DATA_DIR: the tests read the log of the extension from the logs folder of VS Code there.
-    // DEVSPACE_TEST_CONFIGURATION: the tests check that VS Code runs the extension from the build of this label.
-    env: { DOCKER_HOST: dockerHost, DEVSPACE_TEST_USER_DATA_DIR: userDataDir, DEVSPACE_TEST_CONFIGURATION: label },
+    // DEVSPACE_TEST_CONFIGURATION and DEVSPACE_TEST_VERSION: the tests check that VS Code runs the extension from the
+    // build of this label, of the version of this checkout.
+    env: {
+      DOCKER_HOST: dockerHost,
+      DEVSPACE_TEST_USER_DATA_DIR: userDataDir,
+      DEVSPACE_TEST_CONFIGURATION: label,
+      DEVSPACE_TEST_VERSION: manifest.version,
+    },
     mocha: {
       ui: 'bdd',
       // The first activation of the extension in a fresh VS Code can be slow on CI runners.
@@ -69,7 +84,7 @@ export default defineConfig([
   configuration('vscode', {}),
   configuration('vsix', {
     extensionDevelopmentPath: fileURLToPath(new URL('test/vscode/host', import.meta.url)),
-    // The VSIX does not bring the Dev Containers extension (extensionDependencies of the host folder are none).
+    // The test host folder has no extensionDependencies, so the Dev Containers extension is named here.
     installExtensions: ['ms-vscode-remote.remote-containers', vsix],
   }),
 ]);

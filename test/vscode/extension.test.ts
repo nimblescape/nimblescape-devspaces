@@ -17,6 +17,8 @@ const EXTENSION_ID = 'nimblescape.nimblescape-devspaces';
 const OUTPUT_CHANNEL_NAME = 'Devspaces';
 /** VS Code writes the output channels to files in the logs folder after a short delay. */
 const LOG_WAIT_MS = 30_000;
+/** The log counts as complete when it did not change for this time after the expected line. */
+const LOG_QUIET_MS = 3_000;
 
 interface Manifest {
   contributes: { commands: { command: string }[] };
@@ -34,6 +36,8 @@ describe('the extension in VS Code', () => {
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(extension);
     const { version } = extension.packageJSON as { version: string };
+    const expected = process.env.DEVSPACE_TEST_VERSION;
+    assert.strictEqual(version, expected, 'The extension is not of the version of this checkout');
     const configuration = process.env.DEVSPACE_TEST_CONFIGURATION;
     if (configuration === 'vsix') {
       // VS Code installs a VSIX into the folder <publisher>.<name>-<version> of its extensions folder.
@@ -67,18 +71,29 @@ describe('the extension in VS Code', () => {
   });
 });
 
-/** The log of the extension once it has a line that matches `expected`; fails with the log after LOG_WAIT_MS. */
+/**
+ * The log of the extension once it has a line that matches `expected` and then did not change for LOG_QUIET_MS (the
+ * activation goes on in the background and can log an error after that line); fails with the log after LOG_WAIT_MS.
+ */
 async function waitForLog(expected: RegExp): Promise<string> {
   const userDataDir = process.env.DEVSPACE_TEST_USER_DATA_DIR;
   assert.ok(userDataDir, 'DEVSPACE_TEST_USER_DATA_DIR is not set (.vscode-test.mjs)');
   const deadline = Date.now() + LOG_WAIT_MS;
   let log = '';
+  let changedAt = Date.now();
   for (;;) {
-    log = logFiles(path.join(userDataDir, 'logs'))
+    const current = logFiles(path.join(userDataDir, 'logs'))
       .map((file) => fs.readFileSync(file, 'utf8'))
       .join('\n');
-    if (expected.test(log)) return log;
-    if (Date.now() > deadline) assert.fail(`No line matches ${expected} in the log of the extension:\n${log}`);
+    if (current !== log) {
+      log = current;
+      changedAt = Date.now();
+    }
+    if (expected.test(log) && Date.now() - changedAt >= LOG_QUIET_MS) return log;
+    if (Date.now() > deadline) {
+      if (expected.test(log)) return log;
+      assert.fail(`No line matches ${expected} in the log of the extension:\n${log}`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 }
