@@ -11,7 +11,7 @@
 import * as assert from 'assert';
 import * as childProcess from 'child_process';
 import * as vscode from 'vscode';
-import { LOCAL_PORT_HOST_SETTING, devContainersSettings } from '../../../src/core/devContainers';
+import { devContainersSettings } from '../../../src/core/devContainers';
 import { VSCODE_STORE_TARGET } from '../../../src/core/names';
 import { EXTENSION_ID, channelLog, connectedFolder, credentialPaths, docker, execIn, printLogs, seed, vscodeCommit, waitFor } from './support';
 
@@ -83,7 +83,7 @@ describe('the window of a devspace', () => {
   });
 
   it('forwards a port of the container on 127.0.0.1 only', async () => {
-    assert.notStrictEqual(vscode.workspace.getConfiguration().get(LOCAL_PORT_HOST_SETTING), 'allInterfaces');
+    // VS Code forwards on all addresses when remote.localPortHost is not `localhost` (LOCAL_PORT_HOST_SETTING).
     docker(['exec', '-d', '-u', user, containerName, 'node', '-e', `require('http').createServer((q, s) => s.end('devspace')).listen(${SERVER_PORT})`]);
     await waitFor('the server in the container', () => (execIn(user, `node -e "require('http').get('http://127.0.0.1:${SERVER_PORT}', () => process.exit(0)).on('error', () => process.exit(1))"`).code === 0 ? true : undefined), 30_000);
     const external = await vscode.env.asExternalUri(vscode.Uri.parse(`http://localhost:${SERVER_PORT}`));

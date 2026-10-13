@@ -113,7 +113,8 @@ function attachConfiguration(kind, index) {
       DEVSPACE_TEST_ATTACH: kind,
       DEVSPACE_TEST_ATTACH_SEED: JSON.stringify(seed),
     },
-    mocha: { ...base.mocha, timeout: 900_000 },
+    // The longest wait of a test is one minute (postAttachCommand).
+    mocha: { ...base.mocha, timeout: 120_000 },
   };
 }
 
