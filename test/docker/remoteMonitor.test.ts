@@ -68,9 +68,9 @@ interface Recorded {
  * fixed 5 minutes): the smallest limit of a heartbeat (MIN_LIMIT_SECONDS), so the test waits 1 minute and not 5. The
  * rules of the monitor do not depend on the length of the limit.
  */
-const RELEASE_LIMIT_MS = MIN_LIMIT_SECONDS * 1000;
+const TEST_RELEASE_LIMIT_MS = MIN_LIMIT_SECONDS * 1000;
 /** The wait for the stop: the limit, then some ticks of the monitor, the stop itself, and slack for a loaded runner. */
-const RELEASE_STOP_WAIT_MS = RELEASE_LIMIT_MS + 60_000;
+const RELEASE_STOP_WAIT_MS = TEST_RELEASE_LIMIT_MS + 60_000;
 
 /** Bundles the script of the remote monitor as the worker's bundle carries it (workerScriptsPlugin: minified, one file). */
 async function bundleScript(): Promise<string> {
@@ -457,12 +457,12 @@ describe('the Monitor container of a remote Docker host', () => {
   });
 
   // A window that closes records the Git state, sends its short release (RELEASE_LIMIT_SECONDS; the test sends
-  // RELEASE_LIMIT_MS to the monitor in its place) through its worker, and
-  // its worker's input ends; the monitor stops the devspace after the short limit, not after the long one. A window
-  // that reloads within that limit sends its long heartbeats again, so its devspace keeps running.
+  // TEST_RELEASE_LIMIT_MS to the monitor in its place) through its worker, and its worker's input ends; the monitor
+  // stops the devspace after the short limit, not after the long one. A window that reloads within that limit sends its
+  // long heartbeats again, so its devspace keeps running.
   it('stops a closed window\'s devspace after the short release, and keeps one whose window reloaded in time', { timeout: RELEASE_STOP_WAIT_MS + 180_000 }, async () => {
-    // The test waits for the release limit (RELEASE_LIMIT_MS), and its own timeout covers the setup, that wait, and the
-    // checks after it.
+    // The test waits for the release limit (TEST_RELEASE_LIMIT_MS), and its own timeout covers the setup, that wait,
+    // and the checks after it.
     expect(['created', 'running', 'started']).toContain(await monitor.ensure(helperTag, socket));
     await waitUntil(() => running(containerName), 'the monitor');
     const closedId = crypto.randomUUID();
@@ -513,7 +513,7 @@ describe('the Monitor container of a remote Docker host', () => {
           },
           send: async (devspaceId, limitSeconds, signal) => {
             events.push(`release ${devspaceId} ${limitSeconds}`);
-            return heartbeats.release(devspaceId, RELEASE_LIMIT_MS / 1000, signal);
+            return heartbeats.release(devspaceId, TEST_RELEASE_LIMIT_MS / 1000, signal);
           },
           logger: log,
         },
@@ -540,9 +540,10 @@ describe('the Monitor container of a remote Docker host', () => {
       const reloadedWindow = windowOf(reloadedId);
       await reloadedWindow.tick();
       reloadedWindow.dispose();
-      // Not before the release limit (with the release margin), and long before the long one (stopAfterMinutes: 10).
+      // Not before the release limit of the test, and long before the long one (stopAfterMinutes: 10); the release
+      // limit of the window is shorter than the long one too.
       await timings.measure('stop after the release', () => waitUntil(() => !running(closedName), 'the stop after the release', RELEASE_STOP_WAIT_MS));
-      expect(Date.now() - releaseSentAt).toBeGreaterThanOrEqual(RELEASE_LIMIT_MS - 1_000);
+      expect(Date.now() - releaseSentAt).toBeGreaterThanOrEqual(TEST_RELEASE_LIMIT_MS - 1_000);
       expect(RELEASE_LIMIT_SECONDS * 1000).toBeLessThan(settings.stopAfterMinutes * 60_000);
       await new Promise((resolve) => setTimeout(resolve, 20 * TICK_MS));
       expect(running(reloadedName)).toBe(true);
