@@ -12,8 +12,8 @@
 // - "attach" (CI only, npm run test:vscode:attach after npm run test:vscode:attach:prepare): VS Code starts in the
 //   window of a container that test/vscode/attach/prepare.ts made on the real Docker engine, and runs the tests of
 //   test/vscode/attach/<kind>.test.ts there. It exists only when DEVSPACE_TEST_ATTACH names the kind (plain,
-//   devspace, or reattach: the devspace again after a restart of VS Code), so that no local run reaches the Docker
-//   engine of this computer.
+//   devspace, reattach: the devspace again after a restart of VS Code, or account: the devspace under another GitHub
+//   account), so that no local run reaches the Docker engine of this computer.
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
 import * as crypto from 'crypto';
@@ -99,14 +99,15 @@ function configuration(label, index, options, { keepUserDataDir = false } = {}) 
 /**
  * The configuration `attach`: the window of the container DEVSPACE_TEST_ATTACH of out/test/vscode/attach/seed.json, on
  * the Docker engine of this computer. The fake sign-in provider `github` (test/vscode/github) replaces the built-in one.
- * `reattach` starts VS Code again in the window of the devspace with the user data folder of the run `devspace`, as a
- * restart of VS Code.
+ * `reattach` and `account` start VS Code again in the window of the devspace with the user data folder of the run
+ * `devspace`, as a restart of VS Code; `account` with another signed-in account than the owner of the devspace.
  */
 function attachConfiguration(kind, index) {
-  const container = kind === 'reattach' ? 'devspace' : kind;
+  const restart = kind === 'reattach' || kind === 'account';
+  const container = restart ? 'devspace' : kind;
   const seed = JSON.parse(fs.readFileSync(new URL('out/test/vscode/attach/seed.json', import.meta.url), 'utf8'))[container];
   if (!seed) throw new Error(`out/test/vscode/attach/seed.json has no container "${container}".`);
-  const base = configuration('attach', index, {}, { keepUserDataDir: kind === 'reattach' });
+  const base = configuration('attach', index, {}, { keepUserDataDir: restart });
   return {
     ...base,
     files: `out/test/vscode/attach/${kind}.test.js`,
@@ -116,6 +117,7 @@ function attachConfiguration(kind, index) {
       DEVSPACE_TEST_USER_DATA_DIR: base.env.DEVSPACE_TEST_USER_DATA_DIR,
       DEVSPACE_TEST_ATTACH: kind,
       DEVSPACE_TEST_ATTACH_SEED: JSON.stringify(seed),
+      ...(kind === 'account' ? { DEVSPACE_TEST_GITHUB_ACCOUNT: JSON.stringify({ id: '9999', label: 'devspaces-other' }) } : {}),
     },
     // The longest wait of a test is one minute (postAttachCommand).
     mocha: { ...base.mocha, timeout: 120_000 },
