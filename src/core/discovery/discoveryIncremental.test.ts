@@ -60,6 +60,19 @@ class FakeGitHub implements HttpTransport {
   delayOf?: (operation: string) => number;
   /** `start <operation>` and `end <operation>` of each request, in order. */
   readonly events: string[] = [];
+  /** Set by holdLookupsUntilListEnd; resolved when the last page of the list is answered. */
+  private listEnd?: { promise: Promise<void>; resolve: () => void };
+
+  /**
+   * From now on, a batch of lookups answers only when the last page of the list (DISCOVERY_QUERY) was answered, after
+   * its own delay: the order of the answers no longer depends on the speed of the computer, as it does with the delays
+   * alone. A page that waits for a batch then waits for good, and the test ends with its timeout.
+   */
+  holdLookupsUntilListEnd(): void {
+    let resolve!: () => void;
+    const promise = new Promise<void>((done) => (resolve = done));
+    this.listEnd = { promise, resolve };
+  }
 
   async request(request: HttpRequest): Promise<HttpResponse> {
     const parsed = JSON.parse(request.body ?? '{}') as GraphQLRequest;
@@ -70,6 +83,7 @@ class FakeGitHub implements HttpTransport {
     this.peak = Math.max(this.peak, this.open);
     const delayMs = this.delayOf?.(name) ?? (name === 'Configurations' ? this.lookupDelayMs : this.listDelayMs);
     await new Promise((resolve) => setTimeout(resolve, delayMs));
+    if (name === 'Configurations') await this.listEnd?.promise;
     this.open--;
     this.events.push(`end ${name}`);
     return { status: 200, headers: {}, body: JSON.stringify(this.answer(parsed)) };
@@ -86,6 +100,7 @@ class FakeGitHub implements HttpTransport {
   private answer({ query, variables }: GraphQLRequest): unknown {
     if (query === DISCOVERY_QUERY) {
       const repositories = this.page(this.repos, variables);
+      if (!repositories.pageInfo.hasNextPage) this.listEnd?.resolve();
       return { data: { viewer: { login: 'octo', databaseId: 1001, organizations: { pageInfo: { hasNextPage: false }, nodes: [] }, repositories } } };
     }
     if (query === SCOPE_VIEWER_QUERY) {
@@ -125,7 +140,10 @@ class FakeGitHub implements HttpTransport {
     throw new Error(`unexpected query ${query.slice(0, 40)}`);
   }
 
-  private page(repos: FakeRepository[], variables: Record<string, unknown>): unknown {
+  private page(
+    repos: FakeRepository[],
+    variables: Record<string, unknown>,
+  ): { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: unknown[] } {
     const start = variables.cursor === null ? 0 : Number(variables.cursor);
     const size = Number(variables.pageSize);
     const slice = repos.slice(start, start + size);
@@ -277,7 +295,8 @@ describe('incremental detection, empty scope', () => {
     github.requests.length = 0;
     github.peak = 0;
     github.repos = many.map((item) => ({ ...item, pushedAt: '2026-09-25T08:00:00Z' }));
-    github.lookupDelayMs = 30;
+    // GitHub answers the batches only after the last page: three batches are open when it starts, 4 requests in all.
+    github.holdLookupsUntilListEnd();
     const result = await service().refresh(TOKEN, ACCOUNT_ID);
     expect(LOOKUP_BATCH_SIZE).toBe(50);
     expect(github.lookups().map((request) => Object.keys(request.variables).length / 2)).toEqual([50, 50, 50, 50, 30]);
@@ -406,7 +425,7 @@ describe('progressive results (DiscoveryService.onPartialResult)', () => {
 describe('the first load: list pages, then pipelined lookups of all repositories', () => {
   it('lists 100 repositories per page and reads all configurations in batches of 50, at most 4 requests at once', async () => {
     github.repos = Array.from({ length: 664 }, (_, i) => repo(`acme/r${i}`, i % 3 === 0));
-    github.lookupDelayMs = 30;
+    github.holdLookupsUntilListEnd();
     const logger = recordingLogger();
     const result = await service(logger).refresh(TOKEN, ACCOUNT_ID);
     const lists = github.ofQuery(DISCOVERY_QUERY);
@@ -541,7 +560,8 @@ describe('the request pattern of a refresh: list pages beside the lookups, at mo
 
   it('lists every page of the first load while the lookups run: a page never waits for a batch', async () => {
     github.repos = Array.from({ length: 664 }, (_, i) => repo(`acme/r${i}`, i % 3 === 0));
-    github.lookupDelayMs = 40;
+    // GitHub answers the batches only after the last page: the list must load beside the open batches.
+    github.holdLookupsUntilListEnd();
     const logger = recordingLogger();
     const result = await service(logger).refresh(TOKEN, ACCOUNT_ID);
     expect(github.ofQuery(DISCOVERY_QUERY).map((request) => [request.variables.cursor, request.variables.pageSize])).toEqual([
@@ -555,11 +575,11 @@ describe('the request pattern of a refresh: list pages beside the lookups, at mo
     ]);
     expect(github.lookups().map((request) => Object.keys(request.variables).length / 2)).toEqual([...Array(13).fill(50), 14]);
     expect(github.requests).toHaveLength(21);
-    // The whole list arrives before the first batch ends: the pages overlap with the lookups and never wait for them.
-    expect(github.events.lastIndexOf('end Discover')).toBeLessThan(github.events.indexOf('end Configurations'));
+    // The pages started while 3 batches were open, and loaded although no batch ended before the last page: the pages
+    // overlap with the lookups and never wait for them.
     expect(github.events.indexOf('start Configurations')).toBeLessThan(github.events.lastIndexOf('start Discover'));
     const counts = openCounts(github.events);
-    expect(counts.lookupsAtPageStart).toBeLessThanOrEqual(DISCOVERY_CONCURRENCY - 1);
+    expect(counts.lookupsAtPageStart).toBe(DISCOVERY_CONCURRENCY - 1);
     expect(counts.total).toBe(DISCOVERY_CONCURRENCY);
     expect(github.peak).toBe(4);
     expect(names(result.repositories)).toEqual(expected(github.repos).repositories);
@@ -607,7 +627,7 @@ describe('the request pattern of a refresh: list pages beside the lookups, at mo
     ];
     github.requests.length = 0;
     github.events.length = 0;
-    github.lookupDelayMs = 30;
+    github.holdLookupsUntilListEnd();
     const logger = recordingLogger();
     const result = await service(logger).refresh(TOKEN, ACCOUNT_ID);
     expect(github.requests.map((request) => operation(request))).toEqual([
@@ -621,9 +641,9 @@ describe('the request pattern of a refresh: list pages beside the lookups, at mo
       { o0: 'acme', n0: 'r0', o1: 'acme', n1: 'r1', o2: 'acme', n2: 'r2' },
       { o0: 'acme', n0: 'new' },
     ]);
-    // The first batch runs while the other pages load.
+    // The first batch runs while the other pages load: it was open when they started.
     expect(github.events.indexOf('start Configurations')).toBeLessThan(github.events.lastIndexOf('start Discover'));
-    expect(github.events.lastIndexOf('end Discover')).toBeLessThan(github.events.indexOf('end Configurations'));
+    expect(openCounts(github.events).lookupsAtPageStart).toBe(1);
     expect(names(result.repositories)).toEqual([...expected(repos).repositories, 'acme/new']);
     expect(names(result.withoutConfiguration)).toEqual(expected(repos).withoutConfiguration);
     expect(logger.lines).toContain('Repository list: configurations of 4 new or changed repositories read with 2 requests.');
