@@ -1,7 +1,7 @@
 {
   "name": "devspaces-vscode-test-host",
   "displayName": "Devspaces test host",
-  "description": "Development extension without code for the tests of the packaged VSIX (.vscode-test.mjs, label vsix).",
+  "description": "Development extension without code for the tests of the packaged VSIX (.vscode-test.mjs, labels vsix and untrusted).",
   "version": "0.0.0",
   "publisher": "nimblescape-test",
   "private": true,
