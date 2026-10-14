@@ -586,6 +586,18 @@ describe('the entry of a first open, the configuration and the build records as 
       expect(entry()?.buildRecord).toEqual(unpinned);
     });
 
+    it('record: the kind of the devspace, never the other (a devspace never changes its kind); nothing is written', async () => {
+      const image = 'ghcr.io/acme/base:latest';
+      const configuration = setup([entryOf(ID)]);
+      await expect(configuration.ask('build', ID, 'record', buildRecord(ID, 7, { defaultImage: image }), false)).rejects.toThrow('another kind of devspace');
+      expect(configuration.entry()).not.toHaveProperty('buildRecord');
+      // The operation of the default-image devspace.
+      const defaultImage = setup([entryOf(OTHER, { defaultImage: image })], { scope: { devspaceId: OTHER, repository: REPOSITORY, dockerHost: HOST } });
+      await expect(defaultImage.ask('build', OTHER, 'record', buildRecord(OTHER, 7), false)).rejects.toThrow('another kind of devspace');
+      expect(defaultImage.entry(OTHER)).not.toHaveProperty('buildRecord');
+      expect((await defaultImage.ask('build', OTHER, 'record', buildRecord(OTHER, 7, { defaultImage: image }), false)) as Devspace).toMatchObject({ buildRecord: { defaultImage: image } });
+    });
+
     it('record: the name rule, the sha256 IDs and digests, the configuration, the bounded lists, no other field; nothing is written', async () => {
       const prefix = composeProjectName(REPOSITORY, ID);
       const compose = { service: 'app', images: [`${prefix}-app`], serviceImages: ['postgres:16'], version: '2.39.0', inputsHash: DIGEST };

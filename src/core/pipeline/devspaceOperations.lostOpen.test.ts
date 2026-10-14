@@ -58,7 +58,8 @@ describe('the gate of the opens in the worker', () => {
       const first = h.operations.openDevspaceInWorker(ENV_ID, { progress: h.progress });
       const second = h.operations.openDevspaceInWorker(OTHER_ID, { progress: h.progress });
       await until(() => started.length === 2);
-      expect(started).toEqual([ENV_ID, OTHER_ID]);
+      // Both opens reach the worker, in either order (their gates are independent).
+      expect([...started].sort()).toEqual([ENV_ID, OTHER_ID].sort());
       // A second open of the first devspace waits for its first open.
       const again = h.operations.openDevspaceInWorker(ENV_ID, { progress: h.progress });
       await new Promise((resolve) => setTimeout(resolve, 30));
@@ -67,7 +68,7 @@ describe('the gate of the opens in the worker', () => {
       releases[1]();
       await Promise.all([first, second]);
       await until(() => started.length === 3);
-      expect(started).toEqual([ENV_ID, OTHER_ID, ENV_ID]);
+      expect(started[2]).toBe(ENV_ID);
       releases[2]();
       await again;
     } finally {
