@@ -29,6 +29,13 @@ export interface Seed {
   /** The run `remote` only: the Docker context of the other computer (in the folder URI) and its host of the SSH config. */
   dockerContext?: string;
   remoteHost?: string;
+  /** A devspace only: its ID (the label nimblescape.devspaces.id of its volume). */
+  devspaceId?: string;
+  /**
+   * The runs `previous` and `updated` only: the last released version of the extension that prepare.ts installed from
+   * the Marketplace, and the SHA-256 of its dist/extension.js.
+   */
+  previous?: { version: string; extensionSha256: string };
 }
 
 export function seed(): Seed {

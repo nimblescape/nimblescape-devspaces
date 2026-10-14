@@ -2,15 +2,18 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// CI only, before the attach run `stopped` (.github/workflows/ci.yml): packages the extension (npm run package, which
-// also makes the production build in dist/) and the test sign-in provider (test/vscode/github) and installs both from
-// their VSIX files into the extensions folder of the test VS Code, as users install an extension. The second VS Code
-// of that run (test/vscode/attach/stopped.test.ts) loads them from there. It cannot load them as development
-// extensions (--extensionDevelopmentPath): VS Code closes a window of development extensions when one of its extension
-// hosts ends, and the extension host of the container ends when the container stops (seen in PR #18; VS Code,
-// AbstractExtensionService, _onExtensionHostExit). The test VS Code loads its development extensions in place of the
-// installed ones with the same IDs.
+// CI only, before the attach runs `stopped` and `updated` (.github/workflows/ci.yml): packages the extension (npm run
+// package, which also makes the production build in dist/) and the test sign-in provider (test/vscode/github) and
+// installs both from their VSIX files into the extensions folder of the test VS Code, as users install an extension
+// (over an installed version of the extension too: --force). packaged.json next to the VSIX files names the version and
+// the SHA-256 of the packaged dist/extension.js, so that the run `updated` can check that VS Code loads this build
+// (test/vscode/attach/updated.test.ts). The second VS Code of the run `stopped` (test/vscode/attach/stopped.test.ts)
+// loads both from the extensions folder. It cannot load them as development extensions (--extensionDevelopmentPath):
+// VS Code closes a window of development extensions when one of its extension hosts ends, and the extension host of the
+// container ends when the container stops (seen in PR #18; VS Code, AbstractExtensionService, _onExtensionHostExit).
+// The test VS Code loads its development extensions in place of the installed ones with the same IDs.
 import { spawnSync } from 'node:child_process';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +37,10 @@ function run(command, args, options = {}) {
 fs.rmSync(folder, { recursive: true, force: true });
 fs.mkdirSync(folder, { recursive: true });
 run('npm', ['run', '-s', 'package', '--', '--out', extension]);
+const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const extensionSha256 = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'dist', 'extension.js'))).digest('hex');
+fs.writeFileSync(path.join(folder, 'packaged.json'), JSON.stringify({ version, extensionSha256 }, null, 2));
+console.log(`Packaged version ${version} (dist/extension.js ${extensionSha256}).`);
 // The folder has no repository field and no license file of its own.
 await createVSIX({ cwd: path.join(root, 'test', 'vscode', 'github'), packagePath: github, dependencies: false, allowMissingRepository: true, skipLicense: true });
 

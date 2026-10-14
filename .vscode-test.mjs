@@ -14,8 +14,10 @@
 //   test/vscode/attach/<kind>.test.ts there. It exists only when DEVSPACE_TEST_ATTACH names the kind (plain,
 //   devspace, reattach: the devspace again after a restart of VS Code, account: the devspace under another GitHub
 //   account, longopen: the devspace with an open pipeline of several minutes, remote: a devspace on the Docker engine
-//   of another computer over SSH, or stopped: a local folder, whose tests start a second VS Code in the window of the
-//   devspace and stop and remove its container), so that no local run reaches the Docker engine of this computer.
+//   of another computer over SSH, stopped: a local folder, whose tests start a second VS Code in the window of the
+//   devspace and stop and remove its container, previous: the devspace with the last released version of the
+//   extension, or updated: the devspace again after the update to the VSIX of this checkout), so that no local run
+//   reaches the Docker engine of this computer.
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
 import * as crypto from 'crypto';
@@ -107,18 +109,31 @@ function configuration(label, index, options, { keepUserDataDir = false } = {}) 
  * `longopen` starts as long after the last open: without the pending connection files of the extension. The runs before
  * usually remove them already; this makes sure that the window runs the open pipeline again (src/vscode/
  * activationRules.ts, pipelineJustRan).
+ * `previous` and `updated` (a CI job of their own, prepare.ts with DEVSPACE_TEST_ATTACH_PREPARE=update) load the
+ * extension that is installed in the extensions folder of the test VS Code, not the build of this checkout: `previous`
+ * the last released version from the Marketplace, with a fresh user data folder where VS Code updates no extension;
+ * `updated` the VSIX of this checkout that CI installed over it (scripts/install-attach-extensions.mjs), with the user
+ * data folder of `previous` and as long after the last open (like `longopen`), so that the window runs the open
+ * pipeline of the new version, as at the first start of VS Code some time after an update. VS Code loads only the small
+ * folder test/vscode/host and the sign-in provider as development extensions, as in the configuration `vsix`.
  */
 function attachConfiguration(kind, index) {
-  const restart = kind === 'reattach' || kind === 'account' || kind === 'longopen' || kind === 'stopped';
-  const container = restart ? 'devspace' : kind;
+  const restart = kind === 'reattach' || kind === 'account' || kind === 'longopen' || kind === 'stopped' || kind === 'updated';
+  const update = kind === 'previous' || kind === 'updated';
+  const container = restart || update ? 'devspace' : kind;
   const seed = JSON.parse(fs.readFileSync(new URL('out/test/vscode/attach/seed.json', import.meta.url), 'utf8'))[container];
   if (!seed) throw new Error(`out/test/vscode/attach/seed.json has no container "${container}".`);
   const base = configuration('attach', index, {}, { keepUserDataDir: restart });
-  if (kind === 'longopen' && !listsOnly) {
+  const userSettings = path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'settings.json');
+  if (kind === 'previous' && !listsOnly) {
+    fs.mkdirSync(path.dirname(userSettings), { recursive: true });
+    fs.writeFileSync(userSettings, JSON.stringify({ 'extensions.autoUpdate': false, 'extensions.autoCheckUpdates': false }, null, 2));
+  }
+  if ((kind === 'longopen' || kind === 'updated') && !listsOnly) {
     const pending = path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'globalStorage', `${manifest.publisher}.${manifest.name}`, 'pending');
     for (const name of fs.existsSync(pending) ? fs.readdirSync(pending) : []) fs.rmSync(path.join(pending, name), { force: true });
   }
-  const extensionDevelopmentPath = [checkout, fileURLToPath(new URL('test/vscode/github', import.meta.url))];
+  const extensionDevelopmentPath = [update ? fileURLToPath(new URL('test/vscode/host', import.meta.url)) : checkout, fileURLToPath(new URL('test/vscode/github', import.meta.url))];
   // `stopped` starts with a local folder; its tests start a second VS Code in the window of the devspace
   // (test/vscode/attach/stopped.test.ts): with an empty user data folder of its own (VS Code puts its socket there, so
   // the path is short), the extensions folder of the test VS Code (@vscode/test-electron, getProfileArguments), where
