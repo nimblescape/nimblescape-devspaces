@@ -12,7 +12,7 @@ import { silentLogger } from '../core/ports';
 import type { Devspace, RepositoryInfo } from '../core/types';
 import { resetFakeVscode, type ThemeIcon, type TreeItem } from './testing/fakeVscode';
 import { parseRepositoryGroups } from './repositoryGroups';
-import { buildTreeModel, type GroupNode, type HintRow, type OwnerGroup, type RepositoryRow } from './treeModel';
+import { buildTreeModel, type GroupNode, type HintRow, type OwnerGroup, type RepositoryNode, type RepositoryRow } from './treeModel';
 import { DOCKER_HOST_ROW_ID, DockerHostRowTexts, RepositoriesTreeProvider, expandAll, type TreeNode } from './treeView';
 
 function repo(nameWithOwner: string): RepositoryInfo {
@@ -333,6 +333,91 @@ describe('nodes of the setting repositoryGroups', () => {
       const command = ((provider.getTreeItem(node) as unknown as TreeItem).command as { command: string } | undefined)?.command;
       expect(command).toBe(node.kind === 'repository' ? 'devspaces.rowActivated' : undefined);
     }
+    provider.dispose();
+  });
+});
+
+describe('the node of a repository with several sources', () => {
+  beforeEach(() => resetFakeVscode());
+  const IMAGE = 'ghcr.io/majikmate/devcontainer-base:latest';
+  const PYTHON = '.devcontainer/python/devcontainer.json';
+
+  /**
+   * acme/api with the default image and two configurations: a node with three child rows; acme/web without a
+   * configuration: one row (the default image is its only source).
+   */
+  function sourcesModel(): OwnerGroup[] {
+    const api = { ...repo('acme/api'), configPaths: ['.devcontainer/devcontainer.json', PYTHON] };
+    const web = { ...repo('acme/web'), configPaths: [] };
+    return buildTreeModel({
+      discovery: { version: 1, fetchedAt: '', viewerLogin: 'me', organizations: ['acme'], repositories: [api, web], hints: [], scope: [], withoutConfiguration: [] },
+      settings: { owners: [], includeArchived: false, includeForks: true, defaultImage: IMAGE },
+      devspaces: [{ ...env, configPath: PYTHON }],
+      runtime: new Map([['e1', { container: 'running', volume: true }]]),
+      currentDevspaceId: 'e1',
+      otherWindowDevspaceIds: new Set(),
+      busyDevspaceIds: new Set(),
+      liveBranches: new Map([['e1', 'main']]),
+      signedIn: true,
+    });
+  }
+
+  it('maps the node to an expanded item without command, with the child rows as its children and itself as their parent', () => {
+    const provider = new RepositoriesTreeProvider(silentLogger);
+    provider.setModel(sourcesModel());
+    const [owner] = provider.getChildren() as OwnerGroup[];
+    const [node, web] = provider.getChildren(owner) as [RepositoryNode, RepositoryRow];
+    expect(node.kind).toBe('repositoryNode');
+    expect(web.kind).toBe('repository');
+    const item = provider.getTreeItem(node) as unknown as TreeItem;
+    expect(item).toMatchObject({ label: 'api', id: 'repo:acme/api', contextValue: 'sources', collapsibleState: 2 });
+    expect(item.command).toBeUndefined();
+    expect((item.iconPath as ThemeIcon).id).toBe('blank');
+    expect((item.accessibilityInformation as { label: string }).label).toBe('acme/api');
+    const children = provider.getChildren(node) as RepositoryRow[];
+    expect(children.map((child) => [child.kind, child.label, child.child])).toEqual([
+      ['repository', 'default', true],
+      ['repository', 'config', true],
+      ['repository', 'python', true],
+    ]);
+    // The child rows carry the actions of a row: the command of a double-click, the icon of their state.
+    for (const child of children) {
+      const row = provider.getTreeItem(child) as unknown as TreeItem;
+      expect(row.command).toEqual({ command: 'devspaces.rowActivated', title: 'Start', arguments: [child] });
+      expect(provider.getParent(child)).toBe(node);
+    }
+    expect((provider.getTreeItem(children[2]) as unknown as TreeItem).contextValue).toContain('canStop');
+    expect(provider.getParent(node)).toBe(owner);
+    expect(provider.getParent(web)).toBe(owner);
+    provider.dispose();
+  });
+
+  it('Expand All opens the node too', async () => {
+    const groups = sourcesModel();
+    const revealed: string[] = [];
+    const view = { reveal: vi.fn(async (node: TreeNode) => void revealed.push(node.id)) };
+    await expandAll(view, groups);
+    expect(revealed).toEqual(['owner:acme', 'repo:acme/api']);
+  });
+
+  it('gives the node a contextValue that no row action of package.json matches', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      contributes: { menus: Record<string, Array<{ when?: string }>> };
+    };
+    const provider = new RepositoriesTreeProvider(silentLogger);
+    const [owner] = sourcesModel();
+    const value = (provider.getTreeItem(owner.children[0]) as unknown as TreeItem).contextValue ?? '';
+    expect(value).toBe('sources');
+    let checked = 0;
+    for (const menu of ['view/item/context', 'devspaces.more']) {
+      for (const { when } of manifest.contributes.menus[menu]) {
+        for (const regex of (when ?? '').matchAll(/viewItem =~ \/(.+?)\//g)) {
+          checked += 1;
+          expect(new RegExp(regex[1]).test(value)).toBe(false);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
     provider.dispose();
   });
 });

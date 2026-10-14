@@ -180,7 +180,7 @@ export interface CreateRequest {
 }
 
 /** A default image of a request (DevspaceSource `defaultImage`): a valid image reference (parseImageReference), bounded. */
-function isDefaultImage(value: unknown): value is string {
+export function isDefaultImage(value: unknown): value is string {
   return plainText(value, MAX_REFERENCE_LENGTH) && parseImageReference(value) !== undefined;
 }
 
@@ -223,8 +223,9 @@ export function checkedConfigurationChange(value: unknown): ConfigurationChange 
   if (!isRecord(value) || !hasOnlyFields(value, CONFIGURATION_FIELDS)) throw invalid('change of the configuration');
   const { select, defaultImage, shutdownActionNone, addVolumes, addServiceVolumes, keepRefusedFor, serviceFolders, cloned } = value;
   if (select !== undefined && !isConfigPath(select)) throw invalid('selected configuration');
-  // The default image: a valid image reference, or `null` (the open uses the configuration).
-  if (defaultImage !== undefined && defaultImage !== null && !isDefaultImage(defaultImage)) throw invalid('default image');
+  // The default image of this open of a default-image devspace: a valid image reference (a devspace never changes its
+  // kind: the field is never removed).
+  if (defaultImage !== undefined && !isDefaultImage(defaultImage)) throw invalid('default image');
   if (shutdownActionNone !== undefined && typeof shutdownActionNone !== 'boolean') throw invalid('shutdown action');
   let keep: ConfigurationChange['keepRefusedFor'];
   if (keepRefusedFor !== undefined) {
@@ -243,7 +244,7 @@ export function checkedConfigurationChange(value: unknown): ConfigurationChange 
   if (cloned !== undefined && cloned !== true) throw invalid('clone of the change');
   return {
     ...(select !== undefined ? { select } : {}),
-    ...(defaultImage !== undefined ? { defaultImage: defaultImage as string | null } : {}),
+    ...(defaultImage !== undefined ? { defaultImage } : {}),
     ...(shutdownActionNone !== undefined ? { shutdownActionNone } : {}),
     ...(addVolumes !== undefined ? { addVolumes: volumeNames(addVolumes, 'additional volumes') } : {}),
     ...(addServiceVolumes !== undefined ? { addServiceVolumes: volumeNames(addServiceVolumes, 'volumes of the services') } : {}),
@@ -387,8 +388,8 @@ export interface OpenRequests {
   openFinished(devspaceId: string, finish: HostOpenFinish): Promise<Devspace | undefined>;
   /**
    * OpenRecords.createDevspace, the entry built here (this window's account, Docker host, clock and create mark).
-   * The answer is the new entry, or the entry of the repository of the account on the Docker host that another window
-   * created meanwhile (one devspace per repository and account).
+   * The answer is the new entry, or the entry of the same source of the repository of the account on the Docker host
+   * that another window created meanwhile (one devspace per repository, account and source).
    */
   createDevspace(request: CreateRequest): Promise<Devspace>;
   /** OpenRecords.dropCreated, only an entry with the create mark of this window. */

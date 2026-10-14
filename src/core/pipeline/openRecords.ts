@@ -70,10 +70,10 @@ export interface ConfigurationChange {
   /** Devspace.configPath: the selected configuration (or the one restored after a failed start). */
   select?: string;
   /**
-   * Devspace.defaultImage: the default image that the open uses in place of the configuration (DevspaceSource), or
-   * `null`: the open uses the configuration (the field is removed).
+   * Devspace.defaultImage: the default image that this open of a default-image devspace uses in place of the
+   * configuration (DevspaceSource). A devspace never changes its kind: the field is never removed.
    */
-  defaultImage?: string | null;
+  defaultImage?: string;
   shutdownActionNone?: boolean;
   /** Joins Devspace.additionalVolumes, those not recorded yet. */
   addVolumes?: readonly string[];
@@ -205,10 +205,7 @@ export function registryOpenRecords(registry: Pick<DevspaceRegistry, 'add' | 're
     configuration(devspaceId, change) {
       return registry.updateDevspace(devspaceId, (entry) => {
         if (change.select !== undefined) entry.configPath = change.select;
-        if (change.defaultImage !== undefined) {
-          if (change.defaultImage === null) delete entry.defaultImage;
-          else entry.defaultImage = change.defaultImage;
-        }
+        if (change.defaultImage !== undefined) entry.defaultImage = change.defaultImage;
         if (change.shutdownActionNone !== undefined) entry.shutdownActionNone = change.shutdownActionNone;
         // A name once, also when the change repeats it.
         if (change.addVolumes !== undefined) {

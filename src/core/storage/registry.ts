@@ -190,8 +190,8 @@ export class DevspaceRegistry {
   /**
    * When the registry lost content (`record restore`): adds the entries that were rebuilt from the labels of their
    * volumes, under the lock. An entry whose ID or volume the registry has is left out (it was never lost); one of a
-   * repository of which its owner account has a devspace on its Docker host already is left out too (one
-   * devspace per repository and account) and named in `skipped` (its volume name).
+   * repository of which its owner account has a devspace of the same source (sourceOf) on its Docker host already is
+   * left out too (one devspace per repository, account and source) and named in `skipped` (its volume name).
    */
   async restore(entries: readonly Devspace[]): Promise<{ added: number; skipped: string[] }> {
     return this.update((file) => {
@@ -201,7 +201,7 @@ export class DevspaceRegistry {
         // A volume or container of the same name in another case is the same one.
         const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
         if (file.devspaces.some((e) => e.id === entry.id || same(e.volumeName, entry.volumeName) || same(e.containerName, entry.containerName))) continue;
-        if (file.devspaces.some((e) => isDevspaceOf(e, entry.repository, entry.owner.id, dockerHostOf(entry)))) {
+        if (file.devspaces.some((e) => isDevspaceOf(e, entry.repository, entry.owner.id, dockerHostOf(entry), sourceOf(entry)))) {
           skipped.push(entry.volumeName);
           continue;
         }

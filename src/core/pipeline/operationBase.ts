@@ -186,8 +186,9 @@ export interface OpenOptions extends OperationOptions {
   forceRebuild?: boolean;
   /**
    * Opens the devspace with another configuration path of its repository (a rebuild). No command sends it since
-   * version 0.6.0 (each configuration is its own devspace, DevspaceSource); the pipeline keeps it for the switch of
-   * the dev service of Docker Compose, which a changed configuration brings about the same way.
+   * version 0.6.0 (each configuration is its own devspace, DevspaceSource): the tests of a changed configuration use
+   * it, and the pipeline keeps the switch of the dev service of Docker Compose that a changed configuration brings
+   * about.
    */
   configPath?: string;
   /**
@@ -265,10 +266,6 @@ export function devspaceBusy(repository: string, mark: BusyMark): UserFacingErro
 
 export function otherAccount(repository: string): UserFacingError {
   return new UserFacingError('otherAccount', Messages.otherAccount(repository));
-}
-
-export function repositoryKey(repository: string): string {
-  return repository.toLowerCase();
 }
 
 /** Waits for `promise`; rejects with an AbortError when `signal` aborts first. */

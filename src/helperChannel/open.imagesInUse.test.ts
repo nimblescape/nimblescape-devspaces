@@ -80,6 +80,9 @@ describe('the image references in use of an open, to the Monitor', () => {
     // The source of the open (DevspaceSource), strictly.
     const configuration = { kind: 'configuration', configPath: '.devcontainer/python/devcontainer.json' };
     expect(parseOpenParams({ ...base, source: configuration })?.source).toEqual(configuration);
+    for (const configPath of ['.devcontainer.json', '.devcontainer/devcontainer.json']) {
+      expect(parseDevspaceSource({ kind: 'configuration', configPath })).toEqual({ kind: 'configuration', configPath });
+    }
     expect(parseOpenParams({ ...base, source: { kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' } })?.source).toEqual({ kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' });
     expect(parseOpenParams(base)).not.toHaveProperty('source');
     for (const odd of [
@@ -88,6 +91,11 @@ describe('the image references in use of an open, to the Monitor', () => {
       { kind: 'configuration' },
       { kind: 'configuration', configPath: '' },
       { kind: 'configuration', configPath: 'a\nb' },
+      // Only a configuration path of a repository (isConfigPathLabelValue).
+      { kind: 'configuration', configPath: 'devcontainer.json' },
+      { kind: 'configuration', configPath: '../x/devcontainer.json' },
+      { kind: 'configuration', configPath: '.devcontainer/../devcontainer.json' },
+      { kind: 'configuration', configPath: '.devcontainer/a/b/devcontainer.json' },
       { kind: 'configuration', image: 'node:20' },
       { kind: 'configuration', configPath: '.devcontainer/devcontainer.json', image: 'node:20' },
       { kind: 'other' },

@@ -29,7 +29,8 @@ function setup(options: { devspaceId?: string; found?: Devspace; account?: strin
       account: async () => (calls.push('account'), options.account === undefined ? { id: '42', login: 'octo' } : { id: options.account, login: 'other' }),
     },
     records: {
-      findForAccount: async (repository: string, accountId: string, dockerHost: string) => (calls.push(`find ${repository} ${accountId} ${dockerHost}`), found),
+      findForAccount: async (repository: string, accountId: string, dockerHost: string, source?: unknown) =>
+        (calls.push(`find ${repository} ${accountId} ${dockerHost}${source === undefined ? '' : ` ${JSON.stringify(source)}`}`), found),
       restore: async () => (calls.push('restore'), (found = E2), { added: 1, skipped: [] }),
       clearBusy: async (id: string) => void calls.push(`clearBusy ${id}`),
     },
@@ -96,6 +97,20 @@ describe('the devspace of the open of a repository', () => {
     expect(await ask('question', 'confirmUntrustedRepository', 'acme/app')).toBe(true);
     expect(await ask('question', 'confirmUntrustedRepository', 'Acme/App')).toBe(true);
     expect(calls).toEqual(['trust acme/app', 'trust Acme/App']);
+  });
+
+  it('passes the source of the request to the registry (the devspace of that source), and refuses one that is no source', async () => {
+    const { ask, calls } = setup({ found: E1 });
+    const source = { kind: 'configuration', configPath: '.devcontainer/python/devcontainer.json' };
+    expect(await ask('record', 'findForAccount', 'acme/app', '42', HOST, source)).toEqual(E1);
+    expect(calls).toEqual(['account', `find acme/app 42 ${HOST} ${JSON.stringify(source)}`]);
+    expect(await ask('record', 'clearBusy', 'e1')).toBeNull();
+    const other = setup({ found: E1 });
+    for (const odd of [{ kind: 'configuration', configPath: 'x' }, { kind: 'defaultImage', image: 'not an image' }, 'default', null]) {
+      expect(await other.refused('record', 'findForAccount', 'acme/app', '42', HOST, odd), JSON.stringify(odd)).toBe('invalid');
+    }
+    expect(await other.refused('record', 'findForAccount', 'acme/app', '42', HOST, source, 'more')).toBe('invalid');
+    expect(other.calls).toEqual([]);
   });
 
   it('the devspace of its repository in another case binds it too', async () => {

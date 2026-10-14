@@ -8,8 +8,8 @@
 // keeps its kind; it asks Rebuild now or Later when the default image of the settings changes; and the headless prepare
 // builds the synthesized configuration too. The extension side (the settings, the rows, the commands) is in src/vscode.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { LABEL_BUILD_RECORD, LABEL_CONFIG_PATH, LABEL_DEFAULT_IMAGE, devspaceImageName, preparedImageName, resourceName } from '../names';
-import type { Devspace, DevspaceSource } from '../types';
+import { LABEL_BUILD_RECORD, LABEL_CONFIG_PATH, LABEL_DEFAULT_IMAGE, LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, devspaceImageName, preparedImageName, resourceName } from '../names';
+import type { BuildRecord, Devspace, DevspaceSource } from '../types';
 import type { RepositoryTarget } from './operationBase';
 import {
   ACCOUNT,
@@ -19,6 +19,7 @@ import {
   ENV_ID,
   FEATURE,
   FEATURE_DIGEST,
+  OTHER_ID,
   REPO,
   checked,
   createHarness,
@@ -163,22 +164,59 @@ describe('the default-image devspace of a repository', () => {
     expect((await h.registry.get(ENV_ID))?.defaultImage).toBe(IMAGE);
   });
 
-  it('keeps the default image of the build record of an entry restored from a volume without the source label (version 0.5.0 or older)', async () => {
-    const env = await seedDefaultImageDevspace({ container: 'stopped' });
-    const record = env.buildRecord!;
+  it('registry lost: a volume without the source label (version 0.5.0 or older) keeps the kind of the build record of its newest devspace image', async () => {
+    // The volume of a default-image devspace of version 0.5.0: the old name, no source label; its devspace image
+    // records the default image it was built from.
+    const name = resourceName(REPO, OTHER_ID);
+    const tag = devspaceImageName(REPO, OTHER_ID, 1);
+    const record: BuildRecord = {
+      builtAt: '2026-09-20T10:00:00.000Z',
+      devspaceImage: tag,
+      imageId: `sha256:image-of-${tag}`,
+      buildNumber: 1,
+      configPath: DEFAULT_CONFIG_PATH,
+      configHash: configHash(SYNTHESIZED.text),
+      defaultImage: IMAGE,
+      images: { [IMAGE]: IMAGE_DIGEST },
+      features: {},
+    };
+    h.docker.volumes.set(name, { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id });
+    h.docker.images.add(tag);
     const config = imageConfigWithUser('vscode');
-    h.docker.imageConfigs.set(record.devspaceImage, { ...config, Labels: { ...config.Labels, ...imageRecordLabels(env, record) } });
-    // The entry lost its record and its kind (as reconcileFromVolumes restores it from a volume without the label).
-    await h.registry.updateDevspace(ENV_ID, (entry) => {
-      delete entry.buildRecord;
-      delete entry.defaultImage;
-    });
-    await h.service.openDevspace(ENV_ID, options());
+    h.docker.imageConfigs.set(tag, { ...config, Labels: { ...config.Labels, ...imageRecordLabels({ id: OTHER_ID, repository: REPO, owner: ACCOUNT }, record) } });
+    expect(await h.service.reconcileFromVolumes()).toBe(1);
+    expect(await h.registry.get(OTHER_ID)).toMatchObject({ defaultImage: IMAGE, configPath: DEFAULT_CONFIG_PATH, volumeName: name });
+    expect(h.logger.infos).toContain(`The volume ${name} is the default-image devspace of ${REPO}, as its devspace image ${tag} records: it was built from ${IMAGE}.`);
+    // The Start of the default row finds it: no second default-image devspace.
+    expect((await h.registry.findForAccount(REPO, ACCOUNT.id, '', DEFAULT_IMAGE))?.id).toBe(OTHER_ID);
+    expect(await h.registry.findForAccount(REPO, ACCOUNT.id, '', CONFIGURATION)).toBeUndefined();
+    // Its open takes the record of the image and builds nothing.
+    await h.service.openDevspace(OTHER_ID, options());
     expect(h.helper.builds).toEqual([]);
     expect(h.helper.readConfigurations.every((read) => read.override?.image === IMAGE)).toBe(true);
     expect(h.helper.calls.filter((call) => call.startsWith('readConfigFiles'))).toEqual([]);
-    expect((await h.registry.get(ENV_ID))).toMatchObject({ defaultImage: IMAGE, buildRecord: { defaultImage: IMAGE } });
-    expect(h.logger.infos).toContain(`${REPO} is the default-image devspace of its repository, as its devspace image records: it opens with the default image ${IMAGE}.`);
+    expect(await h.registry.get(OTHER_ID)).toMatchObject({ defaultImage: IMAGE, buildRecord: { defaultImage: IMAGE } });
+  });
+
+  it('registry lost: a volume of a configuration devspace without the source label stays a configuration devspace', async () => {
+    const name = resourceName(REPO, OTHER_ID);
+    const tag = devspaceImageName(REPO, OTHER_ID, 1);
+    const record: BuildRecord = {
+      builtAt: '2026-09-20T10:00:00.000Z',
+      devspaceImage: tag,
+      imageId: `sha256:image-of-${tag}`,
+      buildNumber: 1,
+      configPath: DEFAULT_CONFIG_PATH,
+      configHash: 'sha256:config',
+      images: { [BASE_IMAGE]: DIGEST_NEW },
+      features: {},
+    };
+    h.docker.volumes.set(name, { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id });
+    h.docker.images.add(tag);
+    h.docker.imageConfigs.set(tag, { ...imageConfigWithUser('vscode'), Labels: imageRecordLabels({ id: OTHER_ID, repository: REPO, owner: ACCOUNT }, record) });
+    expect(await h.service.reconcileFromVolumes()).toBe(1);
+    expect(await h.registry.get(OTHER_ID)).not.toHaveProperty('defaultImage');
+    expect((await h.registry.findForAccount(REPO, ACCOUNT.id, '', CONFIGURATION))?.id).toBe(OTHER_ID);
   });
 
   it('asks Rebuild now or Later when the default image of the settings changed; Later keeps the container and records the new image', async () => {

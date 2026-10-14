@@ -171,7 +171,8 @@ export function extensionHostSide(deps: HostSideDeps): HostSide {
       lifecycleMark: async (devspaceId, change, scope) => (await openRequests(scope)).lifecycleMark(devspaceId, change),
       openFinished: async (devspaceId, finish, scope) => (await openRequests(scope)).openFinished(devspaceId, finish),
       // The entry of a first open, its removal, the configuration and the build records (requestOpenRecords).
-      createDevspace: async (id, repository, configPath, scope) => (await openRequests(scope)).createDevspace({ id, repository, configPath }),
+      createDevspace: async (id, repository, configPath, scope, defaultImage) =>
+        (await openRequests(scope)).createDevspace({ id, repository, configPath, ...(defaultImage !== undefined ? { defaultImage } : {}) }),
       dropCreated: async (devspaceId, scope) => (await openRequests(scope)).dropCreated(devspaceId),
       configuration: async (devspaceId, change, scope) => (await openRequests(scope)).configuration(devspaceId, change),
       build: async (devspaceId, change, scope) => (await openRequests(scope)).build(devspaceId, change),

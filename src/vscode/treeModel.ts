@@ -572,12 +572,11 @@ export function buildTreeModel(input: TreeInput): OwnerGroup[] {
  * (`devspaces`, most recently used first; empty for a repository without one): its one row when it has one possible
  * source (possibleSources), with a row per devspace when several devspaces (one per Docker host) have that source; else
  * its node with a child row per source. A repository that GitHub does not list (`info` missing) shows only the sources
- * of its devspaces: a source without devspace would need the clone of a repository that cannot be found.
+ * of its devspaces (possibleSources).
  */
 function repositoryEntries(key: string, info: RepositoryInfo | undefined, devspaces: readonly Devspace[], confirmedMissing: boolean, input: TreeInput): RepositoryEntry[] {
   const repository = info?.nameWithOwner ?? devspaces[0]?.repository ?? key;
-  const settings = info === undefined ? { ...input.settings, defaultImage: undefined } : input.settings;
-  const sources = possibleSources({ info, devspaces, settings });
+  const sources = possibleSources({ info, devspaces, settings: input.settings });
   const baseId = `repo:${key}`;
   const rowsOf = (source: DevspaceSource, id: string, child: boolean): RepositoryRow[] => {
     const matching = devspaces.filter((devspace) => isSourceOf(devspace, source));

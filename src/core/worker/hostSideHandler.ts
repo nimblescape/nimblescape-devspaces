@@ -10,7 +10,7 @@ import { DETAILED_REQUESTS, HOST_SECRET_NAMES, HOST_SESSION_FILES, SCOPED_REQUES
 import { BUSY_OPERATIONS } from '../pipeline/busyMarks';
 import type { DeleteConfirmation } from '../pipeline/deleteCheck';
 import { sameBusyMark } from '../pipeline/openRecords';
-import type { BusyMark, BusyOperation, Devspace } from '../types';
+import type { BusyMark, BusyOperation, Devspace, DevspaceSource } from '../types';
 import {
   VOLUME_NAME,
   busyMarkFields,
@@ -21,8 +21,10 @@ import {
   checkedGitSummary,
   checkedLifecycleChange,
   checkedOpenFinish,
+  isDefaultImage,
   type OpenRequestScope,
 } from './openRequests';
+import { sourceSegment } from '../devspaceSource';
 import { MAX_RESTORE_ENTRIES, parseDevspaceSource } from '../helperChannel/protocol';
 import { parseConfigCheckEntry } from '../storage/configCheckEntry';
 import { isConfigPathLabelValue, repositoryFolder, resourceName } from '../names';
@@ -227,6 +229,7 @@ const RESTORED_FIELDS = new Set([
   'id',
   'repository',
   'configPath',
+  'defaultImage',
   'volumeName',
   'containerName',
   'createdAt',
@@ -276,13 +279,19 @@ function restoredEntry(entry: unknown, dockerHost: string): Devspace {
   const fields = entry as Record<string, unknown>;
   const odd = Object.keys(fields).find((key) => !RESTORED_FIELDS.has(key));
   if (odd !== undefined) throw invalid('a field is not one of a restored entry');
-  const { id, repository, configPath, volumeName, containerName, createdAt, lastUsedAt, owner } = fields;
+  const { id, repository, configPath, defaultImage, volumeName, containerName, createdAt, lastUsedAt, owner } = fields;
   if (!isStorageId(id) || !isRepositoryName(repository) || !plainText(repository, 256)) throw invalid('its ID or repository');
-  // Only the volume of the name that the extension gives the devspace of these labels, and its container.
-  if (typeof volumeName !== 'string' || volumeName.toLowerCase() !== resourceName(repository, id).toLowerCase() || containerName !== volumeName) {
+  if (typeof configPath !== 'string' || (configPath !== DEFAULT_CONFIG_PATH && !isConfigPathLabelValue(configPath))) throw invalid('its configuration path');
+  // The source of the entry (the label of its volume): the default image of a default-image devspace, a valid image
+  // reference; else its configuration.
+  if (defaultImage !== undefined && !isDefaultImage(defaultImage)) throw invalid('its default image');
+  const source: DevspaceSource = defaultImage !== undefined ? { kind: 'defaultImage', image: defaultImage } : { kind: 'configuration', configPath };
+  // Only the volume of the name that the extension gives the devspace of these labels (with the word of its source,
+  // or without it: a volume of version 0.5.0 or older), and its container.
+  const names = [resourceName(repository, id, sourceSegment(source)), resourceName(repository, id)].map((name) => name.toLowerCase());
+  if (typeof volumeName !== 'string' || !names.includes(volumeName.toLowerCase()) || containerName !== volumeName) {
     throw invalid('its volume has not the name of its devspace');
   }
-  if (typeof configPath !== 'string' || (configPath !== DEFAULT_CONFIG_PATH && !isConfigPathLabelValue(configPath))) throw invalid('its configuration path');
   if (!isTime(createdAt) || !isTime(lastUsedAt)) throw invalid('a time');
   if (typeof owner !== 'object' || owner === null || Array.isArray(owner)) throw invalid('its owner');
   const { id: ownerId, login, ...rest } = owner as Record<string, unknown>;
@@ -309,6 +318,7 @@ function restoredEntry(entry: unknown, dockerHost: string): Devspace {
     id,
     repository,
     configPath,
+    ...(defaultImage !== undefined ? { defaultImage } : {}),
     volumeName,
     containerName: volumeName,
     createdAt: createdAt as string,
