@@ -9,9 +9,10 @@
 // context. prepare.ts made the devspace without container, so the extension restores it from its volume labels on that
 // engine and runs the open pipeline there before the window connects; the Dev Containers extension attaches through
 // the context of the URI. The engine of the runner has a container with the name of the devspace container, which the
-// window must not use.
+// window must not use. The current context is the one of the URI, so these tests do not tell whether Dev Containers
+// reads the context from the URI or follows the current context; the window of another Docker host than the current
+// one closes before it attaches (controller.ts, onWindowHost).
 import * as assert from 'assert';
-import * as childProcess from 'child_process';
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { DEFAULT_CONTEXT_NAME } from '../../../src/core/docker/dockerHost';
@@ -60,17 +61,12 @@ describe('the window of a devspace on a Docker engine over SSH', () => {
     assert.strictEqual(docker(['--context', dockerContext, 'exec', containerName, 'cat', WINDOW_MARK]), text);
     // The container of the local Docker still runs, and the window left nothing there: no file and no VS Code server.
     assert.strictEqual(docker(['--context', DEFAULT_CONTEXT_NAME, 'inspect', '-f', '{{.State.Status}}', containerName]).trim(), 'running');
-    const local = childProcess.spawnSync(
-      'docker',
-      ['--context', DEFAULT_CONTEXT_NAME, 'exec', containerName, 'sh', '-c', 'for f in "$@"; do if [ -e "$f" ]; then echo "$f"; fi; done', 'sh', WINDOW_MARK, '/root/.vscode-server'],
-      { encoding: 'utf8' },
-    );
-    assert.strictEqual(local.status, 0, local.stderr);
-    assert.strictEqual(local.stdout.trim(), '', 'The window changed the container of the same name on the local Docker');
+    const found = docker(['--context', DEFAULT_CONTEXT_NAME, 'exec', containerName, 'sh', '-c', 'for f in "$@"; do if [ -e "$f" ]; then echo "$f"; fi; done', 'sh', WINDOW_MARK, '/root/.vscode-server']);
+    assert.strictEqual(found.trim(), '', 'The window changed the container of the same name on the local Docker');
   });
 
   it('runs the Monitor on that engine and creates nothing on the local Docker', () => {
-    assert.notStrictEqual(docker(['--context', dockerContext, 'ps', '-aq', '--filter', `label=${LABEL_MONITOR}`]).trim(), '', `No Monitor on ${remoteHost}`);
+    assert.notStrictEqual(docker(['--context', dockerContext, 'ps', '-q', '--filter', `label=${LABEL_MONITOR}`, '--filter', 'status=running']).trim(), '', `No Monitor runs on ${remoteHost}`);
     // Workers and the Monitor are containers of the helper image, which carries LABEL_HELPER.
     const local = (args: string[]): string => docker(['--context', DEFAULT_CONTEXT_NAME, ...args]).trim();
     assert.strictEqual(local(['images', '-q', '--filter', `label=${LABEL_HELPER}`]), '', 'A helper image on the local Docker');
