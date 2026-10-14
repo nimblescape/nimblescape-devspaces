@@ -4,7 +4,7 @@
 
 // Pure model of the sidebar: one list of repositories, grouped by owner. This module never imports `vscode`, so the
 // rules for rows, states, actions, and sorting are unit-tested; treeView.ts only maps the model to tree items.
-import { defaultImageOf, hasConfiguration, isSourceOf, possibleSources, sourceKey, sourceLabel } from '../core/devspaceSource';
+import { defaultImageOf, hasConfiguration, isSourceOf, possibleSources, sourceKey, sourceLabel, sourceOf } from '../core/devspaceSource';
 import { filterRepositories } from '../core/discovery/discoveryService';
 import { isOnDockerHost } from '../core/docker/dockerHost';
 import { hostAccessChecks, type HostAccessChecks } from '../core/policy/hostAccessChecks';
@@ -867,7 +867,9 @@ function devspaceRow(
   const formatTime = input.formatTime ?? defaultFormatTime;
   const tooltip = [
     devspaceName(repository, source, child),
-    sourceLine(source),
+    // The configuration of the devspace itself (the root configuration under the file name it was created with); for
+    // the default image, the image of the settings, which its next start takes.
+    sourceLine(source.kind === 'configuration' ? sourceOf(devspace) : source),
     [unknown !== undefined ? [StateTexts.unknown, keptAny ? StateTexts.kept : undefined].filter(isText).join(' · ') : rowStateText(state, keptAny), services, changes]
       .filter(isText)
       .join(' · '),

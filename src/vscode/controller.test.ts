@@ -1432,6 +1432,14 @@ describe('Keep Running When Closed and Stop When Closed', () => {
     expect(h.service.stop).not.toHaveBeenCalled();
   });
 
+  it('Keep Running When Closed names the child row of a repository with several sources', async () => {
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    await h.registry.add(devspace());
+    await run('keepRunning', row('acme/api', devspace(), undefined, ROOT_SOURCE));
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(ControllerTexts.keptRunning('acme/api · config'));
+  });
+
   it('Stop When Closed removes the switch, renders the sidebar, and says so', async () => {
     await h.registry.add(devspace({ keepRunning: true }));
     await run('stopWhenClosed', row('acme/api', devspace({ keepRunning: true })));
@@ -4109,14 +4117,14 @@ describe('the switch of the host access checks', () => {
     expect(registryOnly.update).toHaveBeenCalledWith('hostAccessChecksOff', undefined, fakeVscode.ConfigurationTarget.Global);
   });
 
-  it('Turn Off Host Access Checks… on a renamed repository writes the registry name, which the open pipeline reads', async () => {
+  it('Turn Off Host Access Checks… on a renamed repository writes the registry name, which the open pipeline reads, and the name on GitHub, which a first open of another source reads', async () => {
     const env = devspace({ repository: 'alice/tool' });
     await h.registry.add(env);
     const settings = userSettings(undefined);
     fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.turnOffChecks);
     await run('turnOffHostAccessChecks', row('bob/tool', env));
     expect(fakeVscode.window.showWarningMessage.mock.calls[0]?.[0]).toBe(Messages.hostAccessChecksOffConfirm('bob/tool'));
-    expect(settings.update).toHaveBeenCalledWith('hostAccessChecksOff', ['alice/tool'], fakeVscode.ConfigurationTarget.Global);
+    expect(settings.update).toHaveBeenCalledWith('hostAccessChecksOff', ['bob/tool', 'alice/tool'], fakeVscode.ConfigurationTarget.Global);
   });
 
   it('Turn Off Host Access Checks… on a child row without devspace writes the registry name of the devspaces of the repository', async () => {
@@ -4142,7 +4150,7 @@ describe('the switch of the host access checks', () => {
     fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.turnOffChecks);
     await run('turnOffHostAccessChecks', row('bob/tool', undefined, undefined, DEFAULT_SOURCE));
     expect(fakeVscode.window.showWarningMessage.mock.calls[0]?.[0]).toBe(Messages.hostAccessChecksOffConfirm('bob/tool'));
-    expect(settings.update).toHaveBeenCalledWith('hostAccessChecksOff', ['alice/tool'], fakeVscode.ConfigurationTarget.Global);
+    expect(settings.update).toHaveBeenCalledWith('hostAccessChecksOff', ['bob/tool', 'alice/tool'], fakeVscode.ConfigurationTarget.Global);
   });
 
   // "Already off" is decided under the pipeline key (the registry name) only; "either name" would answer "already off"

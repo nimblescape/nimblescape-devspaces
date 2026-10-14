@@ -425,9 +425,9 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * The branches of the running containers were read: the status bar shows the current one, and the name of the
-   * devspace as the sidebar shows it now (with the word of its source when the repository has several sources, which
-   * the list of the sidebar and the settings decide).
+   * The branches of the running containers were read, or the sidebar was rendered: the status bar shows the current
+   * branch, and the name of the devspace as the sidebar shows it now (with the word of its source when the repository
+   * has several sources, which the list of the sidebar and the settings decide).
    */
   onStatesRefreshed(): void {
     const current = this.current;
@@ -728,7 +728,7 @@ export class Controller implements vscode.Disposable {
     const target = await this.resolveTarget(argument, 'devspace', placeholder);
     const devspace = this.requireDevspace(target);
     if (!target || !devspace) return;
-    const repository = this.displayName(target);
+    const repository = this.shownName(target);
     const updated = await this.deps.registry.updateDevspace(devspace.id, (current) => {
       if (keep) current.keepRunning = true;
       else delete current.keepRunning;
@@ -771,7 +771,7 @@ export class Controller implements vscode.Disposable {
       return;
     }
     const devspace = current.devspace;
-    const repository = this.displayName({ repository: devspace.repository });
+    const repository = this.shownName(this.devspaceTarget(devspace));
     // On every engine; the heartbeat goes to the engine of the devspace, so Docker must still be set to it.
     const host = dockerHostOf(devspace);
     const currentHost = await this.currentDockerHost();
@@ -982,7 +982,9 @@ export class Controller implements vscode.Disposable {
       Actions.turnOffChecks,
     );
     if (choice !== Actions.turnOffChecks) return;
-    await this.writeHostAccessChecks([key], 'off');
+    // Under every name of the repository here: the registry name of its devspaces (the pipeline reads it for them) and
+    // the name on GitHub (the first open of another source of the repository reads it).
+    await this.writeHostAccessChecks(names.all, 'off');
     this.logger.warn(`The host access checks were turned off for ${repository}. They apply from the next creation of its container.`);
     this.inform(Messages.hostAccessChecksTurnedOff(repository));
   }
@@ -2256,7 +2258,7 @@ export class Controller implements vscode.Disposable {
     if (!account) throw new UserFacingError('signInRequired', Messages.signInRequired);
     if (isAvailableTo(devspace, account)) return target;
     this.logger.info(`The devspace ${devspace.id} belongs to another GitHub account. It is not used.`);
-    this.warn(Messages.otherAccount(this.displayName(target)));
+    this.warn(Messages.otherAccount(this.shownName(target)));
     return undefined;
   }
 
