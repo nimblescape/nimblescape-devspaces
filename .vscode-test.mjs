@@ -4,11 +4,13 @@
 
 // The tests in a real VS Code: @vscode/test-cli downloads VS Code to .vscode-test/, installs the Dev Containers
 // extension (extensionDependencies) there, starts VS Code with an empty user data folder, and runs the bundled tests of
-// out/test/vscode/ with mocha in its extension host. Two configurations:
+// out/test/vscode/ with mocha in its extension host. The configurations:
 // - "vscode" (npm run test:vscode): the extension of the development build in dist/.
 // - "vsix" (npm run test:vscode:vsix, after npm run package): the packaged VSIX of the version in package.json, as
 //   users install it. VS Code loads only the small folder test/vscode/host as development extension, because a
 //   development extension with the ID of the installed VSIX would be loaded in its place.
+// - "untrusted" (npm run test:vscode:vsix, after "vsix"): the packaged VSIX in a local folder that VS Code does not
+//   trust (Restricted Mode), with the tests of test/vscode/untrusted/ too.
 // - "attach" (CI only, npm run test:vscode:attach after npm run test:vscode:attach:prepare): VS Code starts in the
 //   window of a container that test/vscode/attach/prepare.ts made on the real Docker engine, and runs the tests of
 //   test/vscode/attach/<kind>.test.ts there. It exists only when DEVSPACE_TEST_ATTACH names the kind (plain,
@@ -57,6 +59,17 @@ for (let index = 0; index < args.length; index++) {
 const checkout = fileURLToPath(new URL('.', import.meta.url));
 const checkoutId = crypto.createHash('sha256').update(checkout).digest('hex').slice(0, 6);
 
+/** True when this run of vscode-test runs the configuration `label` with the index `index`. */
+function isSelected(label, index) {
+  return selectedLabels.length === 0 || selectedLabels.includes(label) || selectedLabels.includes(`${index}`);
+}
+
+/** Writes `value` as JSON into `file`, with its folder. */
+function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(value, null, 2));
+}
+
 /**
  * A configuration with its own empty user data folder: the folder is removed before each run of the configuration
  * (the default of @vscode/test-electron keeps it between runs), so the extension starts as after a fresh installation
@@ -67,8 +80,7 @@ const checkoutId = crypto.createHash('sha256').update(checkout).digest('hex').sl
  */
 function configuration(label, index, options, { keepUserDataDir = false } = {}) {
   const userDataDir = path.join(os.tmpdir(), `devspaces ${label} ü ${checkoutId}`);
-  const selected = selectedLabels.length === 0 || selectedLabels.includes(label) || selectedLabels.includes(`${index}`);
-  if (!listsOnly && selected && !keepUserDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
+  if (!listsOnly && isSelected(label, index) && !keepUserDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
   return {
     label,
     files: 'out/test/vscode/*.test.js',
@@ -126,10 +138,7 @@ function attachConfiguration(kind, index) {
   if (!seed) throw new Error(`out/test/vscode/attach/seed.json has no container "${container}".`);
   const base = configuration('attach', index, {}, { keepUserDataDir: restart });
   const userSettings = path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'settings.json');
-  if (kind === 'previous' && !listsOnly) {
-    fs.mkdirSync(path.dirname(userSettings), { recursive: true });
-    fs.writeFileSync(userSettings, JSON.stringify({ 'extensions.autoUpdate': false, 'extensions.autoCheckUpdates': false }, null, 2));
-  }
+  if (kind === 'previous' && !listsOnly) writeJson(userSettings, { 'extensions.autoUpdate': false, 'extensions.autoCheckUpdates': false });
   if ((kind === 'longopen' || kind === 'updated') && !listsOnly) {
     const pending = path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'globalStorage', `${manifest.publisher}.${manifest.name}`, 'pending');
     for (const name of fs.existsSync(pending) ? fs.readdirSync(pending) : []) fs.rmSync(path.join(pending, name), { force: true });
@@ -183,14 +192,58 @@ function attachConfiguration(kind, index) {
   };
 }
 
+/** The packaged VSIX, as users install it (the configurations `vsix` and `untrusted`). */
+const vsixOptions = {
+  extensionDevelopmentPath: fileURLToPath(new URL('test/vscode/host', import.meta.url)),
+  // The test host folder has no extensionDependencies, so the Dev Containers extension is named here.
+  installExtensions: ['ms-vscode-remote.remote-containers', vsix],
+};
+
+/**
+ * The configuration `untrusted`: the packaged VSIX, as in `vsix`, in a local folder that VS Code does not trust
+ * (Restricted Mode). @vscode/test-electron always starts VS Code with --disable-workspace-trust, so VS Code starts
+ * through scripts/vscode-with-trust.sh (on Windows scripts/vscode-with-trust.cmd) and scripts/vscode-with-trust.mjs,
+ * which leaves that argument out, and the user setting security.workspace.trust.startupPrompt "never" opens the folder
+ * in Restricted Mode without a question. The settings of the folder give each setting that the manifest lists in
+ * capabilities.untrustedWorkspaces.restrictedConfigurations a value other than its default, and set editor.tabSize, a
+ * setting of VS Code that Restricted Mode does not limit; the user settings give one of the listed settings a value
+ * too. test/vscode/untrusted/untrusted.test.ts reads both files and checks the values that the extension gets.
+ */
+function untrustedConfiguration(index) {
+  const base = configuration('untrusted', index, vsixOptions);
+  const folder = path.join(os.tmpdir(), `devspaces untrusted folder ${checkoutId}`);
+  if (isSelected('untrusted', index) && !listsOnly) {
+    fs.rmSync(folder, { recursive: true, force: true });
+    writeJson(path.join(folder, '.vscode', 'settings.json'), {
+      'editor.tabSize': 3,
+      'devspaces.reopenLastOnStartup': false,
+      'devspaces.updateImagesOnConnect': false,
+      'devspaces.owners': ['devspaces-folder-owner'],
+      'devspaces.includeArchived': true,
+      'devspaces.includeForks': false,
+      'devspaces.showOnlyDevspaces': true,
+      'devspaces.refreshIntervalMinutes': 45,
+    });
+    writeJson(path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'settings.json'), {
+      'security.workspace.trust.startupPrompt': 'never',
+      'devspaces.refreshIntervalMinutes': 30,
+    });
+  }
+  const launcher = `scripts/vscode-with-trust.${process.platform === 'win32' ? 'cmd' : 'sh'}`;
+  return {
+    ...base,
+    files: [base.files, 'out/test/vscode/untrusted/*.test.js'],
+    useInstallation: { fromPath: fileURLToPath(new URL(launcher, import.meta.url)) },
+    workspaceFolder: folder,
+    launchArgs: base.launchArgs.filter((arg) => arg !== '--disable-workspace-trust'),
+  };
+}
+
 const attachKind = process.env.DEVSPACE_TEST_ATTACH;
 
 export default defineConfig([
   configuration('vscode', 0, {}),
-  configuration('vsix', 1, {
-    extensionDevelopmentPath: fileURLToPath(new URL('test/vscode/host', import.meta.url)),
-    // The test host folder has no extensionDependencies, so the Dev Containers extension is named here.
-    installExtensions: ['ms-vscode-remote.remote-containers', vsix],
-  }),
-  ...(attachKind ? [attachConfiguration(attachKind, 2)] : []),
+  configuration('vsix', 1, vsixOptions),
+  untrustedConfiguration(2),
+  ...(attachKind ? [attachConfiguration(attachKind, 3)] : []),
 ]);

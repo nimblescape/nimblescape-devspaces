@@ -151,7 +151,7 @@ The buttons of the Docker setup (**Install WSL 2**, **Install Docker**, **Start 
 
 ## Settings
 
-All settings have the prefix `devspaces.`. Settings marked *user only* count only in your user settings: a workspace or folder setting, which a repository could bring along, cannot change them.
+All settings have the prefix `devspaces.`. Settings marked *user only* count only in your user settings: a workspace or folder setting, which a repository could bring along, cannot change them. In a window whose folder VS Code does not trust (Restricted Mode), Devspaces runs as usual, and all its settings count only in your user settings.
 
 Up to version 0.2.1 the prefix was `devspace.`. Settings with the old prefix are not read any more: rename them to `devspaces.…` in your `settings.json`. The command IDs changed the same way (`devspaces.start` instead of `devspace.start`), so a keybinding with an old ID must be changed too.
 

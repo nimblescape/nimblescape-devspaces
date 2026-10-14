@@ -13,6 +13,7 @@ import { Messages } from '../core/messages';
 import { parseCacheSchedule } from '../core/remoteMonitor/cacheSettings';
 import {
   DEFAULT_SETTINGS,
+  devContainersDefaultExtensionsValue,
   MAX_REFRESH_INTERVAL_MINUTES,
   normalizeSettings,
   readListOpenMode,
@@ -227,6 +228,36 @@ describe('settings', () => {
     };
     const setting = manifest.contributes.configuration.properties[`${SETTINGS_SECTION}.repositoryGroups`];
     expect(setting).toMatchObject({ scope: 'application', default: [] });
+  });
+
+  // Workspace Trust: in Restricted Mode, VS Code runs the extension and ignores the values of a workspace or folder for
+  // the settings in restrictedConfigurations. A setting of the scope application or machine takes no such value
+  // anyway; every other setting must be in the list (test/vscode/untrusted/untrusted.test.ts checks it in VS Code).
+  it('declares limited support of untrusted workspaces, with every setting that a folder can set as restricted', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      capabilities?: { untrustedWorkspaces?: { supported?: unknown; description?: unknown; restrictedConfigurations?: string[] } };
+      contributes: { configuration: { properties: Record<string, { scope?: string }> } };
+    };
+    const folderSettings = Object.entries(manifest.contributes.configuration.properties)
+      .filter(([, { scope }]) => scope !== 'application' && scope !== 'machine')
+      .map(([key]) => key)
+      .sort();
+    expect(folderSettings).toContain(`${SETTINGS_SECTION}.owners`);
+    const untrustedWorkspaces = manifest.capabilities?.untrustedWorkspaces;
+    expect(untrustedWorkspaces).toMatchObject({ supported: 'limited', description: expect.stringContaining('Restricted Mode') });
+    expect([...(untrustedWorkspaces?.restrictedConfigurations ?? [])].sort()).toEqual(folderSettings);
+  });
+
+  it('reads dev.containers.defaultExtensions from the user settings only', () => {
+    let user: unknown = ['acme.tool'];
+    const inspect = vi.fn((key: string) =>
+      key === 'defaultExtensions' ? { key, globalValue: user, workspaceValue: ['other.tool'], workspaceFolderValue: ['other.folder'] } : undefined,
+    );
+    fakeVscode.workspace.getConfiguration.mockReturnValue({ get: () => ['other.tool'], inspect });
+    expect(devContainersDefaultExtensionsValue()).toEqual(['acme.tool']);
+    expect(fakeVscode.workspace.getConfiguration).toHaveBeenCalledWith('dev.containers');
+    user = undefined;
+    expect(devContainersDefaultExtensionsValue()).toBeUndefined();
   });
 
   it('clamps the refresh interval', () => {

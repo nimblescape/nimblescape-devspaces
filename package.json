@@ -51,6 +51,21 @@
     "onResolveRemoteAuthority:attached-container"
   ],
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode, Devspaces uses only your user settings: the values of its settings in the workspace or folder are ignored.",
+      "restrictedConfigurations": [
+        "devspaces.reopenLastOnStartup",
+        "devspaces.updateImagesOnConnect",
+        "devspaces.owners",
+        "devspaces.includeArchived",
+        "devspaces.includeForks",
+        "devspaces.showOnlyDevspaces",
+        "devspaces.refreshIntervalMinutes"
+      ]
+    }
+  },
   "contributes": {
     "icons": {
       "devspaces-monitor-off": {
@@ -794,7 +809,7 @@
     "test": "vitest run",
     "test:docker": "vitest run --config vitest.docker.config.mts",
     "test:vscode": "node esbuild.mjs && node scripts/build-vscode-tests.mjs && vscode-test --label vscode",
-    "test:vscode:vsix": "node scripts/build-vscode-tests.mjs && vscode-test --label vsix",
+    "test:vscode:vsix": "node scripts/build-vscode-tests.mjs && vscode-test --label vsix untrusted",
     "test:vscode:attach:prepare": "node esbuild.mjs && node scripts/build-vscode-tests.mjs && node out/test/vscode/attach/prepare.js",
     "test:vscode:attach": "node scripts/run-attach-tests.mjs",
     "vscode:prepublish": "node esbuild.mjs --production",

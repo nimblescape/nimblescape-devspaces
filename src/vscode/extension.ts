@@ -72,7 +72,7 @@ import { PreviewWorkerRunner } from './groupsPreviewRunner';
 import { RemoteDockerCommands } from './remoteDockerCommands';
 import { RepositoryGroupsEditor } from './repositoryGroupsEditor';
 import { SessionCoordinator } from './sessionCoordinator';
-import { affectsSettings, readSettings, warnInvalidDefaultImage, warnInvalidHostAccessChecksOff } from './settings';
+import { affectsSettings, devContainersDefaultExtensionsValue, readSettings, warnInvalidDefaultImage, warnInvalidHostAccessChecksOff } from './settings';
 import { Sidebar } from './sidebar';
 import { DevspaceStatusBar } from './statusBar';
 import { Throttle } from './tasks';
@@ -525,9 +525,9 @@ async function activateExtension(
     // The commit and quality of this VS Code (product.json under vscode.env.appRoot, read once), which an open sends
     // when the build qualifies.
     vscodeServerOfWindow: windowVscodeServer(vscode.env.appRoot, (file) => fs.promises.readFile(file, 'utf8'), (message) => logger.info(message)),
-    // The user's default extensions of the Dev Containers extension, which an open with a VS Code server carries for
-    // the shared extension cache (read at each open).
-    defaultExtensionsOfWindow: () => defaultExtensionEntries(vscode.workspace.getConfiguration('dev.containers').get<unknown>('defaultExtensions'), (message) => logger.info(message)),
+    // The user's default extensions of the Dev Containers extension (the user settings only), which an open with a VS
+    // Code server carries for the shared extension cache (read at each open).
+    defaultExtensionsOfWindow: () => defaultExtensionEntries(devContainersDefaultExtensionsValue(), (message) => logger.info(message)),
     // The local Docker is started when needed; a remote host is only checked (never a Docker Desktop start).
     startDocker: async ({ onStarting, signal }) =>
       startDockerFor(
