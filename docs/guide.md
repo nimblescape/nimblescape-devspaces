@@ -57,7 +57,7 @@ To go to another devspace, use **Devspaces: Switch Devspace…** (`Ctrl+Alt+E`, 
 
 The first row names the Docker engine that the view shows: **Local Docker**, or **Remote Docker host: <host>**. Select it to choose another engine. Below it, the repositories are grouped by owner.
 
-The title bar has **Select Organizations…** (limits the list and the scan to the organizations and accounts that you select), **Show Only Devspaces** (lists only the repositories that have a devspace, in any state; **Show All Repositories** lists all again), **Search**, **Refresh**, **Expand All** (opens every owner and group), and VS Code's **Collapse All**. Its **…** menu has **Edit Repository Groups…** and **Update All Images Now**.
+The title bar has **Select Organizations…** (limits the list and the scan to the organizations and accounts that you select), **Show Only Devspaces** (lists only the repositories that have a devspace, in any state; **Show All Repositories** lists all again), **Search**, **Refresh**, **Expand All** (opens every owner, group and repository with several sources), and VS Code's **Collapse All**. Its **…** menu has **Edit Repository Groups…** and **Update All Images Now**.
 
 ### What a row shows
 
@@ -137,7 +137,7 @@ All commands are in the category **Devspaces** of the Command Palette. A command
 | Close and Keep Running | Closes this window; its devspace keeps running this time. Only in a connected window. |
 | Switch Devspace… (`Ctrl+Alt+E` / `Cmd+Alt+E`), Switch Devspace in New Window…, Switch Devspace in Current Window… | The switcher. |
 | Refresh, Search | Update or search the repository list. |
-| Expand All | Opens every owner and every group of the view. |
+| Expand All | Opens every owner, every group and every repository with several sources of the view. |
 | Select Organizations… | Limits the list to some organizations and accounts. Select none to see all again. |
 | Show Only Devspaces, Show All Repositories | Lists only the repositories that have a devspace, or all again (the setting `showOnlyDevspaces`). |
 | Edit Repository Groups… | Opens the editor of the setting `devspaces.repositoryGroups`. |

@@ -961,6 +961,15 @@ describe('buildTreeModel', () => {
     expect(row(groups, 'acme/api').tooltip).not.toContain('Last used');
   });
 
+  it('names the configuration of the devspace itself in the tooltip, not the path that the list names for the same configuration', () => {
+    // The devspace was created from `.devcontainer.json`; the list of GitHub names `.devcontainer/devcontainer.json`
+    // (the same configuration, so the row is the devspace's).
+    const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api')]), devspaces: [devspace('e1', 'acme/api', { configPath: '.devcontainer.json' })] }));
+    const entry = row(groups, 'acme/api');
+    expect(entry.devspace?.id).toBe('e1');
+    expect(entry.tooltip.split('\n')[1]).toBe('Source: the configuration .devcontainer.json');
+  });
+
   it('describes a repository without devspace in its tooltip', () => {
     const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api', { defaultBranch: 'trunk' })]) }));
     const entry = row(groups, 'acme/api');

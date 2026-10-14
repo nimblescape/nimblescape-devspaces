@@ -686,6 +686,8 @@ async function activateExtension(
       if (view.visible) background(sidebar.render(), 'update the sidebar');
     }),
     sidebar.onDidRefreshStates(() => controller.onStatesRefreshed()),
+    // The name of the devspace in the status bar follows the rows of the sidebar (a changed list or setting).
+    sidebar.onDidRender(() => controller.onStatesRefreshed()),
     view.onDidChangeVisibility((event) => {
       if (!event.visible) return;
       background(sidebar.refreshStates(), 'update the sidebar');
