@@ -13,7 +13,8 @@
 // start. The extension itself runs no `docker exec` program (its exec calls use the Docker API), so these count as
 // programs of Dev Containers; every other program counts as one of the extension. A program of the extension that
 // still runs WAIT_MS after the quit fails the check: `node scripts/leftoverPrograms.mjs` after the tests of the job
-// "vscode", and scripts/run-attach-tests.mjs after each attach run.
+// "vscode", and scripts/run-attach-tests.mjs after each attach run, which counts only the programs that started during
+// that run (the run `updated` follows the run `previous` of the last released version).
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -37,6 +38,11 @@ function argv(pid) {
   return (readText(`/proc/${pid}/cmdline`) ?? '').split('\0').filter(Boolean);
 }
 
+/** The seconds since the system started (the time base of `startSeconds`). */
+export function uptimeSeconds() {
+  return Number(readText('/proc/uptime')?.split(' ')[0] ?? 0);
+}
+
 /** Clock ticks per second of /proc/<pid>/stat. */
 function clockTicks() {
   try {
@@ -48,13 +54,13 @@ function clockTicks() {
 
 /**
  * The running programs with DEVSPACE_TEST_USER_DATA_DIR in their environment, except this process, each with `owner`
- * `Dev Containers` or `extension`. Empty on other systems than Linux.
- * @returns {{ pid: number, ppid: number, ageSeconds: number, userDataDir: string, argv: string[], parentArgv: string[], owner: 'Dev Containers' | 'extension' }[]}
+ * `Dev Containers` or `extension` and its start in seconds since the system started. Empty on other systems than Linux.
+ * @returns {{ pid: number, ppid: number, startSeconds: number, ageSeconds: number, userDataDir: string, argv: string[], parentArgv: string[], owner: 'Dev Containers' | 'extension' }[]}
  */
 export function leftoverPrograms() {
   if (process.platform !== 'linux') return [];
   const ticks = clockTicks();
-  const uptime = Number(readText('/proc/uptime')?.split(' ')[0] ?? 0);
+  const uptime = uptimeSeconds();
   const found = [];
   for (const entry of fs.readdirSync('/proc')) {
     if (!/^\d+$/.test(entry) || Number(entry) === process.pid) continue;
@@ -68,10 +74,12 @@ export function leftoverPrograms() {
     const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
     if (fields[0] === 'Z') continue;
     const ppid = Number(fields[1]);
+    const startSeconds = Number(fields[19]) / ticks;
     found.push({
       pid,
       ppid,
-      ageSeconds: Math.round(uptime - Number(fields[19]) / ticks),
+      startSeconds,
+      ageSeconds: Math.round(uptime - startSeconds),
       userDataDir: marker.slice(MARKER.length),
       argv: argv(pid),
       parentArgv: argv(ppid),
@@ -91,34 +99,40 @@ function shortCommand(args) {
   return text.length > MAX_COMMAND_CHARACTERS ? `${text.slice(0, MAX_COMMAND_CHARACTERS)}…` : text;
 }
 
-/** Two lines per program. */
-export function describePrograms(programs) {
+/** Two lines per program; `since` as in reportLeftoverPrograms. */
+export function describePrograms(programs, since = 0) {
   return programs.map(
     (p) =>
-      `  [${p.owner}] pid ${p.pid}, ${p.ageSeconds} s old, user data folder ${path.basename(p.userDataDir)}: ${shortCommand(p.argv)}\n` +
+      `  [${p.owner}${p.owner === 'extension' && p.startSeconds < since ? ', earlier run' : ''}] pid ${p.pid}, ${p.ageSeconds} s old, user data folder ${path.basename(p.userDataDir)}: ${shortCommand(p.argv)}\n` +
       `    parent ${p.ppid}: ${shortCommand(p.parentArgv)}`,
   );
 }
 
 /**
- * Prints the programs that run right after the quit and waits up to `waitMs` for those of the extension to end. Resolves
- * the programs of the extension that still run then (also printed).
+ * Prints the programs that run right after the quit and waits up to `waitMs` for those of the extension to end. Only the
+ * programs that started at `since` (seconds since the system started, see uptimeSeconds) or later count. Resolves the
+ * programs of the extension that still run then (also printed).
+ * @param {{ waitMs?: number, since?: number }} [options]
  */
-export async function reportLeftoverPrograms(waitMs = WAIT_MS) {
+export async function reportLeftoverPrograms({ waitMs = WAIT_MS, since = 0 } = {}) {
+  if (process.platform !== 'linux') {
+    console.log('The programs that stay after VS Code quits are only checked on Linux.');
+    return [];
+  }
   let programs = leftoverPrograms();
   if (programs.length === 0) {
     console.log('No program of the test VS Code runs after it quit.');
     return [];
   }
-  console.log(`Programs of the test VS Code that run after it quit (${programs.length}):\n${describePrograms(programs).join('\n')}`);
-  const own = () => programs.filter((p) => p.owner === 'extension');
+  console.log(`Programs of the test VS Code that run after it quit (${programs.length}):\n${describePrograms(programs, since).join('\n')}`);
+  const own = () => programs.filter((p) => p.owner === 'extension' && p.startSeconds >= since);
   const deadline = Date.now() + waitMs;
   while (own().length > 0 && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 500));
     programs = leftoverPrograms();
   }
   if (own().length === 0) {
-    console.log('No program of the extension runs.');
+    console.log(`No program of the extension${since > 0 ? ' that started during this run' : ''} runs.`);
     return [];
   }
   console.log(`Programs of the extension that still run ${waitMs / 1000} s after the quit (${own().length}):\n${describePrograms(own()).join('\n')}`);
