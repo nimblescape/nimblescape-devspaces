@@ -2118,7 +2118,7 @@ export class Controller implements vscode.Disposable {
   private async awaitTokenRemoval(left: LeftDevspace, removal: Promise<void>): Promise<void> {
     const waited = new AbortController();
     const limit = this.delay(this.deps.timing?.tokenRemoveWaitMs ?? TOKEN_REMOVE_WAIT_MS, waited.signal).then(() => false);
-    const ended = await Promise.race([removal.then(() => true), limit]);
+    const ended = await Promise.race([removal.then(() => true, () => true), limit]);
     waited.abort();
     if (!ended) this.logger.warn(`The GitHub token is not removed from the container ${left.containerName} yet. The window closes its remote connection without waiting longer.`);
   }
