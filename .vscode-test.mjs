@@ -13,8 +13,8 @@
 //   window of a container that test/vscode/attach/prepare.ts made on the real Docker engine, and runs the tests of
 //   test/vscode/attach/<kind>.test.ts there. It exists only when DEVSPACE_TEST_ATTACH names the kind (plain,
 //   devspace, reattach: the devspace again after a restart of VS Code, account: the devspace under another GitHub
-//   account, or longopen: the devspace with an open pipeline of several minutes), so that no local run reaches the
-//   Docker engine of this computer.
+//   account, longopen: the devspace with an open pipeline of several minutes, or remote: a devspace on the Docker engine
+//   of another computer over SSH), so that no local run reaches the Docker engine of this computer.
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
 import * as crypto from 'crypto';
@@ -99,7 +99,7 @@ function configuration(label, index, options, { keepUserDataDir = false } = {}) 
 
 /**
  * The configuration `attach`: the window of the container DEVSPACE_TEST_ATTACH of out/test/vscode/attach/seed.json, on
- * the Docker engine of this computer. The fake sign-in provider `github` (test/vscode/github) replaces the built-in one.
+ * the Docker engine of this computer (`remote`: of the other computer that the current Docker context names). The fake sign-in provider `github` (test/vscode/github) replaces the built-in one.
  * `reattach`, `account` and `longopen` start VS Code again in the window of the devspace with the user data folder of
  * the run `devspace`, as a restart of VS Code; `account` with another signed-in account than the owner of the devspace.
  * `longopen` starts as long after the last open: without the pending connection files of the extension. The runs before

@@ -25,6 +25,9 @@ export interface Seed {
   /** The devspace only: the wait of its postStartCommand when the mark exists (prepare.ts, the run `longopen`). */
   longStartSeconds?: number;
   longStartMark?: string;
+  /** The run `remote` only: the Docker context of the other computer (in the folder URI) and its host of the SSH config. */
+  dockerContext?: string;
+  remoteHost?: string;
 }
 
 export function seed(): Seed {

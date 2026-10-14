@@ -19,13 +19,18 @@
 //   (the run `longopen`).
 // - A plain container that is no devspace, of the same dev image (with Git and the Docker CLI, so that Dev Containers
 //   configures its credential helpers there).
+// With DEVSPACE_TEST_ATTACH_PREPARE=remote (the run `remote`, a CI job of its own), the devspace is on the Docker engine
+// of another computer instead, reached over SSH, and the engine of the runner gets a container with its name
+// (prepareRemote). That run has no plain container.
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as childProcess from 'child_process';
 import { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath } from '@vscode/test-electron';
 import { BootstrapDocker } from '../../../src/core/docker/bootstrapDocker';
 import { findDockerCli } from '../../../src/core/docker/dockerCli';
+import { ensureRemoteContext, useContext } from '../../../src/core/docker/remoteDocker';
 import { HelperImages } from '../../../src/core/helper/helperImages';
 import { LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, WORKSPACES_ROOT, newDevspaceId, repositoryFolder, resourceName } from '../../../src/core/names';
 import type { Logger } from '../../../src/core/ports';
@@ -56,6 +61,36 @@ const PLAIN_IMAGE = 'devspaces-attach-test-plain:1';
 const LONG_START_SECONDS = 150;
 const LONG_START_MARK = '/tmp/devspaces-test-long-start';
 const POST_START_COMMAND = `if [ -f ${LONG_START_MARK} ]; then rm -f ${LONG_START_MARK}; date +%s > /tmp/long-start-began; sleep ${LONG_START_SECONDS}; date +%s > /tmp/long-start-ended; fi`;
+
+/**
+ * The run `remote`: the other computer is a container of the runner with a Docker engine of its own (Docker in Docker,
+ * its data in a volume of the runner, where its storage driver works) and an SSH server for root with key
+ * authentication. The connection limits are those of test/docker/sshd/Dockerfile: the Docker CLI opens a new SSH
+ * connection for each call. The host REMOTE_HOST of the SSH config of the runner points to it.
+ */
+const REMOTE_HOST = 'devspaces-test-remote';
+const REMOTE_HOST_IMAGE = 'devspaces-attach-test-remote:1';
+const REMOTE_HOST_CONTAINER = 'attach-test-remote-host';
+const REMOTE_HOST_DOCKER_VOLUME = 'attach-test-remote-docker';
+const REMOTE_HOST_DOCKERFILE = `FROM mirror.gcr.io/library/docker:28-dind
+RUN apk add --no-cache openssh-server \\
+ && ssh-keygen -A \\
+ && sed -i 's/^root:[^:]*:/root:*:/' /etc/shadow \\
+ && printf '%s\\n' 'PermitRootLogin prohibit-password' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' 'PubkeyAuthentication yes' 'LogLevel VERBOSE' 'MaxStartups 100:30:200' 'MaxSessions 100' >> /etc/ssh/sshd_config \\
+ && if /usr/sbin/sshd -t -o PerSourcePenalties=no; then echo 'PerSourcePenalties no' >> /etc/ssh/sshd_config; fi \\
+ && /usr/sbin/sshd -t
+`;
+/** The start of the other computer: the public key of the runner for root, sshd, and the Docker engine (unix socket only). */
+const REMOTE_HOST_START = `set -eu
+mkdir -p /root/.ssh
+printf '%s\\n' "$AUTHORIZED_KEY" > /root/.ssh/authorized_keys
+chmod 700 /root/.ssh
+chmod 600 /root/.ssh/authorized_keys
+/usr/sbin/sshd -D -e &
+exec dockerd-entrypoint.sh dockerd --host=unix:///var/run/docker.sock
+`;
+/** The longest wait for the Docker engine of the other computer to answer over SSH. */
+const REMOTE_ENGINE_WAIT_MS = 120_000;
 
 const log: Logger = {
   info: (message) => console.log(`INFO  ${message}`),
@@ -116,21 +151,16 @@ async function trustExtension(): Promise<void> {
   log.info(`${productJson}: trustedExtensionAuthAccess ${JSON.stringify(product.trustedExtensionAuthAccess)}`);
 }
 
-function folderUri(containerName: string, folder: string): string {
-  const parts = folderUriParts(containerName, folder);
+function folderUri(containerName: string, folder: string, dockerContext?: string): string {
+  const parts = folderUriParts(containerName, folder, dockerContext);
   return `${parts.scheme}://${parts.authority}${parts.path}`;
 }
 
-async function main(): Promise<void> {
-  if (process.env.CI !== 'true') throw new Error('The attach tests use the Docker engine as a real installation does. They run only on CI (CI=true).');
-  const started = Date.now();
-  await trustExtension();
-  const dockerPath = findDockerCli(process.env, process.platform);
-  if (!dockerPath) throw new Error('The Docker CLI was not found.');
-  const docker = new BootstrapDocker(new NodeProcessRunner(), dockerPath, process.env, log);
-  const helper = await new HelperImages({ docker, logger: log, dockerfilePath: path.join(ROOT, 'resources', 'helper', 'Dockerfile') }).ensureImageUse();
-  log.info(`Helper image ${helper.tag} (${((Date.now() - started) / 1000).toFixed(0)} s since the start).`);
-
+/**
+ * A devspace without container on the engine of `docker`: its workspace volume with the labels of the extension (the
+ * test account owns it) and a repository with a devcontainer.json, written by a container of the helper image.
+ */
+async function seedDevspace(docker: BootstrapDocker, helperTag: string): Promise<{ devspaceId: string; name: string; folder: string }> {
   const devspaceId = newDevspaceId();
   const name = resourceName(REPOSITORY, devspaceId);
   const folder = repositoryFolder(REPOSITORY);
@@ -147,16 +177,90 @@ async function main(): Promise<void> {
     null,
     2,
   );
-  await docker.runChecked(['run', '--rm', '--pull', 'never', '--network', 'none', '--mount', `type=volume,source=${name},target=${WORKSPACES_ROOT}`, '--entrypoint', 'sh', helper.tag, '-c', SEED_SCRIPT, 'sh', folder, devcontainerJson, DOCKERFILE]);
+  await docker.runChecked(['run', '--rm', '--pull', 'never', '--network', 'none', '--mount', `type=volume,source=${name},target=${WORKSPACES_ROOT}`, '--entrypoint', 'sh', helperTag, '-c', SEED_SCRIPT, 'sh', folder, devcontainerJson, DOCKERFILE]);
+  return { devspaceId, name, folder };
+}
+
+/** The helper image on the engine of `docker`, built as the extension builds it. */
+async function helperImage(docker: BootstrapDocker, started: number): Promise<string> {
+  const helper = await new HelperImages({ docker, logger: log, dockerfilePath: path.join(ROOT, 'resources', 'helper', 'Dockerfile') }).ensureImageUse();
+  log.info(`Helper image ${helper.tag} (${((Date.now() - started) / 1000).toFixed(0)} s since the start).`);
+  return helper.tag;
+}
+
+/** The runs on the engine of the runner: the devspace and the plain container. */
+async function prepareLocal(docker: BootstrapDocker, started: number): Promise<Record<string, unknown>> {
+  const { devspaceId, name, folder } = await seedDevspace(docker, await helperImage(docker, started));
   // The plain container has the dev image, built here; the build of the devspace finds its layers in the cache.
   await docker.runChecked(['build', '-t', PLAIN_IMAGE, '-'], { input: DOCKERFILE, timeoutMs: 300_000 });
   const plain = `attach-test-plain-${crypto.randomBytes(3).toString('hex')}`;
   await docker.runChecked(['run', '-d', '--name', plain, PLAIN_IMAGE, 'sleep', 'infinity']);
-
-  const seed = {
+  return {
     devspace: { containerName: name, folder, folderUri: folderUri(name, folder), user: 'node', devspaceId, longStartSeconds: LONG_START_SECONDS, longStartMark: LONG_START_MARK },
     plain: { containerName: plain, folder: '/tmp', folderUri: folderUri(plain, '/tmp'), user: 'root' },
   };
+}
+
+/**
+ * The run `remote`: the other computer (REMOTE_HOST_DOCKERFILE) with the host REMOTE_HOST in the SSH config of the runner
+ * (its own key and known_hosts file in ~/.ssh), the Docker context of that host as the extension makes it
+ * (ensureRemoteContext), the helper image and the devspace on its engine, and on the engine of the runner a container
+ * with the name of the devspace container. The context of the host becomes the current context last, as after "Use a
+ * Remote Docker Host…": every Docker call of the runner without a context goes to the other computer from then on.
+ */
+async function prepareRemote(local: BootstrapDocker, dockerPath: string, started: number): Promise<Record<string, unknown>> {
+  await local.runChecked(['build', '-t', REMOTE_HOST_IMAGE, '-'], { input: REMOTE_HOST_DOCKERFILE, timeoutMs: 300_000 });
+  const sshFolder = path.join(os.homedir(), '.ssh');
+  fs.mkdirSync(sshFolder, { recursive: true, mode: 0o700 });
+  const key = path.join(sshFolder, REMOTE_HOST);
+  for (const file of [key, `${key}.pub`]) fs.rmSync(file, { force: true });
+  childProcess.execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', REMOTE_HOST, '-f', key]);
+  const publicKey = fs.readFileSync(`${key}.pub`, 'utf8').trim();
+  await local.runChecked([
+    'run', '-d', '--name', REMOTE_HOST_CONTAINER, '--privileged', '--init', '-p', '127.0.0.1::22',
+    '-e', 'DOCKER_TLS_CERTDIR=', '-e', `AUTHORIZED_KEY=${publicKey}`,
+    '--mount', `type=volume,source=${REMOTE_HOST_DOCKER_VOLUME},target=/var/lib/docker`,
+    '--entrypoint', 'sh', REMOTE_HOST_IMAGE, '-c', REMOTE_HOST_START,
+  ]);
+  const port = Number((await local.runChecked(['port', REMOTE_HOST_CONTAINER, '22/tcp'])).trim().split('\n')[0].split(':').pop());
+  if (!Number.isInteger(port) || port <= 0) throw new Error(`The SSH port of ${REMOTE_HOST_CONTAINER} was not found.`);
+  const hostKey = (await local.runChecked(['exec', REMOTE_HOST_CONTAINER, 'cat', '/etc/ssh/ssh_host_ed25519_key.pub'])).trim().split(' ').slice(0, 2).join(' ');
+  const knownHosts = path.join(sshFolder, `${REMOTE_HOST}.known_hosts`);
+  fs.writeFileSync(knownHosts, `[127.0.0.1]:${port} ${hostKey}\n`, { mode: 0o600 });
+  const config = path.join(sshFolder, 'config');
+  const entry = [`Host ${REMOTE_HOST}`, '  HostName 127.0.0.1', `  Port ${port}`, '  User root', `  IdentityFile ${key}`, '  IdentitiesOnly yes', '  StrictHostKeyChecking yes', `  UserKnownHostsFile ${knownHosts}`];
+  fs.appendFileSync(config, `\n${entry.join('\n')}\n`, { mode: 0o600 });
+  fs.chmodSync(config, 0o600);
+  log.info(`${config}: ${entry.join('; ')}`);
+
+  const context = await ensureRemoteContext(local, REMOTE_HOST);
+  const remote = new BootstrapDocker(new NodeProcessRunner(), dockerPath, { ...process.env, DOCKER_CONTEXT: context }, log);
+  for (const deadline = Date.now() + REMOTE_ENGINE_WAIT_MS; ; ) {
+    const info = await remote.run(['info', '--format', '{{.ServerVersion}}'], { timeoutMs: 30_000 });
+    if (info.exitCode === 0) {
+      log.info(`The Docker engine ${info.stdout.trim()} of ${REMOTE_HOST} answers through the context ${context}.`);
+      break;
+    }
+    if (Date.now() > deadline) throw new Error(`The Docker engine of ${REMOTE_HOST} does not answer: ${(info.stderr || info.stdout).trim()}`);
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  const { devspaceId, name, folder } = await seedDevspace(remote, await helperImage(remote, started));
+  await local.runChecked(['run', '-d', '--name', name, '--entrypoint', 'sh', REMOTE_HOST_IMAGE, '-c', 'exec tail -f /dev/null']);
+  await useContext(local, context);
+  log.info(`The current Docker context is ${context}.`);
+  return {
+    remote: { containerName: name, folder, folderUri: folderUri(name, folder, context), user: 'node', devspaceId, dockerContext: context, remoteHost: REMOTE_HOST },
+  };
+}
+
+async function main(): Promise<void> {
+  if (process.env.CI !== 'true') throw new Error('The attach tests use the Docker engine as a real installation does. They run only on CI (CI=true).');
+  const started = Date.now();
+  await trustExtension();
+  const dockerPath = findDockerCli(process.env, process.platform);
+  if (!dockerPath) throw new Error('The Docker CLI was not found.');
+  const docker = new BootstrapDocker(new NodeProcessRunner(), dockerPath, process.env, log);
+  const seed = process.env.DEVSPACE_TEST_ATTACH_PREPARE === 'remote' ? await prepareRemote(docker, dockerPath, started) : await prepareLocal(docker, started);
   const file = path.join(ROOT, 'out', 'test', 'vscode', 'attach', 'seed.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(seed, null, 2));

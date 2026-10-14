@@ -18,7 +18,8 @@
 # Windows and macOS, against the packaged VSIX and on Linux also against the
 # development build. The job "vscode attach" starts VS Code in the windows of
 # containers on the Docker Engine of the runner, through the real Dev
-# Containers extension. The VSIX of the job "test" stays a workflow artifact for
+# Containers extension, and the job "vscode attach remote" in the window of a
+# devspace on a Docker Engine over SSH. The VSIX of the job "test" stays a workflow artifact for
 # inspection. This workflow publishes nothing: the release workflow calls it for
 # the commit of a version and publishes the VSIX of that call.
 
@@ -324,3 +325,50 @@ jobs:
           docker ps -a
           docker volume ls
           docker images
+
+  vscode-attach-remote:
+    # The attach test of a devspace on the Docker engine of another computer, reached over SSH. test/vscode/attach/
+    # prepare.ts (DEVSPACE_TEST_ATTACH_PREPARE=remote) starts that computer as a container of the runner with its own
+    # Docker engine and an SSH server, adds it to the SSH config of the runner, puts the devspace without container on
+    # its engine, and makes its Docker context the current one, as "Use a Remote Docker Host…" does. The engine of the
+    # runner gets a container with the name of the devspace container, which the window must not use. A job of its
+    # own, so that the engine of the runner has no objects of the other attach tests.
+    name: vscode attach remote
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up the pinned Node release
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Install the locked development tools without install scripts
+        run: npm ci --ignore-scripts
+
+      - name: Prepare a Docker engine over SSH and the test VS Code
+        env:
+          DEVSPACE_TEST_ATTACH_PREPARE: remote
+        run: npm run test:vscode:attach:prepare
+
+      - name: Run the tests in the window of a devspace on the Docker engine over SSH
+        env:
+          DEVSPACE_TEST_ATTACH: remote
+        run: xvfb-run -a npm run test:vscode:attach
+
+      - name: Show the Docker objects of both engines
+        if: ${{ failure() }}
+        run: |
+          docker context ls
+          for context in default devspaces-test-remote; do
+            echo "===== $context"
+            docker --context "$context" ps -a
+            docker --context "$context" volume ls
+            docker --context "$context" images
+          done
+          docker --context default logs --tail 200 attach-test-remote-host
