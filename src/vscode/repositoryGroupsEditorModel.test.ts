@@ -247,6 +247,26 @@ describe('preview', () => {
     );
   });
 
+  it('shows a repository with several sources as one node of the preview, with the devspace of a child row', () => {
+    const python = '.devcontainer/python/devcontainer.json';
+    const hailo = { ...repo('school/2026-3cWI-SWP-module-oop-hailo'), configPaths: ['.devcontainer/devcontainer.json', python] };
+    const base = input({ discovery: discovery([hailo, ...STUDENTS]), devspaces: [{ ...devspace('e1', hailo.nameWithOwner), configPath: python }] });
+    const entries = [entry(EXAMPLE)];
+    const preview = buildGroupsPreview(base, entries);
+    const school = preview.owners[1];
+    expect(school).toMatchObject({ total: 6, counts: [4], keptWithDevspace: [] });
+    expect(previewShape(school.tree)).toEqual([
+      ['2025-3bWI-SWP', [['module-oop', ['hailo']]]],
+      ['2026-3cWI-SWP', [['module-oop', ['EnesHA81', 'felix-he021', 'hailo']]]],
+    ]);
+    const node = (school.tree[1].children ?? [])[0].children?.[2];
+    expect(node).toEqual({ kind: 'repository', label: 'hailo', detail: '2026-3cWI-SWP-module-oop-hailo', devspace: true });
+    const sidebar = buildTreeModel({ ...base, repositoryGroups: parseRepositoryGroups(toSettingValue(entries)).patterns });
+    expect(preview.owners.map((owner) => previewShape(owner.tree))).toEqual(sidebar.map((group) => modelShape(group.children)));
+    // Without the groups, the node counts as one repository of the list.
+    expect(previewShape(buildGroupsPreview(base, []).owners[1].tree)).toContain('2026-3cWI-SWP-module-oop-hailo');
+  });
+
   it('shows a named root with its pattern, and counts per entry (the first entry that matches wins)', () => {
     const entries = [entry('^2026-(.+)$', 'This year'), entry(EXAMPLE), entry('(')];
     const preview = buildGroupsPreview(input({ discovery: discovery(STUDENTS) }), entries);

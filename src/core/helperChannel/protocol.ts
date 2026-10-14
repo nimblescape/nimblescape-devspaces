@@ -25,7 +25,7 @@
 // a name, so no container that the operation did not start can be removed; src/helperChannel/batch.ts).
 import { createHash, randomBytes } from 'crypto';
 import { PIPE_LOADER } from '../loader/pipeLoader';
-import { LABEL_CHANNEL_STEP, LABEL_HELPER_RUN, WORKSPACES_ROOT } from '../names';
+import { LABEL_CHANNEL_STEP, LABEL_HELPER_RUN, WORKSPACES_ROOT, isConfigPathLabelValue } from '../names';
 import type { DevspaceStates, StateDevspace } from '../pipeline/refreshStates';
 import { isStorageId } from '../storage/paths';
 import { LABEL_MONITOR, isSourceId, parseHeartbeatInput, MAX_IMAGE_REFERENCES, parseImageReference, parseMonitorSettings, parseReferenceDigests, type HeartbeatInput, type MonitorSettings } from '../remoteMonitor/protocol';
@@ -1613,11 +1613,12 @@ function plainOpenText(value: unknown, max: number): value is string {
 
 /**
  * The strict check of DevspaceSource (both sides of the open, and the records that the worker sends): `configuration`
- * with a configuration path, or `defaultImage` with a valid image reference (parseImageReference).
+ * with a configuration path of a repository (isConfigPathLabelValue, bounded), or `defaultImage` with a valid image
+ * reference (parseImageReference).
  */
 export function parseDevspaceSource(value: unknown): DevspaceSource | undefined {
   if (!isRecord(value)) return undefined;
-  if (hasOnlyKeys(value, ['kind', 'configPath']) && value.kind === 'configuration' && plainOpenText(value.configPath, MAX_CONFIGURATION_PATH_LENGTH)) {
+  if (hasOnlyKeys(value, ['kind', 'configPath']) && value.kind === 'configuration' && plainOpenText(value.configPath, MAX_CONFIGURATION_PATH_LENGTH) && isConfigPathLabelValue(value.configPath)) {
     return { kind: 'configuration', configPath: value.configPath };
   }
   if (hasOnlyKeys(value, ['kind', 'image']) && value.kind === 'defaultImage' && parseImageReference(value.image) !== undefined) {

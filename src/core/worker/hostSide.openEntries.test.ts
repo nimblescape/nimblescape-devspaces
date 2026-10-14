@@ -108,11 +108,10 @@ describe('the registry writes of an open: entries, clashes and build records', (
     expect(checkedConfigurationChange({ serviceFolders: { folders: [], overflow: false } })).toEqual({ serviceFolders: { folders: [], overflow: false } });
   });
 
-  it('the default image of a change of the configuration: an image reference, or null (the configuration)', () => {
+  it('the default image of a change of the configuration: an image reference, never null (a devspace keeps its kind)', () => {
     expect(checkedConfigurationChange({ defaultImage: 'ghcr.io/acme/base:latest' })).toEqual({ defaultImage: 'ghcr.io/acme/base:latest' });
-    expect(checkedConfigurationChange({ defaultImage: null })).toEqual({ defaultImage: null });
     expect(checkedConfigurationChange({ select: DEFAULT })).not.toHaveProperty('defaultImage');
-    for (const odd of ['', 'not an image', 'node:22\n', 3, true, { image: 'node:22' }]) {
+    for (const odd of [null, '', 'not an image', 'node:22\n', 3, true, { image: 'node:22' }]) {
       expect(() => checkedConfigurationChange({ defaultImage: odd }), JSON.stringify(odd)).toThrow('default image');
     }
   });

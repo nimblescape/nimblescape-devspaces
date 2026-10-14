@@ -135,7 +135,7 @@ import {
   resourceName,
   splitRepository,
 } from '../names';
-import { sourceOf, sourceOperationKey, sourceSegment } from '../devspaceSource';
+import { sameSource, sourceLabel, sourceOf, sourceOperationKey, sourceSegment } from '../devspaceSource';
 import { MAX_REFERENCE_LENGTH } from '../imageCheck/dockerfile';
 import { namePair } from '../namePairs';
 import { imageBuildRecord, imageRecordLabels, preparedImageLabels, preparedImageMismatch, type PrepareKey } from './imageRecord';
@@ -391,7 +391,11 @@ interface PipelineContext {
   forced: boolean;
   steps: StepReporter;
   signal?: AbortSignal;
-  /** Show Messages.configurationNotFound when the configuration is missing on this branch. */
+  /**
+   * Show Messages.configurationNotFound when the configuration is missing on this branch, unless the devspace was
+   * built from the fallback already (the configuration of its build record: the devspace keeps its source, so every
+   * open on such a branch falls back; the message comes once).
+   */
   announceConfigFallback: boolean;
   /** The repository was cloned in this run: fix the ownership, and read the full Git summary. */
   cloned: boolean;
@@ -1386,17 +1390,9 @@ export class DevspaceService extends OperationBase {
     const container = await docker.findContainer(ctx.env.id, ctx.env.containerName);
     ctx.composeContainer = container !== undefined && isComposeContainer(container.labels, composeProjectName(ctx.env.repository, ctx.env.id));
     // An entry without a build record (restored from its volume after a lost registry, or a devspace that another
-    // computer created) takes the record of its newest image (adoptImageRecord).
-    const withoutRecord = ctx.env.buildRecord === undefined;
+    // computer created) takes the record of its newest image (adoptImageRecord). The kind of the entry is fixed before
+    // the open (the label of its volume, or the record of its newest image at reconcileFromVolumes).
     const record = ctx.env.buildRecord ?? (await this.adoptImageRecord(ctx));
-    // The kind of a devspace comes back with its entry (the label of its volume); a volume of version 0.5.0 or older
-    // has no such label, so the entry of a default-image devspace restored from it names no default image. Its newest
-    // image records the default image it was built from: the devspace keeps its kind (the configuration of the
-    // repository is not read, and the next save of the configuration writes the kind into the entry again).
-    if (withoutRecord && ctx.env.defaultImage === undefined && ctx.defaultImage === undefined && record?.defaultImage !== undefined) {
-      ctx.defaultImage = record.defaultImage;
-      this.logger.info(`${ctx.env.repository} is the default-image devspace of its repository, as its devspace image records: it opens with the default image ${record.defaultImage}.`);
-    }
     const imagePresent = record !== undefined && (await this.pinnedImagePresent(record));
     this.logger.info(
       `State of ${ctx.env.repository}: container ${container ? container.state : 'missing'}, devspace image ` +
@@ -1594,7 +1590,9 @@ export class DevspaceService extends OperationBase {
     if (ctx.prepare !== undefined && fallback) throw new PrepareSkipped(`its configuration ${ctx.configPath} is not on the checked-out branch`);
     if (fallback) {
       this.logger.info(`The configuration ${ctx.configPath} does not exist on this branch. ${configPath} is used.`);
-      if (ctx.announceConfigFallback) this.deps.ui.info(Messages.configurationNotFound(ctx.configPath, configurationName(configPath)));
+      if (ctx.announceConfigFallback && env.buildRecord?.configPath !== configPath) {
+        this.deps.ui.info(Messages.configurationNotFound(ctx.configPath, sourceLabel({ kind: 'configuration', configPath })));
+      }
     }
 
     const problems = checkConfiguration(files.configText);
@@ -2340,15 +2338,18 @@ export class DevspaceService extends OperationBase {
 
   /**
    * Stores what the registry needs from the configuration: path, shutdownAction, additional volumes. The path is the
-   * selection of the user: a fallback on a branch without the selected configuration does not replace it, so the
-   * selection applies again on a branch that has it. The build record keeps what was built. Without a build record
-   * (first open, entry restored from a volume), nothing was selected and built yet: the fallback is stored.
+   * source of the devspace (DevspaceSource): a fallback on a branch without its configuration does not replace it, so
+   * the devspace keeps its source (its row, its names) and the configuration applies again on a branch that has it.
+   * The build record keeps what was built. One exception: without a build record (first open, entry restored from a
+   * volume), the other file name of the same configuration at the root (`.devcontainer.json` for
+   * `.devcontainer/devcontainer.json`, sameSource) is stored, so that the next open reads it directly.
    */
   private async saveConfiguration(ctx: PipelineContext, loaded: LoadedConfiguration, record: BuildRecord | undefined): Promise<void> {
     // Only the volumes whose labels make them the devspace's own or an additional volume of the same owner
     // (recordedVolumes); the others are never recorded.
     const additionalVolumes = await this.recordedVolumes(loaded.mountedVolumes, ctx.env);
-    const configPath = loaded.fallback && record !== undefined ? ctx.configPath : loaded.configPath;
+    const sameConfiguration = sameSource({ kind: 'configuration', configPath: loaded.configPath }, { kind: 'configuration', configPath: ctx.configPath });
+    const configPath = loaded.fallback && (record !== undefined || !sameConfiguration) ? ctx.configPath : loaded.configPath;
     // The services' volumes are read from the model here, before the write; it only adds them.
     const serviceVolumes = loaded.compose ? composeServiceVolumeNames(loaded.compose.output.model, loaded.compose.project, loaded.compose.service) : undefined;
     const updated = await this.openRecords.configuration(ctx.env.id, {
@@ -6415,9 +6416,14 @@ export class DevspaceService extends OperationBase {
 
   /**
    * Registry lost: adds an entry for each volume with the label nimblescape.devspaces.id that the registry
-   * lacks, with the owner of its label nimblescape.devspaces.owner-id; a volume without a valid owner label is skipped.
-   * A volume of a repository of which the owner account has a devspace already is not added: one devspace per
-   * repository and account. The additional volumes of an entry are its own labelled volumes
+   * lacks, with the owner of its label nimblescape.devspaces.owner-id and the source of its labels
+   * nimblescape.devspaces.default-image or nimblescape.devspaces.config-path (devspaceOfVolume); a volume without a
+   * valid owner label is skipped. A volume of version 0.5.0 or older has no source label: the build record of the
+   * newest devspace image of the entry (newestImageRecord) says whether it was built from a default image, and the
+   * entry keeps that kind (so that the Start of the `default` row of its repository finds it, and no second
+   * default-image devspace is created). A volume of a repository of which the owner account has a devspace of the
+   * same source already is not added: one devspace per repository, account and source. The additional volumes of an
+   * entry are its own labelled volumes
    * (nimblescape.devspaces.volume, isOwnVolume), the additional volumes of other devspaces of the same owner that its
    * surviving container mounts (isSameOwnerAdditionalVolume), and the volumes without labels of Devspace that it
    * mounts (protectedMountedVolumes), which protect them from other accounts and from the Delete of the other
@@ -6447,6 +6453,15 @@ export class DevspaceService extends OperationBase {
       if ('skipped' in candidate) {
         this.logger.warn(candidate.skipped);
         continue;
+      }
+      // A volume of version 0.5.0 or older (no source label): the kind of the devspace from the build record of its
+      // newest devspace image.
+      if (volume.labels[LABEL_DEFAULT_IMAGE] === undefined && volume.labels[LABEL_CONFIG_PATH] === undefined) {
+        const found = await this.newestImageRecord(candidate);
+        if ('record' in found && found.record.defaultImage !== undefined) {
+          candidate.defaultImage = found.record.defaultImage;
+          this.logger.info(`The volume ${candidate.volumeName} is the default-image devspace of ${candidate.repository}, as its devspace image ${found.tag} records: it was built from ${found.record.defaultImage}.`);
+        }
       }
       candidates.push(candidate);
     }
@@ -6501,7 +6516,7 @@ export class DevspaceService extends OperationBase {
     // The registry adds them under its lock (`record restore` in the worker).
     const { added, skipped } = await this.deps.registry.restore(candidates);
     for (const name of skipped) {
-      this.logger.warn(`The volume ${name} belongs to a repository that has another devspace of the same owner. It is not added.`);
+      this.logger.warn(`The volume ${name} belongs to a repository that has another devspace of the same owner and source. It is not added.`);
     }
     if (added > 0) this.logger.info(`${added} devspaces were restored from the labels of their volumes.`);
     return added;
@@ -6551,7 +6566,8 @@ export class DevspaceService extends OperationBase {
     const create = this.deps.newDevspaceId ?? newDevspaceId;
     for (let attempt = 1; ; attempt++) {
       const id = create();
-      // The names of the devspace (with the word of its source) and of its images (without it).
+      // The names of the devspace (with the word of its source) and of its images (without it; also the name of a
+      // devspace of version 0.5.0 or older, whose volume and container the engine may still have).
       const name = resourceName(repository, id, segment);
       const image = resourceName(repository, id);
       if (
@@ -6559,7 +6575,9 @@ export class DevspaceService extends OperationBase {
         !recorded.has(name.toLowerCase()) &&
         !recorded.has(image.toLowerCase()) &&
         !(await this.deps.docker.volumeExists(name)) &&
-        (await this.deps.docker.containerState(name)) === 'missing'
+        !(await this.deps.docker.volumeExists(image)) &&
+        (await this.deps.docker.containerState(name)) === 'missing' &&
+        (await this.deps.docker.containerState(image)) === 'missing'
       ) {
         return id;
       }

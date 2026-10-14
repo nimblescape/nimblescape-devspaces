@@ -545,7 +545,7 @@ describe('buildTreeModel', () => {
       expect(api.tooltip).toBe(`acme/api\n${TreeTexts.sources(3)}`);
       expect(api.children.map((child) => [child.id, child.label, child.source, child.child, child.devspace?.id])).toEqual([
         ['repo:acme/api:default', 'default', DEFAULT_SOURCE, true, 'e1'],
-        ['repo:acme/api:config:default', 'config', ROOT_SOURCE, true, undefined],
+        ['repo:acme/api:config', 'config', ROOT_SOURCE, true, undefined],
         ['repo:acme/api:config:python', 'python', { kind: 'configuration', configPath: python }, true, 'e2'],
       ]);
       // A child row names its source in its label, not in the description; the tooltip names the devspace with it.
@@ -609,8 +609,8 @@ describe('buildTreeModel', () => {
       );
       expect(node(groups, 'acme/api').children.map((child) => [child.id, child.label, child.devspace?.id])).toEqual([
         ['repo:acme/api:default', 'default', undefined],
-        ['repo:acme/api:config:default', 'config', 'local'],
-        ['repo:acme/api:config:default#remote', 'config', 'remote'],
+        ['repo:acme/api:config', 'config', 'local'],
+        ['repo:acme/api:config#remote', 'config', 'remote'],
       ]);
     });
 
@@ -618,7 +618,7 @@ describe('buildTreeModel', () => {
       const devspaces = [devspace('e1', 'acme/api', { defaultImage: IMAGE, lastUsedAt: iso(T0 + 1000) }), devspace('e2', 'acme/api', { lastUsedAt: iso(T0) })];
       const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api'), repo('acme/web')]), devspaces, settings: withImage }));
       expect(rows(groups).map((entry) => entry.label)).toEqual(['default', 'config', 'default', 'config']);
-      expect(findRowByDevspaceId(groups, 'e2')?.id).toBe('repo:acme/api:config:default');
+      expect(findRowByDevspaceId(groups, 'e2')?.id).toBe('repo:acme/api:config');
       expect(recentDevspaces(groups, devspaces).map((entry) => [entry.devspaceId, entry.name, entry.state])).toEqual([
         ['e1', 'acme/api · default', 'stopped'],
         ['e2', 'acme/api · config', 'stopped'],
@@ -1192,6 +1192,7 @@ describe('setting repositoryGroups', () => {
     return children.map((child) => {
       if (child.kind === 'group') return [child.label, shape(child.children)];
       if (child.kind === 'hint') return `hint:${child.organization}`;
+      if (child.kind === 'repositoryNode') return [child.label, child.children.map((row) => row.label)];
       return child.label;
     });
   }
@@ -1223,6 +1224,24 @@ describe('setting repositoryGroups', () => {
     repo('school/2025-3bWI-SWP-module-oop-hailo'),
     repo('school/2026-3cWI-SWP-module-oop-EnesHA81'),
   ];
+
+  it('a repository with several sources is a node with its child rows inside its group, labelled like its row', () => {
+    const python = '.devcontainer/python/devcontainer.json';
+    const groups = buildTreeModel(
+      input({
+        discovery: discovery([repo('school/2026-3cWI-SWP-module-oop-hailo', { configPaths: ['.devcontainer/devcontainer.json', python] }), repo('school/2026-3cWI-SWP-module-oop-felix')]),
+        devspaces: [devspace('e1', 'school/2026-3cWI-SWP-module-oop-hailo', { configPath: python })],
+        repositoryGroups: patterns(EXAMPLE),
+      }),
+    );
+    expect(tree(groups)).toEqual([['school', [['2026-3cWI-SWP', [['module-oop', ['felix', ['hailo', ['config', 'python']]]]]]]]]);
+    const rowsOfNode = rows(groups).filter((row) => row.repository === 'school/2026-3cWI-SWP-module-oop-hailo');
+    expect(rowsOfNode.map((row) => [row.id, row.child, row.devspace?.id])).toEqual([
+      ['repo:school/2026-3cwi-swp-module-oop-hailo:config', true, undefined],
+      ['repo:school/2026-3cwi-swp-module-oop-hailo:config:python', true, 'e1'],
+    ]);
+    expect(findRowByDevspaceId(groups, 'e1')?.id).toBe('repo:school/2026-3cwi-swp-module-oop-hailo:config:python');
+  });
 
   it('shows the example of the user: the first group is the top level under the owner, the last group labels the row', () => {
     const groups = buildTreeModel(input({ discovery: discovery(STUDENTS), repositoryGroups: patterns(EXAMPLE) }));

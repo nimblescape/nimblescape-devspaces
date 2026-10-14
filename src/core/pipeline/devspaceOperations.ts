@@ -48,7 +48,9 @@ import { isAvailableTo } from '../ownership';
 import { type DevspaceRuntimeState, type DevspaceStates, type StateDevspace } from './refreshStates';
 import { hostAccessChecks } from '../policy/hostAccessChecks';
 import { isoTime } from '../ports';
-import type { Devspace, GitHubAccount } from '../types';
+import type { Devspace, DevspaceSource, GitHubAccount } from '../types';
+import { sourceOf, sourceOperationKey } from '../devspaceSource';
+import { DEFAULT_CONFIG_PATH } from './recordRules';
 import { LIFECYCLE_UNKNOWN } from './lifecycleMemory';
 import { registryOpenRecords, type OpenRecords } from './openRecords';
 
@@ -57,7 +59,6 @@ import {
   StepReporter,
   cancelledError,
   devspaceMissing,
-  repositoryKey,
   refusalError,
   PipelineTexts,
   DEVSPACE_LOCK_WAIT_SECONDS,
@@ -161,6 +162,15 @@ export interface DevspaceOperationsDeps extends OperationBaseDeps {
   defaultExtensionsOfWindow?: () => string[];
 }
 
+/**
+ * The source of the devspace of an open that the worker runs (OpenParams.source; without one, the first configuration
+ * of the repository, as the worker's `open` takes it): the gate of the open and the lookup of its devspace on this
+ * side (findForAccount).
+ */
+function openedSource(params: Pick<OpenParams, 'source' | 'target'>): DevspaceSource {
+  return params.source ?? { kind: 'configuration', configPath: params.target?.configPaths[0] ?? DEFAULT_CONFIG_PATH };
+}
+
 /** The operations of a window, sent to the worker (see the module comment). */
 export class DevspaceOperations extends OperationBase {
   constructor(protected override readonly deps: DevspaceOperationsDeps) {
@@ -176,7 +186,10 @@ export class DevspaceOperations extends OperationBase {
    */
   async openInWorker(target: RepositoryTarget, options: OpenOptions): Promise<OpenResult> {
     splitRepository(target.repository);
-    return this.exclusive(repositoryKey(target.repository), options.signal, async () => {
+    // The gate of the devspace of the source of the open (as the worker's `open` keys it): two devspaces of one
+    // repository open next to each other.
+    const source = openedSource({ ...(options.source !== undefined ? { source: options.source } : {}), target: { configPaths: target.configPaths, trusted: target.trusted } });
+    return this.exclusive(sourceOperationKey(target.repository, source), options.signal, async () => {
       try {
         return await this.openThroughWorker(
           target.repository,
@@ -194,7 +207,7 @@ export class DevspaceOperations extends OperationBase {
     const devspace = await this.deps.registry.get(devspaceId);
     if (!devspace) throw devspaceMissing();
     await this.requireCurrentHost(devspace);
-    return this.exclusive(repositoryKey(devspace.repository), options.signal, async () => {
+    return this.exclusive(sourceOperationKey(devspace.repository, sourceOf(devspace)), options.signal, async () => {
       try {
         const current = await this.deps.registry.get(devspaceId);
         if (!current) throw devspaceMissing(devspace.repository);
@@ -301,7 +314,7 @@ export class DevspaceOperations extends OperationBase {
     if ('refused' in value) throw refusalError(value.refused);
     const { opened } = value;
     const devspace = await this.deps.registry.get(opened.devspaceId);
-    const expected = params.devspaceId ?? (await this.deps.registry.findForAccount(repository, session.account.id, dockerHost))?.id;
+    const expected = params.devspaceId ?? (await this.deps.registry.findForAccount(repository, session.account.id, dockerHost, openedSource(params)))?.id;
     // And its folder is the one that the open recorded (`record openFinished`).
     if (
       !devspace ||
@@ -348,7 +361,7 @@ export class DevspaceOperations extends OperationBase {
   private async afterLostWorkerOpen(repository: string, params: OpenParams, account: GitHubAccount, started: boolean): Promise<void> {
     const id =
       params.devspaceId ??
-      (await this.deps.registry.findForAccount(repository, account.id, params.dockerHost).catch((error: unknown) => {
+      (await this.deps.registry.findForAccount(repository, account.id, params.dockerHost, openedSource(params)).catch((error: unknown) => {
         this.logger.warn(`The devspace of ${repository} could not be read after the open in the worker ended: ${errorMessage(error)}`);
         return undefined;
       }))?.id;
@@ -378,7 +391,7 @@ export class DevspaceOperations extends OperationBase {
     }
     await this.requireCurrentHost(devspace);
     await this.requireOwnAccount(devspace, false);
-    await this.exclusive(repositoryKey(devspace.repository), undefined, async () => {
+    await this.exclusive(sourceOperationKey(devspace.repository, sourceOf(devspace)), undefined, async () => {
       // Stop ends Close and Keep Running (Keep Running When Closed stays).
       if ((await this.deps.registry.get(devspaceId))?.keepRunningOnce !== undefined) {
         await this.quietly('clear Close and Keep Running', () =>
@@ -544,7 +557,7 @@ export class DevspaceOperations extends OperationBase {
       return;
     }
     await this.requireCurrentHost(devspace);
-    await this.exclusive(repositoryKey(devspace.repository), options.signal, async () => {
+    await this.exclusive(sourceOperationKey(devspace.repository, sourceOf(devspace)), options.signal, async () => {
       try {
         const monitorSource = this.deps.monitorSource?.();
         const params = parseDeleteParams({

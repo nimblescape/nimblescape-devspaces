@@ -82,7 +82,7 @@ export const ControllerTexts = {
   selectRepositoryForGitHub: 'Select a repository to show on GitHub',
   /** The Quick Pick of the source of a repository with several sources (sourceChoices), after a pick of the repository. */
   selectSourceTitle: 'Select Source',
-  sourcePlaceholder: (repository: string) => `Select what ${repository} starts from: the default image or a configuration`,
+  sourcePlaceholder: (repository: string) => `Select what ${repository} starts from`,
   /** The marker of a source whose devspace exists (sourceChoices). */
   devspaceExists: 'devspace exists',
 } as const;

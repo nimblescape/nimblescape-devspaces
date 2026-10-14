@@ -277,8 +277,11 @@ function openEvents(): string[] {
   return events.filter((event) => !event.startsWith('docker stop') && !event.startsWith('docker rm') && event !== 'ownImageUse');
 }
 
-/** The read of a first open before its registry entry (unusedDevspaceId: the volume name is free); nothing is created. */
-const FREE_NAME_CHECK = 'docker volume exists';
+/**
+ * The reads of a first open before its registry entry (unusedDevspaceId: the volume name with the word of the source
+ * and the one without it are free); nothing is created.
+ */
+const FREE_NAME_CHECKS = ['docker volume exists', 'docker volume exists'];
 
 describe('Start, Rebuild, a change of the configuration and Clone again under the devspace lock', () => {
   beforeEach(() => {
@@ -475,8 +478,8 @@ describe('Start, Rebuild, a change of the configuration and Clone again under th
       expect(lockedIds).toEqual([id]);
       expect((await h.registry.list()).map((entry) => entry.id)).toEqual([id]);
       // No helper image before the lock.
-      expect(openEvents().slice(0, 6)).toEqual([
-        FREE_NAME_CHECK,
+      expect(openEvents().slice(0, 7)).toEqual([
+        ...FREE_NAME_CHECKS,
         `lock ${id} ${DEVSPACE_LOCK_WAIT_SECONDS}`,
         'busy=create',
         'docker volume create (locked)',
@@ -497,7 +500,7 @@ describe('Start, Rebuild, a change of the configuration and Clone again under th
       const error = await rejection(h.service.open(TARGET, openOptions()));
       expect(error.message).toBe(message);
       // No helper image before the lock (no call of ensureImagePresent).
-      expect(events).toEqual([FREE_NAME_CHECK, `lock ${lockedIds[0]} ${DEVSPACE_LOCK_WAIT_SECONDS}`, 'busy=create']);
+      expect(events).toEqual([...FREE_NAME_CHECKS, `lock ${lockedIds[0]} ${DEVSPACE_LOCK_WAIT_SECONDS}`, 'busy=create']);
       expect(await h.registry.list()).toEqual([]);
       expect(h.docker.log).toEqual([]);
       expect(h.docker.volumes.size).toBe(0);
@@ -523,7 +526,7 @@ describe('Start, Rebuild, a change of the configuration and Clone again under th
       const [id] = lockedIds;
       // No helper image before the lock.
       expect(openEvents()).toEqual([
-        FREE_NAME_CHECK,
+        ...FREE_NAME_CHECKS,
         `lock ${id} ${DEVSPACE_LOCK_WAIT_SECONDS}`,
         'busy=create',
         'docker volume create (locked)',

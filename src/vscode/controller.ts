@@ -487,16 +487,19 @@ export class Controller implements vscode.Disposable {
       this.logger.info(`This window was restored or reloaded. The open pipeline of ${repository} runs before it connects.`);
       // Assumption: activation through ATTACHED_CONTAINER_ACTIVATION_EVENT blocks the connection until activate()
       // resolves, also when the pipeline starts Docker or updates the devspace for several minutes.
+      const shown = this.shownName(this.devspaceTarget(devspace));
       const succeeded = await this.operation(
         this.keyOfDevspace(repository, devspace),
         'Open',
         () =>
           runWithProgress({
-            title: Messages.opening(this.shownName(this.devspaceTarget(devspace))),
-            repository,
+            title: Messages.opening(shown),
+            repository: shown,
             cancellable: true,
             task: async (progress, signal) => {
-              await this.deps.service.openDevspaceInWorker(devspace.id, { progress, signal });
+              // The devspace opens with its own source (sourceOf, with the default image of the settings now, so that a
+              // changed setting is noticed: Rebuild now / Later), as every other open of an existing devspace.
+              await this.deps.service.openDevspaceInWorker(devspace.id, { progress, signal, source: sourceOf(devspace, this.deps.settings()) });
             },
           }),
         { retry: () => this.start({ kind: 'devspace', devspaceId: devspace.id }) },
@@ -1169,7 +1172,7 @@ export class Controller implements vscode.Disposable {
       () =>
         runWithProgress({
           title: Messages.opening(shown),
-          repository,
+          repository: shown,
           cancellable: true,
           task: (progress, signal) =>
             this.connectingFlow(newWindow, async (request) => {
@@ -2403,8 +2406,7 @@ export class Controller implements vscode.Disposable {
   /**
    * Whether the sidebar shows the repository of a target with child rows: it has two or more possible sources
    * (possibleSources, as repositoryEntries of the tree model counts them) from its GitHub data, the devspaces of its
-   * rows in the last render of the sidebar, the devspace of the target, and the settings (the default image of the
-   * settings counts only for a repository that GitHub lists).
+   * rows in the last render of the sidebar, the devspace of the target, and the settings.
    */
   private hasChildRows(target: Target): boolean {
     const key = target.repository.toLowerCase();
@@ -2413,8 +2415,7 @@ export class Controller implements vscode.Disposable {
       .filter((row) => row.repository.toLowerCase() === key || row.devspace?.repository.toLowerCase() === key)
       .flatMap((row) => (row.devspace ? [row.devspace] : []));
     if (target.devspace && !devspaces.some((devspace) => devspace.id === target.devspace?.id)) devspaces.push(target.devspace);
-    const settings = this.deps.settings();
-    return possibleSources({ info, devspaces, settings: info === undefined ? { ...settings, defaultImage: undefined } : settings }).length >= 2;
+    return possibleSources({ info, devspaces, settings: this.deps.settings() }).length >= 2;
   }
 
   /**

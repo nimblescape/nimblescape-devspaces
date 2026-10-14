@@ -59,6 +59,25 @@ describe('record restore', () => {
     expect(await restore([{ ...ENTRY, volumeName: NAME.toUpperCase(), containerName: NAME.toUpperCase() }])).toEqual({ value: { added: 1, skipped: ['devspaces-x'] } });
   });
 
+  it('an entry of version 0.6.0: the volume with the word of its source, and the default image of a default-image devspace', async () => {
+    const { restore, restored } = handlerOf();
+    const named = (segment: string, extra: Record<string, unknown> = {}) => {
+      const name = resourceName('acme/api', ID, segment);
+      return { ...ENTRY, ...extra, volumeName: name, containerName: name };
+    };
+    const configuration = named('config');
+    const python = named('python', { configPath: '.devcontainer/python/devcontainer.json' });
+    const defaultImage = named('default', { defaultImage: 'ghcr.io/acme/base:latest' });
+    expect(await restore([configuration, python, defaultImage])).toEqual({ value: { added: 3, skipped: ['devspaces-x'] } });
+    expect(restored).toEqual([[configuration, python, defaultImage]]);
+    // The kind of the entry comes with it: a default-image devspace keeps its default image.
+    expect(restored[0][2]).toHaveProperty('defaultImage', 'ghcr.io/acme/base:latest');
+    expect(restored[0][0]).not.toHaveProperty('defaultImage');
+    // A default-image devspace of version 0.5.0 (the old name) is restored with its default image too.
+    expect(await restore([{ ...ENTRY, defaultImage: 'ghcr.io/acme/base:latest' }])).toEqual({ value: { added: 1, skipped: ['devspaces-x'] } });
+    expect(restored[1]).toEqual([{ ...ENTRY, defaultImage: 'ghcr.io/acme/base:latest' }]);
+  });
+
   it('only the operation reconcile may send it', async () => {
     const { restore, restored } = handlerOf({ dockerHost: '' }, OP_DELETE);
     await expect(restore([ENTRY])).rejects.toMatchObject({ code: 'invalid' });
@@ -111,6 +130,10 @@ describe('record restore', () => {
     ['a container of another name', { ...ENTRY, containerName: 'other' }],
     ['a volume of another devspace', { ...ENTRY, id: '6b1f0c2e-1d4a-4f5e-9a8b-7c6d5e4f3a2b' }],
     ['a configuration path outside .devcontainer', { ...ENTRY, configPath: '../x/devcontainer.json' }],
+    ['a default image that is no image reference', { ...ENTRY, defaultImage: 'not an image' }],
+    ['a default image that is not a text', { ...ENTRY, defaultImage: null }],
+    ['a volume with the word of another source', { ...ENTRY, volumeName: resourceName('acme/api', ID, 'python'), containerName: resourceName('acme/api', ID, 'python') }],
+    ['a volume with the word of the default image, without a default image', { ...ENTRY, volumeName: resourceName('acme/api', ID, 'default'), containerName: resourceName('acme/api', ID, 'default') }],
     ['a time that is none', { ...ENTRY, createdAt: 'yesterday' }],
     ['an owner with a login', { ...ENTRY, owner: { id: '42', login: 'octo' } }],
     ['an owner with more fields', { ...ENTRY, owner: { id: '42', login: '', admin: true } }],

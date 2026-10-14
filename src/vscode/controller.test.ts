@@ -35,6 +35,7 @@ import type { Devspace, DevspaceSource, ExtensionSettings, GitHubAccount, GitSum
 import { SIGNED_IN_CONTEXT_KEY } from './auth';
 import { Commands } from './commands';
 import { CONNECTED_CONTEXT_KEY, Controller, type ControllerDeps } from './controller';
+import { placeholderRepositoryInfo } from './targets';
 import { ControllerTexts } from './controllerTexts';
 import { DisconnectRequests } from './disconnectRequests';
 import { DOUBLE_CLICK_INTERVAL_MS, type ListOpenMode } from './rowActivation';
@@ -238,6 +239,7 @@ interface Harness {
     infos: Map<string, RepositoryInfo>;
     render: ReturnType<typeof vi.fn>;
     refreshStates: ReturnType<typeof vi.fn>;
+    repositoriesForPicker: ReturnType<typeof vi.fn>;
     trustedOwner: ReturnType<typeof vi.fn>;
     onSessionChanged: ReturnType<typeof vi.fn>;
     refreshDiscovery: ReturnType<typeof vi.fn>;
@@ -2066,6 +2068,44 @@ describe('the pick of the source of a repository with several sources', () => {
   });
 });
 
+describe('the source of a repository that GitHub does not list', () => {
+  it('asks nothing: the devspace of the repository is its only source, also with a default image set', async () => {
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    await h.registry.add(devspace());
+    // The switcher lists the repository of the devspace (pickerRepositories); the sidebar has no information on it.
+    h.sidebar.repositoriesForPicker.mockResolvedValue([placeholderRepositoryInfo('acme/api')]);
+    let asked = 0;
+    fakeVscode.window.showQuickPick.mockImplementation(async (items: Array<{ choice?: { kind: string }; repository?: RepositoryInfo }>) => {
+      asked += 1;
+      return items.find((item) => item.choice?.kind === 'openRepository') ?? items.find((item) => item.repository?.nameWithOwner === 'acme/api');
+    });
+    await run('switchDevspace');
+    // The switcher (its devspaces and Open repository…), then the repositories; no pick of a source.
+    expect(asked).toBe(2);
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ source: ROOT_SOURCE }));
+  });
+
+  it('asks for the source when the repository has a default-image devspace too', async () => {
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    await h.registry.add(devspace());
+    await h.registry.add(devspace({ id: OTHER_ENV_ID, defaultImage: DEFAULT_IMAGE, volumeName: 'other', containerName: 'other' }));
+    h.sidebar.repositoriesForPicker.mockResolvedValue([placeholderRepositoryInfo('acme/api')]);
+    let sources: unknown[] = [];
+    fakeVscode.window.showQuickPick.mockImplementation(async (items: Array<{ choice?: { kind: string }; repository?: RepositoryInfo; label: string; description?: string }>) => {
+      const open = items.find((item) => item.choice?.kind === 'openRepository');
+      if (open) return open;
+      const repository = items.find((item) => item.repository?.nameWithOwner === 'acme/api');
+      if (repository) return repository;
+      sources = items.map((item) => item.label);
+      return items.find((item) => item.label === 'default');
+    });
+    await run('switchDevspace');
+    expect(sources).toEqual(['default', 'config']);
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(OTHER_ENV_ID, expect.objectContaining({ source: DEFAULT_SOURCE }));
+  });
+});
+
 describe('Show on GitHub', () => {
   it('opens the page of the repository', async () => {
     h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
@@ -2132,6 +2172,26 @@ describe('Window roles', () => {
     await h.controller.openAttachedWindow(env, CONTAINER, undefined);
     expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.not.objectContaining({ forceRebuild: true }));
     expect(h.connection.open).not.toHaveBeenCalled();
+    expect(h.statusBar.showConnected).toHaveBeenCalledWith('acme/api', 'main');
+  });
+
+  it('role A: a restored window of a default-image devspace runs the pipeline with the image of the settings now, named with its source', async () => {
+    const env = devspace({ defaultImage: 'ghcr.io/majikmate/devcontainer-base:old' });
+    await h.registry.add(env);
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    await h.controller.openAttachedWindow(env, CONTAINER, undefined);
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ source: DEFAULT_SOURCE }));
+    expect(h.progressTitles[0]).toContain(Messages.opening('acme/api · default'));
+    expect(h.statusBar.showConnected).toHaveBeenCalledWith('acme/api · default', 'main');
+  });
+
+  it('role A: a restored window of a configuration devspace runs the pipeline with its configuration', async () => {
+    const env = devspace({ configPath: '.devcontainer/python/devcontainer.json' });
+    await h.registry.add(env);
+    await h.controller.openAttachedWindow(env, CONTAINER, undefined);
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ source: PYTHON_SOURCE }));
+    // A repository that GitHub does not list, with one devspace: one row, named by the repository alone.
     expect(h.statusBar.showConnected).toHaveBeenCalledWith('acme/api', 'main');
   });
 

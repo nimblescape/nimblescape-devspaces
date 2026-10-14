@@ -36,6 +36,7 @@ import {
   LABEL_DEVSPACE_ID,
   LABEL_HOST_ACCESS,
   LABEL_CONFIG_PATH,
+  LABEL_DEFAULT_IMAGE,
   LABEL_OWNER_ID,
   LABEL_REPOSITORY,
   composeProjectName,
@@ -613,14 +614,23 @@ describe('open: first open', () => {
     expect(used.filter((entry) => JSON.stringify(entry.image) !== JSON.stringify(previous))).toEqual([]);
   });
 
-  it('falls back to the first configuration on the branch and says so', async () => {
+  it('falls back to the first configuration on the branch and says so once; the devspace keeps its source', async () => {
     h.helper.files = { '.devcontainer/python/devcontainer.json': { configText: DEFAULT_CONFIG_TEXT } };
     // The open has no branch option.
     await h.service.open(TARGET, options());
     expect(h.ui.infos).toEqual([Messages.configurationNotFound(DEFAULT_CONFIG_PATH, 'python')]);
-    const env = await h.registry.findForAccount(REPO, ACCOUNT.id);
-    expect(env?.configPath).toBe('.devcontainer/python/devcontainer.json');
+    let env = await h.registry.findForAccount(REPO, ACCOUNT.id);
+    // The devspace stays the one of the root configuration (its row, its names); the record says what was built.
+    expect(env?.configPath).toBe(DEFAULT_CONFIG_PATH);
     expect(env?.buildRecord?.configPath).toBe('.devcontainer/python/devcontainer.json');
+    // The next open on the same branch falls back again, quietly: the devspace was built from the fallback.
+    h.ui.infos.length = 0;
+    await h.service.open(TARGET, options());
+    expect(h.ui.infos).toEqual([]);
+    expect(h.ui.prompts).toEqual([]);
+    env = await h.registry.findForAccount(REPO, ACCOUNT.id);
+    expect(env?.configPath).toBe(DEFAULT_CONFIG_PATH);
+    expect(h.helper.builds.map((build) => build.configPath)).toEqual(['.devcontainer/python/devcontainer.json']);
   });
 
   it('uses the first configuration silently for an unknown repository without configuration paths', async () => {
@@ -3297,7 +3307,7 @@ describe('open: selected configuration missing on the branch', () => {
 
   it('keeps the selection when the user answers "Later", so it applies again on a branch that has it', async () => {
     await h.service.open(TARGET, python());
-    expect(h.ui.infos).toEqual([Messages.configurationNotFound(PYTHON, 'default')]);
+    expect(h.ui.infos).toEqual([Messages.configurationNotFound(PYTHON, 'config')]);
     expect(h.ui.prompts).toEqual([`configurationChanged ${REPO}`]);
     expect(h.helper.builds).toEqual([]);
     expect((await entry())?.configPath).toBe(PYTHON);
@@ -4285,7 +4295,7 @@ describe('reconcileFromVolumes', () => {
       [ids[1], OTHER_ACCOUNT.id],
     ]);
     expect(h.logger.warnings.filter((warning) => warning.includes('another devspace of the same owner'))).toEqual([
-      `The volume ${resourceName(REPO, skippedIds[0])} belongs to a repository that has another devspace of the same owner. It is not added.`,
+      `The volume ${resourceName(REPO, skippedIds[0])} belongs to a repository that has another devspace of the same owner and source. It is not added.`,
     ]);
     // A volume without the owner label is skipped like one with invalid labels.
     expect(h.logger.warnings).toEqual(
@@ -4296,9 +4306,68 @@ describe('reconcileFromVolumes', () => {
     expect((await h.registry.findForAccount(REPO, OTHER_ACCOUNT.id))?.id).toBe(ids[1]);
   });
 
+  it('restores the default-image devspace and the configuration devspace of one repository and owner (the names and labels of version 0.6.0)', async () => {
+    const ids = ['a0000001-0000-4000-8000-000000000001', 'a0000002-0000-4000-8000-000000000002', 'a0000003-0000-4000-8000-000000000003'];
+    const image = 'ghcr.io/acme/base:latest';
+    const config = resourceName(REPO, ids[0], 'config');
+    const defaultImage = resourceName(REPO, ids[1], 'default');
+    const second = resourceName(REPO, ids[2], 'default');
+    h.docker.volumes.set(config, { [LABEL_DEVSPACE_ID]: ids[0], [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id, [LABEL_CONFIG_PATH]: DEFAULT_CONFIG_PATH });
+    h.docker.volumes.set(defaultImage, { [LABEL_DEVSPACE_ID]: ids[1], [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id, [LABEL_DEFAULT_IMAGE]: image });
+    // A second volume of the same source is not added: one devspace per repository, account and source.
+    h.docker.volumes.set(second, { [LABEL_DEVSPACE_ID]: ids[2], [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id, [LABEL_DEFAULT_IMAGE]: image });
+    expect(await h.service.reconcileFromVolumes()).toBe(2);
+    expect(await h.registry.get(ids[0])).toMatchObject({ volumeName: config, containerName: config, configPath: DEFAULT_CONFIG_PATH });
+    expect(await h.registry.get(ids[0])).not.toHaveProperty('defaultImage');
+    expect(await h.registry.get(ids[1])).toMatchObject({ volumeName: defaultImage, containerName: defaultImage, configPath: DEFAULT_CONFIG_PATH, defaultImage: image });
+    expect(await h.registry.get(ids[2])).toBeUndefined();
+    expect(h.logger.warnings).toContain(`The volume ${second} belongs to a repository that has another devspace of the same owner and source. It is not added.`);
+    // Each source finds its devspace.
+    expect((await h.registry.findForAccount(REPO, ACCOUNT.id, '', { kind: 'configuration', configPath: DEFAULT_CONFIG_PATH }))?.id).toBe(ids[0]);
+    expect((await h.registry.findForAccount(REPO, ACCOUNT.id, '', { kind: 'defaultImage', image: 'other:1' }))?.id).toBe(ids[1]);
+    expect(await h.service.reconcileFromVolumes()).toBe(0);
+  });
+
   it('does nothing when Docker does not run', async () => {
     h.docker.running = false;
     expect(await h.service.reconcileFromVolumes()).toBe(0);
+  });
+});
+
+describe('open: first open of a configuration missing on the branch', () => {
+  const PYTHON = '.devcontainer/python/devcontainer.json';
+  const PYTHON_TEXT = '{ "image": "python:3.12" }';
+  const PYTHON_SOURCE = { kind: 'configuration' as const, configPath: PYTHON };
+  /** The discovery lists both configurations; the checked-out branch has only the root one. */
+  const target = { ...TARGET, configPaths: [DEFAULT_CONFIG_PATH, PYTHON] };
+
+  it('keeps the source of the devspace (its row, its names), builds the fallback, and says so once', async () => {
+    await h.service.open(target, { ...options(), source: PYTHON_SOURCE });
+    const env = await h.registry.findForAccount(REPO, ACCOUNT.id, '', PYTHON_SOURCE);
+    expect(env).toBeDefined();
+    expect(env?.configPath).toBe(PYTHON);
+    expect(env?.volumeName).toBe(resourceName(REPO, env!.id, 'python'));
+    expect(h.docker.volumes.get(env!.volumeName)?.[LABEL_CONFIG_PATH]).toBe(PYTHON);
+    expect(env?.buildRecord?.configPath).toBe(DEFAULT_CONFIG_PATH);
+    expect(h.ui.infos).toEqual([Messages.configurationNotFound(PYTHON, 'config')]);
+    expect(h.ui.prompts).toEqual([]);
+    // The devspace of the root configuration does not exist: the fallback created none.
+    expect(await h.registry.findForAccount(REPO, ACCOUNT.id, '', { kind: 'configuration', configPath: DEFAULT_CONFIG_PATH })).toBeUndefined();
+    // Another open on the same branch: the fallback again, quietly.
+    h.ui.infos.length = 0;
+    await h.service.open(target, { ...options(), source: PYTHON_SOURCE });
+    expect(h.ui.infos).toEqual([]);
+    expect((await h.registry.list()).map((entry) => entry.id)).toEqual([env!.id]);
+    // On a branch that has the configuration, the open asks Rebuild now / Later and builds it.
+    h.helper.files = { [DEFAULT_CONFIG_PATH]: { configText: DEFAULT_CONFIG_TEXT }, [PYTHON]: { configText: PYTHON_TEXT } };
+    h.helper.config = { image: 'python:3.12' };
+    h.checker.outcome = checked({ 'python:3.12': DIGEST_NEW });
+    h.ui.configurationChangedAnswer = 'rebuildNow';
+    await h.service.open(target, { ...options(), source: PYTHON_SOURCE });
+    expect(h.ui.prompts).toEqual([`configurationChanged ${REPO}`]);
+    expect(h.helper.builds.map((build) => build.configPath)).toEqual([DEFAULT_CONFIG_PATH, PYTHON]);
+    expect((await h.registry.get(env!.id))?.buildRecord?.configPath).toBe(PYTHON);
+    expect((await h.registry.get(env!.id))?.configPath).toBe(PYTHON);
   });
 });
 

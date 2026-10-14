@@ -31,6 +31,51 @@ function lostWorker(sent: string[]): OperationFlow {
 
 const monitor = { monitorSource: () => '0123456789abcdef0123456789abcdef', openMonitor: () => ({ images: IMAGES }) };
 
+/** Waits until `condition` holds (at most about a second). */
+async function until(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 200 && !condition(); attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(condition()).toBe(true);
+}
+
+describe('the gate of the opens in the worker', () => {
+  it('the opens of two devspaces of one repository run next to each other; the opens of one devspace one after the other', async () => {
+    const started: string[] = [];
+    const releases: Array<() => void> = [];
+    const h = createHarness({
+      ...monitor,
+      flow: async (_op, params) => {
+        const { devspaceId } = params as { devspaceId: string };
+        started.push(devspaceId);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        const devspace = await h.registry.get(devspaceId);
+        return { opened: { devspaceId, containerName: devspace!.containerName, remoteWorkspaceFolder: '/workspaces/api' } };
+      },
+    });
+    try {
+      // The configuration devspace and the default-image devspace of one repository.
+      await seedDevspace(h, { id: ENV_ID, container: 'stopped' });
+      await seedDevspace(h, { id: OTHER_ID, container: 'stopped', extra: { defaultImage: 'ghcr.io/acme/base:latest' } });
+      const first = h.operations.openDevspaceInWorker(ENV_ID, { progress: h.progress });
+      const second = h.operations.openDevspaceInWorker(OTHER_ID, { progress: h.progress });
+      await until(() => started.length === 2);
+      expect(started).toEqual([ENV_ID, OTHER_ID]);
+      // A second open of the first devspace waits for its first open.
+      const again = h.operations.openDevspaceInWorker(ENV_ID, { progress: h.progress });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(started).toHaveLength(2);
+      releases[0]();
+      releases[1]();
+      await Promise.all([first, second]);
+      await until(() => started.length === 3);
+      expect(started).toEqual([ENV_ID, OTHER_ID, ENV_ID]);
+      releases[2]();
+      await again;
+    } finally {
+      h.cleanup();
+    }
+  });
+});
+
 describe('the open in the worker, probes', () => {
   it('a cancel while Docker starts sends nothing to the worker', async () => {
     const controller = new AbortController();

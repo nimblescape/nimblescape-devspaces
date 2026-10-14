@@ -248,6 +248,18 @@ describe('resourceName', () => {
     expect(resourceName('acme/api', '22222222-2222-4222-8222-222222222222')).toBe('devspaces-acme-api-noble-berners');
   });
 
+  it('carries the segment of the source of the devspace before the pair (the names of a devspace of version 0.6.0)', () => {
+    expect(resourceName('acme/api', ID, 'config')).toBe(`devspaces-acme-api-config-${namePair(ID)}`);
+    expect(resourceName('acme/api', ID, 'default')).toBe(`devspaces-acme-api-default-${namePair(ID)}`);
+    expect(resourceName('acme/api', ID, 'python')).toBe(`devspaces-acme-api-python-${namePair(ID)}`);
+    expect(isDevspaceResourceName(resourceName('acme/api', ID, 'python'))).toBe(true);
+    // The segment is kept whole; a long owner and repository are shortened for it.
+    const long = resourceName(`${'a'.repeat(40)}/${'b'.repeat(40)}`, ID, 'x'.repeat(24));
+    expect(long.length).toBeLessThanOrEqual(63);
+    expect(long.endsWith(`-${'x'.repeat(24)}-${namePair(ID)}`)).toBe(true);
+    expect(long.startsWith('devspaces-aaaa')).toBe(true);
+  });
+
   it('is in lower case, each run of other characters than [a-z0-9] one -', () => {
     expect(resourceName('Acme/My.Repo_Name', ID)).toBe(`devspaces-acme-my-repo-name-${namePair(ID)}`);
     expect(resourceName('o/name-with--dashes---', ID)).toBe(`devspaces-o-name-with-dashes-${namePair(ID)}`);
