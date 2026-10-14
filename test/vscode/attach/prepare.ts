@@ -23,8 +23,8 @@
 // of another computer instead, reached over SSH, and the engine of the runner gets a container with its name
 // (prepareRemote). That run has no plain container.
 // With DEVSPACE_TEST_ATTACH_PREPARE=update (the runs `previous` and `updated`, a CI job of its own), the test VS Code
-// also gets the last released version of the extension from the Marketplace, and the helper image is built from the
-// Dockerfile of that version (prepareUpdate). That run has no plain container.
+// also gets the last released version of the extension from the VSIX of its GitHub release, and the helper image is
+// built from the Dockerfile of that version (prepareUpdate). That run has no plain container.
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -272,21 +272,72 @@ async function prepareRemote(local: BootstrapDocker, dockerPath: string, started
 }
 
 /**
- * The runs `previous` and `updated`: the last released version of the extension, installed from the Marketplace into
- * the extensions folder of the test VS Code as users install it, the helper image of that version (its Dockerfile can
- * differ from the one of this checkout; that version restores the devspace at activation only when its helper tag
- * exists), and the devspace without container. The seed names the version and the SHA-256 of its dist/extension.js, so
- * that the run `previous` can check that VS Code loads it. The devspace has the volume labels of this checkout; a
- * version that changes them must seed the devspace with the labels of the released version here.
+ * The last release of this repository on GitHub and its VSIX, downloaded into `folder`: the package that the release
+ * workflow published to the Marketplace (its publish job publishes the VSIX of the GitHub release). The VS Code CLI did
+ * not find the extension on the Marketplace (PR #20), so the test installs this file. The token (GITHUB_TOKEN, see
+ * main) only raises the rate limit of the GitHub API.
  */
-async function prepareUpdate(docker: BootstrapDocker, vscode: TestVscode, started: number): Promise<Record<string, unknown>> {
-  const install = childProcess.spawnSync(vscode.cli, [...vscode.cliArgs, '--install-extension', EXTENSION_ID], { encoding: 'utf8' });
-  log.info(`${EXTENSION_ID} from the Marketplace: exit code ${install.status}\n${install.stdout}${install.stderr}`);
-  if (install.status !== 0) throw new Error(`${EXTENSION_ID} could not be installed from the Marketplace.`);
+async function latestReleaseVsix(folder: string, token: string | undefined): Promise<{ tag: string; file: string }> {
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (!repository) throw new Error('GITHUB_REPOSITORY is not set (GitHub Actions sets it).');
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const answer = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, { headers });
+  if (!answer.ok) throw new Error(`The latest release of ${repository} could not be read: ${answer.status} ${await answer.text()}`);
+  const release = (await answer.json()) as { tag_name: string; assets: { name: string; browser_download_url: string }[] };
+  const assets = release.assets.filter((asset) => asset.name.endsWith('.vsix'));
+  if (assets.length !== 1) throw new Error(`The release ${release.tag_name} of ${repository} has ${assets.length} VSIX files: ${assets.map((asset) => asset.name).join(', ')}`);
+  const download = await fetch(assets[0].browser_download_url);
+  if (!download.ok) throw new Error(`${assets[0].browser_download_url} could not be downloaded: ${download.status}`);
+  fs.mkdirSync(folder, { recursive: true });
+  const file = path.join(folder, assets[0].name);
+  fs.writeFileSync(file, Buffer.from(await download.arrayBuffer()));
+  return { tag: release.tag_name, file };
+}
+
+/**
+ * What the Marketplace answers for the extension, for the log only: its flags and versions as the gallery API lists
+ * them without the filters of VS Code (the VS Code CLI did not find the extension there, PR #20).
+ */
+async function marketplaceAnswer(): Promise<string> {
+  try {
+    const answer = await fetch('https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json;api-version=3.0-preview.1' },
+      // filterType 7: the extension ID; flags 0x111: versions, their properties, statistics.
+      body: JSON.stringify({ filters: [{ criteria: [{ filterType: 7, value: EXTENSION_ID }], pageSize: 5 }], flags: 0x111 }),
+    });
+    const text = await answer.text();
+    if (!answer.ok) return `${answer.status} ${text.slice(0, 2_000)}`;
+    const extensions = ((JSON.parse(text) as { results?: { extensions?: { flags?: string; versions?: { version: string; flags?: string; lastUpdated?: string }[] }[] }[] }).results ?? []).flatMap((result) => result.extensions ?? []);
+    if (extensions.length === 0) return 'no extension';
+    return extensions
+      .map((extension) => `flags "${extension.flags}", versions ${(extension.versions ?? []).map((version) => `${version.version} ("${version.flags}", ${version.lastUpdated})`).join(', ')}`)
+      .join('; ');
+  } catch (error) {
+    return `no answer: ${String(error)}`;
+  }
+}
+
+/**
+ * The runs `previous` and `updated`: the last released version of the extension, installed from the VSIX of its GitHub
+ * release into the extensions folder of the test VS Code as users install a VSIX, the helper image of that version (its
+ * Dockerfile can differ from the one of this checkout; that version restores the devspace at activation only when its
+ * helper tag exists), and the devspace without container. The seed names the version and the SHA-256 of its
+ * dist/extension.js, so that the run `previous` can check that VS Code loads it. The devspace has the volume labels of
+ * this checkout; a version that changes them must seed the devspace with the labels of the released version here.
+ */
+async function prepareUpdate(docker: BootstrapDocker, vscode: TestVscode, started: number, githubToken: string | undefined): Promise<Record<string, unknown>> {
+  log.info(`The Marketplace lists ${EXTENSION_ID}: ${await marketplaceAnswer()}`);
+  const release = await latestReleaseVsix(path.join(ROOT, 'out', 'test', 'vscode', 'attach', 'previous'), githubToken);
+  const install = childProcess.spawnSync(vscode.cli, [...vscode.cliArgs, '--install-extension', release.file], { encoding: 'utf8' });
+  log.info(`${release.file} of the release ${release.tag}: exit code ${install.status}\n${install.stdout}${install.stderr}`);
+  if (install.status !== 0) throw new Error(`${release.file} could not be installed.`);
   const folders = fs.readdirSync(vscode.extensionsDir).filter((name) => name.toLowerCase().startsWith(`${EXTENSION_ID}-`));
   if (folders.length !== 1) throw new Error(`${vscode.extensionsDir} has ${folders.length} folders of ${EXTENSION_ID}: ${folders.join(', ')}`);
   const folder = path.join(vscode.extensionsDir, folders[0]);
   const version = (JSON.parse(fs.readFileSync(path.join(folder, 'package.json'), 'utf8')) as { version: string }).version;
+  if (release.tag !== `v${version}`) throw new Error(`The release ${release.tag} holds the version ${version}.`);
   const extensionSha256 = crypto.createHash('sha256').update(fs.readFileSync(path.join(folder, 'dist', 'extension.js'))).digest('hex');
   log.info(`The previous version ${version} is in ${folder} (dist/extension.js ${extensionSha256}).`);
   const helper = await helperImage(docker, started, path.join(folder, 'resources', 'helper', 'Dockerfile'));
@@ -299,13 +350,16 @@ async function prepareUpdate(docker: BootstrapDocker, vscode: TestVscode, starte
 async function main(): Promise<void> {
   if (process.env.CI !== 'true') throw new Error('The attach tests use the Docker engine as a real installation does. They run only on CI (CI=true).');
   const started = Date.now();
+  // The preparation `update` reads the latest release with it; no program that the preparation starts gets it.
+  const githubToken = process.env.GITHUB_TOKEN;
+  delete process.env.GITHUB_TOKEN;
   const vscode = await trustExtension();
   const dockerPath = findDockerCli(process.env, process.platform);
   if (!dockerPath) throw new Error('The Docker CLI was not found.');
   const docker = new BootstrapDocker(new NodeProcessRunner(), dockerPath, process.env, log);
   const kind = process.env.DEVSPACE_TEST_ATTACH_PREPARE;
   const seed =
-    kind === 'remote' ? await prepareRemote(docker, dockerPath, started) : kind === 'update' ? await prepareUpdate(docker, vscode, started) : await prepareLocal(docker, started);
+    kind === 'remote' ? await prepareRemote(docker, dockerPath, started) : kind === 'update' ? await prepareUpdate(docker, vscode, started, githubToken) : await prepareLocal(docker, started);
   const file = path.join(ROOT, 'out', 'test', 'vscode', 'attach', 'seed.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(seed, null, 2));

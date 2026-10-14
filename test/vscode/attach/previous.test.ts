@@ -6,12 +6,12 @@
 // Attach tests with the last released version of the extension (.vscode-test.mjs, label attach,
 // DEVSPACE_TEST_ATTACH=previous): the first of the two runs of the update from that version (updated.test.ts is the
 // second). VS Code starts with a fresh user data folder in the window of the devspace that prepare.ts
-// (DEVSPACE_TEST_ATTACH_PREPARE=update) made without container, and runs the version of the Marketplace that prepare.ts
-// installed. That version restores the devspace from its volume labels, creates its container and the Monitor, and
-// writes its registry entry; the window attaches. The tests check this with Docker and the files of the user data
-// folder only, not with log lines, because the texts of a released version are fixed. They save what the run `updated`
-// compares (PREVIOUS_STATE_FILE). VS Code quits after the tests, and the container keeps running (the Monitor stops it
-// only after its waiting time).
+// (DEVSPACE_TEST_ATTACH_PREPARE=update) made without container, and runs the released version that prepare.ts installed
+// from the VSIX of its GitHub release. That version restores the devspace from its volume labels, creates its container
+// and the Monitor, and writes its registry entry; the window attaches. The tests check this with Docker and the files of
+// the user data folder only, not with log lines, because the texts of a released version are fixed. They save what the
+// run `updated` compares (PREVIOUS_STATE_FILE). VS Code quits after the tests, and the container keeps running (the
+// Monitor stops it only after its waiting time).
 import * as assert from 'assert';
 import * as fs from 'fs';
 import { connectedFolder, docker, execIn, printLogs, seed, waitFor } from './support';
@@ -29,12 +29,12 @@ describe('the window of a devspace with the last released version of the extensi
     if (failed) printLogs();
   });
 
-  it('runs the version of the Marketplace from the extensions folder', () => {
+  it('runs the released version from the extensions folder', () => {
     assert.ok(previous && devspaceId, 'The seed has no previous version (prepare.ts, DEVSPACE_TEST_ATTACH_PREPARE=update)');
     const installed = installedExtension();
     console.log(`    previous version: ${JSON.stringify(installed)}; folders: ${extensionFolders(installed).join(', ')}`);
     assert.strictEqual(installed.version, previous.version);
-    assert.strictEqual(installed.extensionSha256, previous.extensionSha256, 'VS Code runs another build than the version of the Marketplace');
+    assert.strictEqual(installed.extensionSha256, previous.extensionSha256, 'VS Code runs another build than the released version');
   });
 
   it('attaches the window to the container that this version created for the devspace', async () => {

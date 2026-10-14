@@ -33,7 +33,7 @@ export interface Seed {
   devspaceId?: string;
   /**
    * The runs `previous` and `updated` only: the last released version of the extension that prepare.ts installed from
-   * the Marketplace, and the SHA-256 of its dist/extension.js.
+   * its GitHub release, and the SHA-256 of its dist/extension.js.
    */
   previous?: { version: string; extensionSha256: string };
 }

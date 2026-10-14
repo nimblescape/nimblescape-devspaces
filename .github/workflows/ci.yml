@@ -21,7 +21,7 @@
 # Containers extension, the job "vscode attach remote" in the window of a
 # devspace on a Docker Engine over SSH, and the job "vscode update" in the
 # window of a devspace before and after the update from the last released
-# version of the Marketplace. The VSIX of the job "test" stays a
+# version. The VSIX of the job "test" stays a
 # workflow artifact for inspection. This workflow publishes nothing: the
 # release workflow calls it for the commit of a version and publishes the VSIX
 # of that call.
@@ -393,12 +393,12 @@ jobs:
 
   vscode-update:
     # The update from the last released version (.vscode-test.mjs, label attach, kinds previous and updated).
-    # test/vscode/attach/prepare.ts (DEVSPACE_TEST_ATTACH_PREPARE=update) installs that version from the Marketplace into
-    # the test VS Code and puts the devspace without container on the Docker engine of the runner. The first start runs
-    # the released version in the window of the devspace; then the VSIX of this commit is installed over it, and the
-    # second start, with the same user data folder, runs the new version in the same window. Installing from the
-    # Marketplace publishes nothing. A job of its own, so that the engine of the runner has no objects of the other
-    # attach tests.
+    # test/vscode/attach/prepare.ts (DEVSPACE_TEST_ATTACH_PREPARE=update) installs that version from the VSIX of the
+    # latest GitHub release (the package that the release published to the Marketplace) into the test VS Code, and puts
+    # the devspace without container on the Docker engine of the runner. The first start runs the released version in
+    # the window of the devspace; then the VSIX of this commit is installed over it, and the second start, with the same
+    # user data folder, runs the new version in the same window. A job of its own, so that the engine of the runner has
+    # no objects of the other attach tests.
     name: vscode update
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -417,9 +417,11 @@ jobs:
       - name: Install the locked development tools without install scripts
         run: npm ci --ignore-scripts
 
+      # The token only raises the rate limit of the GitHub API for the read of the latest release.
       - name: Prepare the Docker engine and the test VS Code with the last released version of the extension
         env:
           DEVSPACE_TEST_ATTACH_PREPARE: update
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run test:vscode:attach:prepare
 
       - name: Run the tests in the window of the devspace with the last released version
