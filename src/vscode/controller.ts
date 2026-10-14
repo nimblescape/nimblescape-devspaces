@@ -88,6 +88,14 @@ const HANDOFF_CHECK_MS = 30_000;
  */
 const LEAVE_CHECK_MS = 10_000;
 /**
+ * A window that leaves a devspace because of the GitHub account waits at most this long for the removal of the token
+ * from the container before "Close Remote Connection": the close reloads the window and ends this extension host, and
+ * with it a removal that has not ended. The removal usually takes a few seconds (the worker of the engine runs, or
+ * starts). When it takes longer (for example the image of the worker must be built first), the window closes its
+ * connection anyway, and the token stays in the memory of the container until the Monitor container stops it.
+ */
+const TOKEN_REMOVE_WAIT_MS = 30_000;
+/**
  * The reopen rule looks at the other windows. Windows that VS Code restores at the same start write their status files
  * during their own activation; this pause lets them do so first.
  */
@@ -170,10 +178,14 @@ export interface ControllerDeps {
   clock?: Clock;
   /** For tests. Default: `isProcessAlive`. */
   isAlive?: (pid: number) => boolean;
-  /** For tests: HANDOFF_CHECK_MS, LEAVE_CHECK_MS, REOPEN_CHECK_DELAY_MS, DISCONNECT_REQUEST_MAX_AGE_MS, and BUSY_POLL_MS. */
+  /**
+   * For tests: HANDOFF_CHECK_MS, LEAVE_CHECK_MS, TOKEN_REMOVE_WAIT_MS, REOPEN_CHECK_DELAY_MS,
+   * DISCONNECT_REQUEST_MAX_AGE_MS, and BUSY_POLL_MS.
+   */
   timing?: {
     handOffCheckMs?: number;
     leaveCheckMs?: number;
+    tokenRemoveWaitMs?: number;
     reopenCheckDelayMs?: number;
     disconnectAnswerMs?: number;
     busyPollMs?: number;
@@ -1964,8 +1976,8 @@ export class Controller implements vscode.Disposable {
    * the Monitor container stops it after the waiting time unless it is kept), the status bar, then "Close
    * Remote Connection", with `message` for the user. With `left` (a devspace that the window must not use), the
    * window does not rely on the close: VS Code lets the user keep the connection (Cancel in the dialog about unsaved
-   * files). The token of the owner account leaves the container at once when the account is the reason, and
-   * `checkLeftConnection` closes the connection again.
+   * files), and `checkLeftConnection` closes the connection again. When the account is the reason, the token of the
+   * owner account leaves the container before the close (`removeGitTokenBeforeClose`).
    */
   private async leaveDevspace(message?: string, left?: LeftDevspace): Promise<void> {
     this.current = undefined;
@@ -1975,7 +1987,11 @@ export class Controller implements vscode.Disposable {
       .catch((error: unknown) => this.logger.warn(`The window status could not be written: ${errorMessage(error)}`));
     this.updateStatusBar();
     if (message) this.warn(message);
-    if (left?.reason === 'account') this.background(this.removeGitToken(left), 'remove the GitHub token');
+    if (left?.reason === 'account') {
+      await this.removeGitTokenBeforeClose(left);
+      // The owner account signed in again meanwhile, and the window reloads to open the devspace (reopenLeftDevspace).
+      if (this.left !== left || this.disposed) return;
+    }
     this.closeConnection(left);
   }
 
@@ -2025,10 +2041,11 @@ export class Controller implements vscode.Disposable {
         return;
       }
       this.logger.warn(`This window is still connected to ${left.repository}, which it must not use. It closes its remote connection again.`);
-      if (left.reason === 'account') this.background(this.removeGitToken(left), 'remove the GitHub token');
+      const removal = left.reason === 'account' ? this.removeGitTokenBeforeClose(left) : undefined;
       await vscode.window
         .showWarningMessage(ControllerTexts.stillConnected(left.repository), { modal: true })
         .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
+      await removal;
       // The owner account may have signed in while the message was open.
       if (await this.reopenLeftDevspace(left)) return;
       if (this.left !== left || this.current || this.disposed) return;
@@ -2081,11 +2098,32 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
+   * `removeGitToken` before "Close Remote Connection", which reloads the window and ends this extension host, and with
+   * it a removal that has not ended. Waits at most TOKEN_REMOVE_WAIT_MS; the removal continues after that while this
+   * extension host runs. Never throws.
+   */
+  private async removeGitTokenBeforeClose(left: LeftDevspace): Promise<void> {
+    const waited = new AbortController();
+    const removal = this.removeGitToken(left).then(
+      () => true,
+      (error: unknown) => {
+        this.logger.error('Could not remove the GitHub token.', error);
+        return true;
+      },
+    );
+    const limit = this.delay(this.deps.timing?.tokenRemoveWaitMs ?? TOKEN_REMOVE_WAIT_MS, waited.signal).then(() => false);
+    const ended = await Promise.race([removal, limit]);
+    waited.abort();
+    if (!ended) this.logger.warn(`The GitHub token is not removed from the container ${left.containerName} yet. The window closes its remote connection without waiting longer.`);
+  }
+
+  /**
    * Role A and a restored registry: the devspace that this window is attached to, when it belongs to the signed-in
    * account (a sign-in is asked for when needed). Otherwise the window runs no pipeline, starts no container, and
    * closes its remote connection with a message; `undefined`. Assumption: the activation blocks the connection of a
-   * restored window, so the window of another account never connects to a stopped container; a container that still
-   * runs is closed right after the connection.
+   * restored window, so the window of another account never connects to a stopped container, and the token of the
+   * owner leaves a container that still runs before the window connects to it (leaveDevspace, within
+   * TOKEN_REMOVE_WAIT_MS); the window closes that connection right after it connected.
    */
   private async ownWindowDevspace(devspace: Devspace, containerName: string): Promise<Devspace | undefined> {
     const account = await this.readAccount(true);
@@ -2105,9 +2143,9 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Sign-in, sign-out, or account change: a window connected to a devspace that the new account may not use closes
-   * its remote connection at once. The Monitor container stops it after the waiting time (the release of the
-   * window). A window that has left such a devspace but kept its connection reloads when the owner account signs in
-   * again.
+   * its remote connection at once, after the token of the owner left the container (leaveDevspace). The Monitor
+   * container stops it after the waiting time (the release of the window). A window that has left such a devspace but
+   * kept its connection reloads when the owner account signs in again.
    */
   async onSessionChanged(): Promise<void> {
     const current = this.current;

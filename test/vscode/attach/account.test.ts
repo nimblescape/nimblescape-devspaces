@@ -8,12 +8,13 @@
 // devspace run, but the fake sign-in provider (test/vscode/github) answers with another account than the owner of the
 // devspace, as after a sign-out and a sign-in with another account. The extension then runs no open pipeline and
 // closes the remote connection of the window (src/vscode/controller.ts, ownWindowDevspace), which reloads the window
-// as a local window without a folder, and the tests run in that window. Assumption of ownWindowDevspace: a container
-// that still runs is closed right after the connection. The token of the owner leaves the container.
+// as a local window without a folder, and the tests run in that window. Before the close, the token of the owner
+// leaves the container (leaveDevspace): the reload ends the extension host, and with it a removal that has not ended.
+// Assumption of ownWindowDevspace: a container that still runs is closed right after the connection.
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { GH_HOSTS_FILE, GITHUB_TOKEN_FILE } from '../../../src/core/names';
-import { channelLog, docker, execIn, printLogs, seed, waitFor } from './support';
+import { channelLog, docker, execIn, outputLogs, printLogs, seed } from './support';
 
 describe('the window of a devspace under another GitHub account', () => {
   const { containerName, user } = seed();
@@ -52,11 +53,17 @@ describe('the window of a devspace under another GitHub account', () => {
     assert.strictEqual(docker(['inspect', '-f', '{{.State.Status}}', containerName]).trim(), 'running');
   });
 
-  it('removed the token of the owner from the container', async () => {
-    // The removal runs in the worker of the engine (tokenRemove), started before the window closes its connection.
-    await waitFor('the removal of the token', () => (execIn(user, `test -e ${GITHUB_TOKEN_FILE}`).code === 0 ? undefined : true), 60_000);
+  it('removed the token of the owner from the container before it closed its connection', () => {
+    assert.notStrictEqual(execIn(user, `test -e ${GITHUB_TOKEN_FILE}`).code, 0, 'The token of the owner is still in the container');
     assert.notStrictEqual(execIn(user, `test -e ${GH_HOSTS_FILE}`).code, 0, 'The sign-in of the GitHub CLI is still in the container');
-    const log = channelLog('Devspaces');
-    assert.doesNotMatch(log, /The GitHub token could not be removed/);
+    // The removal runs in the worker of the engine (tokenRemove), and logs in the extension host that closed the
+    // connection.
+    const closing = 'Closing the remote connection of this window.';
+    const log = [...outputLogs()].filter(([name]) => name.endsWith('-Devspaces.log')).map(([, text]) => text).find((text) => text.includes(closing));
+    assert.ok(log, 'No log of the extension host that closed the connection');
+    const removed = log.indexOf(`: The GitHub token was removed from the container ${containerName}.`);
+    assert.ok(removed >= 0, 'The worker did not log the removal of the token');
+    assert.ok(removed < log.indexOf(closing), 'The window closed its connection before the token left the container');
+    assert.doesNotMatch(log, /The GitHub token could not be removed|The GitHub token is not removed from the container/);
   });
 });

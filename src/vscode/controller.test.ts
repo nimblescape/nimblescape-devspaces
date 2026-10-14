@@ -253,6 +253,7 @@ function createHarness(
   options: {
     handOffCheckMs?: number;
     leaveCheckMs?: number;
+    tokenRemoveWaitMs?: number;
     disconnectAnswerMs?: number;
     /** The current Docker host and the remote Docker commands. Default: none (the local Docker). */
     dockerTargets?: ControllerDeps['dockerTargets'];
@@ -438,6 +439,7 @@ function createHarness(
     timing: {
       handOffCheckMs: options.handOffCheckMs ?? 60_000,
       leaveCheckMs: options.leaveCheckMs ?? 60_000,
+      tokenRemoveWaitMs: options.tokenRemoveWaitMs ?? 60_000,
       reopenCheckDelayMs: 0,
       disconnectAnswerMs: options.disconnectAnswerMs ?? 60_000,
       busyPollMs: 5,
@@ -3256,6 +3258,34 @@ describe('Accounts', () => {
     expect(h.coordinator.setDevspace).toHaveBeenCalledWith(null);
     expect(warningMessages()).toEqual([Messages.otherAccountConnection('acme/api')]);
     expect(h.statusBar.showNotConnected).toHaveBeenCalled();
+  });
+
+  // The close reloads the window and ends this extension host, and with it a removal of the token that has not ended.
+  it('role A: a restored window of another account closes its connection only after the token left the container', async () => {
+    const env = devspace({ owner: OTHER_ACCOUNT });
+    await h.registry.add(env);
+    let answer: (value: unknown) => void = () => {};
+    h.flow.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    const opened = h.controller.openAttachedWindow(env, CONTAINER, undefined);
+    await settle(() => tokenRemovals() > 0, 'the removal of the token');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.connection.closeRemoteConnection).not.toHaveBeenCalled();
+    answer({ outcome: 'removed', container: 'c0ffeec0ffee' });
+    await opened;
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length > 0, 'the close of the connection');
+    expect(h.logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('is not removed from the container'));
+  });
+
+  it('role A: a restored window of another account closes its connection when the removal of the token takes too long', async () => {
+    recreateHarness({ tokenRemoveWaitMs: 20 });
+    const env = devspace({ owner: OTHER_ACCOUNT });
+    await h.registry.add(env);
+    h.flow.mockImplementationOnce(() => new Promise(() => {}));
+    await h.controller.openAttachedWindow(env, CONTAINER, undefined);
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length > 0, 'the close of the connection');
+    expect(h.logger.warn).toHaveBeenCalledWith(
+      `The GitHub token is not removed from the container ${CONTAINER} yet. The window closes its remote connection without waiting longer.`,
+    );
   });
 
   it('role A: a restored window leaves when its open pipeline refuses the devspace after an account change', async () => {
