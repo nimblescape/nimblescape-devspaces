@@ -296,7 +296,8 @@ describe('incremental detection, empty scope', () => {
     github.requests.length = 0;
     github.peak = 0;
     github.repos = many.map((item) => ({ ...item, pushedAt: '2026-09-25T08:00:00Z' }));
-    // GitHub answers the batches only after the last page: three batches are open when it starts, 4 requests in all.
+    // GitHub answers the batches only after the last page: three batches are open when the last page starts, 4 requests
+    // in all.
     github.holdLookupsUntilListEnd();
     const result = await service().refresh(TOKEN, ACCOUNT_ID);
     expect(LOOKUP_BATCH_SIZE).toBe(50);
