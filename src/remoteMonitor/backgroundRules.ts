@@ -193,9 +193,9 @@ export function serverUnused(usedAt: number | undefined, now: number): boolean {
 /**
  * The server commits that the processes of a running container name (each line of `GET /containers/<id>/top`): every
  * 40-hex string that stands alone in a field (not part of a longer hex string), as in
- * `~/.vscode-server/bin/<commit>/node …`, `…/server/<quality>/<platform>/<commit>/…` of the store, or
- * `~/.vscode-server/cli/servers/Stable-<commit>/…`. Deliberately wide: a commit kept by mistake only stays a day
- * longer.
+ * `~/.vscode-server/bin/<commit>/node …`, `~/.vscode-server-insiders/bin/<commit>-insider/node …`,
+ * `…/server/<quality>/<platform>/<commit>/…` of the store, or `~/.vscode-server/cli/servers/Stable-<commit>/…`.
+ * Deliberately wide: a commit kept by mistake only stays a day longer.
  */
 export function commitsInProcesses(processes: readonly (readonly string[])[]): Set<string> {
   const found = new Set<string>();

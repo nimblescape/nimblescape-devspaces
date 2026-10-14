@@ -117,7 +117,7 @@ export async function newestStableServerVersion(root: string, platform: VscodePl
   let newest: string | undefined;
   for (const entry of await fs.promises.readdir(folder).catch(() => [] as string[])) {
     const server = path.posix.join(folder, entry);
-    if (!/^[0-9a-f]{40}$/.test(entry) || !(await isServerReady(server))) continue;
+    if (!/^[0-9a-f]{40}$/.test(entry) || !(await isServerReady(server, 'stable'))) continue;
     const file = path.posix.join(server, 'product.json');
     const stat = await fs.promises.lstat(file).catch(() => undefined);
     if (stat === undefined || !stat.isFile() || stat.size > MAX_PRODUCT_JSON_BYTES) continue;

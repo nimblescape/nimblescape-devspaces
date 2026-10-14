@@ -27,6 +27,7 @@ import {
   isServerReady,
   serverFolder,
   serverPlatform,
+  serverScriptName,
   serverVersionUrl,
   storeLock,
   unpackServer,
@@ -46,13 +47,16 @@ afterEach(() => {
   for (const dir of temps.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/** A server archive as the update service has it: one top folder with `bin/code-server`, `node` and more. */
-function archive(options: { node?: boolean; top?: string } = {}): Buffer {
+/**
+ * A server archive as the update service has it: one top folder with `bin/code-server` (`script`: another name, as
+ * `code-server-insiders` of Insiders), `node` and more.
+ */
+function archive(options: { node?: boolean; top?: string; script?: string } = {}): Buffer {
   const dir = tempDir('devspaces-vscode-archive-');
   const top = path.join(dir, options.top ?? 'vscode-server-linux-x64');
   fs.mkdirSync(path.join(top, 'bin'), { recursive: true });
   fs.mkdirSync(path.join(top, 'out'), { recursive: true });
-  fs.writeFileSync(path.join(top, 'bin', 'code-server'), '#!/bin/sh\necho server\n', { mode: 0o700 });
+  fs.writeFileSync(path.join(top, 'bin', options.script ?? 'code-server'), '#!/bin/sh\necho server\n', { mode: 0o700 });
   if (options.node !== false) fs.writeFileSync(path.join(top, 'node'), 'ELF', { mode: 0o700 });
   fs.writeFileSync(path.join(top, 'out', 'main.js'), '//', { mode: 0o600 });
   fs.chmodSync(path.join(top, 'out'), 0o700);
@@ -157,7 +161,7 @@ describe('ensureServer', () => {
     // The lock of this server version (one download of a version at a time on the engine).
     expect(h.locks).toEqual([{ root: h.root, name: `stable-linux-x64-${SERVER.commit}`, waitSeconds: 600 }]);
     expect(h.released()).toBe(1);
-    expect(await isServerReady(h.folder)).toBe(true);
+    expect(await isServerReady(h.folder, 'stable')).toBe(true);
     const mode = (file: string) => fs.statSync(path.join(h.folder, file)).mode & 0o777;
     // Folders 0755, files their mode plus read, and execute where an execute bit was set (0700 → 0755, 0600 → 0644).
     expect(mode('.')).toBe(0o755);
@@ -197,7 +201,7 @@ describe('ensureServer', () => {
     expect(await ensureServer(h.deps, SERVER, 'linux-arm64', signal())).toBe(true);
     expect(h.urls[0]).toBe(serverVersionUrl(SERVER, 'linux-arm64'));
     expect(h.locks.map((lock) => lock.name)).toEqual([serverVersionName(SERVER, 'linux-arm64')]);
-    expect(await isServerReady(arm)).toBe(true);
+    expect(await isServerReady(arm, 'stable')).toBe(true);
     expect(fs.existsSync(h.folder)).toBe(false);
   });
 
@@ -347,6 +351,24 @@ describe('ensureServer', () => {
     expect(fs.existsSync(noNode.folder)).toBe(false);
   });
 
+  it('an Insiders server has bin/code-server-insiders: fetched and ready; an archive with only bin/code-server is not', async () => {
+    const insider = { ...SERVER, quality: 'insider' as const };
+    const h = harness({ body: archive({ script: 'code-server-insiders' }) });
+    const folder = serverFolder(h.root, insider, 'linux-x64');
+    expect(await ensureServer(h.deps, insider, 'linux-x64', signal())).toBe(true);
+    expect(h.urls[0]).toBe(serverVersionUrl(insider, 'linux-x64'));
+    expect(h.locks.map((lock) => lock.name)).toEqual([`insider-linux-x64-${SERVER.commit}`]);
+    expect(await isServerReady(folder, 'insider')).toBe(true);
+    expect(fs.statSync(path.join(folder, 'bin', 'code-server-insiders')).mode & 0o777).toBe(0o755);
+    expect(tmpEntries(h.root)).toEqual([]);
+    // The script of the stable server in an archive of Insiders: not ready, nothing in place.
+    const stable = harness();
+    expect(await ensureServer(stable.deps, insider, 'linux-x64', signal())).toBe(false);
+    expect(failure(stable.log)).toContain('(the archive has no bin/code-server-insiders or no node)');
+    expect(fs.existsSync(serverFolder(stable.root, insider, 'linux-x64'))).toBe(false);
+    expect(tmpEntries(stable.root)).toEqual([]);
+  });
+
   it('removes the leftovers of a download of the same version that ended without its cleanup, never those of others', async () => {
     const h = harness();
     const version = serverVersionName(SERVER, 'linux-x64');
@@ -379,16 +401,33 @@ describe('ensureServer', () => {
     fs.mkdirSync(path.join(h.folder, 'bin'), { recursive: true });
     fs.writeFileSync(path.join(h.folder, 'half'), '');
     expect(await ensureEngineServer(h.deps, SERVER, signal())).toBe('linux-x64');
-    expect(await isServerReady(h.folder)).toBe(true);
+    expect(await isServerReady(h.folder, 'stable')).toBe(true);
     expect(fs.existsSync(path.join(h.folder, 'half'))).toBe(false);
   });
 
-  it('a link in place of bin/code-server or node is not ready', async () => {
+  it('a link in place of bin/code-server, bin/code-server-insiders or node is not ready', async () => {
     const folder = path.join(tempDir(), 'server');
     fs.mkdirSync(path.join(folder, 'bin'), { recursive: true });
     fs.writeFileSync(path.join(folder, 'node'), '');
     fs.symlinkSync('/bin/sh', path.join(folder, 'bin', 'code-server'));
-    expect(await isServerReady(folder)).toBe(false);
+    fs.symlinkSync('/bin/sh', path.join(folder, 'bin', 'code-server-insiders'));
+    expect(await isServerReady(folder, 'stable')).toBe(false);
+    expect(await isServerReady(folder, 'insider')).toBe(false);
+  });
+
+  it('the quality names the script: bin/code-server for stable, bin/code-server-insiders for insider', async () => {
+    expect(serverScriptName('stable')).toBe('code-server');
+    expect(serverScriptName('insider')).toBe('code-server-insiders');
+    const folder = path.join(tempDir(), 'server');
+    fs.mkdirSync(path.join(folder, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(folder, 'node'), '');
+    fs.writeFileSync(path.join(folder, 'bin', 'code-server'), '');
+    expect(await isServerReady(folder, 'stable')).toBe(true);
+    // An Insiders folder with only bin/code-server is not ready.
+    expect(await isServerReady(folder, 'insider')).toBe(false);
+    fs.renameSync(path.join(folder, 'bin', 'code-server'), path.join(folder, 'bin', 'code-server-insiders'));
+    expect(await isServerReady(folder, 'insider')).toBe(true);
+    expect(await isServerReady(folder, 'stable')).toBe(false);
   });
 });
 

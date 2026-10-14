@@ -14,9 +14,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { VscodeQuality } from '../helperChannel/protocol';
 import { VSCODE_STORE_TARGET } from '../names';
 import { scriptCommand } from './containerScripts';
 import { VSCODE_SERVER_LINK_SCRIPT, vscodeServerLinkOutcome } from './vscodeServerLink';
+import { serverScriptName } from './vscodeServerStore';
 
 const COMMIT = '0123456789abcdef0123456789abcdef01234567';
 const shell = !spawnSync('dash', ['-c', 'true'], { stdio: 'ignore' }).error ? 'dash' : 'sh';
@@ -74,11 +76,11 @@ function sandbox(): Sandbox {
   };
 }
 
-/** The server of the commit in the store of `s`. */
-function serverInStore(s: Sandbox, quality = 'stable', platform = 'linux-x64'): string {
+/** The server of the commit in the store of `s` (the script of its quality, serverScriptName, and `node`). */
+function serverInStore(s: Sandbox, quality: VscodeQuality = 'stable', platform = 'linux-x64'): string {
   const folder = path.join(s.store, 'server', quality, platform, COMMIT);
   fs.mkdirSync(path.join(folder, 'bin'), { recursive: true });
-  fs.writeFileSync(path.join(folder, 'bin', 'code-server'), '');
+  fs.writeFileSync(path.join(folder, 'bin', serverScriptName(quality)), '');
   fs.writeFileSync(path.join(folder, 'node'), '');
   return folder;
 }
@@ -100,12 +102,41 @@ describe('the link of the shared VS Code server', () => {
     expect(fs.readlinkSync(link)).toBe(server);
   });
 
-  it('uses ~/.vscode-server-insiders for the quality insider', () => {
+  it('links ~/.vscode-server-insiders/bin/<commit>-insider for the quality insider, the folder that Dev Containers runs', () => {
     const s = sandbox();
     const server = serverInStore(s, 'insider');
     expect(s.run([COMMIT, 'insider', 'linux-x64'])).toMatchObject({ status: 0, stdout: 'linked\n' });
-    expect(fs.readlinkSync(path.join(s.home, '.vscode-server-insiders', 'bin', COMMIT))).toBe(server);
+    const link = path.join(s.home, '.vscode-server-insiders', 'bin', `${COMMIT}-insider`);
+    expect(fs.readlinkSync(link)).toBe(server);
+    expect(fs.readdirSync(path.join(s.home, '.vscode-server-insiders', 'bin'))).toEqual([`${COMMIT}-insider`]);
     expect(fs.existsSync(path.join(s.home, '.vscode-server'))).toBe(false);
+    expect(s.run([COMMIT, 'insider', 'linux-x64'])).toMatchObject({ status: 0, stdout: 'present\n' });
+    expect(fs.readlinkSync(link)).toBe(server);
+  });
+
+  it('checks the script of the quality in the store: bin/code-server alone is no Insiders server, and the reverse', () => {
+    for (const [quality, script] of [
+      ['insider', 'code-server'],
+      ['stable', 'code-server-insiders'],
+    ] as const) {
+      const s = sandbox();
+      const folder = path.join(s.store, 'server', quality, 'linux-x64', COMMIT);
+      fs.mkdirSync(path.join(folder, 'bin'), { recursive: true });
+      fs.writeFileSync(path.join(folder, 'bin', script), '');
+      fs.writeFileSync(path.join(folder, 'node'), '');
+      expect(s.run([COMMIT, quality, 'linux-x64']).stdout).toBe('skipped: the store does not have the server\n');
+      expect(fs.readdirSync(s.home)).toEqual([]);
+    }
+  });
+
+  it('for the quality insider, bin/<commit> is not the server: it stays as it is, and bin/<commit>-insider is linked', () => {
+    const s = sandbox();
+    const server = serverInStore(s, 'insider');
+    const bin = path.join(s.home, '.vscode-server-insiders', 'bin');
+    fs.mkdirSync(path.join(bin, COMMIT), { recursive: true });
+    expect(s.run([COMMIT, 'insider', 'linux-x64'])).toMatchObject({ status: 0, stdout: 'linked\n' });
+    expect(fs.readlinkSync(path.join(bin, `${COMMIT}-insider`))).toBe(server);
+    expect(fs.lstatSync(path.join(bin, COMMIT)).isDirectory()).toBe(true);
   });
 
   it('never replaces a server of the container: a folder, a file or a link of the commit is present', () => {

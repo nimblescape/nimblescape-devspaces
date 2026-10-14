@@ -4,12 +4,13 @@
 
 // The shared VS Code server store: the script of the container setup that links the server of the store into the home
 // folder of the remote user, and the reading of its one line of output. The Dev Containers extension takes a link
-// `~/.vscode-server/bin/<commit>` into a read-only volume, installs nothing, and runs the server from there as the
-// remote user. The script runs as the remote user (never root) through the registry of the container scripts
-// (`vscodeServerLink`, runScript), at every open (first open, Start, Rebuild, recreate, a running container: the commit
-// changes with each update of VS Code), after the open made sure that the store has the server for the engine's
-// platform; a container of another platform is skipped. The dev container is untrusted: the script follows and writes
-// through no link that it did not create. No I/O here, no `vscode`.
+// `~/.vscode-server/bin/<commit>` (for VS Code Insiders `~/.vscode-server-insiders/bin/<commit>-insider`) into a
+// read-only volume, installs nothing, and runs the server from there as the remote user. The script runs as the remote
+// user (never root) through the registry of the container scripts (`vscodeServerLink`, runScript), at every open (first
+// open, Start, Rebuild, recreate, a running container: the commit changes with each update of VS Code), after the open
+// made sure that the store has the server for the engine's platform; a container of another platform is skipped. The
+// dev container is untrusted: the script follows and writes through no link that it did not create. No I/O here, no
+// `vscode`.
 import * as path from 'path';
 import type { MountTarget } from '../docker/dockerObjects';
 import { VSCODE_STORE_TARGET } from '../names';
@@ -68,16 +69,19 @@ enter() {
  * server the open made present in the store (`$3`, the platform of the engine). It links only when everything fits:
  * - the container has that platform (`uname -m`: x86_64/amd64 linux-x64, aarch64/arm64 linux-arm64; musl,
  *   `/etc/alpine-release` or `ldd --version` naming musl, has no server in the store);
- * - the store has the server (`bin/code-server` and `node` under VSCODE_STORE_TARGET/server/<quality>/<platform>/<commit>);
+ * - the store has the server (`node` and `bin/code-server`, for the quality `insider` `bin/code-server-insiders`, under
+ *   VSCODE_STORE_TARGET/server/<quality>/<platform>/<commit>; serverScriptName);
  * - the user has a home folder (/etc/passwd, by the user ID);
  * - `~/.vscode-server` (`~/.vscode-server-insiders` for the quality `insider`) and its `bin` are each missing (then
  *   created) or a plain folder of the user; a link, another kind of file, or a folder of another user is refused;
- * - `bin/<commit>` does not exist yet (a file, a folder or a link there is never replaced).
- * Then it creates the link `bin/<commit>` → the server in the store (working in each checked folder, entered after its
- * check, with `ln -sn`, so nothing is written through a link planted after a check). Its output is one line: `linked`,
- * `present`, `skipped: <why>` or `refused: <why>`; it exits 0 for each of them, and non-zero only when a command
- * failed. Works with GNU and BusyBox tools. It unsets CDPATH first (the environment of the image may set it), so `cd`
- * enters the folder relative to the working folder, never one of CDPATH, and prints nothing.
+ * - the folder of the server in `bin`, from which the Dev Containers extension runs it, does not exist yet:
+ *   `bin/<commit>`, for the quality `insider` `bin/<commit>-insider` (a file, a folder or a link there is never
+ *   replaced).
+ * Then it creates the link `bin/<commit>` (`bin/<commit>-insider`) → the server in the store (working in each checked
+ * folder, entered after its check, with `ln -sn`, so nothing is written through a link planted after a check). Its
+ * output is one line: `linked`, `present`, `skipped: <why>` or `refused: <why>`; it exits 0 for each of them, and
+ * non-zero only when a command failed. Works with GNU and BusyBox tools. It unsets CDPATH first (the environment of the
+ * image may set it), so `cd` enters the folder relative to the working folder, never one of CDPATH, and prints nothing.
  */
 export const VSCODE_SERVER_LINK_SCRIPT = `set -u
 unset CDPATH
@@ -89,8 +93,8 @@ case "$commit" in
 esac
 if [ \${#commit} -ne 40 ]; then echo 'skipped: the commit is invalid'; exit 0; fi
 case "$quality" in
-  stable) data=.vscode-server ;;
-  insider) data=.vscode-server-insiders ;;
+  stable) data=.vscode-server; script=code-server; name="$commit" ;;
+  insider) data=.vscode-server-insiders; script=code-server-insiders; name="$commit-insider" ;;
   *) echo 'skipped: the quality is invalid'; exit 0 ;;
 esac
 case "$stored" in
@@ -109,21 +113,22 @@ if [ -e /etc/alpine-release ] || { ldd --version 2>&1 | grep -qi musl; }; then
 fi
 if [ "$platform" != "$stored" ]; then echo "skipped: the container is $platform, the server in the store is for $stored"; exit 0; fi
 server="${VSCODE_STORE_TARGET}/server/$quality/$platform/$commit"
-if [ ! -f "$server/bin/code-server" ] || [ ! -f "$server/node" ]; then echo 'skipped: the store does not have the server'; exit 0; fi
+if [ ! -f "$server/bin/$script" ] || [ ! -f "$server/node" ]; then echo 'skipped: the store does not have the server'; exit 0; fi
 ${SCRIPT_HOME_OF_USER}${SCRIPT_ENTER_FOLDER}enter "$data" "$home/$data"
 enter bin "$home/$data/bin"
-if [ -e "$commit" ] || [ -L "$commit" ]; then echo 'present'; exit 0; fi
-ln -sn "$server" "$commit" || exit 1
+if [ -e "$name" ] || [ -L "$name" ]; then echo 'present'; exit 0; fi
+ln -sn "$server" "$name" || exit 1
 echo 'linked'
 `;
 
 /**
  * Runs as the remote user in the dev container, with the commit (`$1`) and the quality (`$2`), and answers `present`
- * when anything is at `~/.vscode-server/bin/<commit>` (`~/.vscode-server-insiders` for the quality `insider`):
- * VSCODE_SERVER_LINK_SCRIPT then leaves it as it is (`present`), so the open does not wait for the store (without this
- * check, a second open of a running container would wait the whole time limit of a stalled download for a server that
- * the container has already). Else `missing` (also for an invalid commit or quality, or a user without a home folder).
- * It only tests; it creates, changes and enters nothing.
+ * when anything is at `~/.vscode-server/bin/<commit>` (`~/.vscode-server-insiders/bin/<commit>-insider` for the
+ * quality `insider`; the folder from which the Dev Containers extension runs the server): VSCODE_SERVER_LINK_SCRIPT
+ * then leaves it as it is (`present`), so the open does not wait for the store (without this check, a second open of a
+ * running container would wait the whole time limit of a stalled download for a server that the container has
+ * already). Else `missing` (also for an invalid commit or quality, or a user without a home folder). It only tests; it
+ * creates, changes and enters nothing.
  */
 export const VSCODE_SERVER_PRESENT_SCRIPT = `set -u
 commit="$1"
@@ -133,14 +138,14 @@ case "$commit" in
 esac
 if [ \${#commit} -ne 40 ]; then echo 'missing'; exit 0; fi
 case "$quality" in
-  stable) data=.vscode-server ;;
-  insider) data=.vscode-server-insiders ;;
+  stable) data=.vscode-server; name="$commit" ;;
+  insider) data=.vscode-server-insiders; name="$commit-insider" ;;
   *) echo 'missing'; exit 0 ;;
 esac
 uid=$(id -u) || exit 1
 home=$(awk -F: -v u="$uid" '$3 == u { print $6; exit }' /etc/passwd)
 if [ -z "$home" ] || [ ! -d "$home" ]; then echo 'missing'; exit 0; fi
-if [ -e "$home/$data/bin/$commit" ] || [ -L "$home/$data/bin/$commit" ]; then echo 'present'; else echo 'missing'; fi
+if [ -e "$home/$data/bin/$name" ] || [ -L "$home/$data/bin/$name" ]; then echo 'present'; else echo 'missing'; fi
 `;
 
 /**

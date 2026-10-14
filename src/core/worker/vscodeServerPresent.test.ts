@@ -81,12 +81,21 @@ describe('the check whether the container has the server of the window', () => {
     expect(s.listing()).toEqual(before);
   });
 
-  it('looks in ~/.vscode-server-insiders for the quality insider, not in ~/.vscode-server', () => {
+  it('looks at ~/.vscode-server-insiders/bin/<commit>-insider for the quality insider, the folder that Dev Containers runs', () => {
     const s = sandbox();
     fs.mkdirSync(path.join(s.home, '.vscode-server', 'bin', COMMIT), { recursive: true });
+    fs.mkdirSync(path.join(s.home, '.vscode-server', 'bin', `${COMMIT}-insider`), { recursive: true });
     expect(s.run([COMMIT, 'insider']).stdout).toBe('missing\n');
+    // bin/<commit> is not the folder of an Insiders server.
     fs.mkdirSync(path.join(s.home, '.vscode-server-insiders', 'bin', COMMIT), { recursive: true });
-    expect(s.run([COMMIT, 'insider']).stdout).toBe('present\n');
+    expect(s.run([COMMIT, 'insider']).stdout).toBe('missing\n');
+    fs.mkdirSync(path.join(s.home, '.vscode-server-insiders', 'bin', `${COMMIT}-insider`), { recursive: true });
+    const before = s.listing();
+    expect(s.run([COMMIT, 'insider'])).toEqual({ status: 0, stdout: 'present\n', stderr: '' });
+    expect(s.listing()).toEqual(before);
+    // And for stable, bin/<commit>-insider is not its folder.
+    fs.rmSync(path.join(s.home, '.vscode-server', 'bin', COMMIT), { recursive: true });
+    expect(s.run([COMMIT, 'stable']).stdout).toBe('missing\n');
   });
 
   it.each([

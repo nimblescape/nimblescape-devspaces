@@ -39,7 +39,7 @@ describe('the fetch of the background run is no use', () => {
     const server = { commit: 'b'.repeat(40), quality: 'insider' as const };
     const folder = serverFolder(root, server, 'linux-x64');
     fs.mkdirSync(path.join(folder, 'bin'), { recursive: true });
-    fs.writeFileSync(path.join(folder, 'bin', 'code-server'), '#!/bin/sh\n');
+    fs.writeFileSync(path.join(folder, 'bin', 'code-server-insiders'), '#!/bin/sh\n');
     fs.writeFileSync(path.join(folder, 'node'), '');
     const unused = () => {
       throw new Error('not used');

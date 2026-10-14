@@ -18,7 +18,7 @@ import { scriptCommand } from '../core/worker/containerScripts';
 import type { EngineContainer, EngineContainerSummary, EngineExecOptions, EngineExecResult } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import { formatExtensionRecord } from '../core/vscodeExtensions';
-import { markServerOpened, serverCommitsUrl, serverFolder, serverLockFile, type StoreLockAttempt, type VscodeStoreDeps } from '../core/worker/vscodeServerStore';
+import { markServerOpened, serverCommitsUrl, serverFolder, serverLockFile, serverScriptName, type StoreLockAttempt, type VscodeStoreDeps } from '../core/worker/vscodeServerStore';
 import { BackgroundRun, type CacheRunStore, type VscodeBackgroundDeps } from './background';
 import { SERVER_UNUSED_MS, type CacheRunState } from './backgroundRules';
 
@@ -40,14 +40,14 @@ afterEach(() => {
 });
 
 /**
- * A ready server in the store. `usedAt` is the last use by an open (its marker, markServerOpened); `never`: no open
- * used it (a version that the monitor fetched). Its folder has the time `usedAt` too, so that a rule that read the
- * folder's time again would show.
+ * A ready server in the store (the script of its quality, serverScriptName, and `node`). `usedAt` is the last use by an
+ * open (its marker, markServerOpened); `never`: no open used it (a version that the monitor fetched). Its folder has the
+ * time `usedAt` too, so that a rule that read the folder's time again would show.
  */
 async function readyServer(root: string, server: VscodeServerRef, platform: VscodePlatform = 'linux-x64', usedAt: number | 'never' = NOW - SERVER_UNUSED_MS - DAY): Promise<string> {
   const folder = serverFolder(root, server, platform);
   fs.mkdirSync(path.join(folder, 'bin'), { recursive: true });
-  fs.writeFileSync(path.join(folder, 'bin', 'code-server'), '#!/bin/sh\n');
+  fs.writeFileSync(path.join(folder, 'bin', serverScriptName(server.quality)), '#!/bin/sh\n');
   fs.writeFileSync(path.join(folder, 'node'), '');
   if (usedAt !== 'never') await markServerOpened(root, server, platform, new Date(usedAt));
   fs.utimesSync(folder, new Date(NOW), new Date(NOW));

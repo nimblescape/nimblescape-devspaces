@@ -241,7 +241,7 @@ export class BackgroundRun {
       released.set(quality, commits);
       const server: VscodeServerRef = { commit: commits[0], quality };
       const version = serverVersionName(server, platform);
-      if (await isServerReady(serverFolder(vscode.store.root, server, platform))) {
+      if (await isServerReady(serverFolder(vscode.store.root, server, platform), server.quality)) {
         delete failed[version];
         continue;
       }

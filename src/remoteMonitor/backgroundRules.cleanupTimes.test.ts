@@ -88,13 +88,15 @@ describe('a version that no open used, and one that a running container runs', (
   it('finds the commits that stand alone in the processes of a container', () => {
     const c = commit(7);
     const found = commitsInProcesses([
-      ['1000', '42', `/home/u/.vscode-server/bin/${c}/node`, `/home/u/.vscode-server-insiders/bin/${commit(8)}/out/server-main.js`],
+      ['1000', '42', `/home/u/.vscode-server/bin/${c}/node`, `/home/u/.vscode-server-insiders/bin/${commit(8)}-insider/out/server-main.js`],
       ['1000', '43', `/opt/devspace/vscode/server/stable/linux-x64/${commit(9)}/node --x`],
       ['1000', '44', `/home/u/.vscode-server/cli/servers/Stable-${commit(10)}/server/node`],
+      // The folder of an Insiders server: the commit, then `-insider`.
+      ['root', '45', `/root/.vscode-server-insiders/bin/${commit(11)}-insider/node`],
       // Not a commit: longer hex strings, upper case, too short.
       ['root', '1', `sha256:${'a'.repeat(64)} ${'b'.repeat(41)} ${'C'.repeat(40)} ${'d'.repeat(39)}`],
     ]);
-    expect([...found].sort()).toEqual([c, commit(8), commit(9), commit(10)].sort());
+    expect([...found].sort()).toEqual([c, commit(8), commit(9), commit(10), commit(11)].sort());
     expect(commitsInProcesses([])).toEqual(new Set());
   });
 });
