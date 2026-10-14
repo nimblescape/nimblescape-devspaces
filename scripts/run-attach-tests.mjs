@@ -4,8 +4,9 @@
 
 // Runs the attach tests (`vscode-test --label attach`, npm run test:vscode:attach) and fails unless mocha reported a
 // result without failures. VS Code can end a test run with exit code 0 and without a mocha summary: when the remote
-// connection of the window drops during a test, the run is cancelled ("Extension host test runner error
-// { name: 'Canceled' }", seen in PR #18), and a failed test then counts as passed. So the output must have a line
+// connection of the window drops during a test, the extension host in the container ends, and VS Code then ends the
+// whole test run with the exit code of that extension host ("Extension host test runner error { name: 'Canceled' }",
+// seen in PR #18; AbstractExtensionService, _onExtensionHostExit). A failed test then counts as passed. So the output must have a line
 // "<n> passing", and no line "<n> failing" or "<n>) <test>" of a failed test. A window that reloads during the run
 // (the run `account`) prints its summary in the run after the reload.
 import { spawn } from 'child_process';
