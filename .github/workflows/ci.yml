@@ -320,6 +320,11 @@ jobs:
           DEVSPACE_TEST_ATTACH: longopen
         run: xvfb-run -a npm run test:vscode:attach
 
+      - name: Run the tests in the window of the devspace whose container stops
+        env:
+          DEVSPACE_TEST_ATTACH: stopped
+        run: xvfb-run -a npm run test:vscode:attach
+
       - name: Show the Docker objects
         if: ${{ failure() }}
         run: |

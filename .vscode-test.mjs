@@ -108,7 +108,7 @@ function configuration(label, index, options, { keepUserDataDir = false } = {}) 
  * activationRules.ts, pipelineJustRan).
  */
 function attachConfiguration(kind, index) {
-  const restart = kind === 'reattach' || kind === 'account' || kind === 'longopen';
+  const restart = kind === 'reattach' || kind === 'account' || kind === 'longopen' || kind === 'stopped';
   const container = restart ? 'devspace' : kind;
   const seed = JSON.parse(fs.readFileSync(new URL('out/test/vscode/attach/seed.json', import.meta.url), 'utf8'))[container];
   if (!seed) throw new Error(`out/test/vscode/attach/seed.json has no container "${container}".`);
