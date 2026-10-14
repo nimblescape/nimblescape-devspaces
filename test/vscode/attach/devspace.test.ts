@@ -25,6 +25,7 @@ import {
   execIn,
   printLogs,
   seed,
+  serverDataFolder,
   vscodeCommit,
   waitFor,
 } from './support';
@@ -59,7 +60,7 @@ describe('the window of a devspace', () => {
 
   it('gives Dev Containers the security settings of the override in the machine settings', () => {
     // devContainersSettings: Dev Containers writes them into the machine settings at the first attach.
-    const file = execIn(user, 'cat "$HOME/.vscode-server/data/Machine/settings.json"');
+    const file = execIn(user, `cat "$HOME/${serverDataFolder()}/data/Machine/settings.json"`);
     assert.strictEqual(file.code, 0, file.out);
     const settings = JSON.parse(file.out) as Record<string, unknown>;
     for (const [key, value] of Object.entries(devContainersSettings())) assert.strictEqual(settings[key], value, `${key} in ${file.out}`);
@@ -87,7 +88,7 @@ describe('the window of a devspace', () => {
 
   it('uses the shared VS Code server of the store', () => {
     const commit = vscodeCommit();
-    const link = execIn(user, `readlink "$HOME/.vscode-server/bin/${commit}"`);
+    const link = execIn(user, `readlink "$HOME/${serverDataFolder()}/bin/${commit}"`);
     assert.strictEqual(link.code, 0, link.out);
     assert.ok(link.out.startsWith(`${VSCODE_STORE_TARGET}/server/`), link.out);
     const downloads = channelLog('Dev Containers')

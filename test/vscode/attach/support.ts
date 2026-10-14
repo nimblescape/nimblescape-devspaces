@@ -93,10 +93,22 @@ export async function waitFor<T>(what: string, check: () => T | undefined, timeo
   }
 }
 
+/** product.json of the VS Code that runs the tests. */
+function product(): { commit: string; quality?: string } {
+  return JSON.parse(fs.readFileSync(path.join(vscode.env.appRoot, 'product.json'), 'utf8')) as { commit: string; quality?: string };
+}
+
 /** The commit of the test VS Code: its server in the container has this commit. */
 export function vscodeCommit(): string {
-  const product = JSON.parse(fs.readFileSync(path.join(vscode.env.appRoot, 'product.json'), 'utf8')) as { commit: string };
-  return product.commit;
+  return product().commit;
+}
+
+/**
+ * The folder of the VS Code server in the home folder of a container: `.vscode-server`, and `.vscode-server-insiders`
+ * for VS Code Insiders (the quality `insider`, as src/core/worker/vscodeServerLink.ts decides).
+ */
+export function serverDataFolder(): string {
+  return product().quality === 'insider' ? '.vscode-server-insiders' : '.vscode-server';
 }
 
 /**
@@ -219,7 +231,8 @@ export function printLogs(userDataDir?: string): void {
 
 /**
  * The settings of Dev Containers that the override switches off (devContainersSettings), switched on again, as a process
- * in the container can write them into ~/.vscode-server/data/Machine/settings.json.
+ * in the container can write them into the machine settings of the VS Code server (data/Machine/settings.json in
+ * serverDataFolder).
  */
 export const ENABLING_MACHINE_SETTINGS: Record<string, boolean | string> = {
   'dev.containers.copyGitConfig': true,
@@ -275,12 +288,12 @@ export const FORWARDING_HELPER = /vscode|remote-containers|dev-containers/i;
 /** Merges `settings` into the machine settings of the VS Code server in the container, as `user`; returns the result. */
 export function changeMachineSettings(user: string, settings: Record<string, unknown>): Record<string, unknown> {
   const script = `const fs = require('fs');
-const file = require('path').join(require('os').homedir(), '.vscode-server/data/Machine/settings.json');
+const file = require('path').join(require('os').homedir(), process.env.SERVER_DATA_FOLDER, 'data/Machine/settings.json');
 const settings = Object.assign(JSON.parse(fs.readFileSync(file, 'utf8')), JSON.parse(process.env.SETTINGS));
 fs.writeFileSync(file, JSON.stringify(settings, null, 2));
 console.log(JSON.stringify(settings));
 `;
-  const result = childProcess.spawnSync('docker', ['exec', '-i', '-u', user, '-e', `SETTINGS=${JSON.stringify(settings)}`, seed().containerName, 'node', '-'], { encoding: 'utf8', input: script });
+  const result = childProcess.spawnSync('docker', ['exec', '-i', '-u', user, '-e', `SETTINGS=${JSON.stringify(settings)}`, '-e', `SERVER_DATA_FOLDER=${serverDataFolder()}`, seed().containerName, 'node', '-'], { encoding: 'utf8', input: script });
   assert.strictEqual(result.status, 0, result.stderr);
   return JSON.parse(result.stdout) as Record<string, unknown>;
 }
