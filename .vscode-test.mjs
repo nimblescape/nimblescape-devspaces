@@ -18,8 +18,8 @@
 //   devspace and stop and remove its container, previous: the devspace with the last released version of the
 //   extension, or updated: the devspace again after the update to the VSIX of this checkout), so that no local run
 //   reaches the Docker engine of this computer.
-// VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
-// Linux without a display, run it under xvfb-run.
+// VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders", a version such as 1.125.0, or the
+// commit of an Insiders build (the attach jobs of CI pin Insiders so). On Linux without a display, run it under xvfb-run.
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';

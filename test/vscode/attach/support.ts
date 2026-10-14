@@ -98,9 +98,13 @@ function product(): { commit: string; quality?: string } {
   return JSON.parse(fs.readFileSync(path.join(vscode.env.appRoot, 'product.json'), 'utf8')) as { commit: string; quality?: string };
 }
 
-/** The commit of the test VS Code: its server in the container has this commit. */
-export function vscodeCommit(): string {
-  return product().commit;
+/**
+ * The folder of the VS Code server of the test VS Code in `bin` of the server data folder (serverDataFolder), as Dev
+ * Containers names it: the commit of the test VS Code, with `-insider` for VS Code Insiders.
+ */
+export function serverBinFolder(): string {
+  const { commit, quality } = product();
+  return quality === 'insider' ? `${commit}-insider` : commit;
 }
 
 /**

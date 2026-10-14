@@ -40,6 +40,7 @@ import { LABEL_DEVSPACE_ID, LABEL_HELPER, LABEL_OWNER_ID, LABEL_REPOSITORY, WORK
 import type { Logger } from '../../../src/core/ports';
 import { NodeProcessRunner } from '../../../src/core/process';
 import { folderUriParts } from '../../../src/vscode/connection/authority';
+import { answerAttachQuestion } from '../../../scripts/attachQuestion.mjs';
 
 /** The checkout: the bundle runs from out/test/vscode/attach/. */
 const ROOT = path.resolve(__dirname, '../../../..');
@@ -116,28 +117,9 @@ git -c user.name=Test -c user.email=test@example.invalid commit -q -m 'Initial c
 `;
 
 /**
- * Dev Containers asks once per user, in a modal dialog, before its first attach ("Attaching to a container may execute
- * arbitrary code.", Got It), and VS Code refuses every dialog in tests. Got It stores
- * userConfirmedAttachToContainerRequiresTrust in the global state of Dev Containers, but VS Code keeps the global
- * state in memory while it runs tests, so the state cannot be prepared. The copy of Dev Containers in the extensions
- * folder of @vscode/test-cli is changed instead: the function of the question returns true at once.
- */
-function confirmAttach(extensionsDir: string): void {
-  const folder = fs.readdirSync(extensionsDir).find((name) => name.startsWith('ms-vscode-remote.remote-containers-'));
-  if (!folder) throw new Error(`Dev Containers is not installed in ${extensionsDir}.`);
-  const file = path.join(extensionsDir, folder, 'dist', 'extension', 'extension.js');
-  const code = fs.readFileSync(file, 'utf8');
-  // Dev Containers 0.469.0: var GA="userConfirmedAttachToContainerRequiresTrust";async function js(e){if(e.globalState.get(GA))return!0;…
-  const question = /(="userConfirmedAttachToContainerRequiresTrust";async function [\w$]+\([\w$]+\)\{)/;
-  if (!question.test(code)) throw new Error(`The attach question was not found in ${file}.`);
-  fs.writeFileSync(file, code.replace(question, '$1return!0;'));
-  log.info(`Dev Containers ${folder.slice('ms-vscode-remote.remote-containers-'.length)}: the attach question is answered (${file}).`);
-}
-
-/**
  * trustedExtensionAuthAccess of the product.json of the test VS Code names the extension for `github`. Dev Containers
  * is installed into the extensions folder of @vscode/test-cli (which then does not install it again), without its
- * attach question. Returns the command line of the test VS Code.
+ * attach question (scripts/attachQuestion.mjs). Returns the command line of the test VS Code.
  */
 async function trustExtension(): Promise<TestVscode> {
   const executable = await downloadAndUnzipVSCode(process.env.VSCODE_TEST_VERSION || 'stable');
@@ -146,7 +128,7 @@ async function trustExtension(): Promise<TestVscode> {
   log.info(`Dev Containers: exit code ${install.status}\n${install.stdout}${install.stderr}`);
   const extensionsDir = cliArgs.find((arg) => arg.startsWith('--extensions-dir='))?.slice('--extensions-dir='.length);
   if (!extensionsDir) throw new Error(`No extensions folder in ${cliArgs.join(' ')}.`);
-  confirmAttach(extensionsDir);
+  for (const line of answerAttachQuestion(extensionsDir)) log.info(line);
   const productJson = path.join(path.dirname(executable), 'resources', 'app', 'product.json');
   const product = JSON.parse(fs.readFileSync(productJson, 'utf8')) as { quality?: string; trustedExtensionAuthAccess?: string[] | Record<string, string[]> };
   const { version } = JSON.parse(fs.readFileSync(path.join(path.dirname(productJson), 'package.json'), 'utf8')) as { version: string };

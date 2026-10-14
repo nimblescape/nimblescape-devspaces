@@ -25,8 +25,8 @@ import {
   execIn,
   printLogs,
   seed,
+  serverBinFolder,
   serverDataFolder,
-  vscodeCommit,
   waitFor,
 } from './support';
 
@@ -87,8 +87,7 @@ describe('the window of a devspace', () => {
   });
 
   it('uses the shared VS Code server of the store', () => {
-    const commit = vscodeCommit();
-    const link = execIn(user, `readlink "$HOME/${serverDataFolder()}/bin/${commit}"`);
+    const link = execIn(user, `readlink "$HOME/${serverDataFolder()}/bin/${serverBinFolder()}"`);
     assert.strictEqual(link.code, 0, link.out);
     assert.ok(link.out.startsWith(`${VSCODE_STORE_TARGET}/server/`), link.out);
     const downloads = channelLog('Dev Containers')
