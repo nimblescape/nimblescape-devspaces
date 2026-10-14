@@ -38,7 +38,7 @@ child.on('close', (code, signal) => {
   const problems = [];
   if (!/^\s+\d+ passing/m.test(output)) problems.push('mocha reported no result (no line "<n> passing"): the test run did not end normally');
   if (/^\s+\d+ failing/m.test(output)) problems.push('mocha reported failed tests');
-  else if (/^\s+\d+\) \S/m.test(output)) problems.push('a test failed, and its run ended without a summary');
+  else if (/^[ \t]+\d+\) \S/m.test(output)) problems.push('a test failed, and its run ended without a summary');
   if (problems.length > 0) {
     console.error(`The attach tests failed although VS Code ended with exit code 0: ${problems.join('; ')}.`);
     process.exit(1);
