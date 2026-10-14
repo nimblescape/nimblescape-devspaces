@@ -19,9 +19,10 @@
 # development build. The job "vscode attach" starts VS Code in the windows of
 # containers on the Docker Engine of the runner, through the real Dev
 # Containers extension, and the job "vscode attach remote" in the window of a
-# devspace on a Docker Engine over SSH. The VSIX of the job "test" stays a workflow artifact for
-# inspection. This workflow publishes nothing: the release workflow calls it for
-# the commit of a version and publishes the VSIX of that call.
+# devspace on a Docker Engine over SSH. The VSIX of the job "test" stays a
+# workflow artifact for inspection. This workflow publishes nothing: the
+# release workflow calls it for the commit of a version and publishes the VSIX
+# of that call.
 
 name: CI
 
@@ -361,9 +362,12 @@ jobs:
           DEVSPACE_TEST_ATTACH: remote
         run: xvfb-run -a npm run test:vscode:attach
 
+      # Each command runs also when one before failed (for example the engine of the other computer did not start).
       - name: Show the Docker objects of both engines
         if: ${{ failure() }}
         run: |
+          set +e
+          docker --context default logs --tail 200 attach-test-remote-host
           docker context ls
           for context in default devspaces-test-remote; do
             echo "===== $context"
@@ -371,4 +375,3 @@ jobs:
             docker --context "$context" volume ls
             docker --context "$context" images
           done
-          docker --context default logs --tail 200 attach-test-remote-host

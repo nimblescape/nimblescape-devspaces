@@ -3,8 +3,9 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // Shared parts of the attach tests (.vscode-test.mjs, label attach): the container of this start of VS Code
-// (DEVSPACE_TEST_ATTACH_SEED, written by prepare.ts), `docker` on the engine of the runner, the logs of VS Code, and
-// what the container can reach of the credentials of the runner.
+// (DEVSPACE_TEST_ATTACH_SEED, written by prepare.ts), `docker` on the engine of the current Docker context (in the run
+// `remote` the engine of the other computer), the logs of VS Code, and what the container can reach of the credentials
+// of the runner.
 import * as assert from 'assert';
 import * as childProcess from 'child_process';
 import * as fs from 'fs';
@@ -46,7 +47,7 @@ export async function connectedFolder(): Promise<vscode.Uri> {
   return folder;
 }
 
-/** `docker` on the engine of the runner; fails when it fails. */
+/** `docker` on the engine of the current Docker context (or of a `--context` in `args`); fails when it fails. */
 export function docker(args: string[]): string {
   const result = childProcess.spawnSync('docker', args, { encoding: 'utf8' });
   assert.strictEqual(result.status, 0, `docker ${args.join(' ')}: ${result.stderr}`);

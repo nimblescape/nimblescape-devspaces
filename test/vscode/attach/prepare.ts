@@ -65,8 +65,9 @@ const POST_START_COMMAND = `if [ -f ${LONG_START_MARK} ]; then rm -f ${LONG_STAR
 /**
  * The run `remote`: the other computer is a container of the runner with a Docker engine of its own (Docker in Docker,
  * its data in a volume of the runner, where its storage driver works) and an SSH server for root with key
- * authentication. The connection limits are those of test/docker/sshd/Dockerfile: the Docker CLI opens a new SSH
- * connection for each call. The host REMOTE_HOST of the SSH config of the runner points to it.
+ * authentication. MaxStartups, MaxSessions and PerSourcePenalties are set as in test/docker/sshd/Dockerfile, because the
+ * Docker CLI opens a new SSH connection for each call (OpenSSH of docker:28-dind knows PerSourcePenalties). The host
+ * REMOTE_HOST of the SSH config of the runner points to it.
  */
 const REMOTE_HOST = 'devspaces-test-remote';
 const REMOTE_HOST_IMAGE = 'devspaces-attach-test-remote:1';
@@ -229,7 +230,9 @@ async function prepareRemote(local: BootstrapDocker, dockerPath: string, started
   fs.writeFileSync(knownHosts, `[127.0.0.1]:${port} ${hostKey}\n`, { mode: 0o600 });
   const config = path.join(sshFolder, 'config');
   const entry = [`Host ${REMOTE_HOST}`, '  HostName 127.0.0.1', `  Port ${port}`, '  User root', `  IdentityFile ${key}`, '  IdentitiesOnly yes', '  StrictHostKeyChecking yes', `  UserKnownHostsFile ${knownHosts}`];
-  fs.appendFileSync(config, `\n${entry.join('\n')}\n`, { mode: 0o600 });
+  // ssh takes the first value of each option, so the entry of an earlier preparation on this runner is replaced.
+  const earlier = fs.existsSync(config) ? fs.readFileSync(config, 'utf8').replace(new RegExp(`^Host ${REMOTE_HOST}\\n(?:[ \\t]+.*(?:\\n|$))*`, 'gm'), '').trimEnd() : '';
+  fs.writeFileSync(config, `${earlier === '' ? '' : `${earlier}\n\n`}${entry.join('\n')}\n`, { mode: 0o600 });
   fs.chmodSync(config, 0o600);
   log.info(`${config}: ${entry.join('; ')}`);
 
