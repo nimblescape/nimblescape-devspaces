@@ -13,6 +13,8 @@ The shared VS Code server store now works for VS Code Insiders: before, the down
 
 **Restricted Mode:** Devspaces now also runs in a window whose folder VS Code does not trust (Restricted Mode); before, VS Code turned the extension off there. In such a window, VS Code ignores the values that the workspace or folder gives the settings of Devspaces, so only your user settings apply. The default extensions that a start records for the shared extension cache now come only from your user value of dev.containers.defaultExtensions, also in a trusted window; a workspace or folder value is ignored.
 
+A worker whose name another container still had could fail to start when Docker refused the name very quickly: the log said that the input of the helper channel cannot be written, and the window tried the Docker engine again only after 5 minutes. The worker now takes the next free number, as it already did when Docker refused the name more slowly.
+
 ## 0.5.0
 
 **Docker names, without migration:** the image of the worker is now devspaces-worker:<hash> (was devspaces-helper:<hash>), its cache volume devspaces-worker-cache (was devspaces-helper-cache), and its labels nimblescape.devspaces.worker, nimblescape.devspaces.worker-run and nimblescape.devspaces.worker-channel (were nimblescape.devspaces.helper...). The new image is built at the first use. After the update, remove the old devspaces-helper images and the devspaces-helper-cache volume on each Docker engine by hand; the steps are in the user guide, section [Update from version 0.4.0 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-040-or-older).

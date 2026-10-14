@@ -4,7 +4,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_BUNDLE_LINE_LENGTH } from '../loader/pipeLoader';
-import { abortError, type Logger, type StartedProcess } from '../ports';
+import { abortError, silentLogger, type Logger, type StartedProcess } from '../ports';
+import { NodeProcessRunner } from '../process';
 import { CHANNEL_RESULT_GRACE_MS, HelperChannel, HelperOperationError } from './helperChannel';
 import {
   CHANNEL_CLEANUP_TIMEOUT_MS,
@@ -124,6 +125,38 @@ describe('HelperChannel', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await check;
     expect(silent.state.killed).toBe(true);
+  });
+
+  // A `docker run` that the daemon refused at once can end before the extension writes the script: the write fails,
+  // and its error output and its end come after the write, as the pipes of an ended process are read.
+  it('fails to open with the reason of the end of a process that ended before its input was written, not of the write', async () => {
+    let stderr: ((text: string) => void) | undefined;
+    let exit!: (value: { exitCode: number | null }) => void;
+    let kills = 0;
+    const ended: StartedProcess = {
+      write: () => false,
+      end: () => {},
+      kill: () => {
+        kills++;
+      },
+      onStdout: () => {},
+      onStderr: (listener) => (stderr = listener),
+      exited: new Promise((resolve) => (exit = resolve)),
+    };
+    const { logger } = recordingLogger();
+    const opening = HelperChannel.open(ended, 'SCRIPT', { logger, name: 'build-box' });
+    const failure = opening.then(
+      () => undefined,
+      (error: Error) => error,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    // Stopped, in case it still runs with its input closed.
+    expect(kills).toBe(1);
+    stderr?.('docker: Error response from daemon: Conflict. The container name "/devspaces-api-worker1" is already in use by container "0123456789ab".\n');
+    exit({ exitCode: 125 });
+    expect((await failure)?.message).toBe(
+      'The helper channel to build-box could not be opened: the helper ended (docker: Error response from daemon: Conflict. The container name "/devspaces-api-worker1" is already in use by container "0123456789ab".)',
+    );
   });
 
   it('a long line of stderr (the source line of an uncaught error) is not in the reason, the loader line is', async () => {
@@ -806,5 +839,18 @@ describe('HelperChannel: the requests of an operation', () => {
     expect(answers(fake).map((answer) => (answer.ok ? 'ok' : answer.error.code))).toEqual(['invalid', 'failed']);
     fake.answer({ t: 'result', id: op.id, ok: true, value: null });
     await running;
+  });
+});
+
+// The same with a real program (NodeProcessRunner.start) that ended before the channel wrote to it: its input is
+// closed, and its error output is read only after the failed write.
+describe('HelperChannel with a program that ended before its input was written', () => {
+  it('fails to open with the error output of the program', async () => {
+    const conflict = 'docker: Error response from daemon: Conflict. The container name "/devspaces-window-worker1" is already in use by container "0123456789ab".';
+    const program = new NodeProcessRunner().start(process.execPath, ['-e', `process.stderr.write(${JSON.stringify(`${conflict}\n`)}); process.exit(125)`]);
+    expect((await program.exited).exitCode).toBe(125);
+    await expect(HelperChannel.open(program, 'SCRIPT', { logger: silentLogger, name: 'the local Docker' })).rejects.toThrow(
+      `The helper channel to the local Docker could not be opened: the helper ended (${conflict})`,
+    );
   });
 });

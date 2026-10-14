@@ -431,7 +431,13 @@ export class HelperChannel {
     return this.write(encodeMessage(message));
   }
 
-  /** Writes a line; a failed write loses the channel. */
+  /**
+   * Writes a line; a failed write loses the channel. While the channel opens, a failed write means that the process
+   * ended before it read its input, for example a `docker run` that the daemon refused at once (the name of the
+   * container in use: openHelperChannel then takes the next name). Only the end of the process says why (its error
+   * output, which is read after this write), so the process is stopped, and the channel is lost with the reason of its
+   * end (start), as when the end comes before the write.
+   */
   private write(line: string): boolean {
     if (this.state === 'closed') return false;
     let written = false;
@@ -440,7 +446,10 @@ export class HelperChannel {
     } catch {
       written = false;
     }
-    if (!written) this.lose('its input cannot be written');
+    if (!written) {
+      if (this.state === 'opening') this.process.kill();
+      else this.lose('its input cannot be written');
+    }
     return written;
   }
 

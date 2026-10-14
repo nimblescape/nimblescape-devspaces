@@ -38,12 +38,15 @@ function good(): StartedProcess {
   };
 }
 
-/** A `docker run` that the daemon refuses with `stderr` (exit code 125). */
-function refused(stderr: string): StartedProcess {
+/**
+ * A `docker run` that the daemon refuses with `stderr` (exit code 125). `ended`: it ended before the extension wrote its
+ * input (the write fails; its error output and its end come after it).
+ */
+function refused(stderr: string, options: { ended?: boolean } = {}): StartedProcess {
   let exit: (value: { exitCode: number | null }) => void = () => {};
   const exited = new Promise<{ exitCode: number | null }>((resolve) => (exit = resolve));
   return {
-    write: () => true,
+    write: () => options.ended !== true,
     end: () => {},
     kill: () => {},
     onStdout: () => {},
@@ -169,6 +172,13 @@ describe('the number of a worker name in use', () => {
     // A container with more than one name (legacy links) shows them in one line, separated by `,`.
     const linked = await openWith({ containers: ['devspaces-api-worker1', 'devspaces-api-worker2,other/api'] }, () => refused(IN_USE));
     expect(linked.names).toEqual(['devspaces-api-worker1', 'devspaces-api-worker3']);
+  });
+
+  // The Docker CLI can end before the extension writes the input of `docker run`: the name in use is in its end only.
+  it('takes the next number also when the refused start ended before its input was written', async () => {
+    const { names, infos } = await openWith({ containers: ['devspaces-api-worker1'] }, () => refused(IN_USE, { ended: true }));
+    expect(names).toEqual(['devspaces-api-worker1', 'devspaces-api-worker2']);
+    expect(infos.join('\n')).toContain('The worker name devspaces-api-worker1 is in use on build-box, so the worker starts as devspaces-api-worker2.');
   });
 
   it('names the worker of a window of a devspace after it, apart from the containers of a service worker of Docker Compose', async () => {
