@@ -111,7 +111,8 @@ function configuration(label, index, options, { keepUserDataDir = false } = {}) 
  * activationRules.ts, pipelineJustRan).
  * `previous` and `updated` (a CI job of their own, prepare.ts with DEVSPACE_TEST_ATTACH_PREPARE=update) load the
  * extension that is installed in the extensions folder of the test VS Code, not the build of this checkout: `previous`
- * the last released version from the Marketplace, with a fresh user data folder where VS Code updates no extension;
+ * the last released version from the VSIX of its GitHub release, with a fresh user data folder where VS Code updates no
+ * extension;
  * `updated` the VSIX of this checkout that CI installed over it (scripts/install-attach-extensions.mjs), with the user
  * data folder of `previous` and as long after the last open (like `longopen`), so that the window runs the open
  * pipeline of the new version, as at the first start of VS Code some time after an update. VS Code loads only the small
