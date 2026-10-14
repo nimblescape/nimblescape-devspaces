@@ -11,12 +11,14 @@
 // during the run (the run `account`) prints its summary in the run after the reload.
 // Before the run, the Dev Containers releases in the extensions folder of the test VS Code lose their attach question
 // (scripts/attachQuestion.mjs), also a release that VS Code installed during an earlier run. After it, the programs
-// that the test VS Code left running are listed (scripts/leftoverPrograms.mjs).
+// that the test VS Code left running are listed, and the run fails when one of the extension still runs WAIT_MS after
+// the quit (scripts/leftoverPrograms.mjs); in the run `previous`, whose extension is the last released version, they are
+// only listed.
 import { spawn } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { answerAttachQuestion } from './attachQuestion.mjs';
-import { reportLeftoverPrograms } from './leftoverPrograms.mjs';
+import { WAIT_MS, reportLeftoverPrograms } from './leftoverPrograms.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cli = path.join(root, 'node_modules', '@vscode', 'test-cli', 'out', 'bin.mjs');
@@ -38,7 +40,7 @@ child.on('error', (error) => {
   process.exit(1);
 });
 child.on('close', async (code, signal) => {
-  await reportLeftoverPrograms();
+  const leftover = await reportLeftoverPrograms();
   if (code !== 0) {
     console.error(`vscode-test ended with ${code === null ? `the signal ${signal}` : `exit code ${code}`}.`);
     process.exit(code ?? 1);
@@ -49,6 +51,10 @@ child.on('close', async (code, signal) => {
   else if (/^[ \t]+\d+\) \S/m.test(output)) problems.push('a test failed, and its run ended without a summary');
   if (problems.length > 0) {
     console.error(`The attach tests failed although VS Code ended with exit code 0: ${problems.join('; ')}.`);
+    process.exit(1);
+  }
+  if (leftover.length > 0 && process.env.DEVSPACE_TEST_ATTACH !== 'previous') {
+    console.error(`${leftover.length} programs of the extension still ran ${WAIT_MS / 1000} s after VS Code quit (listed above).`);
     process.exit(1);
   }
 });
