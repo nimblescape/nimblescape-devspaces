@@ -243,7 +243,8 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:vscode
 
-      # The VSIX of the job "test", which the release publishes: the tests run against the file that users get.
+      # The VSIX of the job "test", which the release publishes: the tests run against the file that users get, also in a
+      # folder that VS Code does not trust (Restricted Mode, the configuration "untrusted" of .vscode-test.mjs).
       - name: Download the VSIX of the job "test"
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

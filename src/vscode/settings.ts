@@ -78,6 +78,18 @@ export function hostAccessChecksOffValue(configuration: Pick<vscode.WorkspaceCon
 }
 
 /**
+ * The raw value of `dev.containers.defaultExtensions` (a setting of the Dev Containers extension) in the user settings.
+ * An open carries these extensions for the shared extension cache of its Docker engine, which all devspaces there use.
+ * A value of a workspace or folder, which a repository could bring along, is not used: the scope that the Dev Containers
+ * extension declares may already make VS Code ignore it, and this reads the user value only, to be sure. In Restricted
+ * Mode too: capabilities.untrustedWorkspaces.restrictedConfigurations in package.json can name only the settings of
+ * Devspaces itself.
+ */
+export function devContainersDefaultExtensionsValue(): unknown {
+  return vscode.workspace.getConfiguration('dev.containers').inspect<unknown>('defaultExtensions')?.globalValue;
+}
+
+/**
  * The value of devspaces.defaultImage that is no image reference (parseImageReference, after trimming), for one
  * warning; `''` when the setting is empty or valid. The setting has the scope `application`: only the user value.
  */

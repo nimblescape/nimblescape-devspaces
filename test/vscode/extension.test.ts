@@ -5,7 +5,7 @@
 /// <reference types="mocha" />
 // Tests in a real VS Code (npm run test:vscode and test:vscode:vsix, .vscode-test.mjs): VS Code loads the extension
 // from dist/ or from the installed VSIX beside the Dev Containers extension, and mocha runs these tests in its
-// extension host. The tests need no Docker engine, and .vscode-test.mjs keeps the extension away from the Docker
+// extension host (in the configuration `untrusted` in a folder that VS Code does not trust). The tests need no Docker engine, and .vscode-test.mjs keeps the extension away from the Docker
 // engine of this computer.
 import * as assert from 'assert';
 import * as fs from 'fs';
@@ -44,7 +44,7 @@ describe('the extension in VS Code', () => {
     const expected = process.env.DEVSPACE_TEST_VERSION;
     assert.strictEqual(version, expected, 'The extension is not of the version of this checkout');
     const configuration = process.env.DEVSPACE_TEST_CONFIGURATION;
-    if (configuration === 'vsix') {
+    if (configuration === 'vsix' || configuration === 'untrusted') {
       // VS Code installs a VSIX into the folder <publisher>.<name>-<version> of its extensions folder.
       assert.strictEqual(path.basename(extension.extensionPath), `${EXTENSION_ID}-${version}`, extension.extensionPath);
     } else {
