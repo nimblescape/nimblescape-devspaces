@@ -17,6 +17,8 @@ The aim of Devspaces is that no setting of a configuration grants a container ac
 
 The first open of a repository that belongs neither to you nor to one of your organizations asks for a confirmation.
 
+**Workspace Trust.** In a VS Code window whose folder you have not trusted (Restricted Mode), Devspaces runs, and only your user settings count for its settings: VS Code ignores the values of the workspace or folder. The default extensions of `dev.containers.defaultExtensions`, which Devspaces records for the shared extension cache, also come only from your user settings, in every window.
+
 ## Trust boundaries
 
 | Part | Where it runs | Trust |
