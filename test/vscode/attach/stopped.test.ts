@@ -57,6 +57,8 @@ describe('a devspace window whose container stops or is removed', () => {
   let running: childProcess.ChildProcess | undefined;
   let starts = 0;
   let failed = false;
+  /** The last start of the second VS Code whose logs were printed after a failure. */
+  let printedStart = 0;
   /** The lines of postAttachCommand when the container stopped. */
   let attachesAtStop = 0;
 
@@ -67,13 +69,16 @@ describe('a devspace window whose container stops or is removed', () => {
   after(async function () {
     this.timeout(QUIT_WAIT_MS + 30_000);
     await quitSecond();
-    if (failed) printLogs();
+    if (!failed) return;
+    printSecondLogs();
+    printLogs();
   });
 
-  /** The state of the container: `running`, `exited`, … or `missing`. */
+  /** The state of the container: `running`, `exited`, … or `missing`; another error of Docker as it is. */
   function containerState(): string {
     const result = childProcess.spawnSync('docker', ['inspect', '-f', '{{.State.Status}}', containerName], { encoding: 'utf8' });
-    return result.status === 0 ? result.stdout.trim() : 'missing';
+    if (result.status === 0) return result.stdout.trim();
+    return /No such (object|container)/i.test(result.stderr) ? 'missing' : `docker inspect failed: ${result.stderr.trim()}`;
   }
 
   function containerId(): string {
@@ -122,10 +127,12 @@ describe('a devspace window whose container stops or is removed', () => {
   }
 
   /**
-   * After a failed test, prints the logs of the current start of the second VS Code before it quits: the next start
-   * logs into a folder of its own, and `after` prints only the logs of the test VS Code.
+   * After a failed test, prints the logs of the last start of the second VS Code, once, after it quit (with what it
+   * logged at the quit) and before the next start, which logs into a folder of its own.
    */
   function printSecondLogs(): void {
+    if (starts === printedStart) return;
+    printedStart = starts;
     console.log(`\n===== start ${starts} of the second VS Code =====`);
     printLogs(second.userDataDir);
     for (const [name, text] of sessionLogs(second.userDataDir)) if (!/output_logging_/.test(name)) printLong(`\n===== ${name} =====\n${text}`);
@@ -158,7 +165,6 @@ describe('a devspace window whose container stops or is removed', () => {
     const child = running;
     running = undefined;
     if (child?.pid === undefined) return 'not started';
-    if (failed) printSecondLogs();
     const pid = child.pid;
     const ending = (): string | undefined => (child.exitCode !== null ? `exit code ${child.exitCode}` : (child.signalCode ?? undefined));
     const exited = ending() !== undefined ? Promise.resolve() : new Promise<void>((resolve) => child.once('exit', () => resolve()));
@@ -170,6 +176,7 @@ describe('a devspace window whose container stops or is removed', () => {
       // The process group has ended.
     }
     await Promise.race([exited, sleep(10_000)]);
+    if (failed) printSecondLogs();
     return ending() ?? 'still running';
   }
 
@@ -191,8 +198,13 @@ describe('a devspace window whose container stops or is removed', () => {
     const from = secondLog().length;
     const ended = await quitSecond();
     console.log(`    the second VS Code quit: ${ended}`);
-    assert.ok(ended === 'exit code 0' || ended === 'SIGTERM', `The second VS Code did not quit on its own (${ended})`);
-    assert.match(secondLog(from), new RegExp(`Released ${repository}: the Monitor stops it after`), 'The window did not release the devspace at its close');
+    try {
+      assert.ok(ended === 'exit code 0' || ended === 'SIGTERM', `The second VS Code did not quit on its own (${ended})`);
+      assert.match(secondLog(from), new RegExp(`Released ${repository}: the Monitor stops it after`), 'The window did not release the devspace at its close');
+    } catch (error) {
+      printSecondLogs();
+      throw error;
+    }
   }
 
   /**
@@ -217,6 +229,11 @@ describe('a devspace window whose container stops or is removed', () => {
     printLong(`    the log of the window after the ${change}:\n${withoutGitHub(secondLog(from))}`);
     printLong(`    the remote connection of the window after the ${change}:\n${connectionLines(rendererFrom)}`);
     return { noticedAt, states };
+  }
+
+  /** The states that watchAfter recorded, without their times. */
+  function statesOnly(states: string[]): string[] {
+    return states.map((state) => state.replace(/^\d+ s: /, ''));
   }
 
   /**
@@ -254,7 +271,7 @@ describe('a devspace window whose container stops or is removed', () => {
     docker(['stop', containerName]);
     const { noticedAt, states } = await watchAfter('stop', from, rendererFrom);
     assertNoticed(noticedAt, rendererFrom);
-    assert.deepStrictEqual(states, ['0 s: exited'], 'Something started the container again');
+    assert.deepStrictEqual(statesOnly(states), ['exited'], 'Something started the container again');
   });
 
   it('at the next open of the window, the open pipeline starts the stopped container, and the window attaches', async function () {
@@ -280,7 +297,7 @@ describe('a devspace window whose container stops or is removed', () => {
     docker(['rm', '-f', containerName]);
     const { noticedAt, states } = await watchAfter('removal', from, rendererFrom);
     assertNoticed(noticedAt, rendererFrom);
-    assert.deepStrictEqual(states, ['0 s: missing'], 'Something made the container again before the next open');
+    assert.deepStrictEqual(statesOnly(states), ['missing'], 'Something made the container again before the next open');
     await quitAndRelease();
     // A new container starts without the lines of the old one.
     await startAndAttach(0);
