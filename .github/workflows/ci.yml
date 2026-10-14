@@ -271,7 +271,9 @@ jobs:
       # .vscode-test.mjs, test/vscode/attach/prepare.ts and scripts/install-attach-extensions.mjs download the VS Code
       # version of VSCODE_TEST_VERSION; empty (also for every event but a call) gives stable. @vscode/test-electron
       # downloads VS Code Insiders again when a newer build has come out, without the changes of prepare.ts, so the job
-      # uses the commit of the newest Insiders build at its start. This step writes the version for the later steps.
+      # uses the commit of the newest Insiders build at its start. Stable stays unpinned: a stable release during a job
+      # is rare, and @vscode/test-electron takes a stable version only with a patch number of one digit. This step
+      # writes the version for the later steps.
       - name: Choose the VS Code version
         env:
           VERSION: ${{ inputs.vscode-version }}

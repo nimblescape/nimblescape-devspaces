@@ -43,14 +43,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # The version of engines.vscode (^x.y.z) is the lowest that the extension supports; another form fails the run.
+      # The version of engines.vscode (^x.y.z) is the lowest that the extension supports; another form fails the run,
+      # also a patch number of more than one digit, which @vscode/test-electron does not take as a stable version.
       - name: List Insiders and the lowest supported version
         id: list
         run: |
           node - >> "$GITHUB_OUTPUT" <<'JS'
           const range = require("./package.json").engines.vscode;
-          const match = /^\^(\d+\.\d+\.\d+)$/.exec(range);
-          if (!match) throw new Error(`engines.vscode is "${range}", not of the form ^x.y.z`);
+          const match = /^\^(\d+\.\d+\.\d)$/.exec(range);
+          if (!match) throw new Error(`engines.vscode is "${range}", not of the form ^x.y.z with a patch number of one digit`);
           console.log(`list=${JSON.stringify(["insiders", match[1]])}`);
           JS
 
