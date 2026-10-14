@@ -12,7 +12,7 @@
 // configuration of the devspace also then.
 import * as assert from 'assert';
 import { GH_HOSTS_FILE, GITHUB_TOKEN_FILE } from '../../../src/core/names';
-import { ENABLING_MACHINE_SETTINGS, assertOnlyDevspaceCredentials, channelLog, connectedFolder, credentialPaths, docker, execIn, printLogs, seed, waitFor } from './support';
+import { ENABLING_MACHINE_SETTINGS, assertOnlyDevspaceCredentials, channelLog, connectedFolder, credentialPaths, docker, execIn, printLogs, seed, serverDataFolder, waitFor } from './support';
 
 describe('the window of the devspace after a restart of VS Code', () => {
   const { containerName, user } = seed();
@@ -49,7 +49,7 @@ describe('the window of the devspace after a restart of VS Code', () => {
   });
 
   it('attaches with the machine settings that the process in the container changed', async () => {
-    const file = execIn(user, 'cat "$HOME/.vscode-server/data/Machine/settings.json"');
+    const file = execIn(user, `cat "$HOME/${serverDataFolder()}/data/Machine/settings.json"`);
     assert.strictEqual(file.code, 0, file.out);
     const settings = JSON.parse(file.out) as Record<string, unknown>;
     const kept = Object.entries(ENABLING_MACHINE_SETTINGS).filter(([key, value]) => settings[key] === value);

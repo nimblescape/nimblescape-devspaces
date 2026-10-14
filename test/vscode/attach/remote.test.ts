@@ -19,7 +19,7 @@ import { DEFAULT_CONTEXT_NAME } from '../../../src/core/docker/dockerHost';
 import { LABEL_DEVSPACE_ID, LABEL_HELPER } from '../../../src/core/names';
 import { LABEL_MONITOR } from '../../../src/core/remoteMonitor/protocol';
 import { decodeAuthorityParts } from '../../../src/vscode/connection/authority';
-import { EXTENSION_ID, channelLog, connectedFolder, docker, printLogs, seed } from './support';
+import { EXTENSION_ID, channelLog, connectedFolder, docker, printLogs, seed, serverDataFolder } from './support';
 
 /** A file that the window writes into its container. */
 const WINDOW_MARK = '/tmp/devspaces-test-window-mark';
@@ -61,7 +61,7 @@ describe('the window of a devspace on a Docker engine over SSH', () => {
     assert.strictEqual(docker(['--context', dockerContext, 'exec', containerName, 'cat', WINDOW_MARK]), text);
     // The container of the local Docker still runs, and the window left nothing there: no file and no VS Code server.
     assert.strictEqual(docker(['--context', DEFAULT_CONTEXT_NAME, 'inspect', '-f', '{{.State.Status}}', containerName]).trim(), 'running');
-    const found = docker(['--context', DEFAULT_CONTEXT_NAME, 'exec', containerName, 'sh', '-c', 'for f in "$@"; do if [ -e "$f" ]; then echo "$f"; fi; done', 'sh', WINDOW_MARK, '/root/.vscode-server']);
+    const found = docker(['--context', DEFAULT_CONTEXT_NAME, 'exec', containerName, 'sh', '-c', 'for f in "$@"; do if [ -e "$f" ]; then echo "$f"; fi; done', 'sh', WINDOW_MARK, `/root/${serverDataFolder()}`]);
     assert.strictEqual(found.trim(), '', 'The window changed the container of the same name on the local Docker');
   });
 
