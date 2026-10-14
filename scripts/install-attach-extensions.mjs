@@ -4,10 +4,10 @@
 
 // CI only, before the attach runs `stopped` and `updated` (.github/workflows/ci.yml): packages the extension (npm run
 // package, which also makes the production build in dist/) and the test sign-in provider (test/vscode/github) and
-// installs both from their VSIX files into the extensions folder of the test VS Code, as users install an extension
-// (over an installed version of the extension too: --force). packaged.json next to the VSIX files names the version and
-// the SHA-256 of the packaged dist/extension.js, so that the run `updated` can check that VS Code loads this build
-// (test/vscode/attach/updated.test.ts). The second VS Code of the run `stopped` (test/vscode/attach/stopped.test.ts)
+// installs both from their VSIX files into the extensions folder of the test VS Code, as users install an extension, also
+// over an installed version of the same or a lower version (the run `updated`). packaged.json next to the VSIX files
+// names the version and the SHA-256 of the packaged dist/extension.js, so that the run `updated` can check that VS Code
+// loads this build (test/vscode/attach/updated.test.ts). The second VS Code of the run `stopped` (test/vscode/attach/stopped.test.ts)
 // loads both from the extensions folder. It cannot load them as development extensions (--extensionDevelopmentPath):
 // VS Code closes a window of development extensions when one of its extension hosts ends, and the extension host of the
 // container ends when the container stops (seen in PR #18; VS Code, AbstractExtensionService, _onExtensionHostExit).
