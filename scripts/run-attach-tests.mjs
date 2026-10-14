@@ -9,12 +9,17 @@
 // seen in PR #18; AbstractExtensionService, _onExtensionHostExit). A failed test then counts as passed. So the output
 // must have a line "<n> passing", and no line "<n> failing" or "<n>) <test>" of a failed test. A window that reloads
 // during the run (the run `account`) prints its summary in the run after the reload.
+// Before the run, the Dev Containers releases in the extensions folder of the test VS Code lose their attach question
+// (scripts/attachQuestion.mjs), also a release that VS Code installed during an earlier run.
 import { spawn } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { answerAttachQuestion } from './attachQuestion.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cli = path.join(root, 'node_modules', '@vscode', 'test-cli', 'out', 'bin.mjs');
+
+for (const line of answerAttachQuestion(path.join(root, '.vscode-test', 'extensions'))) console.log(line);
 
 const child = spawn(process.execPath, [cli, '--label', 'attach', ...process.argv.slice(2)], { stdio: ['inherit', 'pipe', 'pipe'] });
 let output = '';
