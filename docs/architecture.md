@@ -136,7 +136,7 @@ At an open that updates a devspace (after **Continue** or **Update Now**), the *
 
 One volume per engine, `devspaces-vscode`, holds the VS Code servers and the extension packages that all dev containers of the engine share. Only the worker and the monitor write it, each file under a lock in `locks/`. A dev container that an open of the official VS Code build creates mounts it read-only at `/opt/devspace/vscode`.
 
-- `server/<quality>/<platform>/<commit>/`: an unpacked server, for `linux-x64` or `linux-arm64`. The open sends the commit and quality of the window's VS Code (only for the official build); the worker downloads a missing server from the VS Code update service, checks its SHA-256, and moves it into place. Before the window connects, the worker links `~/.vscode-server/bin/<commit>` in the dev container to it, as the remote user, so the Dev Containers extension installs no server. A failure never fails the open: the Dev Containers extension then installs the server as usual.
+- `server/<quality>/<platform>/<commit>/`: an unpacked server, for `linux-x64` or `linux-arm64`. The open sends the commit and quality of the window's VS Code (only for the official build); the worker downloads a missing server from the VS Code update service, checks its SHA-256, and moves it into place. Before the window connects, the worker links `~/.vscode-server/bin/<commit>` (for VS Code Insiders `~/.vscode-server-insiders/bin/<commit>-insider`) in the dev container to it, as the remote user, so the Dev Containers extension installs no server. A failure never fails the open: the Dev Containers extension then installs the server as usual.
 - `extensions/<universal|linux-x64|linux-arm64>/<publisher.name-version>.vsix`: extension packages. Each open records the extensions of the devspace (`customizations.vscode.extensions` of the merged configuration, and the user's `dev.containers.defaultExtensions`); the monitor downloads them in its background run. Before the window connects, the worker copies the matching packages into the container's `~/.vscode-server/extensionsCache`, from where the VS Code server installs them without a download. An open never downloads an extension and never waits for one.
 
 ### Heartbeats and stops
@@ -233,7 +233,7 @@ VS Code restores the windows of the last session; a restored window that was con
 | Volume `devspaces-monitor` (`/state`) | Heartbeat records (`heartbeats/`), locks (`locks/`), the image references in use, the registry answers, the image bookkeeping of the monitor, the schedule state (`cache-run.json`, `run-now.json`), the extension lists of the opens (`extensions/`), and the stored worker scripts (`worker-scripts/`). |
 | Volume `devspaces-vscode` | The shared VS Code servers and extension packages. |
 | Volume `devspaces-worker-cache` | The user data folder of the Dev Container CLI in the batch helper. |
-| Dev container | `/run/devspace` (tmpfs: `github-token`, `gh/hosts.yml`), `/opt/devspace/vscode` (the store, read-only), and `~/.vscode-server/bin/<commit>` (a link into the store). |
+| Dev container | `/run/devspace` (tmpfs: `github-token`, `gh/hosts.yml`), `/opt/devspace/vscode` (the store, read-only), and `~/.vscode-server/bin/<commit>` or `~/.vscode-server-insiders/bin/<commit>-insider` (a link into the store). |
 
 ## Naming
 

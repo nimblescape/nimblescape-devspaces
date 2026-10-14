@@ -6,7 +6,8 @@
 // shared store of the engine (the volume VSCODE_STORE_VOLUME, mounted read-write in the worker at VSCODE_STORE_DIR),
 // made present by ensureServer: by the open that needs it (the very first open of a VS Code version) and by the Session
 // Monitor in its daily background run. The layout:
-//   <store>/server/<quality>/<platform>/<commit>/        the unpacked server (bin/code-server, node, …), readable for all
+//   <store>/server/<quality>/<platform>/<commit>/        the unpacked server (node, bin/code-server, for Insiders
+//                                                          bin/code-server-insiders, …), readable for all
 //   <store>/locks/server-<quality>-<platform>-<commit>.lock  the `flock` of one server version (every worker and the
 //                                                          monitor of the engine: one download of a version at a time)
 //   <store>/tmp/<quality>-<platform>-<commit>-<random>/  the archive and the unpacked folder of one download, removed on
@@ -76,10 +77,21 @@ export function serverFolder(root: string, server: VscodeServerRef, platform: Vs
   return path.posix.join(root, 'server', server.quality, platform, server.commit);
 }
 
-/** The server in `folder` is ready: `bin/code-server` and `node` are plain files (never links). */
-export async function isServerReady(folder: string): Promise<boolean> {
+/**
+ * The script of the server of `quality` in its folder `bin` (`serverApplicationName` of its `product.json`):
+ * `code-server` for `stable`, `code-server-insiders` for `insider`.
+ */
+export function serverScriptName(quality: VscodeQuality): 'code-server' | 'code-server-insiders' {
+  return quality === 'insider' ? 'code-server-insiders' : 'code-server';
+}
+
+/**
+ * The server of `quality` in `folder` is ready: its script (`bin/<serverScriptName>`) and `node` are plain files (never
+ * links).
+ */
+export async function isServerReady(folder: string, quality: VscodeQuality): Promise<boolean> {
   try {
-    const [script, node] = await Promise.all([fs.promises.lstat(path.join(folder, 'bin', 'code-server')), fs.promises.lstat(path.join(folder, 'node'))]);
+    const [script, node] = await Promise.all([fs.promises.lstat(path.join(folder, 'bin', serverScriptName(quality))), fs.promises.lstat(path.join(folder, 'node'))]);
     return script.isFile() && node.isFile();
   } catch {
     return false;
@@ -132,10 +144,11 @@ export function serverVersionName(server: VscodeServerRef, platform: VscodePlatf
  * removes the leftovers of an earlier download of this version that ended without its cleanup, asks the update service
  * for the URL and the SHA-256 of the archive, downloads it into a temporary folder of its own (streamed, at most
  * `maxBytes`, at most MAX_SERVER_REDIRECTS redirects to `https:` URLs), checks its SHA-256, unpacks it there, checks
- * that `bin/code-server` and `node` are there, makes it readable for all (folders 0755, files their mode plus read, and
- * execute for all where any execute bit is set), and renames the folder into place (atomic). The temporary folder goes
- * on every outcome. Resolves true when the server is ready, else false after one line in the log (also for a cancel by
- * `signal` and the time limit of the whole fetch); never rejects.
+ * that the script of its quality (`bin/code-server`, for Insiders `bin/code-server-insiders`) and `node` are there,
+ * makes it readable for all (folders 0755, files their mode plus read, and execute for all where any execute bit is
+ * set), and renames the folder into place (atomic). The temporary folder goes on every outcome. Resolves true when the
+ * server is ready, else false after one line in the log (also for a cancel by `signal` and the time limit of the whole
+ * fetch); never rejects.
  */
 export async function ensureServer(deps: VscodeStoreDeps, server: VscodeServerRef, platform: VscodePlatform, signal: AbortSignal): Promise<boolean> {
   return ensureServerWithin(deps, server, platform, signal, fetchLimit(deps));
@@ -159,11 +172,11 @@ async function ensureServerWithin(
   const name = `${server.commit} (${server.quality})`;
   try {
     const folder = serverFolder(deps.root, server, platform);
-    if (await isServerReady(folder)) return true;
+    if (await isServerReady(folder, server.quality)) return true;
     deps.logger.info(`Downloading the VS Code server ${name} for ${platform} into the shared store of the engine.`);
     const release = await deps.lock(deps.root, serverVersionName(server, platform), Math.max(1, Math.ceil(timeoutMs / 1000)), both);
     try {
-      if (await isServerReady(folder)) {
+      if (await isServerReady(folder, server.quality)) {
         deps.logger.info(`The VS Code server ${name} for ${platform} was put into the shared store by another window in the meantime.`);
         return true;
       }
@@ -378,7 +391,7 @@ async function fetchServer(deps: VscodeStoreDeps, server: VscodeServerRef, platf
     if (hash !== sha256) throw new FetchError(`the SHA-256 of the download ${hash} is not the ${sha256} of the update service`);
     await fs.promises.mkdir(unpacked, { mode: 0o700 });
     await deps.unpack(archive, unpacked, signal);
-    if (!(await isServerReady(unpacked))) throw new FetchError('the archive has no bin/code-server or no node');
+    if (!(await isServerReady(unpacked, server.quality))) throw new FetchError(`the archive has no bin/${serverScriptName(server.quality)} or no node`);
     await readableForAll(unpacked);
     // The folders above it, readable for all too (the dev containers read the store as their remote user).
     let parent = deps.root;
@@ -391,7 +404,7 @@ async function fetchServer(deps: VscodeStoreDeps, server: VscodeServerRef, platf
     }
     // A folder of the commit that is ready is never moved away or removed (a dev container may run the server from it):
     // it stays, and this download goes with the temporary folder.
-    if (await isServerReady(folder)) return;
+    if (await isServerReady(folder, server.quality)) return;
     // A folder of the commit that is not ready (no download of the worker leaves one; it is not used anyway) goes first.
     const old = await fs.promises.lstat(folder).catch(() => undefined);
     if (old !== undefined) await fs.promises.rename(folder, path.posix.join(own, 'old'));
@@ -554,9 +567,9 @@ function mebibytes(bytes: number): string {
 
 /**
  * Everything in `folder` readable for all: folders 0755, files their mode plus read for all, and execute for all where
- * any execute bit is set (so the remote user of a dev container runs `node` and `bin/code-server`); links stay as they
- * are. The setuid, setgid and sticky bits of the archive are dropped (a setuid file in the store would run as its
- * owner, root, in every dev container of the engine).
+ * any execute bit is set (so the remote user of a dev container runs `node` and `bin/code-server` or
+ * `bin/code-server-insiders`); links stay as they are. The setuid, setgid and sticky bits of the archive are dropped (a
+ * setuid file in the store would run as its owner, root, in every dev container of the engine).
  */
 export async function readableForAll(folder: string): Promise<void> {
   const stat = await fs.promises.lstat(folder);

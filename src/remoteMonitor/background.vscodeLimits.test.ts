@@ -17,7 +17,7 @@ import type { HttpRequest, HttpStreamTransport, HttpTransport } from '../core/ht
 import { silentLogger } from '../core/ports';
 import type { EngineContainer, EngineContainerSummary, EngineExecOptions, EngineExecResult } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
-import { markServerOpened, serverCommitsUrl, serverFolder, type StoreLockAttempt, type VscodeStoreDeps } from '../core/worker/vscodeServerStore';
+import { markServerOpened, serverCommitsUrl, serverFolder, serverScriptName, type StoreLockAttempt, type VscodeStoreDeps } from '../core/worker/vscodeServerStore';
 import { BACKGROUND_ENGINE_TIMEOUT_MS, BACKGROUND_LINK_TIMEOUT_MS, BackgroundRun, UPDATE_SERVICE_TIMEOUT_MS, type VscodeBackgroundDeps } from './background';
 import { SERVER_UNUSED_MS, type CacheRunState } from './backgroundRules';
 
@@ -39,11 +39,14 @@ afterEach(() => {
   for (const dir of temps.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/** A ready server; `usedAt`: the last use by an open (its marker); `never`: none. */
+/**
+ * A ready server (the script of its quality, serverScriptName, and `node`); `usedAt`: the last use by an open (its
+ * marker); `never`: none.
+ */
 async function readyServer(root: string, server: VscodeServerRef, platform: VscodePlatform = 'linux-x64', usedAt: number | 'never' = NOW - SERVER_UNUSED_MS - DAY): Promise<string> {
   const folder = serverFolder(root, server, platform);
   fs.mkdirSync(path.join(folder, 'bin'), { recursive: true });
-  fs.writeFileSync(path.join(folder, 'bin', 'code-server'), '#!/bin/sh\n');
+  fs.writeFileSync(path.join(folder, 'bin', serverScriptName(server.quality)), '#!/bin/sh\n');
   fs.writeFileSync(path.join(folder, 'node'), '');
   if (usedAt !== 'never') await markServerOpened(root, server, platform, new Date(usedAt));
   return folder;

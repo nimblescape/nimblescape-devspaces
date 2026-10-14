@@ -14,7 +14,7 @@ import type { VscodeServerRef } from '../core/helperChannel/protocol';
 import type { HttpStreamTransport, HttpTransport } from '../core/http';
 import { silentLogger } from '../core/ports';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
-import { serverFolder, type StoreLockAttempt, type VscodeStoreDeps } from '../core/worker/vscodeServerStore';
+import { serverFolder, serverScriptName, type StoreLockAttempt, type VscodeStoreDeps } from '../core/worker/vscodeServerStore';
 import { BackgroundRun, type VscodeBackgroundDeps } from './background';
 import type { CacheRunState } from './backgroundRules';
 
@@ -31,7 +31,7 @@ afterEach(() => {
 function unmarkedServer(root: string, server: VscodeServerRef, accessedAt: number, modifiedAt: number): string {
   const folder = serverFolder(root, server, 'linux-x64');
   fs.mkdirSync(path.join(folder, 'bin'), { recursive: true });
-  fs.writeFileSync(path.join(folder, 'bin', 'code-server'), '#!/bin/sh\n');
+  fs.writeFileSync(path.join(folder, 'bin', serverScriptName(server.quality)), '#!/bin/sh\n');
   fs.writeFileSync(path.join(folder, 'node'), '');
   fs.utimesSync(folder, new Date(accessedAt), new Date(modifiedAt));
   return folder;

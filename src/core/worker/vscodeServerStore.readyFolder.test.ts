@@ -60,7 +60,7 @@ describe('a download keeps a folder of the server that is ready', () => {
     });
     folder = h.folder;
     expect(await ensureServer(h.deps, SERVER, 'linux-x64', new AbortController().signal)).toBe(true);
-    expect(await isServerReady(h.folder)).toBe(true);
+    expect(await isServerReady(h.folder, 'stable')).toBe(true);
     expect(fs.existsSync(path.join(h.folder, 'kept'))).toBe(true);
     expect(fs.existsSync(path.join(h.folder, 'new'))).toBe(false);
     // The temporary folder of the download (with the new copy) is gone.

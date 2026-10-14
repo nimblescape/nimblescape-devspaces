@@ -17,7 +17,7 @@ import type { VscodePlatform, VscodeServerRef } from '../core/helperChannel/prot
 import type { HttpRequest, HttpStreamTransport, HttpTransport } from '../core/http';
 import { silentLogger } from '../core/ports';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
-import { markServerOpened, serverCommitsUrl, serverFolder, type StoreLockAttempt, type VscodeStoreDeps } from '../core/worker/vscodeServerStore';
+import { markServerOpened, serverCommitsUrl, serverFolder, serverScriptName, type StoreLockAttempt, type VscodeStoreDeps } from '../core/worker/vscodeServerStore';
 import { BACKGROUND_ENGINE_TIMEOUT_MS, BackgroundRun, type VscodeBackgroundDeps } from './background';
 import { MAX_FAILED_FETCHES, SERVER_UNUSED_MS, type CacheRunState, type NetworkContact } from './backgroundRules';
 
@@ -34,7 +34,7 @@ afterEach(() => {
 async function readyServer(root: string, server: VscodeServerRef, platform: VscodePlatform = 'linux-x64', usedAt = NOW - SERVER_UNUSED_MS - DAY): Promise<void> {
   const folder = serverFolder(root, server, platform);
   fs.mkdirSync(path.join(folder, 'bin'), { recursive: true });
-  fs.writeFileSync(path.join(folder, 'bin', 'code-server'), '#!/bin/sh\n');
+  fs.writeFileSync(path.join(folder, 'bin', serverScriptName(server.quality)), '#!/bin/sh\n');
   fs.writeFileSync(path.join(folder, 'node'), '');
   await markServerOpened(root, server, platform, new Date(usedAt));
 }
@@ -282,7 +282,7 @@ describe('the run marks nothing, and the processes keep every quality', () => {
   });
 
   it('an insider version that a running container runs stays, also when only Insiders has versions to remove', async () => {
-    const line = (n: number) => ['1000', '42', `/home/u/.vscode-server-insiders/bin/${commit(n)}/node`];
+    const line = (n: number) => ['1000', '42', `/home/u/.vscode-server-insiders/bin/${commit(n)}-insider/node`];
     const h = harness({ commits: { stable: [commit(9)], insider: [commit(3), commit(2), commit(1)] }, ensure: true, processes: { 'dev-a': [line(1)] } });
     await readyServer(h.root, { commit: commit(9), quality: 'stable' });
     for (const n of [1, 2, 3]) await readyServer(h.root, { commit: commit(n), quality: 'insider' });

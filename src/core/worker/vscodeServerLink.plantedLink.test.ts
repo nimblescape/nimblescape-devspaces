@@ -110,9 +110,9 @@ describe('the link script writes through no link planted after a check', () => {
   });
 
   it('creates the link with `ln -sn`: a link to a folder at the name makes it fail, it never writes into that folder', () => {
-    // The check of bin/<commit> comes right before `ln` (no command between them that a test could use to plant a
-    // link); this pins the option the script relies on, with the tools of this computer.
-    expect(VSCODE_SERVER_LINK_SCRIPT).toContain('ln -sn "$server" "$commit" || exit 1');
+    // The check of bin/<commit> (bin/<commit>-insider) comes right before `ln` (no command between them that a test
+    // could use to plant a link); this pins the option the script relies on, with the tools of this computer.
+    expect(VSCODE_SERVER_LINK_SCRIPT).toContain('ln -sn "$server" "$name" || exit 1');
     const s = sandbox();
     const name = path.join(s.root, 'link');
     fs.symlinkSync(s.elsewhere, name);
