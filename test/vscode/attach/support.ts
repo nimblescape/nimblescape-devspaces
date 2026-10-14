@@ -197,9 +197,17 @@ export function channelLog(channel: string, userDataDir?: string): string {
   return [...outputLogs(userDataDir)].filter(([name]) => path.basename(name).endsWith(`-${channel}.log`)).map(([, text]) => text).join('\n');
 }
 
+/**
+ * Prints `text` in parts: the extension host of the tests omits a longer console line ("Output omitted for a large
+ * object that exceeds the limits", seen in PR #18).
+ */
+export function printLong(text: string): void {
+  for (let start = 0; start < text.length; start += 20_000) console.log(text.slice(start, start + 20_000));
+}
+
 /** Prints every output channel of the last start of VS Code; the evidence of a failed test on CI. */
 export function printLogs(userDataDir?: string): void {
-  for (const [name, text] of outputLogs(userDataDir)) console.log(`\n===== ${name} =====\n${text}`);
+  for (const [name, text] of outputLogs(userDataDir)) printLong(`\n===== ${name} =====\n${text}`);
 }
 
 /**
