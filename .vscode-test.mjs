@@ -99,7 +99,8 @@ function configuration(label, index, options, { keepUserDataDir = false } = {}) 
 
 /**
  * The configuration `attach`: the window of the container DEVSPACE_TEST_ATTACH of out/test/vscode/attach/seed.json, on
- * the Docker engine of this computer (`remote`: of the other computer that the current Docker context names). The fake sign-in provider `github` (test/vscode/github) replaces the built-in one.
+ * the Docker engine of this computer (`remote`: of the other computer that the current Docker context names). The fake
+ * sign-in provider `github` (test/vscode/github) replaces the built-in one.
  * `reattach`, `account` and `longopen` start VS Code again in the window of the devspace with the user data folder of
  * the run `devspace`, as a restart of VS Code; `account` with another signed-in account than the owner of the devspace.
  * `longopen` starts as long after the last open: without the pending connection files of the extension. The runs before
