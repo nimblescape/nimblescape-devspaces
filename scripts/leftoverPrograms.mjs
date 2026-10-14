@@ -3,15 +3,17 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The programs that a test VS Code left running after it quit (Linux only, from /proc). The configurations of
-// .vscode-test.mjs give the test VS Code the environment variable DEVSPACE_TEST_USER_DATA_DIR; every program that it
-// starts, and every program that those start, inherits it (the extension and the Dev Containers extension pass the
-// environment of the extension host on), and no other program of a CI job has it. VS Code does not end the programs
-// of its extension host when it quits.
+// .vscode-test.mjs give the test VS Code the environment variable DEVSPACE_TEST_USER_DATA_DIR, and the run `stopped`
+// gives it to its second VS Code (test/vscode/attach/stopped.test.ts); every program that they start, and every program
+// that those start, inherits it (the extension and the Dev Containers extension pass the environment of the extension
+// host on), and no other program of a CI job has it. VS Code does not end the programs of its extension host when it
+// quits.
 // Seen in CI (PR #22): after each attach run, only programs of the Dev Containers extension stay: `docker exec` into
 // the container of the window (the VS Code server, and scripts that watch the machine settings and the installed
 // extensions for up to 60 seconds) and, for a Docker engine over SSH, the `ssh … docker system dial-stdio` that those
 // start. The extension itself runs no `docker exec` program (its exec calls use the Docker API), so these count as
-// programs of Dev Containers; every other program counts as one of the extension. A program of the extension that
+// programs of Dev Containers; every other program counts as one of the extension (VS Code ends its own programs when it
+// quits; none stayed in CI). A program of the extension that
 // still runs WAIT_MS after the quit fails the check: `node scripts/leftoverPrograms.mjs` after the tests of the job
 // "vscode", and scripts/run-attach-tests.mjs after each attach run, which counts only the programs that started during
 // that run (the run `updated` follows the run `previous` of the last released version).
@@ -43,13 +45,30 @@ export function uptimeSeconds() {
   return Number(readText('/proc/uptime')?.split(' ')[0] ?? 0);
 }
 
+let ticksPerSecond;
 /** Clock ticks per second of /proc/<pid>/stat. */
 function clockTicks() {
-  try {
-    return Number(execFileSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).trim()) || 100;
-  } catch {
-    return 100;
+  if (ticksPerSecond === undefined) {
+    try {
+      ticksPerSecond = Number(execFileSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).trim()) || 100;
+    } catch {
+      ticksPerSecond = 100;
+    }
   }
+  return ticksPerSecond;
+}
+
+/** Options of the Docker CLI before its command that take a value in the next argument. */
+const DOCKER_VALUE_OPTIONS = new Set(['-c', '--context', '--config', '-H', '--host', '-l', '--log-level', '--tlscacert', '--tlscert', '--tlskey']);
+
+/** True for `docker exec …`, also with options of the Docker CLI before `exec` (`docker --context x exec …`). */
+function isDockerExec(args) {
+  if (path.basename(args[0] ?? '') !== 'docker') return false;
+  for (let i = 1; i < args.length; i++) {
+    if (!args[i].startsWith('-')) return args[i] === 'exec';
+    if (DOCKER_VALUE_OPTIONS.has(args[i])) i++;
+  }
+  return false;
 }
 
 /**
@@ -72,7 +91,9 @@ export function leftoverPrograms() {
     if (marker === undefined || stat === undefined) continue;
     // The fields after the name in parentheses, which can hold spaces and parentheses: state, ppid, … starttime (22).
     const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-    if (fields[0] === 'Z') continue;
+    // A program that ended during the scan has no command line any more.
+    const args = argv(pid);
+    if (fields[0] === 'Z' || args.length === 0) continue;
     const ppid = Number(fields[1]);
     const startSeconds = Number(fields[19]) / ticks;
     found.push({
@@ -81,11 +102,10 @@ export function leftoverPrograms() {
       startSeconds,
       ageSeconds: Math.round(uptime - startSeconds),
       userDataDir: marker.slice(MARKER.length),
-      argv: argv(pid),
+      argv: args,
       parentArgv: argv(ppid),
     });
   }
-  const isDockerExec = (args) => path.basename(args[0] ?? '') === 'docker' && args[1] === 'exec';
   const devContainers = new Set(found.filter((p) => isDockerExec(p.argv)).map((p) => p.pid));
   // The Docker CLI of a `docker exec` reaches an engine over SSH through `ssh … docker system dial-stdio`.
   for (const p of found) if (devContainers.has(p.ppid) && path.basename(p.argv[0] ?? '') === 'ssh') devContainers.add(p.pid);

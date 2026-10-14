@@ -145,7 +145,9 @@ describe('a devspace window whose container stops or is removed', () => {
 
   /**
    * Starts the second VS Code in the window of the devspace, in a process group of its own. Without the variables of the
-   * test VS Code (VSCODE_*, ELECTRON_*), so that it starts as a VS Code of its own and not as a Node.js process.
+   * test VS Code (VSCODE_*, ELECTRON_*, DEVSPACE_TEST_*), so that it starts as a VS Code of its own and not as a Node.js
+   * process; DEVSPACE_TEST_USER_DATA_DIR names its own user data folder, so that scripts/run-attach-tests.mjs also finds
+   * the programs that it leaves running (the extension does not read it).
    */
   function startSecond(): void {
     starts += 1;
@@ -155,6 +157,7 @@ describe('a devspace window whose container stops or is removed', () => {
     if (!fs.existsSync(settings)) fs.writeFileSync(settings, JSON.stringify({ 'extensions.autoUpdate': false, 'extensions.autoCheckUpdates': false }, null, 2));
     const output = fs.openSync(path.join(second.userDataDir, `output-${starts}.txt`), 'w');
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(ELECTRON_|VSCODE_|DEVSPACE_TEST_)/.test(key)));
+    env.DEVSPACE_TEST_USER_DATA_DIR = second.userDataDir;
     running = childProcess.spawn(process.execPath, second.args, { env, detached: true, stdio: ['ignore', output, output] });
     fs.closeSync(output);
     running.unref();
