@@ -74,15 +74,18 @@ describe('a devspace window whose container stops or is removed', () => {
     printLogs();
   });
 
-  /** The state of the container: `running`, `exited`, … or `missing`; another error of Docker as it is. */
+  /**
+   * The state of the container: `running`, `exited`, … or `missing`; another error of Docker as it is. With `--type`,
+   * because the volume and the image of the devspace have the name of its container.
+   */
   function containerState(): string {
-    const result = childProcess.spawnSync('docker', ['inspect', '-f', '{{.State.Status}}', containerName], { encoding: 'utf8' });
+    const result = childProcess.spawnSync('docker', ['inspect', '--type', 'container', '-f', '{{.State.Status}}', containerName], { encoding: 'utf8' });
     if (result.status === 0) return result.stdout.trim();
     return /No such (object|container)/i.test(result.stderr) ? 'missing' : `docker inspect failed: ${result.stderr.trim()}`;
   }
 
   function containerId(): string {
-    return docker(['inspect', '-f', '{{.Id}}', containerName]).trim();
+    return docker(['inspect', '--type', 'container', '-f', '{{.Id}}', containerName]).trim();
   }
 
   /** The lines that postAttachCommand wrote: one per attach of a window; -1 while the container does not run. */
