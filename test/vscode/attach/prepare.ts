@@ -22,6 +22,9 @@
 // With DEVSPACE_TEST_ATTACH_PREPARE=remote (the run `remote`, a CI job of its own), the devspace is on the Docker engine
 // of another computer instead, reached over SSH, and the engine of the runner gets a container with its name
 // (prepareRemote). That run has no plain container.
+// With DEVSPACE_TEST_ATTACH_PREPARE=update (the runs `previous` and `updated`, a CI job of its own), the test VS Code
+// also gets the last released version of the extension from the Marketplace, and the helper image is built from the
+// Dockerfile of that version (prepareUpdate). That run has no plain container.
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -133,9 +136,9 @@ function confirmAttach(extensionsDir: string): void {
 /**
  * trustedExtensionAuthAccess of the product.json of the test VS Code names the extension for `github`. Dev Containers
  * is installed into the extensions folder of @vscode/test-cli (which then does not install it again), without its
- * attach question.
+ * attach question. Returns the command line of the test VS Code.
  */
-async function trustExtension(): Promise<void> {
+async function trustExtension(): Promise<TestVscode> {
   const executable = await downloadAndUnzipVSCode(process.env.VSCODE_TEST_VERSION || 'stable');
   const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(executable);
   const install = childProcess.spawnSync(cli, [...cliArgs, '--install-extension', 'ms-vscode-remote.remote-containers'], { encoding: 'utf8' });
@@ -150,6 +153,14 @@ async function trustExtension(): Promise<void> {
   else product.trustedExtensionAuthAccess = { ...trusted, github: [...(trusted?.github ?? []), EXTENSION_ID] };
   fs.writeFileSync(productJson, JSON.stringify(product, null, '\t'));
   log.info(`${productJson}: trustedExtensionAuthAccess ${JSON.stringify(product.trustedExtensionAuthAccess)}`);
+  return { cli, cliArgs, extensionsDir };
+}
+
+/** The command line of the test VS Code (with its extensions folder and user data folder) and its extensions folder. */
+interface TestVscode {
+  cli: string;
+  cliArgs: string[];
+  extensionsDir: string;
 }
 
 function folderUri(containerName: string, folder: string, dockerContext?: string): string {
@@ -182,9 +193,12 @@ async function seedDevspace(docker: BootstrapDocker, helperTag: string): Promise
   return { devspaceId, name, folder };
 }
 
-/** The helper image on the engine of `docker`, built as the extension builds it. */
-async function helperImage(docker: BootstrapDocker, started: number): Promise<string> {
-  const helper = await new HelperImages({ docker, logger: log, dockerfilePath: path.join(ROOT, 'resources', 'helper', 'Dockerfile') }).ensureImageUse();
+/**
+ * The helper image on the engine of `docker`, built as the extension builds it, from the Dockerfile of this checkout or
+ * of another version of the extension (`dockerfilePath`): the tag comes from the text of the Dockerfile only.
+ */
+async function helperImage(docker: BootstrapDocker, started: number, dockerfilePath = path.join(ROOT, 'resources', 'helper', 'Dockerfile')): Promise<string> {
+  const helper = await new HelperImages({ docker, logger: log, dockerfilePath }).ensureImageUse();
   log.info(`Helper image ${helper.tag} (${((Date.now() - started) / 1000).toFixed(0)} s since the start).`);
   return helper.tag;
 }
@@ -257,14 +271,41 @@ async function prepareRemote(local: BootstrapDocker, dockerPath: string, started
   };
 }
 
+/**
+ * The runs `previous` and `updated`: the last released version of the extension, installed from the Marketplace into
+ * the extensions folder of the test VS Code as users install it, the helper image of that version (its Dockerfile can
+ * differ from the one of this checkout; that version restores the devspace at activation only when its helper tag
+ * exists), and the devspace without container. The seed names the version and the SHA-256 of its dist/extension.js, so
+ * that the run `previous` can check that VS Code loads it. The devspace has the volume labels of this checkout; a
+ * version that changes them must seed the devspace with the labels of the released version here.
+ */
+async function prepareUpdate(docker: BootstrapDocker, vscode: TestVscode, started: number): Promise<Record<string, unknown>> {
+  const install = childProcess.spawnSync(vscode.cli, [...vscode.cliArgs, '--install-extension', EXTENSION_ID], { encoding: 'utf8' });
+  log.info(`${EXTENSION_ID} from the Marketplace: exit code ${install.status}\n${install.stdout}${install.stderr}`);
+  if (install.status !== 0) throw new Error(`${EXTENSION_ID} could not be installed from the Marketplace.`);
+  const folders = fs.readdirSync(vscode.extensionsDir).filter((name) => name.toLowerCase().startsWith(`${EXTENSION_ID}-`));
+  if (folders.length !== 1) throw new Error(`${vscode.extensionsDir} has ${folders.length} folders of ${EXTENSION_ID}: ${folders.join(', ')}`);
+  const folder = path.join(vscode.extensionsDir, folders[0]);
+  const version = (JSON.parse(fs.readFileSync(path.join(folder, 'package.json'), 'utf8')) as { version: string }).version;
+  const extensionSha256 = crypto.createHash('sha256').update(fs.readFileSync(path.join(folder, 'dist', 'extension.js'))).digest('hex');
+  log.info(`The previous version ${version} is in ${folder} (dist/extension.js ${extensionSha256}).`);
+  const helper = await helperImage(docker, started, path.join(folder, 'resources', 'helper', 'Dockerfile'));
+  const { devspaceId, name, folder: repository } = await seedDevspace(docker, helper);
+  return {
+    devspace: { containerName: name, folder: repository, folderUri: folderUri(name, repository), user: 'node', devspaceId, previous: { version, extensionSha256 } },
+  };
+}
+
 async function main(): Promise<void> {
   if (process.env.CI !== 'true') throw new Error('The attach tests use the Docker engine as a real installation does. They run only on CI (CI=true).');
   const started = Date.now();
-  await trustExtension();
+  const vscode = await trustExtension();
   const dockerPath = findDockerCli(process.env, process.platform);
   if (!dockerPath) throw new Error('The Docker CLI was not found.');
   const docker = new BootstrapDocker(new NodeProcessRunner(), dockerPath, process.env, log);
-  const seed = process.env.DEVSPACE_TEST_ATTACH_PREPARE === 'remote' ? await prepareRemote(docker, dockerPath, started) : await prepareLocal(docker, started);
+  const kind = process.env.DEVSPACE_TEST_ATTACH_PREPARE;
+  const seed =
+    kind === 'remote' ? await prepareRemote(docker, dockerPath, started) : kind === 'update' ? await prepareUpdate(docker, vscode, started) : await prepareLocal(docker, started);
   const file = path.join(ROOT, 'out', 'test', 'vscode', 'attach', 'seed.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(seed, null, 2));
