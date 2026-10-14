@@ -60,6 +60,7 @@ later (`engines.vscode`) for the extension.
 - The engine range defines the compatible VS Code versions, and `extensionDependencies` the Dev Containers extension.
 - `main` selects the bundle `dist/extension.js`.
 - `contributes` declares the view, the commands, the menus, the settings and the icons.
+- `capabilities.untrustedWorkspaces` lets the extension run in a folder that VS Code does not trust (Restricted Mode). Its list `restrictedConfigurations` names every setting without the scope `application` or `machine`, so that VS Code ignores the values of the workspace or folder for it there. A new setting of that kind also goes into this list (a unit test in `src/vscode/settings.test.ts` checks it) and into the folder settings of `untrustedConfiguration` in `.vscode-test.mjs`.
 - The icon of the Marketplace is `resources/icon.png`, the sidebar icon `resources/icon.svg` on a blue tile, because the Marketplace takes no SVG icon. The description, categories, keywords and the banner color complete the Marketplace page.
 
 `README.md` is the page of the Marketplace and `CHANGELOG.md` its tab

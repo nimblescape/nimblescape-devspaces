@@ -232,7 +232,8 @@ describe('settings', () => {
 
   // Workspace Trust: in Restricted Mode, VS Code runs the extension and ignores the values of a workspace or folder for
   // the settings in restrictedConfigurations. A setting of the scope application or machine takes no such value
-  // anyway; every other setting must be in the list (test/vscode/untrusted/untrusted.test.ts checks it in VS Code).
+  // anyway; every other setting must be in the list (test/vscode/untrusted/untrusted.test.ts checks in VS Code that it
+  // ignores the folder values of the listed settings).
   it('declares limited support of untrusted workspaces, with every setting that a folder can set as restricted', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       capabilities?: { untrustedWorkspaces?: { supported?: unknown; description?: unknown; restrictedConfigurations?: string[] } };
