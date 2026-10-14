@@ -258,7 +258,7 @@ export const FLOW_REQUESTS: Readonly<Record<string, readonly HostCall[]>> = {
   [OP_MONITOR_RUN_NOW]: [],
   // The Git state of a release reads the record and records the state of its devspace (SCOPED_REQUESTS).
   [OP_RECORD_GIT_STATE]: ['record get', 'record recordGitSummary'],
-  // The open reads the registry (the entry, the devspace of the repository and the account, the volumes that other
+  // The open reads the registry (the entry, the devspace of the repository, its source and the account, the volumes that other
   // devspaces record), the windows and pending files of this computer, the account, the profile and the window's
   // lifecycle memory; it rebuilds the registry from the volumes before a first open (`record restore`); it writes the
   // records of the open (each for its devspace: SCOPED_REQUESTS), the pending file of the window, and the busy marks

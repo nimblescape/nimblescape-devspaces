@@ -559,6 +559,42 @@ describe('buildTreeModel', () => {
       expect(childRow(groups, 'acme/api', 'config').tooltip).toContain(TreeTexts.noDevspace);
     });
 
+    it('is collapsed while no child row has a devspace', () => {
+      const groups = buildTreeModel(
+        input({
+          discovery: discovery([repo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', python] })]),
+          settings: withImage,
+        }),
+      );
+      const api = node(groups, 'acme/api');
+      expect(api.expanded).toBe(false);
+      expect(api.children.map((child) => [child.label, child.devspace])).toEqual([
+        ['default', undefined],
+        ['config', undefined],
+        ['python', undefined],
+      ]);
+    });
+
+    it('reads the host access checks of every child row under the registry name of the devspaces of the repository', () => {
+      // The repository alice/tool was renamed to bob/tool on GitHub; its devspace keeps the old name, which the switch
+      // names (the name the pipeline reads): every row of the repository shows the same switch.
+      const moved = repo('bob/tool', { configPaths: ['.devcontainer/devcontainer.json', python] });
+      const groups = buildTreeModel(
+        input({
+          discovery: discovery([repo('acme/api')]),
+          devspaces: [devspace('e2', 'alice/tool', { configPath: python })],
+          repositoryLookups: new Map([['alice/tool', moved]]),
+          settings: { ...withImage, hostAccessChecksOff: ['alice/tool'] },
+        }),
+      );
+      const tool = node(groups, 'bob/tool');
+      expect(tool.children.map((child) => [child.label, child.devspace?.id, child.hostAccessChecks])).toEqual([
+        ['default', undefined, 'off'],
+        ['config', undefined, 'off'],
+        ['python', 'e2', 'off'],
+      ]);
+    });
+
     it('puts the default row last while the setting startWithDefaultImage is off', () => {
       const groups = buildTreeModel(
         input({ discovery: discovery([repo('acme/api')]), settings: { ...withImage, startWithDefaultImage: false } }),
@@ -909,7 +945,7 @@ describe('buildTreeModel', () => {
     });
     const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api')]), devspaces: [env] }));
     expect(row(groups, 'acme/api').tooltip).toBe(
-      ['acme/api', 'Stopped · 3 unpushed', 'Branch: main', 'Source: the configuration .devcontainer/devcontainer.json', 'Last used: T(2026-09-24T17:10:00.000Z)'].join('\n'),
+      ['acme/api', 'Source: the configuration .devcontainer/devcontainer.json', 'Stopped · 3 unpushed', 'Branch: main', 'Last used: T(2026-09-24T17:10:00.000Z)'].join('\n'),
     );
   });
 
@@ -931,7 +967,7 @@ describe('buildTreeModel', () => {
     expect(entry.state).toBeUndefined();
     expect(entry.devspace).toBeUndefined();
     expect(entry.description).toBe('');
-    expect(entry.tooltip).toBe(['acme/api', TreeTexts.noDevspace, 'Source: the configuration .devcontainer/devcontainer.json', 'Default branch: trunk'].join('\n'));
+    expect(entry.tooltip).toBe(['acme/api', 'Source: the configuration .devcontainer/devcontainer.json', TreeTexts.noDevspace, 'Default branch: trunk'].join('\n'));
   });
 
   it('keeps tree item IDs unique if the registry holds two devspaces of one repository', () => {

@@ -61,6 +61,36 @@ function setup(entries: readonly Devspace[], kept: readonly KeptVolume[] = []) {
   return { records, warnings, file: () => file };
 }
 
+describe('the source of a devspace in a change of the configuration', () => {
+  const PYTHON = '.devcontainer/python/devcontainer.json';
+  const IMAGE = 'ghcr.io/acme/base:latest';
+
+  it('a selected configuration of the source of the devspace: the root configuration under either file name, the folder of an alternative one', async () => {
+    const { records } = setup([entryOf(ID), entryOf(NEW, { configPath: PYTHON })]);
+    expect((await records.configuration(ID, { select: '.devcontainer.json' }))?.configPath).toBe('.devcontainer.json');
+    expect((await records.configuration(ID, { select: DEFAULT }))?.configPath).toBe(DEFAULT);
+    expect((await records.configuration(NEW, { select: PYTHON }))?.configPath).toBe(PYTHON);
+  });
+
+  it('refuses a selected configuration of another source, and writes nothing', async () => {
+    const { records, file } = setup([entryOf(ID), entryOf(NEW, { configPath: PYTHON })]);
+    await expect(records.configuration(ID, { select: PYTHON, shutdownActionNone: true })).rejects.toThrow('not the source of the devspace');
+    await expect(records.configuration(NEW, { select: DEFAULT })).rejects.toThrow('not the source of the devspace');
+    expect(file().devspaces.map((entry) => [entry.configPath, entry.shutdownActionNone])).toEqual([
+      [DEFAULT, undefined],
+      [PYTHON, undefined],
+    ]);
+  });
+
+  it('a default image only for a default-image devspace (its configuration is the root one)', async () => {
+    const { records, file } = setup([entryOf(ID), entryOf(NEW, { defaultImage: IMAGE })]);
+    expect((await records.configuration(NEW, { select: DEFAULT, defaultImage: 'ghcr.io/acme/base:2' }))?.defaultImage).toBe('ghcr.io/acme/base:2');
+    await expect(records.configuration(ID, { defaultImage: IMAGE })).rejects.toThrow('no default-image devspace');
+    await expect(records.configuration(NEW, { select: PYTHON })).rejects.toThrow('not the source of the devspace');
+    expect(file().devspaces.find((entry) => entry.id === ID)).not.toHaveProperty('defaultImage');
+  });
+});
+
 describe('the registry writes of an open: build numbers and volume names', () => {
   // There is no build change `checked`.
   it('a check of the images is no build change', () => {

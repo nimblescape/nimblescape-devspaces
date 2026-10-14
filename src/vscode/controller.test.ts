@@ -42,7 +42,7 @@ import { DOUBLE_CLICK_INTERVAL_MS, type ListOpenMode } from './rowActivation';
 import { DEFAULT_SETTINGS, SETTINGS_SECTION } from './settings';
 import { LOADED_CONTEXT_KEY, LOAD_FAILED_CONTEXT_KEY } from './sidebar';
 import { DEVSPACES_ONLY_CONTEXT_KEY } from './devspacesOnly';
-import { contextValue as treeContextValue, REPOSITORY_NODE_CONTEXT, rowActions } from './treeModel';
+import { contextValue as treeContextValue, REPOSITORY_NODE_CONTEXT, rowActions, type OwnerGroup } from './treeModel';
 import type { RemoteDockerCommands } from './remoteDockerCommands';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
 
@@ -240,6 +240,7 @@ interface Harness {
     render: ReturnType<typeof vi.fn>;
     refreshStates: ReturnType<typeof vi.fn>;
     repositoriesForPicker: ReturnType<typeof vi.fn>;
+    model: () => OwnerGroup[];
     trustedOwner: ReturnType<typeof vi.fn>;
     onSessionChanged: ReturnType<typeof vi.fn>;
     refreshDiscovery: ReturnType<typeof vi.fn>;
@@ -1322,6 +1323,13 @@ describe('Stop', () => {
     await run('stop', row('acme/web'));
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(Messages.noDevspace('acme/web'));
   });
+
+  it('names the child row of a repository with several sources when it has no devspace', async () => {
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    await run('stop', row('acme/api', undefined, undefined, DEFAULT_SOURCE));
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(Messages.noDevspace('acme/api · default'));
+  });
 });
 
 // Keep Running When Closed per devspace, stored in the registry. The Monitor never stops a kept devspace;
@@ -2113,6 +2121,20 @@ describe('Show on GitHub', () => {
     expect(fakeVscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ toString: expect.any(Function) }));
     expect(String(fakeVscode.env.openExternal.mock.calls[0][0])).toBe('https://github.com/acme/api');
   });
+
+  it('from the Command Palette: picks the repository only, never a source, also for a repository with several sources', async () => {
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] }));
+    let asked = 0;
+    fakeVscode.window.showQuickPick.mockImplementation(async (items: Array<{ repository?: RepositoryInfo }>) => {
+      asked += 1;
+      return items.find((item) => item.repository?.nameWithOwner === 'acme/api');
+    });
+    await run('showOnGitHub');
+    expect(asked).toBe(1);
+    expect(String(fakeVscode.env.openExternal.mock.calls[0][0])).toBe('https://github.com/acme/api');
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+  });
 });
 
 describe('Sign in and Refresh', () => {
@@ -2184,6 +2206,18 @@ describe('Window roles', () => {
     expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ source: DEFAULT_SOURCE }));
     expect(h.progressTitles[0]).toContain(Messages.opening('acme/api · default'));
     expect(h.statusBar.showConnected).toHaveBeenCalledWith('acme/api · default', 'main');
+  });
+
+  it('role A: the status bar takes the name of the devspace as the sidebar shows it when the states are refreshed', async () => {
+    const env = devspace();
+    await h.registry.add(env);
+    await h.controller.openAttachedWindow(env, CONTAINER, undefined);
+    expect(h.statusBar.showConnected).toHaveBeenLastCalledWith('acme/api', 'main');
+    // A default image is set: the repository has two sources now, and its rows are the child rows `default` and `config`.
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    h.controller.onStatesRefreshed();
+    expect(h.statusBar.showConnected).toHaveBeenLastCalledWith('acme/api · config', 'main');
   });
 
   it('role A: a restored window of a configuration devspace runs the pipeline with its configuration', async () => {
@@ -4081,6 +4115,32 @@ describe('the switch of the host access checks', () => {
     const settings = userSettings(undefined);
     fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.turnOffChecks);
     await run('turnOffHostAccessChecks', row('bob/tool', env));
+    expect(fakeVscode.window.showWarningMessage.mock.calls[0]?.[0]).toBe(Messages.hostAccessChecksOffConfirm('bob/tool'));
+    expect(settings.update).toHaveBeenCalledWith('hostAccessChecksOff', ['alice/tool'], fakeVscode.ConfigurationTarget.Global);
+  });
+
+  it('Turn Off Host Access Checks… on a child row without devspace writes the registry name of the devspaces of the repository', async () => {
+    // alice/tool was renamed to bob/tool; its `python` devspace keeps the old name. The `default` row has no devspace.
+    const env = devspace({ repository: 'alice/tool', configPath: '.devcontainer/python/devcontainer.json' });
+    await h.registry.add(env);
+    h.sidebar.model = () =>
+      [
+        {
+          kind: 'owner',
+          children: [
+            {
+              kind: 'repositoryNode',
+              children: [
+                { kind: 'repository', repository: 'bob/tool', source: DEFAULT_SOURCE, child: true },
+                { kind: 'repository', repository: 'bob/tool', source: PYTHON_SOURCE, child: true, devspace: env },
+              ],
+            },
+          ],
+        },
+      ] as unknown as OwnerGroup[];
+    const settings = userSettings(undefined);
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.turnOffChecks);
+    await run('turnOffHostAccessChecks', row('bob/tool', undefined, undefined, DEFAULT_SOURCE));
     expect(fakeVscode.window.showWarningMessage.mock.calls[0]?.[0]).toBe(Messages.hostAccessChecksOffConfirm('bob/tool'));
     expect(settings.update).toHaveBeenCalledWith('hostAccessChecksOff', ['alice/tool'], fakeVscode.ConfigurationTarget.Global);
   });

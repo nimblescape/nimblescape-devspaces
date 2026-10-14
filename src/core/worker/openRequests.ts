@@ -15,7 +15,7 @@ import { HelperOperationError } from '../helperChannel/helperChannel';
 import { dockerHostField, isOnDockerHost } from '../docker/dockerHost';
 import { devspaceImageName, isConfigPathLabelValue, repositoryFolder, resourceName } from '../names';
 import { ownerOf } from '../ownership';
-import { sourceSegment } from '../devspaceSource';
+import { sameSource, sourceSegment } from '../devspaceSource';
 import { parseImageReference } from '../remoteMonitor/protocol';
 import { isoTime } from '../ports';
 import type { BuildRecord, BusyMark, BusyOperation, ComposeBuildRecord, Devspace, DevspaceSource, GitHubAccount, GitSummary, RefusedUpdate, RegistryFile } from '../types';
@@ -602,6 +602,15 @@ export function requestOpenRecords(
       const admitted: ConfigurationChange = { ...change };
       return registry.update((file) =>
         recordsIn(file, (entry) => {
+          // A devspace never changes its source: a default image only for a default-image devspace, and a selected
+          // configuration only of the source of the devspace (the root configuration under its other file name is the
+          // same source; the configuration of a default-image devspace is the root one).
+          if (change.defaultImage !== undefined && entry.defaultImage === undefined) {
+            throw new HelperOperationError('invalid', 'The devspace of the request is no default-image devspace.', false);
+          }
+          if (change.select !== undefined && !sameSource({ kind: 'configuration', configPath: entry.configPath }, { kind: 'configuration', configPath: change.select })) {
+            throw new HelperOperationError('invalid', 'The selected configuration is not the source of the devspace.', false);
+          }
           const logger = leftOutLog(view.logger);
           if (change.addVolumes !== undefined) admitted.addVolumes = admittedVolumes(change.addVolumes, entry, file, logger);
           if (change.addServiceVolumes !== undefined) {

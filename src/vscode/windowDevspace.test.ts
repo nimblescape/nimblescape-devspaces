@@ -103,14 +103,24 @@ describe('the devspace of the window at its activation', () => {
 
 describe('the name of the devspace of the window, for the names of its workers', () => {
   const ID = '11111111-2222-4333-8444-555555555555';
-  const devspace = { id: ID, repository: 'majikmate/module-html-css-2', containerName: 'devspaces-majikmate-module-html-css-2-x-app-1' } as Devspace;
+  // A Docker Compose devspace of the configuration `python`: its container is named by Compose, its volume is its
+  // resource name.
+  const devspace = {
+    id: ID,
+    repository: 'majikmate/module-html-css-2',
+    volumeName: resourceName('majikmate/module-html-css-2', ID, 'python'),
+    containerName: 'devspaces-majikmate-module-html-css-2-x-app-1',
+  } as Devspace;
   const remote = { ...devspace, dockerHost: 'build-box' } as Devspace;
+  const old = { ...devspace, volumeName: resourceName('majikmate/module-html-css-2', ID), containerName: resourceName('majikmate/module-html-css-2', ID) } as Devspace;
 
-  it('is the resource name of the devspace of the attached container on its engine, also of Docker Compose', async () => {
+  it('is the resource name of the devspace of the attached container on its engine (with the word of its source), also of Docker Compose', async () => {
     const registry = { findByContainerName: vi.fn(async () => devspace) };
-    expect(await windowDevspaceName(devspace.containerName, '', registry)).toBe(resourceName(devspace.repository, ID));
+    expect(await windowDevspaceName(devspace.containerName, '', registry)).toBe(resourceName(devspace.repository, ID, 'python'));
     expect(registry.findByContainerName).toHaveBeenCalledWith(devspace.containerName);
-    expect(await windowDevspaceName(remote.containerName, 'build-box', { findByContainerName: async () => remote })).toBe(resourceName(devspace.repository, ID));
+    expect(await windowDevspaceName(remote.containerName, 'build-box', { findByContainerName: async () => remote })).toBe(resourceName(devspace.repository, ID, 'python'));
+    // A devspace of version 0.5.0 or older: its name has no word of its source.
+    expect(await windowDevspaceName(old.containerName, '', { findByContainerName: async () => old })).toBe(resourceName(devspace.repository, ID));
   });
 
   it('is undefined on another engine, for a window of no container, and for a container that the registry does not know', async () => {

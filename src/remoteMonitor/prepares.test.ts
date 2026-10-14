@@ -12,7 +12,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CHANNEL_ENTRY, OP_PREPARE, type PrepareValue } from '../core/helperChannel/protocol';
 import { PIPE_LOADER, bundleHash } from '../core/loader/pipeLoader';
-import { LABEL_DEVSPACE_ID, LABEL_PREPARED, LABEL_REPOSITORY, LABEL_VOLUME, preparedImageName, resourceName } from '../core/names';
+import { LABEL_CONFIG_PATH, LABEL_DEFAULT_IMAGE, LABEL_DEVSPACE_ID, LABEL_PREPARED, LABEL_REPOSITORY, LABEL_VOLUME, preparedImageName, resourceName } from '../core/names';
 import { PREPARE_LIMIT_MS } from '../core/pipeline/pipelineRules';
 import type { StartOptions, StartedProcess } from '../core/ports';
 import { storeWorkerScript, workerScriptPath } from '../core/remoteMonitor/workerScript';
@@ -105,6 +105,29 @@ describe('the devspaces of the prepares', () => {
       [resourceName(REPO_C, C)]: { [LABEL_DEVSPACE_ID]: C, [LABEL_REPOSITORY]: 'no slash' },
     });
     expect(await workspaceDevspaces(engine)).toEqual([{ id: A, repository: REPO_A }]);
+  });
+
+  it('are also the volumes named with the word of their source (version 0.6.0 and later), as their labels name it', async () => {
+    const D = 'dddddddddddd';
+    const E = 'eeeeeeeeeeee';
+    const F = 'ffffffffffff';
+    const python = '.devcontainer/python/devcontainer.json';
+    const { engine } = fakeEngine({
+      [resourceName(REPO_A, A, 'default')]: { [LABEL_DEVSPACE_ID]: A, [LABEL_REPOSITORY]: REPO_A, [LABEL_DEFAULT_IMAGE]: 'ghcr.io/acme/base:latest' },
+      [resourceName(REPO_B, B, 'config')]: { [LABEL_DEVSPACE_ID]: B, [LABEL_REPOSITORY]: REPO_B, [LABEL_CONFIG_PATH]: '.devcontainer/devcontainer.json' },
+      [resourceName(REPO_C, C, 'python')]: { [LABEL_DEVSPACE_ID]: C, [LABEL_REPOSITORY]: REPO_C, [LABEL_CONFIG_PATH]: python },
+      // The word of another source, or of none, is not the name of the devspace of the labels.
+      [resourceName(REPO_A, D, 'config')]: { [LABEL_DEVSPACE_ID]: D, [LABEL_REPOSITORY]: REPO_A, [LABEL_DEFAULT_IMAGE]: 'ghcr.io/acme/base:latest' },
+      [resourceName(REPO_B, E, 'python')]: { [LABEL_DEVSPACE_ID]: E, [LABEL_REPOSITORY]: REPO_B },
+      // A volume of version 0.5.0 or older, whose labels do not name its source.
+      ...volume(REPO_C, F),
+    });
+    expect(await workspaceDevspaces(engine)).toEqual([
+      { id: A, repository: REPO_A },
+      { id: B, repository: REPO_B },
+      { id: C, repository: REPO_C },
+      { id: F, repository: REPO_C },
+    ]);
   });
 
   it('are ordered by their last use (the newest heartbeat record first), then those without one by their ID', () => {
