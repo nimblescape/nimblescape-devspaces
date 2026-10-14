@@ -11,6 +11,7 @@
 // Dev Containers reads these settings at each attach; the variables of the devspace keep Git, Docker and gh on the
 // configuration of the devspace also then.
 import * as assert from 'assert';
+import { GH_HOSTS_FILE, GITHUB_TOKEN_FILE } from '../../../src/core/names';
 import { ENABLING_MACHINE_SETTINGS, assertOnlyDevspaceCredentials, channelLog, connectedFolder, credentialPaths, docker, execIn, printLogs, seed, waitFor } from './support';
 
 describe('the window of the devspace after a restart of VS Code', () => {
@@ -65,5 +66,11 @@ describe('the window of the devspace after a restart of VS Code', () => {
 
   it('still gives Git, Docker and the GitHub CLI only the configuration of the devspace', async () => {
     await assertOnlyDevspaceCredentials(user);
+  });
+
+  it('keeps the token of the owner in the memory of the container', () => {
+    // The next run (account.test.ts) checks that the token leaves the container; this shows that it was there.
+    assert.strictEqual(execIn(user, `test -s ${GITHUB_TOKEN_FILE}`).code, 0, 'The container has no token of the owner');
+    assert.strictEqual(execIn(user, `test -s ${GH_HOSTS_FILE}`).code, 0, 'The GitHub CLI of the container is not signed in');
   });
 });
