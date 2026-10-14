@@ -384,9 +384,9 @@ export class HelperChannel {
       // script is one long line). The script has short lines too, so readableStderr also drops the source excerpt by
       // its shape.
       const stderr = error ? '' : readableStderr(this.stderrTail, STDERR_TAIL_LENGTH);
-      // A process that the stop after a failed write ended (by a signal, so no exit code), and that said nothing: the
-      // write is the better reason.
-      if (!error && stderr === '' && exitCode === null && this.inputClosed) {
+      // The process ended after a failed write (write), and it wrote no error output: the failed write is the better
+      // reason.
+      if (!error && stderr === '' && this.inputClosed) {
         this.lose('its input cannot be written');
         return;
       }
@@ -445,7 +445,7 @@ export class HelperChannel {
    * daemon refused at once (the name of the container in use: openHelperChannel then takes the next name). Only the end
    * of the process says why (its error output, which the extension reads after this write), so the process is stopped
    * (in case it still runs), and the channel is lost with the reason of its end (start), as when the process ends after
-   * a write that succeeded.
+   * a write that succeeded; when the process wrote no error output, with the failed write.
    */
   private write(line: string): boolean {
     if (this.state === 'closed') return false;

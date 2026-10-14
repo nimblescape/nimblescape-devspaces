@@ -159,12 +159,35 @@ describe('HelperChannel', () => {
       'The helper channel to build-box could not be opened: the helper ended (docker: Error response from daemon: Conflict. The container name "/devspaces-api-worker1" is already in use by container "0123456789ab".)',
     );
 
-    // A process with a closed input that the stop ended, and that said nothing: the failed write is the reason.
-    let exitSilent!: (value: { exitCode: number | null }) => void;
-    const silent: StartedProcess = { ...ended, kill: () => exitSilent({ exitCode: null }), exited: new Promise((resolve) => (exitSilent = resolve)) };
-    await expect(HelperChannel.open(silent, 'SCRIPT', { logger, name: 'build-box' })).rejects.toThrow(
-      'The helper channel to build-box could not be opened: its input cannot be written',
-    );
+    // The other ends after a failed write: the error output also with an end by a signal; an error of the start of
+    // the process; no error output (the stop ended it, or on Windows taskkill with exit code 1): the failed write.
+    const ends: Array<{ output?: string; end: { exitCode: number | null; error?: Error }; reason: string }> = [
+      { output: 'docker: Error response from daemon: network bridge not found.\n', end: { exitCode: null }, reason: 'the helper ended (docker: Error response from daemon: network bridge not found.)' },
+      { end: { exitCode: null, error: new Error('spawn docker ENOENT') }, reason: 'the helper ended (spawn docker ENOENT)' },
+      { end: { exitCode: null }, reason: 'its input cannot be written' },
+      { end: { exitCode: 1 }, reason: 'its input cannot be written' },
+    ];
+    for (const { output, end, reason } of ends) {
+      let onStderr: ((text: string) => void) | undefined;
+      let finish!: (value: { exitCode: number | null; error?: Error }) => void;
+      const closed: StartedProcess = { ...ended, onStderr: (listener) => (onStderr = listener), exited: new Promise((resolve) => (finish = resolve)) };
+      const failed = HelperChannel.open(closed, 'SCRIPT', { logger, name: 'build-box' }).then(
+        () => undefined,
+        (error: Error) => error,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      if (output !== undefined) onStderr?.(output);
+      finish(end);
+      expect((await failed)?.message, reason).toBe(`The helper channel to build-box could not be opened: ${reason}`);
+    }
+  });
+
+  it('without a failed write, an end without error output names its exit code', async () => {
+    const fake = fakeProcess();
+    const { logger } = recordingLogger();
+    const opening = HelperChannel.open(fake.process, 'SCRIPT', { logger, name: 'build-box' });
+    fake.exit(null);
+    await expect(opening).rejects.toThrow('The helper channel to build-box could not be opened: the helper ended (exit code null)');
   });
 
   it('a long line of stderr (the source line of an uncaught error) is not in the reason, the loader line is', async () => {
@@ -339,6 +362,24 @@ describe('HelperChannel', () => {
     expect(fake.state.killed).toBe(true);
     expect(closed).toEqual(['the helper does not answer']);
     expect(lines).toContainEqual({ level: 'warn', text: 'The helper channel to build-box was lost: the helper does not answer.' });
+  });
+
+  it('takes an open channel whose input cannot be written as lost at once, and stops docker run', async () => {
+    const { channel, fake, lines } = await openChannel({ pingIntervalMs: 1_000 });
+    const closed: string[] = [];
+    channel.onClose((reason) => closed.push(reason));
+    // Its input is closed: the next ping cannot be written. The stop does not end it here, so the channel cannot wait
+    // for its end.
+    let kills = 0;
+    fake.process.kill = () => {
+      kills++;
+    };
+    fake.state.ended = true;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(channel.isOpen).toBe(false);
+    expect(closed).toEqual(['its input cannot be written']);
+    expect(kills).toBe(1);
+    expect(lines).toContainEqual({ level: 'warn', text: 'The helper channel to build-box was lost: its input cannot be written.' });
   });
 
   it('takes an invalid message of the helper as a lost channel', async () => {
