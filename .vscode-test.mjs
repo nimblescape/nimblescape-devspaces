@@ -121,8 +121,10 @@ function attachConfiguration(kind, index) {
   const extensionDevelopmentPath = [checkout, fileURLToPath(new URL('test/vscode/github', import.meta.url))];
   // `stopped` starts with a local folder; its tests start a second VS Code in the window of the devspace
   // (test/vscode/attach/stopped.test.ts): with an empty user data folder of its own (VS Code puts its socket there, so
-  // the path is short), the extensions of the test VS Code (@vscode/test-electron, getProfileArguments) and the
-  // arguments of the test VS Code (@vscode/test-electron, runTests), without tests.
+  // the path is short), the extensions folder of the test VS Code (@vscode/test-electron, getProfileArguments), where
+  // CI installed the extension and the sign-in provider from their VSIX files (scripts/install-attach-extensions.mjs),
+  // and the arguments of the test VS Code (@vscode/test-electron, runTests), without tests and without development
+  // extensions.
   const local = path.join(os.tmpdir(), `devspaces attach local ${checkoutId}`);
   const second = path.join(os.tmpdir(), `devspaces second ${checkoutId}`);
   const extensionsDir = path.join(checkout, '.vscode-test', 'extensions');
@@ -136,7 +138,6 @@ function attachConfiguration(kind, index) {
     args: [
       `--user-data-dir=${second}`,
       `--extensions-dir=${extensionsDir}`,
-      ...extensionDevelopmentPath.map((folder) => `--extensionDevelopmentPath=${folder}`),
       `--folder-uri=${seed.folderUri}`,
       '--disable-extension=vscode.github-authentication',
       '--no-sandbox',

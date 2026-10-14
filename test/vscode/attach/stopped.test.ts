@@ -4,18 +4,20 @@
 
 /// <reference types="mocha" />
 // Attach tests of a devspace window whose container stops or is removed while the window is attached (.vscode-test.mjs,
-// label attach, DEVSPACE_TEST_ATTACH=stopped). The tests cannot run in that window: when its remote connection drops,
-// VS Code cancels the test run (PR #18), and a window that the test VS Code opens runs the tests too. So the test VS Code
-// has a local folder, and the tests start a second VS Code (DEVSPACE_TEST_SECOND_VSCODE: its own user data folder, the
-// extensions of the test VS Code, no tests) in the window of the devspace, as a user starts VS Code. They stop or remove
-// the container from outside (as the Monitor, or a user with `docker stop` or `docker rm -f`), read the log of the
-// second VS Code, and start it again as the next reload of the window. The window checks its container with each
-// heartbeat (src/vscode/controller.ts, checkConnection) and then shows Reconnect in the status bar.
+// label attach, DEVSPACE_TEST_ATTACH=stopped). The tests cannot run in that window, and no window of development
+// extensions can stay open after its container stops: VS Code closes such a window when one of its extension hosts
+// ends, and the one in the container ends with the container (PR #18; a test window then ends with exit code 0). So the
+// test VS Code has a local folder, and the tests start a second VS Code (DEVSPACE_TEST_SECOND_VSCODE: its own user data
+// folder, the extensions folder of the test VS Code with the extension and the sign-in provider installed from their
+// VSIX files by scripts/install-attach-extensions.mjs, no tests) in the window of the devspace, as a user starts VS
+// Code. They stop or remove the container from outside (as the Monitor, or a user with `docker stop` or `docker rm -f`),
+// read the log of the second VS Code, and start it again as the next reload of the window. The window checks its
+// container with each heartbeat (src/vscode/controller.ts, checkConnection) and then shows Reconnect in the status bar.
 import * as assert from 'assert';
 import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { channelLog, docker, execIn, printLogs, seed, sessionLogs, waitFor } from './support';
+import { EXTENSION_ID, channelLog, docker, execIn, printLogs, seed, sessionLogs, waitFor } from './support';
 
 /** The second VS Code (.vscode-test.mjs): its user data folder, the extensions folder of the test VS Code, its arguments. */
 interface SecondVscode {
@@ -189,10 +191,10 @@ describe('a devspace window whose container stops or is removed', () => {
   it('a second VS Code opens the window of the devspace, which attaches', async function () {
     this.timeout(ATTACH_WAIT_MS + 60_000);
     console.log(`    the second VS Code: ${process.execPath} ${second.args.join(' ')}`);
-    assert.ok(
-      fs.existsSync(second.extensionsDir) && fs.readdirSync(second.extensionsDir).some((name) => name.startsWith('ms-vscode-remote.remote-containers-')),
-      `${second.extensionsDir} has no Dev Containers extension`,
-    );
+    const installed = fs.existsSync(second.extensionsDir) ? fs.readdirSync(second.extensionsDir) : [];
+    for (const id of ['ms-vscode-remote.remote-containers', EXTENSION_ID, 'nimblescape-test.devspaces-vscode-test-github']) {
+      assert.ok(installed.some((name) => name.startsWith(`${id}-`)), `${second.extensionsDir} has no ${id} (scripts/install-attach-extensions.mjs)`);
+    }
     assert.strictEqual(containerState(), 'running', 'The devspace does not run after the earlier runs');
     await startAndAttach(attaches());
     // One heartbeat after the attach, so that the window knows its container as running.
