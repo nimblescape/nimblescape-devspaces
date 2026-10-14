@@ -159,8 +159,8 @@ describe('HelperChannel', () => {
       'The helper channel to build-box could not be opened: the helper ended (docker: Error response from daemon: Conflict. The container name "/devspaces-api-worker1" is already in use by container "0123456789ab".)',
     );
 
-    // The other ends after a failed write: the error output also with an end by a signal; an error of the start of
-    // the process; no error output (the stop ended it, or on Windows taskkill with exit code 1): the failed write.
+    // The other kinds of end after a failed write: error output with an end by a signal; an error of the start; no error
+    // output (exit code null after the stop, or 1 after taskkill on Windows), where the reason is the failed write.
     const ends: Array<{ output?: string; end: { exitCode: number | null; error?: Error }; reason: string }> = [
       { output: 'docker: Error response from daemon: network bridge not found.\n', end: { exitCode: null }, reason: 'the helper ended (docker: Error response from daemon: network bridge not found.)' },
       { end: { exitCode: null, error: new Error('spawn docker ENOENT') }, reason: 'the helper ended (spawn docker ENOENT)' },
