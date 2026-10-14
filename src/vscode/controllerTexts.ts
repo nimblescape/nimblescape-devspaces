@@ -15,7 +15,6 @@ export const ControllerTexts = {
   deleting: (repository: string) => `Deleting the devspace of ${repository}…`,
   rebuilding: (repository: string) => `Rebuilding ${repository}…`,
   checkingChanges: (repository: string) => `Checking ${repository} for changes…`,
-  readingConfigurations: (repository: string) => `Reading the configurations of ${repository}…`,
   waitingForOtherWindow: (repository: string) => `Waiting until another window has finished changing ${repository}…`,
   // Messages.
   alreadyConnected: (repository: string) => `This window is connected to ${repository}.`,
@@ -80,11 +79,10 @@ export const ControllerTexts = {
   selectDevspaceToStopWhenClosed: 'Select a devspace to stop when closed',
   selectDevspaceToDelete: 'Select a devspace to delete',
   selectDevspaceToRebuild: 'Select a devspace to rebuild',
-  /** Start with Default Image without the setting defaultImage. */
-  noDefaultImage: 'No default image is set. Set the setting devspaces.defaultImage first.',
-  selectRepositoryForConfiguration: 'Select a repository to select its configuration',
   selectRepositoryForGitHub: 'Select a repository to show on GitHub',
-  selectConfigurationTitle: 'Select Configuration',
-  configurationPlaceholder: (repository: string) => `Select a configuration of ${repository}`,
-  current: 'current',
+  /** The Quick Pick of the source of a repository with several sources (sourceChoices), after a pick of the repository. */
+  selectSourceTitle: 'Select Source',
+  sourcePlaceholder: (repository: string) => `Select what ${repository} starts from: the default image or a configuration`,
+  /** The marker of a source whose devspace exists (sourceChoices). */
+  devspaceExists: 'devspace exists',
 } as const;

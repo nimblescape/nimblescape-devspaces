@@ -14,6 +14,7 @@ import type {
   BusyMark,
   BusyOperation,
   Devspace,
+  DevspaceSource,
   GitHubAccount,
   KeptVolume,
   RefusedUpdate,
@@ -25,6 +26,7 @@ import { errorCode, isStorageId, isTransientFsError, parseJson, readTextFile, re
 import { isRecord } from '../valueChecks';
 import { parseImageReference } from '../remoteMonitor/protocol';
 import { DEFAULT_CONFIG_PATH } from '../pipeline/recordRules';
+import { isSourceOf, sourceOf } from '../devspaceSource';
 
 /** The registry format that this version reads and writes. */
 export const REGISTRY_VERSION = 1;
@@ -60,20 +62,22 @@ const MAX_TRANSIENT_LOCK_ERRORS = 50;
 const EPOCH = new Date(0).toISOString();
 
 /**
- * True if `devspace` is the devspace of the repository `owner/name` (ignoring case) of the GitHub account
- * `accountId` on the Docker host `dockerHost` ('' = the local Docker). A repository has at most one devspace per
- * account and Docker host.
+ * True if `devspace` is a devspace of the repository `owner/name` (ignoring case) of the GitHub account `accountId`
+ * on the Docker host `dockerHost` ('' = the local Docker), and, with `source`, the devspace of that source
+ * (isSourceOf). A repository has at most one devspace per account, Docker host and source.
  */
 export function isDevspaceOf(
-  devspace: Pick<Devspace, 'repository' | 'owner' | 'dockerHost'>,
+  devspace: Pick<Devspace, 'repository' | 'owner' | 'dockerHost' | 'configPath' | 'defaultImage'>,
   repository: string,
   accountId: string,
   dockerHost = '',
+  source?: DevspaceSource,
 ): boolean {
   return (
     devspace.repository.toLowerCase() === repository.toLowerCase() &&
     devspace.owner.id === accountId &&
-    isOnDockerHost(devspace, dockerHost)
+    isOnDockerHost(devspace, dockerHost) &&
+    (source === undefined || isSourceOf(devspace, source))
   );
 }
 
@@ -132,11 +136,13 @@ export class DevspaceRegistry {
   }
 
   /**
-   * Finds the devspace of `owner/name` (ignoring case) of the GitHub account `accountId` on the Docker host
-   * `dockerHost` ('' = the local Docker).
+   * Finds the devspace of `source` of `owner/name` (ignoring case) of the GitHub account `accountId` on the Docker
+   * host `dockerHost` ('' = the local Docker). Without `source`: any devspace of the repository there (the most
+   * recently used one first).
    */
-  async findForAccount(repository: string, accountId: string, dockerHost = ''): Promise<Devspace | undefined> {
-    return (await this.list()).find((devspace) => isDevspaceOf(devspace, repository, accountId, dockerHost));
+  async findForAccount(repository: string, accountId: string, dockerHost = '', source?: DevspaceSource): Promise<Devspace | undefined> {
+    const found = (await this.list()).filter((devspace) => isDevspaceOf(devspace, repository, accountId, dockerHost, source));
+    return found.sort((a, b) => Date.parse(b.lastUsedAt) - Date.parse(a.lastUsedAt))[0];
   }
 
   /** Finds the devspace of a container name, with or without the leading `/` of `docker inspect`. */
@@ -164,8 +170,9 @@ export class DevspaceRegistry {
 
   /**
    * Adds a devspace. Throws if a devspace with the same ID exists, or one of the same repository (ignoring
-   * case) and the same owner account: one devspace per repository and GitHub account. The check runs under the lock,
-   * so two windows of one account that start the same repository at the same time cannot both add a devspace.
+   * case), the same owner account, the same Docker host and the same source (isDevspaceOf): one devspace per
+   * repository, GitHub account and source. The check runs under the lock, so two windows of one account that start
+   * the same source of a repository at the same time cannot both add a devspace.
    */
   async add(devspace: Devspace): Promise<void> {
     const accountId = devspace.owner.id;
@@ -173,7 +180,7 @@ export class DevspaceRegistry {
       if (file.devspaces.some((existing) => existing.id === devspace.id)) {
         throw new Error(`The devspace ${devspace.id} exists already.`);
       }
-      if (file.devspaces.some((existing) => isDevspaceOf(existing, devspace.repository, accountId, dockerHostOf(devspace)))) {
+      if (file.devspaces.some((existing) => isDevspaceOf(existing, devspace.repository, accountId, dockerHostOf(devspace), sourceOf(devspace)))) {
         throw new Error(`A devspace of ${devspace.repository} of the GitHub account ${accountId} exists already.`);
       }
       file.devspaces.push(devspace);

@@ -9,7 +9,7 @@
 import type { ConfigurationChangeKind } from '../ports';
 import { OP_DELETE, OP_DELETE_CHECK, OP_HEARTBEAT, OP_LIST_CONFIGURATIONS, OP_MONITOR_ENSURE, OP_MONITOR_RUN_NOW, OP_OPEN, OP_PREPARE, OP_RECONCILE, OP_RECORD_GIT_STATE, OP_STOP, OP_TOKEN_REMOVE, OP_WINDOW_STATE, SECRET_REGISTRY, SECRET_TOKEN, type AskKind } from '../helperChannel/protocol';
 import type { BusyMarkResult } from '../pipeline/busyMarks';
-import type { BusyMark, BusyOperation, Devspace, GitHubAccount, GitSummary, RegistryFile, WindowStatus } from '../types';
+import type { BusyMark, BusyOperation, Devspace, DevspaceSource, GitHubAccount, GitSummary, RegistryFile, WindowStatus } from '../types';
 import type { DeleteConfirmation } from '../pipeline/deleteCheck';
 import type { GitHubViewer } from '../helper/containerGit';
 import type { BuildChange, ConfigurationChange, LifecycleMarkChange, StepMarkResult } from '../pipeline/openRecords';
@@ -67,7 +67,8 @@ export interface HostRecords {
   read(): Promise<RegistryFile>;
   get(id: string): Promise<Devspace | undefined>;
   list(): Promise<Devspace[]>;
-  findForAccount(repository: string, accountId: string, dockerHost: string): Promise<Devspace | undefined>;
+  /** With `source`: the devspace of that source of the repository; without: any devspace of the repository. */
+  findForAccount(repository: string, accountId: string, dockerHost: string, source?: DevspaceSource): Promise<Devspace | undefined>;
   // There is no generic `add` or `update`: an entry is added only as `record createDevspace`, and changed only by
   // the specific requests below.
   remove(id: string, volumes: { kept?: readonly string[]; removed?: readonly string[] }): Promise<void>;
@@ -120,12 +121,13 @@ export interface HostRecords {
   /** `record openFinished`; the time and the liveness are the extension's. */
   openFinished(devspaceId: string, finish: HostOpenFinish, scope?: OpenRequestScope): Promise<Devspace | undefined>;
   /**
-   * `record createDevspace`, the entry of a first open: the worker picks its ID and names the repository and the
-   * configuration; the extension builds the rest (its account, clock and create mark, the Docker host of the operation)
-   * and binds the operation to the devspace. The answer is the new entry, or the one of the repository that another
-   * window of the account created meanwhile.
+   * `record createDevspace`, the entry of a first open: the worker picks its ID and names the repository, the
+   * configuration and, for a default-image devspace, its default image; the extension builds the rest (its account,
+   * clock and create mark, the Docker host of the operation, the names) and binds the operation to the devspace. The
+   * answer is the new entry, or the one of the source of the repository that another window of the account created
+   * meanwhile.
    */
-  createDevspace(id: string, repository: string, configPath: string, scope?: OpenRequestScope): Promise<Devspace>;
+  createDevspace(id: string, repository: string, configPath: string, scope?: OpenRequestScope, defaultImage?: string): Promise<Devspace>;
   /** `record dropCreated`, only the entry that the operation created, with the create mark of the window. */
   dropCreated(devspaceId: string, scope?: OpenRequestScope): Promise<void>;
   /** `record configuration`; a volume that the entry may not record is left out (and logged). */
@@ -212,7 +214,7 @@ export const FLOW_REQUESTS: Readonly<Record<string, readonly HostCall[]>> = {
   [OP_TOKEN_REMOVE]: ['record get'],
   // Stop needs nothing from this computer (its parameters carry what it needs; the extension records the Git state).
   [OP_STOP]: [],
-  // The listing of Select configuration reads the record and the account; no secret, no write.
+  // The listing of the configurations reads the record and the account; no secret, no write.
   [OP_LIST_CONFIGURATIONS]: ['record get', 'local account'],
   // The reads of an attached window need nothing from this computer.
   [OP_WINDOW_STATE]: [],

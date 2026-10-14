@@ -7,7 +7,7 @@
 /**
  * What the command asked for: `default` is plain Start (and the switcher, Search, and "Open devspace" of Delete),
  * which follows the setting openInNewWindow; `newWindow` is Start in New Window; `currentWindow` is Start in Current
- * Window, and also Select configuration…, which changes what this window shows.
+ * Window.
  */
 export type WindowRequest = 'default' | 'newWindow' | 'currentWindow';
 

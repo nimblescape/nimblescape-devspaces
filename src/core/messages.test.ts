@@ -168,17 +168,17 @@ describe('helperFailedOpenedAsItIs', () => {
 });
 
 // The question of a switch from Docker Compose to a single container names the switch with the configuration path, what
-// Rebuild now removes, and points to Select configuration…, also in the window that is connected.
+// Rebuild now removes, and points to the row of a Docker Compose configuration, also in the window that is connected.
 describe('the question of a switch from Docker Compose to a single container', () => {
   const configPath = '.devcontainer/python/devcontainer.json';
   it.each([
     ['at an open', Messages.configurationKindChanged(true, configPath)],
-  ])('names the switch, what Rebuild now removes, and Select configuration… (%s)', (_where, text) => {
+  ])('names the switch, what Rebuild now removes, and the row of a Docker Compose configuration (%s)', (_where, text) => {
     expect(text).toContain(`The containers of this devspace use Docker Compose, but the configuration ${configPath} uses a single container.`);
     expect(text).toContain(
       'Rebuild now switches the devspace to a single container: it removes the containers of the other services and the files outside the volumes; named volumes are kept.',
     );
-    expect(text).toContain('To use the Docker Compose configuration of the repository, choose Select configuration… in the list of devspaces.');
+    expect(text).toContain('A Docker Compose configuration of the repository, if it has one, is its own row in the list of devspaces.');
   });
 });
 

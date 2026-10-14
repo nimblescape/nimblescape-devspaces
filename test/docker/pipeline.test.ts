@@ -37,6 +37,8 @@ import {
   TOKEN_FOLDER,
   TOKEN_TMPFS,
   LABEL_BUILD_RECORD,
+  LABEL_CONFIG_PATH,
+  LABEL_DEFAULT_IMAGE,
   LABEL_DEVSPACE_ID,
   LABEL_HELPER_RUN,
   LABEL_OWNER_ID,
@@ -46,6 +48,8 @@ import {
   resourceName,
 } from '../../src/core/names';
 import type { DeleteConfirmation } from '../../src/core/pipeline/deleteCheck';
+import { sourceSegment } from '../../src/core/devspaceSource';
+import type { DevspaceSource } from '../../src/core/types';
 import { isoTime, systemClock } from '../../src/core/ports';
 import { NodeProcessRunner } from '../../src/core/process';
 import { scriptCommand } from '../../src/core/worker/containerScripts';
@@ -1110,10 +1114,8 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     }
   });
 
-  it('default image: the open builds from the image in place of the configuration and records it; Start with Configuration builds again from the Dockerfile', async () => {
-    const id = newDevspaceId();
+  it('default image: the default-image devspace builds from the image, the configuration devspace from the Dockerfile; both run next to each other and come back after a lost registry', async () => {
     const repository = 'devspaces-test/default-image';
-    const name = resourceName(repository, id);
     const config = JSON.stringify({
       name: 'Default image',
       build: { dockerfile: 'Dockerfile' },
@@ -1121,25 +1123,51 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
     });
     // The Dockerfile leaves a file that the default image does not have.
     const dockerfile = [`FROM ${TEST_BASE_IMAGE}`, 'RUN touch /from-dockerfile', `LABEL ${TEST_RUN_LABEL}=${run.runId}`].join('\n');
-    await createVolume(docker, name, { [LABEL_DEVSPACE_ID]: id, [LABEL_REPOSITORY]: repository, [TEST_RUN_LABEL]: run.runId });
-    const seeded = await runInVolume(docker, name, ['sh', '-c', SEED_SCRIPT, 'sh', '/workspaces/default-image', config, dockerfile]);
-    expect(seeded.exitCode, seeded.stderr).toBe(0);
-    const now = isoTime(systemClock);
-    await registry.add({ id, repository, configPath: CONFIG_PATH, volumeName: name, containerName: name, createdAt: now, lastUsedAt: now, owner: TEST_ACCOUNT });
-    const fromDockerfile = () => cli.run(['exec', name, 'sh', '-c', 'test -e /from-dockerfile && echo present || echo missing']).out;
+    // One devspace per source: the default-image devspace and the configuration devspace of the repository, each with
+    // its own volume and container, named with the word of its source (`default`, `config`).
+    const sources: DevspaceSource[] = [
+      { kind: 'defaultImage', image: TEST_BASE_IMAGE },
+      { kind: 'configuration', configPath: CONFIG_PATH },
+    ];
+    const entries = sources.map((source) => {
+      const id = newDevspaceId();
+      return { source, id, name: resourceName(repository, id, sourceSegment(source)) };
+    });
+    const fromDockerfile = (name: string) => cli.run(['exec', name, 'sh', '-c', 'test -e /from-dockerfile && echo present || echo missing']).out;
     try {
-      // The first open with the default image: the configuration of the repository (its Dockerfile, its runArgs) is
+      const now = isoTime(systemClock);
+      for (const { source, id, name } of entries) {
+        const sourceLabels: Record<string, string> = source.kind === 'defaultImage' ? { [LABEL_DEFAULT_IMAGE]: source.image } : { [LABEL_CONFIG_PATH]: source.configPath };
+        await createVolume(docker, name, { [LABEL_DEVSPACE_ID]: id, [LABEL_REPOSITORY]: repository, [LABEL_OWNER_ID]: TEST_ACCOUNT.id, ...sourceLabels, [TEST_RUN_LABEL]: run.runId });
+        const seeded = await runInVolume(docker, name, ['sh', '-c', SEED_SCRIPT, 'sh', '/workspaces/default-image', config, dockerfile]);
+        expect(seeded.exitCode, seeded.stderr).toBe(0);
+        // The kind of the devspace is fixed in its entry (Devspace.defaultImage).
+        await registry.add({
+          id,
+          repository,
+          configPath: CONFIG_PATH,
+          ...(source.kind === 'defaultImage' ? { defaultImage: source.image } : {}),
+          volumeName: name,
+          containerName: name,
+          createdAt: now,
+          lastUsedAt: now,
+          owner: TEST_ACCOUNT,
+        });
+      }
+      const [defaultImage, configuration] = entries;
+      expect(defaultImage.name).toMatch(/^devspaces-devspaces-test-default-image-default-[a-z]+-[a-z]+$/);
+      expect(configuration.name).toMatch(/^devspaces-devspaces-test-default-image-config-[a-z]+-[a-z]+$/);
+
+      // The open of the default-image devspace: the configuration of the repository (its Dockerfile, its runArgs) is
       // not read; the synthesized configuration `{ "image": … }` goes to the Dev Container CLI in its place.
       const events = ui.events.length;
-      await timings.measure('first open with the default image', () =>
-        service.openDevspaceInWorker(id, { progress: new RecordingProgress(), source: { kind: 'defaultImage', image: TEST_BASE_IMAGE } }),
-      );
-      const container = cli.container(name);
+      await timings.measure('open of the default-image devspace', () => service.openDevspaceInWorker(defaultImage.id, { progress: new RecordingProgress() }));
+      let container = cli.container(defaultImage.name);
       expect(container?.State.Running).toBe(true);
-      expect(container?.Config.Image).toBe(`${devspaceImageRepository(repository, id)}:1`);
+      expect(container?.Config.Image).toBe(`${devspaceImageRepository(repository, defaultImage.id)}:1`);
       expect(container?.Config.Labels?.[TEST_RUN_LABEL]).toBeUndefined();
-      expect(fromDockerfile()).toBe('missing');
-      let entry = await registry.get(id);
+      expect(fromDockerfile(defaultImage.name)).toBe('missing');
+      let entry = await registry.get(defaultImage.id);
       expect(entry?.defaultImage).toBe(TEST_BASE_IMAGE);
       expect(entry?.buildRecord).toMatchObject({ buildNumber: 1, configPath: CONFIG_PATH, defaultImage: TEST_BASE_IMAGE, features: {} });
       // The record in the labels of the image names the default image too (adoptImageRecord restores it).
@@ -1147,27 +1175,36 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
       expect(JSON.parse(labels[LABEL_BUILD_RECORD] ?? '{}')).toMatchObject({ defaultImage: TEST_BASE_IMAGE });
       expect(ui.since(events)).toEqual([]);
 
-      // Start with Configuration: the source changed, so the devspace is built again from the Dockerfile without a
-      // question, and the container is created again.
-      const mark = logMark();
-      await timings.measure('open with the configuration after the default image', () =>
-        service.openDevspaceInWorker(id, { progress: new RecordingProgress(), source: { kind: 'configuration' } }),
-      );
-      expect(logSince(mark)).toContain(`Source of ${repository}: the default image ${TEST_BASE_IMAGE} → the configuration ${CONFIG_PATH}. The devspace is built again.`);
-      expect(cli.container(name)?.State.Running).toBe(true);
-      expect(cli.container(name)?.Config.Image).toBe(`${devspaceImageRepository(repository, id)}:2`);
-      expect(cli.container(name)?.Config.Labels?.[TEST_RUN_LABEL]).toBe(run.runId);
-      expect(fromDockerfile()).toBe('present');
-      entry = await registry.get(id);
+      // The open of the configuration devspace, while the default-image devspace runs: built from the Dockerfile, with
+      // the runArgs of the configuration; the default-image devspace is not touched.
+      await timings.measure('open of the configuration devspace next to it', () => service.openDevspaceInWorker(configuration.id, { progress: new RecordingProgress() }));
+      container = cli.container(configuration.name);
+      expect(container?.State.Running).toBe(true);
+      expect(container?.Config.Image).toBe(`${devspaceImageRepository(repository, configuration.id)}:1`);
+      expect(container?.Config.Labels?.[TEST_RUN_LABEL]).toBe(run.runId);
+      expect(fromDockerfile(configuration.name)).toBe('present');
+      entry = await registry.get(configuration.id);
       expect(entry?.defaultImage).toBeUndefined();
-      expect(entry?.buildRecord?.buildNumber).toBe(2);
+      expect(entry?.buildRecord).toMatchObject({ buildNumber: 1, configPath: CONFIG_PATH });
       expect(entry?.buildRecord?.defaultImage).toBeUndefined();
+      expect(cli.container(defaultImage.name)?.State.Running).toBe(true);
+      expect(fromDockerfile(defaultImage.name)).toBe('missing');
       expect(ui.since(events)).toEqual([]);
+
+      // A lost registry: both devspaces come back from the labels of their volumes, each with its source (the rebuild
+      // of the registry by the worker, `reconcile`; its entries come back as `record restore`).
+      for (const { id } of entries) await registry.remove(id);
+      expect(await service.reconcileInWorker({ passive: false })).toBeGreaterThanOrEqual(2);
+      expect((await registry.get(defaultImage.id))?.defaultImage).toBe(TEST_BASE_IMAGE);
+      expect((await registry.get(configuration.id))?.defaultImage).toBeUndefined();
+      expect((await registry.get(configuration.id))?.configPath).toBe(CONFIG_PATH);
     } finally {
-      await registry.remove(id);
-      cli.run(['rm', '-f', name]);
-      for (const image of cli.lines(['image', 'ls', '-q', devspaceImageRepository(repository, id)])) cli.run(['image', 'rm', '-f', image]);
-      cli.run(['volume', 'rm', name]);
+      for (const { id, name } of entries) {
+        await registry.remove(id);
+        cli.run(['rm', '-f', name]);
+        for (const image of cli.lines(['image', 'ls', '-q', devspaceImageRepository(repository, id)])) cli.run(['image', 'rm', '-f', image]);
+        cli.run(['volume', 'rm', name]);
+      }
     }
   });
 
@@ -1232,15 +1269,6 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
         }
       }
     }
-  });
-
-  it('the listing of the configuration picker runs in exactly one batch helper under the lock and leaves none', async () => {
-    // The listing in the worker (`listConfigurations`); its batch helpers are counted by the step `batch` that the
-    // worker reports.
-    const stepsBefore = window.steps.length;
-    expect(await service.listConfigurationsInWorker(devspaceId, { progress: new RecordingProgress() })).toEqual([CONFIG_PATH]);
-    expect(window.batchesOf(volumeName, stepsBefore)).toBe(1);
-    expect(helperContainers()).toEqual([]);
   });
 
   it('the safety check of a volume without the repository folder runs no batch helper and gives the recorded state', async () => {

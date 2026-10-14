@@ -224,7 +224,7 @@ describe('the flows through a real worker', () => {
     expect(await read('devspaces-test-window-missing', false)).toEqual({ state: 'missing' });
   });
 
-  // The listing of Select configuration by the worker's own pipeline: the record and the account from this computer,
+  // The listing of the configurations by the worker's own pipeline: the record and the account from this computer,
   // the volume and its labels from the engine, the lock taken in the worker, and the step listConfigs in a batch helper
   // that the worker starts from its own image; it is gone afterwards. A lock held elsewhere is refused as busy after
   // the wait for the lock.

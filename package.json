@@ -190,16 +190,6 @@
         "icon": "$(play)"
       },
       {
-        "command": "devspaces.startWithDefaultImage",
-        "title": "Start with Default Image",
-        "category": "Devspaces"
-      },
-      {
-        "command": "devspaces.startWithConfiguration",
-        "title": "Start with Configuration",
-        "category": "Devspaces"
-      },
-      {
         "command": "devspaces.stop",
         "title": "Stop",
         "category": "Devspaces",
@@ -210,11 +200,6 @@
         "title": "Delete",
         "category": "Devspaces",
         "icon": "$(trash)"
-      },
-      {
-        "command": "devspaces.selectConfiguration",
-        "title": "Select Configuration…",
-        "category": "Devspaces"
       },
       {
         "command": "devspaces.rebuild",
@@ -397,14 +382,6 @@
           "when": "config.devspaces.openInNewWindow"
         },
         {
-          "command": "devspaces.startWithDefaultImage",
-          "when": "devspaces.hasDefaultImage && !config.devspaces.startWithDefaultImage"
-        },
-        {
-          "command": "devspaces.startWithConfiguration",
-          "when": "devspaces.hasDefaultImage && config.devspaces.startWithDefaultImage"
-        },
-        {
           "command": "devspaces.switchDevspaceInNewWindow",
           "when": "!config.devspaces.openInNewWindow"
         },
@@ -549,16 +526,6 @@
           "group": "1_actions@2"
         },
         {
-          "command": "devspaces.startWithConfiguration",
-          "when": "view == devspaces.repositories && viewItem =~ /canChooseSource/ && devspaces.hasDefaultImage && config.devspaces.startWithDefaultImage",
-          "group": "1_actions@3"
-        },
-        {
-          "command": "devspaces.startWithDefaultImage",
-          "when": "view == devspaces.repositories && viewItem =~ /canChooseSource/ && devspaces.hasDefaultImage && !config.devspaces.startWithDefaultImage",
-          "group": "1_actions@3"
-        },
-        {
           "command": "devspaces.stop",
           "when": "view == devspaces.repositories && viewItem =~ /canStop/",
           "group": "1_actions@4"
@@ -582,11 +549,6 @@
           "command": "devspaces.closeAndKeepRunning",
           "when": "view == devspaces.repositories && viewItem =~ /;canCloseAndKeepRunning(;|$)/",
           "group": "1_actions@7"
-        },
-        {
-          "command": "devspaces.selectConfiguration",
-          "when": "view == devspaces.repositories && viewItem =~ /multiConfig/",
-          "group": "2_more@2"
         },
         {
           "command": "devspaces.rebuild",
@@ -621,16 +583,6 @@
           "group": "0_start@1"
         },
         {
-          "command": "devspaces.startWithConfiguration",
-          "when": "viewItem =~ /canChooseSource/ && devspaces.hasDefaultImage && config.devspaces.startWithDefaultImage",
-          "group": "0_start@2"
-        },
-        {
-          "command": "devspaces.startWithDefaultImage",
-          "when": "viewItem =~ /canChooseSource/ && devspaces.hasDefaultImage && !config.devspaces.startWithDefaultImage",
-          "group": "0_start@2"
-        },
-        {
           "command": "devspaces.keepRunning",
           "when": "viewItem =~ /;canKeepRunning(;|$)/",
           "group": "1_more@5"
@@ -644,11 +596,6 @@
           "command": "devspaces.closeAndKeepRunning",
           "when": "viewItem =~ /;canCloseAndKeepRunning(;|$)/",
           "group": "1_more@6"
-        },
-        {
-          "command": "devspaces.selectConfiguration",
-          "when": "viewItem =~ /multiConfig/",
-          "group": "1_more@2"
         },
         {
           "command": "devspaces.rebuild",
@@ -697,13 +644,13 @@
           "type": "string",
           "scope": "application",
           "default": "",
-          "markdownDescription": "An image that **Start** uses in place of the Dev Container configuration of the repository, for example `ghcr.io/majikmate/devcontainer-base:latest`.\n\nThe devspace is created from this image alone: the `devcontainer.json` of the repository (its Dockerfile, Features, lifecycle commands, mounts, ports and extensions) is not read; the metadata of the image applies. The repository is cloned as usual. The sidebar then lists the repositories without a Dev Container configuration too: they start from this image. Empty: every start uses the configuration of the repository, and only repositories with one are listed.\n\nWith a default image, **Start With Default Image** decides what plain **Start** uses; the context menu of a row offers the other choice. Switching a devspace between the two creates its container again (the files in its workspace stay)."
+          "markdownDescription": "An image that a devspace can be created from in place of the Dev Container configuration of the repository, for example `ghcr.io/majikmate/devcontainer-base:latest`.\n\nWith a default image, every repository gets a `default` row in the sidebar next to the rows of its configurations (child rows under the repository name), and each row has its own devspace: the default-image devspace and the configuration devspace of a repository can run at the same time. A repository without a Dev Container configuration is listed too and starts from the default image alone.\n\nThe `default` devspace is created from this image alone: the `devcontainer.json` of the repository (its Dockerfile, Features, lifecycle commands, mounts, ports and extensions) is not read; the metadata of the image applies. The repository is cloned as usual. A devspace keeps the image it was created from; a changed setting asks **Rebuild now** or **Later** on its next start.\n\nEmpty: every devspace uses a configuration of the repository, and only repositories with one are listed."
         },
         "devspaces.startWithDefaultImage": {
           "type": "boolean",
           "scope": "application",
           "default": true,
-          "markdownDescription": "Only with **Default Image** set.\n\n- On: **Start** uses the default image, and the context menu offers **Start with Configuration**\n- Off: **Start** uses the configuration of the repository, and the context menu offers **Start with Default Image**\n\nA repository without a Dev Container configuration starts from the default image either way."
+          "markdownDescription": "Only with **Default Image** set: the place of the `default` row among the child rows of a repository.\n\n- On: the `default` row comes first, before the rows of the configurations\n- Off: the `default` row comes last\n\nEvery row keeps its own **Start**; the setting changes the order only."
         },
         "devspaces.stopOnClose": {
           "type": "boolean",

@@ -145,7 +145,7 @@ export const OPERATIONS: Readonly<Record<string, OperationHandler>> = {
   [OP_TOKEN_REMOVE]: tokenRemoveOperation(ENGINE_OF),
   // Stop, under the lock that the operation takes itself.
   [OP_STOP]: stopOperation(ENGINE_OF),
-  // The listing of Select configuration, by the worker's own pipeline.
+  // The listing of the configurations, by the worker's own pipeline.
   [OP_LIST_CONFIGURATIONS]: listConfigurationsOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p)),
   // Delete, by the worker's own pipeline.
   [OP_DELETE]: deleteOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p)),

@@ -35,6 +35,7 @@ import {
   LABEL_CONTAINER_VERSION,
   LABEL_DEVSPACE_ID,
   LABEL_HOST_ACCESS,
+  LABEL_CONFIG_PATH,
   LABEL_OWNER_ID,
   LABEL_REPOSITORY,
   composeProjectName,
@@ -157,11 +158,13 @@ describe('open: first open', () => {
     const env = await h.registry.findForAccount(REPO, ACCOUNT.id);
     expect(env).toBeDefined();
     const id = env!.id;
-    const name = resourceName(REPO, id);
+    // The names of a new devspace carry the word of its source (`config`: the configuration at the root).
+    const name = resourceName(REPO, id, 'config');
     expect(result.containerName).toBe(name);
     expect(result.remoteWorkspaceFolder).toBe('/workspaces/api');
     expect(env!.volumeName).toBe(name);
-    expect(h.docker.volumes.get(name)).toEqual({ [LABEL_DEVSPACE_ID]: id, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id });
+    // The workspace volume carries the source too (devspaceOfVolume restores it).
+    expect(h.docker.volumes.get(name)).toEqual({ [LABEL_DEVSPACE_ID]: id, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id, [LABEL_CONFIG_PATH]: DEFAULT_CONFIG_PATH });
     // The devspace belongs to the account that creates it.
     expect(env!.owner).toEqual(ACCOUNT);
     expect(h.helper.clones).toEqual([{ volumeName: name, repository: REPO, branch: 'main', token: TOKEN }]);
@@ -1027,7 +1030,7 @@ describe('open: existing devspace', () => {
       h.ui.filesMissingAnswer = 'cloneAgain';
       h.docker.execHandler = (_c, command) => (command[0] === 'sh' && command[2]?.includes('rev-list') ? { stdout: gitExecOutput('main') } : {});
       await h.service.open(TARGET, options());
-      expect(h.docker.volumes.get(NAME)).toEqual({ [LABEL_DEVSPACE_ID]: ENV_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id });
+      expect(h.docker.volumes.get(NAME)).toEqual({ [LABEL_DEVSPACE_ID]: ENV_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id, [LABEL_CONFIG_PATH]: DEFAULT_CONFIG_PATH });
       expect(h.helper.clones).toEqual([{ volumeName: NAME, repository: REPO, branch: 'main', token: TOKEN }]);
       expect(h.helper.calls).toContain(`up ${IMAGE_1}`);
       // The IDs come from the /etc/passwd of IMAGE_1 and the fix is a step of the batch helper.
@@ -3281,6 +3284,9 @@ describe('open: selected configuration missing on the branch', () => {
     h.helper.files = { [DEFAULT_CONFIG_PATH]: { configText: DEFAULT_CONFIG_TEXT } };
   });
 
+  /** The open of the devspace of the configuration python (its child row), as the extension sends it. */
+  const python = () => ({ ...options(), source: { kind: 'configuration' as const, configPath: PYTHON } });
+
   /** Back on a branch (main) with both configurations. */
   function onMain(): void {
     h.helper.files = { [DEFAULT_CONFIG_PATH]: { configText: DEFAULT_CONFIG_TEXT }, [PYTHON]: { configText: PYTHON_TEXT } };
@@ -3290,14 +3296,14 @@ describe('open: selected configuration missing on the branch', () => {
   }
 
   it('keeps the selection when the user answers "Later", so it applies again on a branch that has it', async () => {
-    await h.service.open(TARGET, options());
+    await h.service.open(TARGET, python());
     expect(h.ui.infos).toEqual([Messages.configurationNotFound(PYTHON, 'default')]);
     expect(h.ui.prompts).toEqual([`configurationChanged ${REPO}`]);
     expect(h.helper.builds).toEqual([]);
     expect((await entry())?.configPath).toBe(PYTHON);
 
     onMain();
-    await h.service.open(TARGET, options());
+    await h.service.open(TARGET, python());
     expect(h.helper.calls).toContain(`readConfiguration ${PYTHON}`);
     expect(h.ui.prompts).toEqual([]);
     expect(h.helper.builds).toEqual([]);
@@ -3306,13 +3312,13 @@ describe('open: selected configuration missing on the branch', () => {
 
   it('builds the fallback on "Rebuild now", and the selection again on a branch that has it', async () => {
     h.ui.configurationChangedAnswer = 'rebuildNow';
-    await h.service.open(TARGET, options());
+    await h.service.open(TARGET, python());
     let env = await entry();
     expect(env?.buildRecord?.configPath).toBe(DEFAULT_CONFIG_PATH);
     expect(env?.configPath).toBe(PYTHON);
 
     onMain();
-    await h.service.open(TARGET, options());
+    await h.service.open(TARGET, python());
     expect(h.ui.prompts).toEqual([`configurationChanged ${REPO}`]);
     expect(h.helper.builds.map((build) => build.configPath)).toEqual([DEFAULT_CONFIG_PATH, PYTHON]);
     env = await entry();
@@ -3393,7 +3399,7 @@ describe('open: registry lost', () => {
     expect(await h.service.reconcileFromVolumes()).toBe(0);
     const result = await h.service.open(TARGET, options());
     expect(result.devspace.id).not.toBe(OTHER_ID);
-    expect(result.devspace.volumeName).toBe(resourceName(REPO, result.devspace.id));
+    expect(result.devspace.volumeName).toBe(resourceName(REPO, result.devspace.id, 'config'));
     expect(h.helper.gitPreparations.map((preparation) => preparation.volumeName)).toEqual([result.devspace.volumeName]);
   });
 });
@@ -5483,7 +5489,7 @@ describe('host access policy in the pipeline', () => {
     expect(error.message).toBe(Messages.hostAccess('volume shop_db of the Docker Compose project shop'));
     // The cleanup of the failed first open reads the labels of the workspace volume too, and the first open reads them
     // after it created it (requireOwnVolume).
-    const workspace = expect.stringMatching(/^devspaces-acme-api-[a-z]+-[a-z]+$/);
+    const workspace = expect.stringMatching(/^devspaces-acme-api-config-[a-z]+-[a-z]+$/);
     expect(h.docker.volumeInspections).toEqual([[workspace], ['shop_db', 'cache'], [workspace]]);
     expect(h.helper.builds).toEqual([]);
   });
@@ -5492,7 +5498,7 @@ describe('host access policy in the pipeline', () => {
     await h.service.open(TARGET, options());
     expect(h.helper.ups).toHaveLength(1);
     // Only the labels of the workspace volume (requireOwnVolume).
-    expect(h.docker.volumeInspections).toEqual([[expect.stringMatching(/^devspaces-acme-api-[a-z]+-[a-z]+$/)]]);
+    expect(h.docker.volumeInspections).toEqual([[expect.stringMatching(/^devspaces-acme-api-config-[a-z]+-[a-z]+$/)]]);
   });
 
   describe('named volumes of devspaces of other accounts (finding 4)', () => {

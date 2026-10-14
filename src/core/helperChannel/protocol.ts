@@ -1111,7 +1111,7 @@ export function parseFlowRefusal(value: unknown): FlowRefusal | undefined {
 }
 
 /**
- * `listConfigurations`, the listing of Select configuration in the worker: the configuration paths in the volume of the
+ * `listConfigurations`, the listing of the configurations in the worker: the configuration paths in the volume of the
  * devspace, in the order of precedence (DevspaceService .listConfigurations, as the worker's own service runs it:
  * the record through `record get`, the account through `local account`, the lock that the worker takes itself, the
  * batch helper on the worker's own image). Parameters ListConfigurationsParams; value ListConfigurationsValue; no
@@ -1528,8 +1528,6 @@ export interface OpenParams {
   target?: { defaultBranch?: string | null; configPaths: string[]; trusted: boolean };
   /** A manual rebuild (OpenOptions.forceRebuild). */
   forceRebuild?: true;
-  /** Select configuration (OpenOptions.configPath). */
-  configPath?: string;
   /** The source of the open (OpenOptions.source): the configuration, or the default image of the setting. */
   source?: DevspaceSource;
   /**
@@ -1614,12 +1612,14 @@ function plainOpenText(value: unknown, max: number): value is string {
 }
 
 /**
- * The strict check of DevspaceSource (both sides of the open, and the records that the worker sends): `configuration`,
- * or `defaultImage` with a valid image reference (parseImageReference).
+ * The strict check of DevspaceSource (both sides of the open, and the records that the worker sends): `configuration`
+ * with a configuration path, or `defaultImage` with a valid image reference (parseImageReference).
  */
 export function parseDevspaceSource(value: unknown): DevspaceSource | undefined {
   if (!isRecord(value)) return undefined;
-  if (hasOnlyKeys(value, ['kind']) && value.kind === 'configuration') return { kind: 'configuration' };
+  if (hasOnlyKeys(value, ['kind', 'configPath']) && value.kind === 'configuration' && plainOpenText(value.configPath, MAX_CONFIGURATION_PATH_LENGTH)) {
+    return { kind: 'configuration', configPath: value.configPath };
+  }
   if (hasOnlyKeys(value, ['kind', 'image']) && value.kind === 'defaultImage' && parseImageReference(value.image) !== undefined) {
     return { kind: 'defaultImage', image: value.image as string };
   }
@@ -1649,13 +1649,13 @@ function parseOpenSettings(value: unknown): OpenSettings | undefined {
 export function parseOpenParams(value: unknown): OpenParams | undefined {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ['dockerHost', 'owner', 'monitorSource', 'settings', 'images', 'repository'], ['references', 'referenceDigests', 'devspaceId', 'target', 'forceRebuild', 'configPath', 'source', 'vscodeServer', 'defaultExtensions'])
+    !hasOnlyKeys(value, ['dockerHost', 'owner', 'monitorSource', 'settings', 'images', 'repository'], ['references', 'referenceDigests', 'devspaceId', 'target', 'forceRebuild', 'source', 'vscodeServer', 'defaultExtensions'])
   ) {
     return undefined;
   }
   const operationTarget = parseOperationTarget(value.dockerHost, value.owner);
   if (operationTarget === undefined) return undefined;
-  const { monitorSource, repository, devspaceId, target, forceRebuild, configPath } = value;
+  const { monitorSource, repository, devspaceId, target, forceRebuild } = value;
   if (!isSourceId(monitorSource)) return undefined;
   if (!plainOpenText(repository, 256) || !/^[^/\s]+\/[^/\s]+$/.test(repository)) return undefined;
   const settings = parseOpenSettings(value.settings);
@@ -1688,7 +1688,6 @@ export function parseOpenParams(value: unknown): OpenParams | undefined {
     checkedTarget = { ...(defaultBranch !== undefined ? { defaultBranch } : {}), configPaths: [...(configPaths as string[])], trusted };
   }
   if (forceRebuild !== undefined && forceRebuild !== true) return undefined;
-  if (configPath !== undefined && !plainOpenText(configPath, MAX_CONFIGURATION_PATH_LENGTH)) return undefined;
   // Exactly a DevspaceSource when it is given.
   let source: DevspaceSource | undefined;
   if (value.source !== undefined) {
@@ -1718,7 +1717,6 @@ export function parseOpenParams(value: unknown): OpenParams | undefined {
     ...(devspaceId !== undefined ? { devspaceId } : {}),
     ...(checkedTarget !== undefined ? { target: checkedTarget } : {}),
     ...(forceRebuild === true ? { forceRebuild } : {}),
-    ...(configPath !== undefined ? { configPath } : {}),
     ...(source !== undefined ? { source } : {}),
     ...(vscodeServer !== undefined ? { vscodeServer } : {}),
     ...(defaultExtensions !== undefined ? { defaultExtensions } : {}),

@@ -9,7 +9,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Clock, Logger } from '../ports';
-import type { Devspace, GitHubAccount, RegistryFile } from '../types';
+import type { Devspace, DevspaceSource, GitHubAccount, RegistryFile } from '../types';
 import { StoragePaths } from './paths';
 import { DevspaceRegistry, REGISTRY_NEWER_VERSION_MESSAGE, RegistryVersionError, isDevspaceOf } from './registry';
 
@@ -20,6 +20,7 @@ const ID_D = 'd00dfeed-0000-4000-8000-000000000004';
 const T0 = Date.parse('2026-09-24T15:40:00.000Z');
 const OCTO: GitHubAccount = { id: '1001', login: 'octo' };
 const STAUSSH: GitHubAccount = { id: '2002', login: 'staussh' };
+const CONFIG = '.devcontainer/devcontainer.json';
 
 function devspace(id: string, repository: string, extra: Partial<Devspace> = {}): Devspace {
   const name = `devspaces-${repository.replace('/', '-').toLowerCase()}-${id.slice(0, 8)}`;
@@ -66,25 +67,42 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe('isDevspaceOf: one devspace per repository and GitHub account', () => {
-  it.each<[string, Pick<Devspace, 'repository' | 'owner'>, string, string, boolean]>([
-    ['the repository of the account', { repository: 'acme/api', owner: OCTO }, 'acme/api', OCTO.id, true],
-    ['the repository in another case', { repository: 'Acme/API', owner: OCTO }, 'acme/api', OCTO.id, true],
-    ['the owner with another login (renamed on GitHub)', { repository: 'acme/api', owner: { id: OCTO.id, login: 'old' } }, 'acme/api', OCTO.id, true],
-    ['the repository of another account', { repository: 'acme/api', owner: STAUSSH }, 'acme/api', OCTO.id, false],
-    ['another repository of the account', { repository: 'acme/web', owner: OCTO }, 'acme/api', OCTO.id, false],
-    ['a repository whose name starts the same', { repository: 'acme/api-2', owner: OCTO }, 'acme/api', OCTO.id, false],
+describe('isDevspaceOf: one devspace per repository, GitHub account and source', () => {
+  it.each<[string, Pick<Devspace, 'repository' | 'owner' | 'configPath' | 'defaultImage'>, string, string, boolean]>([
+    ['the repository of the account', { repository: 'acme/api', owner: OCTO, configPath: CONFIG }, 'acme/api', OCTO.id, true],
+    ['the repository in another case', { repository: 'Acme/API', owner: OCTO, configPath: CONFIG }, 'acme/api', OCTO.id, true],
+    ['the owner with another login (renamed on GitHub)', { repository: 'acme/api', owner: { id: OCTO.id, login: 'old' }, configPath: CONFIG }, 'acme/api', OCTO.id, true],
+    ['the repository of another account', { repository: 'acme/api', owner: STAUSSH, configPath: CONFIG }, 'acme/api', OCTO.id, false],
+    ['another repository of the account', { repository: 'acme/web', owner: OCTO, configPath: CONFIG }, 'acme/api', OCTO.id, false],
+    ['a repository whose name starts the same', { repository: 'acme/api-2', owner: OCTO, configPath: CONFIG }, 'acme/api', OCTO.id, false],
   ])('%s', (_name, entry, repository, accountId, expected) => {
     expect(isDevspaceOf(entry, repository, accountId)).toBe(expected);
+  });
+
+  it('with a source: the default-image devspace, or the devspace of the configuration with the same name', () => {
+    const configuration = { repository: 'acme/api', owner: OCTO, configPath: CONFIG };
+    const alternative = { repository: 'acme/api', owner: OCTO, configPath: '.devcontainer/py/devcontainer.json' };
+    const image = { repository: 'acme/api', owner: OCTO, configPath: CONFIG, defaultImage: 'ghcr.io/acme/base:1' };
+    const ofConfiguration: DevspaceSource = { kind: 'configuration', configPath: CONFIG };
+    const ofAlternative: DevspaceSource = { kind: 'configuration', configPath: '.devcontainer/py/devcontainer.json' };
+    const ofImage: DevspaceSource = { kind: 'defaultImage', image: 'ghcr.io/acme/base:2' };
+    // Without a source: any devspace of the repository and account.
+    expect([configuration, alternative, image].map((entry) => isDevspaceOf(entry, 'acme/api', OCTO.id))).toEqual([true, true, true]);
+    expect([configuration, alternative, image].map((entry) => isDevspaceOf(entry, 'acme/api', OCTO.id, '', ofConfiguration))).toEqual([true, false, false]);
+    expect([configuration, alternative, image].map((entry) => isDevspaceOf(entry, 'acme/api', OCTO.id, '', ofAlternative))).toEqual([false, true, false]);
+    // The image of the source does not count: a repository has one default-image devspace.
+    expect([configuration, alternative, image].map((entry) => isDevspaceOf(entry, 'acme/api', OCTO.id, '', ofImage))).toEqual([false, false, true]);
+    // `.devcontainer.json` and `.devcontainer/devcontainer.json` are the same configuration, the one at the root.
+    expect(isDevspaceOf({ ...configuration, configPath: '.devcontainer.json' }, 'acme/api', OCTO.id, '', ofConfiguration)).toBe(true);
   });
 });
 
 describe('the Docker host in the key of a devspace: repository, account, Docker host', () => {
   it('matches the host exactly; a missing field is the local Docker', () => {
-    expect(isDevspaceOf({ repository: 'acme/api', owner: OCTO }, 'acme/api', OCTO.id, '')).toBe(true);
-    expect(isDevspaceOf({ repository: 'acme/api', owner: OCTO }, 'acme/api', OCTO.id, 'box')).toBe(false);
-    expect(isDevspaceOf({ repository: 'acme/api', owner: OCTO, dockerHost: 'box' }, 'acme/api', OCTO.id, 'box')).toBe(true);
-    expect(isDevspaceOf({ repository: 'acme/api', owner: OCTO, dockerHost: 'box' }, 'acme/api', OCTO.id)).toBe(false);
+    expect(isDevspaceOf({ repository: 'acme/api', owner: OCTO, configPath: CONFIG }, 'acme/api', OCTO.id, '')).toBe(true);
+    expect(isDevspaceOf({ repository: 'acme/api', owner: OCTO, configPath: CONFIG }, 'acme/api', OCTO.id, 'box')).toBe(false);
+    expect(isDevspaceOf({ repository: 'acme/api', owner: OCTO, configPath: CONFIG, dockerHost: 'box' }, 'acme/api', OCTO.id, 'box')).toBe(true);
+    expect(isDevspaceOf({ repository: 'acme/api', owner: OCTO, configPath: CONFIG, dockerHost: 'box' }, 'acme/api', OCTO.id)).toBe(false);
   });
 
   it('finds the devspace of the current host, and allows one per host', async () => {

@@ -98,9 +98,10 @@ export interface Devspace {
   /** For example `.devcontainer/python/devcontainer.json`. */
   configPath: string;
   /**
-   * The source of the last open (DevspaceSource): the default image of the setting `defaultImage` that the open used
-   * in place of the configuration of the repository, as the setting gave it. Missing: the configuration `configPath`.
-   * Written with the configuration of each open (ConfigurationChange.defaultImage), before the build record.
+   * The devspace is the default-image devspace of its repository (DevspaceSource `defaultImage`): the image it was
+   * last opened with, as the setting `defaultImage` gave it. Missing: the devspace of the configuration `configPath`.
+   * Set at the creation and written with the configuration of each open (ConfigurationChange.defaultImage), before the
+   * build record; never removed, as a devspace keeps its source.
    */
   defaultImage?: string;
   volumeName: string;
@@ -325,11 +326,7 @@ export interface PendingOperation {
   requestedAt: string;
   /** Window ID of the window that requested the operation. */
   requestedBy: string;
-  reason: 'manual' | 'update' | 'configChanged' | 'configurationSelected' | 'sourceSelected';
-  /** New configuration path, for `configurationSelected`. */
-  configPath?: string;
-  /** New source of the devspace, for `sourceSelected` ("Start with Default Image", "Start with Configuration"). */
-  source?: DevspaceSource;
+  reason: 'manual' | 'update' | 'configChanged';
   /**
    * For `delete`: the additional named volumes that the user confirmed for removal, as the question listed them. A volume
    * that the devspace recorded after the question is kept.
@@ -396,16 +393,16 @@ export interface ExtensionSettings {
    */
   updateContainer?: UpdateContainer;
   /**
-   * `defaultImage`: an image reference (for example `ghcr.io/majikmate/devcontainer-base:latest`) that opens a
-   * devspace in place of the configuration of its repository (DevspaceSource). Only the user setting counts (scope
-   * `application`). Missing or empty: no default image, every open uses the configuration. An invalid reference is
-   * ignored (readSettings warns once).
+   * `defaultImage`: an image reference (for example `ghcr.io/majikmate/devcontainer-base:latest`) that every
+   * repository can start from, next to its Dev Container configurations: its default-image devspace (DevspaceSource).
+   * Only the user setting counts (scope `application`). Missing or empty: no default image; a devspace built from one
+   * keeps starting from it. An invalid reference is ignored (readSettings warns once).
    */
   defaultImage?: string;
   /**
-   * `startWithDefaultImage`: with a default image, Start (and the other open actions) use the default image, and the
-   * context menu offers "Start with Configuration" (true, the default); false: Start uses the configuration, and the
-   * context menu offers "Start with Default Image". Only the user setting counts (scope `application`).
+   * `startWithDefaultImage`: with a default image, the row `default` is the first child row of a repository (true,
+   * the default) or the last one (false); the pickers list the sources in the same order. Only the user setting counts
+   * (scope `application`).
    */
   startWithDefaultImage?: boolean;
 }
@@ -414,15 +411,16 @@ export interface ExtensionSettings {
 export type UpdateContainer = 'notify' | 'ask';
 
 /**
- * What an open builds the devspace from: the configuration of the repository (`configPath` of the devspace), or the
- * default image of the setting `defaultImage` in place of it. With `defaultImage`, the open reads a synthesized
+ * What a devspace is built from: one Dev Container configuration of its repository (`configPath`), or the default
+ * image of the setting `defaultImage` in place of a configuration. With `defaultImage`, the open reads a synthesized
  * configuration `{ "image": "<image>" }` under the configuration path of the devspace: the Dockerfile, the Features,
  * the lifecycle commands, the mounts and the other properties of the configuration of the repository do not apply;
- * only the metadata of the image does. A devspace keeps the source of its last open (Devspace.defaultImage) until an
- * open names another one; an open with the other source creates the container again from the other image (the files
- * in the workspace volume stay).
+ * only the metadata of the image does. A repository has one devspace per source (src/core/devspaceSource.ts): the
+ * source is fixed when the devspace is created (Devspace.defaultImage tells the kind), and the devspaces of a
+ * repository run next to each other. A later open of a default-image devspace names the image of the setting at that
+ * time; a changed image asks Rebuild now / Later, as a changed configuration does.
  */
-export type DevspaceSource = { kind: 'configuration' } | { kind: 'defaultImage'; image: string };
+export type DevspaceSource = { kind: 'configuration'; configPath: string } | { kind: 'defaultImage'; image: string };
 
 /** State of a container as Docker reports it, simplified. */
 export type ContainerState = 'running' | 'stopped' | 'missing';

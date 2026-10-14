@@ -49,8 +49,6 @@ export const Messages = {
   configurationChanged: 'The devspace configuration changed.',
   /** The default image of the setting changed since the devspace was built from one. */
   defaultImageChanged: 'The default image of the devspace changed.',
-  /** The source selected for the devspace (the default image, or its configuration) is not the one it was built from. */
-  sourceChanged: 'The devspace was built from the other source (its configuration, or the default image).',
   /**
    * A devspace without a build record (restored after a lost registry) whose containers are of another kind than
    * its configuration. Rebuild now switches the kind; Later keeps it (the non-destructive answer). No docker start
@@ -60,20 +58,20 @@ export const Messages = {
    */
   configurationKindChanged: (containersUseCompose: boolean, configPath: string) =>
     containersUseCompose
-      ? `The containers of this devspace use Docker Compose, but the configuration ${configPath} uses a single container. Rebuild now switches the devspace to a single container: it removes the containers of the other services and the files outside the volumes; named volumes are kept. Later keeps Docker Compose without a rebuild: if the dev container runs already and no container of the devspace must be created again, the dev container opens as it is, and the stopped containers of the other services are started. Otherwise nothing starts: a stopped dev container, or containers that must be created again (for example because an older version created them, or because they were created while the host access checks were off and the checks are on now), start only with a Docker Compose configuration. To use the Docker Compose configuration of the repository, choose Select configuration… in the list of devspaces.`
-      : `The container of this devspace is a single container, but the configuration ${configPath} uses Docker Compose. Rebuild now switches the devspace to Docker Compose: it removes the container and the files outside the volumes; named volumes are kept. Later keeps the single container. To use the configuration of the single container, choose Select configuration… in the list of devspaces.`,
+      ? `The containers of this devspace use Docker Compose, but the configuration ${configPath} uses a single container. Rebuild now switches the devspace to a single container: it removes the containers of the other services and the files outside the volumes; named volumes are kept. Later keeps Docker Compose without a rebuild: if the dev container runs already and no container of the devspace must be created again, the dev container opens as it is, and the stopped containers of the other services are started. Otherwise nothing starts: a stopped dev container, or containers that must be created again (for example because an older version created them, or because they were created while the host access checks were off and the checks are on now), start only with a Docker Compose configuration. A Docker Compose configuration of the repository, if it has one, is its own row in the list of devspaces.`
+      : `The container of this devspace is a single container, but the configuration ${configPath} uses Docker Compose. Rebuild now switches the devspace to Docker Compose: it removes the container and the files outside the volumes; named volumes are kept. Later keeps the single container. A single-container configuration of the repository, if it has one, is its own row in the list of devspaces.`,
   /**
    * configurationKindChanged when the dev container of Docker Compose is missing: Later starts nothing then
    * (composeDevContainerMissing).
    */
   configurationKindChangedDevContainerMissing: (configPath: string) =>
-    `The dev container of this Docker Compose devspace is missing, and the configuration ${configPath} uses a single container. Rebuild now switches the devspace to a single container: it removes the containers of the other services and the files outside the volumes; named volumes are kept. Later starts nothing and keeps the containers of the other services. To switch later, choose Rebuild; to use the Docker Compose configuration of the repository, choose Select configuration… in the list of devspaces.`,
+    `The dev container of this Docker Compose devspace is missing, and the configuration ${configPath} uses a single container. Rebuild now switches the devspace to a single container: it removes the containers of the other services and the files outside the volumes; named volumes are kept. Later starts nothing and keeps the containers of the other services. To switch later, choose Rebuild. A Docker Compose configuration of the repository, if it has one, is its own row in the list of devspaces.`,
   /**
    * Later for a devspace whose Docker Compose dev container is missing: nothing can start without the switch, so
    * nothing is removed and nothing starts.
    */
   composeDevContainerMissing: (configPath: string) =>
-    `The dev container of this Docker Compose devspace is missing, and the configuration ${configPath} uses a single container. The containers of the other services are kept. Rebuild the devspace to switch it to a single container, or choose Select configuration… for its Docker Compose configuration.`,
+    `The dev container of this Docker Compose devspace is missing, and the configuration ${configPath} uses a single container. The containers of the other services are kept. Rebuild the devspace to switch it to a single container, or start the row of a Docker Compose configuration of the repository, if it has one.`,
   /**
    * The configuration builds from a Dockerfile or a build context that does not exist in the repository. Not a refusal:
    * the existing devspace still starts.

@@ -7,7 +7,7 @@
 // helper image is prepared before the lock. A lock held elsewhere is refused after the wait, with its message. The busy
 // mark comes first, then the lock; both are released in `finally`.
 //
-// Start, Rebuild, Select configuration and Clone again under the same lock. An open of an existing devspace takes it
+// Start, Rebuild, a change of the configuration and Clone again under the same lock. An open of an existing devspace takes it
 // after the start of Docker and the wait for another window's operation, around everything through the pipeline; a
 // first open after its registry entry, before the volume. A refusal leaves no busy mark and nothing changed (a first
 // open removes its new registry entry again). Re-entrant: the Delete of Clone again takes no second lock; the redirects
@@ -251,7 +251,7 @@ describe('no unlocked path', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Start, Rebuild, Select configuration and Clone again under the devspace lock.
+// Start, Rebuild, a change of the configuration and Clone again under the devspace lock.
 
 const TARGET: RepositoryTarget = { repository: REPO, defaultBranch: 'main', configPaths: [DEFAULT_CONFIG_PATH], trusted: true };
 
@@ -280,7 +280,7 @@ function openEvents(): string[] {
 /** The read of a first open before its registry entry (unusedDevspaceId: the volume name is free); nothing is created. */
 const FREE_NAME_CHECK = 'docker volume exists';
 
-describe('Start, Rebuild, Select configuration and Clone again under the devspace lock', () => {
+describe('Start, Rebuild, a change of the configuration and Clone again under the devspace lock', () => {
   beforeEach(() => {
     // The Docker and helper steps of the open, each with whether it ran under the lock of its devspace.
     const volumeExists = h.docker.volumeExists.bind(h.docker);
@@ -372,7 +372,7 @@ describe('Start, Rebuild, Select configuration and Clone again under the devspac
     expect(releases).toBe(1);
   });
 
-  it('Select configuration: applies the selected configuration under the lock', async () => {
+  it('a change of the configuration: applies the selected configuration under the lock', async () => {
     await seedDevspace(h, { container: 'running' });
     await h.service.openDevspace(ENV_ID, openOptions({ configPath: DEFAULT_CONFIG_PATH }));
     expect(lockedIds).toEqual([ENV_ID]);
@@ -445,7 +445,7 @@ describe('Start, Rebuild, Select configuration and Clone again under the devspac
     expect(await h.sessionFiles.readPendings()).toEqual([]);
   });
 
-  it('a refused lock of Rebuild and of Select configuration builds nothing', async () => {
+  it('a refused lock of Rebuild and of a change of the configuration builds nothing', async () => {
     await seedDevspace(h, { container: 'running' });
     lockOutcome = new DevspaceLockError('busy', 'held');
     expect((await rejection(h.service.openDevspace(ENV_ID, openOptions({ forceRebuild: true })))).message).toBe(PipelineTexts.devspaceLockBusy(REPO));
@@ -568,9 +568,9 @@ describe('Start, Rebuild, Select configuration and Clone again under the devspac
     });
   });
 
-  // The listing of Select configuration reads whose the volume is under the lock, so the volume cannot change between
+  // The listing of the configurations reads whose the volume is under the lock, so the volume cannot change between
   // the check and the listing of the helper.
-  it('Select configuration reads whose the volume is under the lock, before the listing of the helper', async () => {
+  it('the listing of the configurations reads whose the volume is under the lock, before the listing of the helper', async () => {
     await seedDevspace(h, { container: 'running' });
     const listConfigurations = h.helper.listConfigurations.bind(h.helper);
     h.helper.listConfigurations = async (p) => {

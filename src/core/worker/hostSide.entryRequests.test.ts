@@ -40,7 +40,8 @@ const CREATE = { id: NEW, repository: REPOSITORY, configPath: DEFAULT };
 const ALLOWED: readonly HostCall[] = ['record markBusy', 'record createDevspace', 'record dropCreated', 'record configuration', 'record build', 'record ownerLogin'];
 
 const ownCreate = (fields: Partial<BusyMark> = {}): BusyMark => ({ operation: 'create', since: new Date(NOW).toISOString(), pid: OWNER.pid, windowId: OWNER.windowId, ...fields });
-const name = (id: string) => resourceName(REPOSITORY, id);
+/** The names of a devspace that createDevspace makes of the configuration at the root: with the word `config`. */
+const name = (id: string) => resourceName(REPOSITORY, id, 'config');
 const entryOf = (id: string, fields: Partial<Devspace> = {}): Devspace =>
   ({
     id,

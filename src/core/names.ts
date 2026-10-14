@@ -41,6 +41,12 @@ export const LABEL_REPOSITORY = 'nimblescape.devspaces.repository';
 /** Volume label: the GitHub user ID of the account that created the devspace. */
 export const LABEL_OWNER_ID = 'nimblescape.devspaces.owner-id';
 /**
+ * On the workspace volume of a default-image devspace: the default image it was created from (DevspaceSource
+ * `defaultImage`). Absent on the volume of a configuration devspace. With it, a lost registry gets the kind of the
+ * devspace back (devspaceOfVolume).
+ */
+export const LABEL_DEFAULT_IMAGE = 'nimblescape.devspaces.default-image';
+/**
  * Volume label of the additional volumes that the extension creates before `up` (the named volumes that a configuration
  * mounts), with the value VOLUME_KIND_ADDITIONAL. Such a volume also carries nimblescape.devspaces.id,
  * nimblescape.devspaces.owner-id, and nimblescape.devspaces.repository of its devspace: only these labels make a volume
@@ -177,6 +183,7 @@ export const EXTENSION_LABEL_KEYS: ReadonlySet<string> = new Set([
   LABEL_CONTAINER_VERSION,
   LABEL_CONTAINER_CONFIG,
   LABEL_CONFIG_PATH,
+  LABEL_DEFAULT_IMAGE,
   LABEL_HOST_ACCESS,
   LABEL_HELPER,
   LABEL_HELPER_RUN,
@@ -287,15 +294,17 @@ export const RESOURCE_NAME_PREFIX = 'devspaces-';
 /**
  * Name of everything of a devspace: the workspace volume, the dev container, the repository of the devspace
  * image, and the Docker Compose project (so also the names that Compose derives from it):
- * `devspaces-<owner>-<repository>-<adjective>-<scientist>`, with the pair of the devspace ID (namePair). Lower case,
- * every run of other characters than `[a-z0-9]` as one `-` (an image repository and a Compose project allow no `.` or
- * `_` next to each other), at most 63 characters: a long `<owner>-<repository>` is shortened, the pair is always kept.
- * The full devspace ID is only in the labels.
+ * `devspaces-<owner>-<repository>-<source>-<adjective>-<scientist>`, with the word of the source of the devspace
+ * (sourceSegment: `default`, `config`, or the name of an alternative configuration; `segment`) and the pair of the
+ * devspace ID (namePair). Lower case, every run of other characters than `[a-z0-9]` as one `-` (an image repository and
+ * a Compose project allow no `.` or `_` next to each other), at most 63 characters: a long `<owner>-<repository>` is
+ * shortened, the source and the pair are always kept. The full devspace ID is only in the labels. Devspaces of
+ * version 0.5.0 and older have no source in their name (no `segment`); they keep it.
  */
-export function resourceName(repository: string, devspaceId: string): string {
+export function resourceName(repository: string, devspaceId: string, segment?: string): string {
   const { owner, name } = splitRepository(repository);
   const prefix = RESOURCE_NAME_PREFIX;
-  const suffix = `-${namePair(devspaceId)}`;
+  const suffix = `${segment !== undefined ? `-${segment}` : ''}-${namePair(devspaceId)}`;
   let middle = `${owner}-${name}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '');
   const room = MAX_NAME_LENGTH - prefix.length - suffix.length;
   if (middle.length > room) middle = middle.slice(0, room);

@@ -189,6 +189,8 @@ describe('EXTENSION_LABEL_KEYS', () => {
       'config-path',
       'container-config',
       'container-version',
+      // The source of a default-image devspace, on its workspace volume (devspaceOfVolume).
+      'default-image',
       'host-access',
       // The ID label of a devspace.
       'id',

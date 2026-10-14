@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UserFacingError } from '../errors';
 import { dockerCheckItem } from '../helper/configurationAnalysis';
 import { Messages } from '../messages';
-import { LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, devspaceImageName, devspaceImageRepository, resourceName } from '../names';
+import { LABEL_CONFIG_PATH, LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, devspaceImageName, devspaceImageRepository, resourceName } from '../names';
 import { namePair } from '../namePairs';
 import { availableDevspaces } from '../ownership';
 import { otherAccountImageItem } from '../policy';
@@ -76,13 +76,14 @@ describe('two GitHub accounts open the same repository', () => {
 
     expect(second.id).not.toBe(first.id);
     expect([first.owner, second.owner]).toEqual([ACCOUNT, OTHER_ACCOUNT]);
-    expect(second.volumeName).toBe(resourceName(REPO, second.id));
+    expect(second.volumeName).toBe(resourceName(REPO, second.id, 'config'));
     expect(second.volumeName).not.toBe(first.volumeName);
     expect(second.containerName).not.toBe(first.containerName);
     expect(h.docker.volumes.get(second.volumeName)).toEqual({
       [LABEL_DEVSPACE_ID]: second.id,
       [LABEL_REPOSITORY]: REPO,
       [LABEL_OWNER_ID]: OTHER_ACCOUNT.id,
+      [LABEL_CONFIG_PATH]: DEFAULT_CONFIG_PATH,
     });
     expect(h.helper.clones.map((clone) => [clone.volumeName, clone.token])).toEqual([
       [first.volumeName, TOKEN],
@@ -463,7 +464,7 @@ describe('the ID of a new devspace', () => {
 
   it('never removes a volume of its name that another devspace created meanwhile', async () => {
     recreate({ newDevspaceId: () => FREE });
-    const name = resourceName(REPO, FREE);
+    const name = resourceName(REPO, FREE, 'config');
     // Another first open on the engine created the volume of the same name between the check and the create.
     vi.spyOn(h.docker, 'volumeExists').mockResolvedValue(false);
     const theirs = { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: OTHER_ACCOUNT.id };
@@ -478,20 +479,20 @@ describe('the ID of a new devspace', () => {
   it('is not one whose volume exists, and that volume is never touched', async () => {
     const ids = vi.fn().mockReturnValueOnce(TAKEN).mockReturnValue(FREE);
     recreate({ newDevspaceId: ids });
-    const existing = resourceName(REPO, TAKEN);
+    const existing = resourceName(REPO, TAKEN, 'config');
     h.docker.volumes.set(existing, {});
     h.helper.cloneError = new Error('clone failed');
     await expect(h.service.open(TARGET, options())).rejects.toBeDefined();
     // The failed first open removed only what it created.
     expect(h.docker.volumes.get(existing)).toEqual({});
-    expect(h.docker.log).toContain(`volume rm ${resourceName(REPO, FREE)}`);
+    expect(h.docker.log).toContain(`volume rm ${resourceName(REPO, FREE, 'config')}`);
     expect(h.docker.log).not.toContain(`volume rm ${existing}`);
   });
 
   it('is not one whose container exists, and that container is never touched', async () => {
     const ids = vi.fn().mockReturnValueOnce(TAKEN).mockReturnValue(FREE);
     recreate({ newDevspaceId: ids });
-    const existing = resourceName(REPO, TAKEN);
+    const existing = resourceName(REPO, TAKEN, 'config');
     const container = h.docker.addContainer({ devspaceId: 'made-by-hand', name: existing, state: 'stopped', image: 'x' });
     const result = await h.service.open(TARGET, options());
     expect(result.devspace.id).toBe(FREE);

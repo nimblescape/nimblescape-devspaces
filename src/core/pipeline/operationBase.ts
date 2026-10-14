@@ -94,7 +94,7 @@ export const STOP_FLOW_TIMEOUT_MS = 10 * 60_000;
 export const WINDOW_STATE_FLOW_TIMEOUT_MS = 30_000;
 
 /**
- * The longest listing of Select configuration in the worker: the wait for the lock, the start of the batch helper, and
+ * The longest listing of the configurations (`listConfigurations`) in the worker: the wait for the lock, the start of the batch helper, and
  * its step.
  */
 export const LIST_CONFIGURATIONS_FLOW_TIMEOUT_MS = 5 * 60_000;
@@ -184,13 +184,17 @@ export interface OperationOptions {
 export interface OpenOptions extends OperationOptions {
   /** Manual rebuild: build the devspace image also when no digest changed. */
   forceRebuild?: boolean;
-  /** "Select configuration…": change the configuration first. Implies a rebuild when a devspace exists. */
+  /**
+   * Opens the devspace with another configuration path of its repository (a rebuild). No command sends it since
+   * version 0.6.0 (each configuration is its own devspace, DevspaceSource); the pipeline keeps it for the switch of
+   * the dev service of Docker Compose, which a changed configuration brings about the same way.
+   */
   configPath?: string;
   /**
-   * What the open builds the devspace from (DevspaceSource): the configuration, or the default image of the setting.
-   * Missing: an existing devspace keeps the source of its last open (Devspace.defaultImage); a new devspace uses the
-   * configuration. With `configPath`, the configuration. A source that differs from the one of the build record of an
-   * existing devspace implies a rebuild.
+   * The source of the open (DevspaceSource): the devspace of a repository that the open opens or creates (the first
+   * configuration of the repository without it), and, for an existing default-image devspace, the image of the
+   * setting now (without it, the devspace keeps the image of its last open). A devspace never changes its kind: a
+   * source of the other kind is not followed.
    */
   source?: DevspaceSource;
 }
