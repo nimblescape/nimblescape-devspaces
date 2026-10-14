@@ -47,4 +47,5 @@ await createVSIX({ cwd: path.join(root, 'test', 'vscode', 'github'), packagePath
 // The extensions folder of @vscode/test-electron (.vscode-test/extensions), where prepare.ts installed Dev Containers.
 const executable = await downloadAndUnzipVSCode(process.env.VSCODE_TEST_VERSION || 'stable');
 const [cli, ...cliArgs] = resolveCliArgsFromVSCodeExecutablePath(executable);
+// --force: the CLI needs it only to install over a newer version, a downgrade that prepare.ts refuses for the run `updated`.
 run(cli, [...cliArgs, '--install-extension', extension, '--install-extension', github, '--force']);

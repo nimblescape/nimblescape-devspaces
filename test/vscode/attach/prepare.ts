@@ -24,7 +24,7 @@
 // (prepareRemote). That run has no plain container.
 // With DEVSPACE_TEST_ATTACH_PREPARE=update (the runs `previous` and `updated`, a CI job of its own), the test VS Code
 // also gets the last released version of the extension from the VSIX of its GitHub release, and the helper image is
-// built from the Dockerfile of that version (prepareUpdate). That run has no plain container.
+// built as that version builds it (prepareUpdate). That run has no plain container.
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -34,8 +34,9 @@ import { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath } from '
 import { BootstrapDocker } from '../../../src/core/docker/bootstrapDocker';
 import { findDockerCli } from '../../../src/core/docker/dockerCli';
 import { ensureRemoteContext, useContext } from '../../../src/core/docker/remoteDocker';
+import { DEVCONTAINER_CLI_VERSION, helperImageTag } from '../../../src/core/helper/helperImage';
 import { HelperImages } from '../../../src/core/helper/helperImages';
-import { LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, WORKSPACES_ROOT, newDevspaceId, repositoryFolder, resourceName } from '../../../src/core/names';
+import { LABEL_DEVSPACE_ID, LABEL_HELPER, LABEL_OWNER_ID, LABEL_REPOSITORY, WORKSPACES_ROOT, newDevspaceId, repositoryFolder, resourceName } from '../../../src/core/names';
 import type { Logger } from '../../../src/core/ports';
 import { NodeProcessRunner } from '../../../src/core/process';
 import { folderUriParts } from '../../../src/vscode/connection/authority';
@@ -193,12 +194,9 @@ async function seedDevspace(docker: BootstrapDocker, helperTag: string): Promise
   return { devspaceId, name, folder };
 }
 
-/**
- * The helper image on the engine of `docker`, built as the extension builds it, from the Dockerfile of this checkout or
- * of another version of the extension (`dockerfilePath`): the tag comes from the text of the Dockerfile only.
- */
-async function helperImage(docker: BootstrapDocker, started: number, dockerfilePath = path.join(ROOT, 'resources', 'helper', 'Dockerfile')): Promise<string> {
-  const helper = await new HelperImages({ docker, logger: log, dockerfilePath }).ensureImageUse();
+/** The helper image on the engine of `docker`, built as the extension builds it. */
+async function helperImage(docker: BootstrapDocker, started: number): Promise<string> {
+  const helper = await new HelperImages({ docker, logger: log, dockerfilePath: path.join(ROOT, 'resources', 'helper', 'Dockerfile') }).ensureImageUse();
   log.info(`Helper image ${helper.tag} (${((Date.now() - started) / 1000).toFixed(0)} s since the start).`);
   return helper.tag;
 }
@@ -295,6 +293,29 @@ async function latestReleaseVsix(folder: string, token: string | undefined): Pro
   return { tag: release.tag_name, file };
 }
 
+/**
+ * The helper image of the released version in `folder` (its extension folder), built as that version builds it when it
+ * is missing (helperImage.ts, ensureHelperImageUse): the tag from its Dockerfile and the CLI version of its package.json
+ * (helperImageTag), with that CLI version as the build argument. The CLI version of this checkout can be another one
+ * (Dependabot updates it), and that version restores the devspace at activation only when its own tag exists. The image
+ * name, its label and the helper generation are those of this checkout.
+ */
+async function releasedHelperImage(docker: BootstrapDocker, folder: string, started: number): Promise<string> {
+  const dockerfile = path.join(folder, 'resources', 'helper', 'Dockerfile');
+  // As scripts/cliVersion.mjs reads it; that module uses import.meta, which the CommonJS bundle of this file has not.
+  const manifest = JSON.parse(fs.readFileSync(path.join(folder, 'package.json'), 'utf8')) as { devDependencies?: Record<string, unknown> };
+  const cliVersion = manifest.devDependencies?.['@devcontainers/cli'];
+  if (typeof cliVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(cliVersion)) {
+    throw new Error(`The package.json of the released version has no exact version of @devcontainers/cli: ${JSON.stringify(cliVersion)}`);
+  }
+  const tag = helperImageTag(fs.readFileSync(dockerfile, 'utf8'), cliVersion);
+  if (!(await docker.imageExists(tag))) {
+    await docker.buildImage({ tag, dockerfile, context: path.dirname(dockerfile), labels: { [LABEL_HELPER]: 'true' }, buildArgs: { DEVCONTAINER_CLI_VERSION: cliVersion } });
+  }
+  log.info(`Helper image ${tag} of the released version, CLI ${cliVersion} (this checkout: ${DEVCONTAINER_CLI_VERSION}), ${((Date.now() - started) / 1000).toFixed(0)} s since the start.`);
+  return tag;
+}
+
 /** Whether the version `a` (major.minor.patch) is greater than `b`. */
 function newerVersion(a: string, b: string): boolean {
   const [pa, pb] = [a, b].map((value) => value.split('.').map((part) => Number.parseInt(part, 10)));
@@ -304,13 +325,12 @@ function newerVersion(a: string, b: string): boolean {
 
 /**
  * The runs `previous` and `updated`: the last released version of the extension, installed from the VSIX of its GitHub
- * release into the extensions folder of the test VS Code as users install a VSIX, the helper image of that version (its
- * Dockerfile can differ from the one of this checkout; that version restores the devspace at activation only when its
- * helper tag exists), and the devspace without container. The seed names the version and the SHA-256 of its
- * dist/extension.js, so that the run `previous` can check that VS Code loads it. Only the tag of the helper image comes
- * from the released version: its image name and labels, and the volume labels of the devspace, are those of this
- * checkout. A version that changes them must build the image or seed the devspace with those of the released version
- * here. A checkout older than the latest release fails: its VSIX would replace a newer version (a downgrade).
+ * release into the extensions folder of the test VS Code as users install a VSIX, the helper image of that version
+ * (releasedHelperImage), and the devspace without container. The seed names the version and the SHA-256 of its
+ * dist/extension.js, so that the run `previous` can check that VS Code loads it. The image name, label and generation of
+ * the helper image and the volume labels of the devspace are those of this checkout: a version that changes them must
+ * build the image or seed the devspace with those of the released version here. A checkout older than the latest
+ * release fails: its VSIX would replace a newer version (a downgrade).
  */
 async function prepareUpdate(docker: BootstrapDocker, vscode: TestVscode, started: number, githubToken: string | undefined): Promise<Record<string, unknown>> {
   const release = await latestReleaseVsix(path.join(ROOT, 'out', 'test', 'vscode', 'attach', 'previous'), githubToken);
@@ -326,7 +346,7 @@ async function prepareUpdate(docker: BootstrapDocker, vscode: TestVscode, starte
   if (newerVersion(version, own)) throw new Error(`The latest release ${version} is newer than the version ${own} of this checkout: the update would be a downgrade. Merge main.`);
   const extensionSha256 = crypto.createHash('sha256').update(fs.readFileSync(path.join(folder, 'dist', 'extension.js'))).digest('hex');
   log.info(`The previous version ${version} is in ${folder} (dist/extension.js ${extensionSha256}).`);
-  const helper = await helperImage(docker, started, path.join(folder, 'resources', 'helper', 'Dockerfile'));
+  const helper = await releasedHelperImage(docker, folder, started);
   const { devspaceId, name, folder: repository } = await seedDevspace(docker, helper);
   return {
     devspace: { containerName: name, folder: repository, folderUri: folderUri(name, repository), user: 'node', devspaceId, previous: { version, extensionSha256 } },
