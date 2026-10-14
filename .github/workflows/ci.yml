@@ -253,8 +253,9 @@ jobs:
         shell: bash
         run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}npm run test:vscode:vsix
 
-      # The programs that the test VS Code of the two steps above left running (Linux, from /proc).
-      - name: List the programs that the test VS Code left running
+      # Fails when a program that the extension started in the test VS Code of the two steps above still runs 10 s after
+      # VS Code quit (Linux, from /proc; scripts/leftoverPrograms.mjs).
+      - name: Check that the test VS Code left no program of the extension running
         if: ${{ !cancelled() && runner.os == 'Linux' }}
         run: node scripts/leftoverPrograms.mjs
 
