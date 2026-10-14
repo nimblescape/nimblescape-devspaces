@@ -10,16 +10,23 @@
 // test VS Code has a local folder, and the tests start a second VS Code (DEVSPACE_TEST_SECOND_VSCODE: its own user data
 // folder, the extensions folder of the test VS Code with the extension and the sign-in provider installed from their
 // VSIX files by scripts/install-attach-extensions.mjs, no tests) in the window of the devspace, as a user starts VS
-// Code. They stop or remove the container from outside (as the Monitor, or a user with `docker stop` or `docker rm -f`),
-// read the log of the second VS Code, and start it again as the next reload of the window. The window checks its
-// container with each heartbeat (src/vscode/controller.ts, checkConnection) and then shows Reconnect in the status bar.
+// Code. They stop or remove the container from outside (as the Monitor, or a user with `docker stop` or
+// `docker rm -f`), read the log of the second VS Code, quit it and start it again: the next open of the window.
+// What a user sees (PR #18, VS Code 1.141.1, Dev Containers 0.469.0): VS Code gives up the remote connection at once
+// ("Container is no longer running") and offers to reload the window; the window stays open, and its extension, in the
+// local extension host, logs at its next heartbeat that the container does not run (src/vscode/controller.ts,
+// checkConnection) and shows Reconnect in the status bar. At the next open, the open pipeline starts the stopped
+// container, or makes a new one for a removed container, before the window connects.
 import * as assert from 'assert';
 import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { EXTENSION_ID, channelLog, docker, execIn, printLogs, seed, sessionLogs, waitFor } from './support';
+import { EXTENSION_ID, channelLog, docker, execIn, printLogs, printLong, seed, sessionLogs, waitFor } from './support';
 
-/** The second VS Code (.vscode-test.mjs): its user data folder, the extensions folder of the test VS Code, its arguments. */
+/**
+ * The second VS Code (.vscode-test.mjs): its user data folder, the extensions folder of the test VS Code, its
+ * arguments.
+ */
 interface SecondVscode {
   userDataDir: string;
   extensionsDir: string;
@@ -38,6 +45,8 @@ const NOTICE_WAIT_MS = 45_000;
 const WATCH_MS = 60_000;
 /** The longest time from the start of the second VS Code to the attach of its window (with the open pipeline). */
 const ATTACH_WAIT_MS = 300_000;
+/** The longest time that the second VS Code may take to quit. */
+const QUIT_WAIT_MS = 30_000;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -56,20 +65,24 @@ describe('a devspace window whose container stops or is removed', () => {
   });
 
   after(async function () {
-    this.timeout(60_000);
+    this.timeout(QUIT_WAIT_MS + 30_000);
     await quitSecond();
     if (!failed) return;
     printLogs();
     console.log('\n===== the second VS Code =====');
     printLogs(second.userDataDir);
-    for (const [name, text] of sessionLogs(second.userDataDir)) if (!/output_logging_/.test(name)) console.log(`\n===== ${name} =====\n${text}`);
-    for (let start = 1; start <= starts; start++) console.log(`\n===== output of start ${start} =====\n${readOutput(start)}`);
+    for (const [name, text] of sessionLogs(second.userDataDir)) if (!/output_logging_/.test(name)) printLong(`\n===== ${name} =====\n${text}`);
+    for (let start = 1; start <= starts; start++) printLong(`\n===== output of start ${start} =====\n${readOutput(start)}`);
   });
 
   /** The state of the container: `running`, `exited`, … or `missing`. */
   function containerState(): string {
     const result = childProcess.spawnSync('docker', ['inspect', '-f', '{{.State.Status}}', containerName], { encoding: 'utf8' });
     return result.status === 0 ? result.stdout.trim() : 'missing';
+  }
+
+  function containerId(): string {
+    return docker(['inspect', '-f', '{{.Id}}', containerName]).trim();
   }
 
   /** The lines that postAttachCommand wrote: one per attach of a window; -1 while the container does not run. */
@@ -83,27 +96,25 @@ describe('a devspace window whose container stops or is removed', () => {
     return channelLog('Devspaces', second.userDataDir).slice(from);
   }
 
-  /** The lines of the renderer log of the second VS Code about its remote connection. */
-  function connectionLines(): string {
-    const renderer = [...sessionLogs(second.userDataDir)].find(([name]) => /^window\d+[\\/]renderer\.log$/.test(name))?.[1] ?? '';
-    return renderer
+  /** The lines of a log without the ones about GitHub, which rejects the dummy token of the sign-in provider. */
+  function withoutGitHub(log: string): string {
+    return log
       .split('\n')
-      .filter((line) => /remote|reconnect|connection|resolv/i.test(line))
+      .filter((line) => !/GitHub|^\s+at |^Canceled/.test(line))
       .join('\n');
   }
 
-  /** The lengths of the log files of the last start of the second VS Code, to print what they logged after a change. */
-  function logLengths(): Map<string, number> {
-    return new Map([...sessionLogs(second.userDataDir)].map(([name, text]) => [name, text.length]));
+  /** The renderer log of the last start of the second VS Code. */
+  function rendererLog(): string {
+    return [...sessionLogs(second.userDataDir)].find(([name]) => /^window\d+[\\/]renderer\.log$/.test(name))?.[1] ?? '';
   }
 
-  /** What the log files of the second VS Code (except its Devspaces log) logged since `before`: the last 100 lines of each. */
-  function newLogLines(before: Map<string, number>): string {
-    return [...sessionLogs(second.userDataDir)]
-      .filter(([name]) => !name.endsWith('-Devspaces.log'))
-      .map(([name, text]) => [name, text.slice(before.get(name) ?? 0).trimEnd()])
-      .filter(([, text]) => text !== '')
-      .map(([name, text]) => `----- ${name}\n${text.split('\n').slice(-100).join('\n')}`)
+  /** The lines of the renderer log about the remote connection of the window, from position `from` on. */
+  function connectionLines(from = 0): string {
+    return rendererLog()
+      .slice(from)
+      .split('\n')
+      .filter((line) => /\[remote-connection\]|resolveAuthority/.test(line))
       .join('\n');
   }
 
@@ -121,35 +132,31 @@ describe('a devspace window whose container stops or is removed', () => {
     fs.mkdirSync(second.userDataDir, { recursive: true });
     const output = fs.openSync(path.join(second.userDataDir, `output-${starts}.txt`), 'w');
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(ELECTRON_|VSCODE_|DEVSPACE_TEST_)/.test(key)));
-    const start = starts;
-    const startedAt = Date.now();
     running = childProcess.spawn(process.execPath, second.args, { env, detached: true, stdio: ['ignore', output, output] });
     fs.closeSync(output);
     running.unref();
-    running.once('exit', (code, signal) => console.log(`    start ${start} of the second VS Code ended after ${Math.round((Date.now() - startedAt) / 1000)} s (${code ?? signal})`));
   }
 
-  /** Quits the second VS Code (SIGTERM to its process group, SIGKILL after 20 seconds), as a user quits VS Code. */
-  async function quitSecond(): Promise<void> {
+  /**
+   * Quits the second VS Code as a user quits it: SIGTERM to its main process, which closes its window, and the extension
+   * deactivates. Then SIGKILL to its process group, for any process that remains. Returns how the main process ended.
+   */
+  async function quitSecond(): Promise<string> {
     const child = running;
     running = undefined;
-    if (child?.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+    if (child?.pid === undefined) return 'not started';
     const pid = child.pid;
-    const exited = new Promise<boolean>((resolve) => child.once('exit', () => resolve(true)));
-    const signal = (name: NodeJS.Signals): void => {
-      try {
-        process.kill(-pid, name);
-      } catch {
-        // The process group has ended.
-      }
-    };
-    signal('SIGTERM');
-    if (!(await Promise.race([exited, sleep(20_000).then(() => false)]))) {
-      signal('SIGKILL');
-      await Promise.race([exited, sleep(10_000)]);
+    const ending = (): string | undefined => (child.exitCode !== null ? `exit code ${child.exitCode}` : (child.signalCode ?? undefined));
+    const exited = ending() !== undefined ? Promise.resolve() : new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    if (ending() === undefined) child.kill('SIGTERM');
+    await Promise.race([exited, sleep(QUIT_WAIT_MS)]);
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      // The process group has ended.
     }
-    // The other processes of the group (the extension host, the shared process) end after the main process.
-    signal('SIGKILL');
+    await Promise.race([exited, sleep(10_000)]);
+    return ending() ?? 'still running';
   }
 
   /** Starts the second VS Code and waits until its window attached: postAttachCommand wrote one more line. */
@@ -161,13 +168,23 @@ describe('a devspace window whose container stops or is removed', () => {
     } finally {
       console.log(`    start ${starts} of the second VS Code: attaches ${before} -> ${attaches()} after ${Math.round((Date.now() - startedAt) / 1000)} s`);
     }
+    // One heartbeat after the attach, so that the window knows its container as running.
+    await sleep(20_000);
+  }
+
+  /** Quits the second VS Code, which must quit on its own and release the devspace at its close. */
+  async function quitAndRelease(): Promise<void> {
+    const ended = await quitSecond();
+    console.log(`    the second VS Code quit: ${ended}`);
+    assert.ok(ended === 'exit code 0' || ended === 'SIGTERM', `The second VS Code did not quit on its own (${ended})`);
+    assert.match(secondLog(), new RegExp(`Released ${repository}: the Monitor stops it after`), 'The window did not release the devspace at its close');
   }
 
   /**
    * Watches the container and the log of the window after a stop or a removal: the states of the container, and when the
    * window logged that its container does not run.
    */
-  async function watchAfter(change: string, from: number, before: Map<string, number>): Promise<number | undefined> {
+  async function watchAfter(change: string, from: number, rendererFrom: number): Promise<number | undefined> {
     const changedAt = Date.now();
     const seconds = (): number => Math.round((Date.now() - changedAt) / 1000);
     const states: string[] = [];
@@ -182,10 +199,17 @@ describe('a devspace window whose container stops or is removed', () => {
     }
     console.log(`    the container after the ${change}: ${states.join('; ')}`);
     console.log(`    the window logged after ${noticedAt ?? '(never)'} s that its container does not run`);
-    console.log(`    the log of the window after the ${change}:\n${secondLog(from)}`);
-    console.log(`    the second VS Code runs: ${running !== undefined && running.exitCode === null && running.signalCode === null}`);
-    console.log(`    the other logs of the second VS Code after the ${change}:\n${newLogLines(before)}`);
+    printLong(`    the log of the window after the ${change}:\n${withoutGitHub(secondLog(from))}`);
+    printLong(`    the remote connection of the window after the ${change}:\n${connectionLines(rendererFrom)}`);
     return noticedAt;
+  }
+
+  /** The window noticed the change in time, and VS Code keeps it open although it gave up its remote connection. */
+  function assertNoticed(noticedAt: number | undefined, rendererFrom: number): void {
+    assert.ok(noticedAt !== undefined, 'The window did not log that its container does not run');
+    assert.ok(noticedAt * 1000 <= NOTICE_WAIT_MS + 5_000, `The window logged it only after ${noticedAt} s`);
+    assert.ok(running !== undefined && running.exitCode === null && running.signalCode === null, 'The second VS Code ended');
+    assert.match(connectionLines(rendererFrom), /\[Management +\].*Will give up now/, 'VS Code did not give up the remote connection');
   }
 
   it('a second VS Code opens the window of the devspace, which attaches', async function () {
@@ -197,55 +221,52 @@ describe('a devspace window whose container stops or is removed', () => {
     }
     assert.strictEqual(containerState(), 'running', 'The devspace does not run after the earlier runs');
     await startAndAttach(attaches());
-    // One heartbeat after the attach, so that the window knows its container as running.
-    await sleep(20_000);
-    console.log(`    the log of the window:\n${secondLog()}`);
-    assert.match(secondLog(), new RegExp(`This window is connected to ${repository}\\.|The open pipeline of ${repository} runs before it connects\\.`));
+    printLong(`    the log of the window:\n${withoutGitHub(secondLog())}`);
+    assert.match(secondLog(), new RegExp(`The open pipeline of ${repository} runs before it connects\\.`));
+    assert.match(secondLog(), new RegExp(`${repository} is ready in the container ${containerName}\\.`));
   });
 
-  it('the window notices that its container stopped, and nothing starts it again', async function () {
+  it('the window notices that its container stopped and stays open, and nothing starts the container again', async function () {
     this.timeout(WATCH_MS + NOTICE_WAIT_MS + 60_000);
     assert.ok(running, 'The second VS Code does not run');
     const from = secondLog().length;
+    const rendererFrom = rendererLog().length;
     attachesAtStop = attaches();
-    const before = logLengths();
     docker(['stop', containerName]);
-    const noticedAt = await watchAfter('stop', from, before);
-    assert.ok(noticedAt !== undefined, 'The window did not log that its container does not run');
-    assert.ok(noticedAt * 1000 <= NOTICE_WAIT_MS + 5_000, `The window logged it only after ${noticedAt} s`);
+    const noticedAt = await watchAfter('stop', from, rendererFrom);
+    assertNoticed(noticedAt, rendererFrom);
     assert.strictEqual(containerState(), 'exited', 'Something started the container again');
   });
 
-  it('at the next start of the window, the container runs again and the window attaches', async function () {
-    this.timeout(ATTACH_WAIT_MS + 90_000);
-    await quitSecond();
+  it('at the next open of the window, the open pipeline starts the stopped container, and the window attaches', async function () {
+    this.timeout(QUIT_WAIT_MS + ATTACH_WAIT_MS + 90_000);
+    await quitAndRelease();
     assert.strictEqual(containerState(), 'exited');
-    const id = docker(['inspect', '-f', '{{.Id}}', containerName]).trim();
+    const id = containerId();
     // The container does not run, so its lines are the ones at the stop.
     await startAndAttach(attachesAtStop);
-    await sleep(20_000);
-    console.log(`    the log of the window:\n${secondLog()}`);
-    console.log(`    the remote connection of the window:\n${connectionLines()}`);
+    printLong(`    the log of the window:\n${withoutGitHub(secondLog())}`);
+    assert.match(secondLog(), new RegExp(`State of ${repository}: container stopped,`));
+    assert.match(secondLog(), new RegExp(`Starting the container of ${repository}\\.`));
     assert.strictEqual(containerState(), 'running');
-    assert.strictEqual(docker(['inspect', '-f', '{{.Id}}', containerName]).trim(), id, 'The start made a new container');
+    assert.strictEqual(containerId(), id, 'The open made a new container');
   });
 
-  it('the window notices that its container was removed, and its next start makes the container again', async function () {
-    this.timeout(WATCH_MS + NOTICE_WAIT_MS + ATTACH_WAIT_MS + 120_000);
+  it('the window notices that its container was removed, and its next open makes a new container', async function () {
+    this.timeout(WATCH_MS + NOTICE_WAIT_MS + QUIT_WAIT_MS + ATTACH_WAIT_MS + 120_000);
     assert.ok(running, 'The second VS Code does not run');
-    const id = docker(['inspect', '-f', '{{.Id}}', containerName]).trim();
+    const id = containerId();
     const from = secondLog().length;
-    const before = logLengths();
+    const rendererFrom = rendererLog().length;
     docker(['rm', '-f', containerName]);
-    const noticedAt = await watchAfter('removal', from, before);
-    await quitSecond();
+    const noticedAt = await watchAfter('removal', from, rendererFrom);
+    assertNoticed(noticedAt, rendererFrom);
+    await quitAndRelease();
     // A new container starts without the lines of the old one.
     await startAndAttach(0);
-    await sleep(20_000);
-    console.log(`    the log of the window:\n${secondLog()}`);
-    console.log(`    the remote connection of the window:\n${connectionLines()}`);
-    assert.ok(noticedAt !== undefined, 'The window did not log that its container does not run');
+    printLong(`    the log of the window:\n${withoutGitHub(secondLog())}`);
+    assert.match(secondLog(), new RegExp(`State of ${repository}: container missing,`));
     assert.strictEqual(containerState(), 'running');
-    assert.notStrictEqual(docker(['inspect', '-f', '{{.Id}}', containerName]).trim(), id, 'The container is the removed one');
+    assert.notStrictEqual(containerId(), id, 'The container is the removed one');
   });
 });
