@@ -5,8 +5,8 @@
 /// <reference types="mocha" />
 // Tests in a real VS Code (npm run test:vscode and test:vscode:vsix, .vscode-test.mjs): VS Code loads the extension
 // from dist/ or from the installed VSIX beside the Dev Containers extension, and mocha runs these tests in its
-// extension host (in the configuration `untrusted` in a folder that VS Code does not trust). The tests need no Docker engine, and .vscode-test.mjs keeps the extension away from the Docker
-// engine of this computer.
+// extension host (in the configuration `untrusted` in a folder that VS Code does not trust). The tests need no Docker
+// engine, and .vscode-test.mjs keeps the extension away from the Docker engine of this computer.
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';

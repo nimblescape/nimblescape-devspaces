@@ -4,8 +4,8 @@
 
 // Bundles each test of test/vscode/ to out/test/vscode/<name>.test.js for the tests in a real VS Code
 // (.vscode-test.mjs), and the tests of test/vscode/attach/ and test/vscode/untrusted/ to out/test/vscode/attach/ and
-// out/test/vscode/untrusted/. The module `vscode` comes from
-// the extension host, and mocha from @vscode/test-cli. test/vscode/attach/prepare.ts becomes a Node program for CI.
+// out/test/vscode/untrusted/. The module `vscode` comes from the extension host, and mocha from @vscode/test-cli.
+// test/vscode/attach/prepare.ts becomes a Node program for CI.
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';

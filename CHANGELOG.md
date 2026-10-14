@@ -11,7 +11,7 @@ The Docker names of a new devspace carry the word of its source before the rando
 
 The shared VS Code server store now works for VS Code Insiders: before, the download of an Insiders server into the store failed, and the Dev Containers extension installed the server into each container.
 
-**Restricted Mode:** Devspaces now also runs in a window whose folder VS Code does not trust (Restricted Mode); before, VS Code turned the extension off there. In such a window, VS Code ignores the values that the workspace or folder gives the settings of Devspaces, so only your user settings apply. The extensions that a start puts into the shared extension cache now come only from your user value of dev.containers.defaultExtensions, also in a trusted window.
+**Restricted Mode:** Devspaces now also runs in a window whose folder VS Code does not trust (Restricted Mode); before, VS Code turned the extension off there. In such a window, VS Code ignores the values that the workspace or folder gives the settings of Devspaces, so only your user settings apply. The default extensions that a start records for the shared extension cache now come only from your user value of dev.containers.defaultExtensions, also in a trusted window; a workspace or folder value is ignored.
 
 ## 0.5.0
 
