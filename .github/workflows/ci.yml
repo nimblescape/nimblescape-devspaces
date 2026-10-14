@@ -240,12 +240,13 @@ jobs:
     # and the test VS Code. The first start opens a container that is no devspace, the second a devspace that the window
     # restores from its volume labels, the third the same devspace again with the user data folder of the second (a
     # restart of VS Code), the fourth the same window under another GitHub account, and the fifth the same window when
-    # the start of its stopped container takes several minutes. The runner gets a Git configuration and an SSH agent,
-    # so that the tests see which of them reach the containers. The extension creates its objects with the names of a
-    # real installation, which is why these tests run only on CI.
+    # the start of its stopped container takes several minutes. The sixth starts with a local folder and starts a
+    # second VS Code in the window of the devspace, whose container the tests stop and then remove. The runner gets a
+    # Git configuration and an SSH agent, so that the tests see which of them reach the containers. The extension
+    # creates its objects with the names of a real installation, which is why these tests run only on CI.
     name: vscode attach
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Check out the source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

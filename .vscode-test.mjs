@@ -13,8 +13,9 @@
 //   window of a container that test/vscode/attach/prepare.ts made on the real Docker engine, and runs the tests of
 //   test/vscode/attach/<kind>.test.ts there. It exists only when DEVSPACE_TEST_ATTACH names the kind (plain,
 //   devspace, reattach: the devspace again after a restart of VS Code, account: the devspace under another GitHub
-//   account, longopen: the devspace with an open pipeline of several minutes, or remote: a devspace on the Docker engine
-//   of another computer over SSH), so that no local run reaches the Docker engine of this computer.
+//   account, longopen: the devspace with an open pipeline of several minutes, remote: a devspace on the Docker engine
+//   of another computer over SSH, or stopped: a local folder, whose tests start a second VS Code in the window of the
+//   devspace and stop and remove its container), so that no local run reaches the Docker engine of this computer.
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
 import * as crypto from 'crypto';
@@ -117,13 +118,40 @@ function attachConfiguration(kind, index) {
     const pending = path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'globalStorage', `${manifest.publisher}.${manifest.name}`, 'pending');
     for (const name of fs.existsSync(pending) ? fs.readdirSync(pending) : []) fs.rmSync(path.join(pending, name), { force: true });
   }
-  // `stopped` starts with a local folder; its tests open the devspace in a second window (test/vscode/attach/stopped.test.ts).
+  const extensionDevelopmentPath = [checkout, fileURLToPath(new URL('test/vscode/github', import.meta.url))];
+  // `stopped` starts with a local folder; its tests start a second VS Code in the window of the devspace
+  // (test/vscode/attach/stopped.test.ts): with an empty user data folder of its own (VS Code puts its socket there, so
+  // the path is short), the extensions of the test VS Code (@vscode/test-electron, getProfileArguments) and the
+  // arguments of the test VS Code (@vscode/test-electron, runTests), without tests.
   const local = path.join(os.tmpdir(), `devspaces attach local ${checkoutId}`);
-  if (kind === 'stopped' && !listsOnly) fs.mkdirSync(local, { recursive: true });
+  const second = path.join(os.tmpdir(), `devspaces second ${checkoutId}`);
+  const extensionsDir = path.join(checkout, '.vscode-test', 'extensions');
+  if (kind === 'stopped' && !listsOnly) {
+    fs.mkdirSync(local, { recursive: true });
+    fs.rmSync(second, { recursive: true, force: true });
+  }
+  const secondVscode = {
+    userDataDir: second,
+    extensionsDir,
+    args: [
+      `--user-data-dir=${second}`,
+      `--extensions-dir=${extensionsDir}`,
+      ...extensionDevelopmentPath.map((folder) => `--extensionDevelopmentPath=${folder}`),
+      `--folder-uri=${seed.folderUri}`,
+      '--disable-extension=vscode.github-authentication',
+      '--no-sandbox',
+      '--disable-gpu-sandbox',
+      '--disable-updates',
+      '--disable-workspace-trust',
+      '--skip-welcome',
+      '--skip-release-notes',
+      '--password-store=basic',
+    ],
+  };
   return {
     ...base,
     files: `out/test/vscode/attach/${kind}.test.js`,
-    extensionDevelopmentPath: [fileURLToPath(new URL('.', import.meta.url)), fileURLToPath(new URL('test/vscode/github', import.meta.url))],
+    extensionDevelopmentPath,
     ...(kind === 'stopped' ? { workspaceFolder: local } : {}),
     launchArgs: [...base.launchArgs, ...(kind === 'stopped' ? [] : [`--folder-uri=${seed.folderUri}`]), '--disable-extension=vscode.github-authentication'],
     env: {
@@ -131,6 +159,7 @@ function attachConfiguration(kind, index) {
       DEVSPACE_TEST_ATTACH: kind,
       DEVSPACE_TEST_ATTACH_SEED: JSON.stringify(seed),
       ...(kind === 'account' ? { DEVSPACE_TEST_GITHUB_ACCOUNT: JSON.stringify({ id: '9999', label: 'devspaces-other' }) } : {}),
+      ...(kind === 'stopped' ? { DEVSPACE_TEST_SECOND_VSCODE: JSON.stringify(secondVscode) } : {}),
     },
     // The longest wait of a test is one minute (postAttachCommand); the tests of `stopped` set their own.
     mocha: { ...base.mocha, timeout: 120_000 },
