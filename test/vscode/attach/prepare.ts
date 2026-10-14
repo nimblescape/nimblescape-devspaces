@@ -14,8 +14,9 @@
 // - A devspace without container: its workspace volume with the labels of the extension (the test account owns it)
 //   and a repository with a devcontainer.json. VS Code starts with a fresh user data folder, so the registry of the
 //   extension is empty, and the window restores the devspace from the volume labels, as on a new computer. The
-//   configuration sets the old key "remote.containers.copyGitConfig": true and a postAttachCommand that counts the
-//   attaches.
+//   configuration sets the old key "remote.containers.copyGitConfig": true, a postAttachCommand that writes the time
+//   of each attach, and a postStartCommand that waits LONG_START_SECONDS once when the mark LONG_START_MARK exists
+//   (the run `longopen`).
 // - A plain container that is no devspace, of the same dev image (with Git and the Docker CLI, so that Dev Containers
 //   configures its credential helpers there).
 import * as crypto from 'crypto';
@@ -47,6 +48,14 @@ const DOCKERFILE = `FROM ${BASE_IMAGE}
 RUN apt-get update && apt-get install -y --no-install-recommends docker-cli git && rm -rf /var/lib/apt/lists/*
 `;
 const PLAIN_IMAGE = 'devspaces-attach-test-plain:1';
+/**
+ * The run `longopen`: a start of the devspace container that takes several minutes. The CI job writes the mark (as
+ * the remote user) and stops the container; postStartCommand removes the mark, so it waits once, and writes when it
+ * began and ended.
+ */
+const LONG_START_SECONDS = 150;
+const LONG_START_MARK = '/tmp/devspaces-test-long-start';
+const POST_START_COMMAND = `if [ -f ${LONG_START_MARK} ]; then rm -f ${LONG_START_MARK}; date +%s > /tmp/long-start-began; sleep ${LONG_START_SECONDS}; date +%s > /tmp/long-start-ended; fi`;
 
 const log: Logger = {
   info: (message) => console.log(`INFO  ${message}`),
@@ -131,7 +140,8 @@ async function main(): Promise<void> {
       name: 'Attach test',
       build: { dockerfile: 'Dockerfile' },
       remoteUser: 'node',
-      postAttachCommand: 'echo attach >> /tmp/attach-count',
+      postStartCommand: POST_START_COMMAND,
+      postAttachCommand: 'date +%s >> /tmp/attach-count',
       customizations: { vscode: { settings: { 'remote.containers.copyGitConfig': true } } },
     },
     null,
@@ -144,7 +154,7 @@ async function main(): Promise<void> {
   await docker.runChecked(['run', '-d', '--name', plain, PLAIN_IMAGE, 'sleep', 'infinity']);
 
   const seed = {
-    devspace: { containerName: name, folder, folderUri: folderUri(name, folder), user: 'node', devspaceId },
+    devspace: { containerName: name, folder, folderUri: folderUri(name, folder), user: 'node', devspaceId, longStartSeconds: LONG_START_SECONDS, longStartMark: LONG_START_MARK },
     plain: { containerName: plain, folder: '/tmp', folderUri: folderUri(plain, '/tmp'), user: 'root' },
   };
   const file = path.join(ROOT, 'out', 'test', 'vscode', 'attach', 'seed.json');

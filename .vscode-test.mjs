@@ -12,8 +12,9 @@
 // - "attach" (CI only, npm run test:vscode:attach after npm run test:vscode:attach:prepare): VS Code starts in the
 //   window of a container that test/vscode/attach/prepare.ts made on the real Docker engine, and runs the tests of
 //   test/vscode/attach/<kind>.test.ts there. It exists only when DEVSPACE_TEST_ATTACH names the kind (plain,
-//   devspace, reattach: the devspace again after a restart of VS Code, or account: the devspace under another GitHub
-//   account), so that no local run reaches the Docker engine of this computer.
+//   devspace, reattach: the devspace again after a restart of VS Code, account: the devspace under another GitHub
+//   account, or longopen: the devspace with an open pipeline of several minutes), so that no local run reaches the
+//   Docker engine of this computer.
 // VSCODE_TEST_VERSION selects the VS Code version: "stable" (the default), "insiders" or a version such as 1.125.0. On
 // Linux without a display, run it under xvfb-run.
 import * as crypto from 'crypto';
@@ -99,15 +100,21 @@ function configuration(label, index, options, { keepUserDataDir = false } = {}) 
 /**
  * The configuration `attach`: the window of the container DEVSPACE_TEST_ATTACH of out/test/vscode/attach/seed.json, on
  * the Docker engine of this computer. The fake sign-in provider `github` (test/vscode/github) replaces the built-in one.
- * `reattach` and `account` start VS Code again in the window of the devspace with the user data folder of the run
- * `devspace`, as a restart of VS Code; `account` with another signed-in account than the owner of the devspace.
+ * `reattach`, `account` and `longopen` start VS Code again in the window of the devspace with the user data folder of
+ * the run `devspace`, as a restart of VS Code; `account` with another signed-in account than the owner of the devspace.
+ * `longopen` starts as long after the last open: without the pending connection files of the extension, so that the
+ * window runs the open pipeline again (src/vscode/activationRules.ts, pipelineJustRan).
  */
 function attachConfiguration(kind, index) {
-  const restart = kind === 'reattach' || kind === 'account';
+  const restart = kind === 'reattach' || kind === 'account' || kind === 'longopen';
   const container = restart ? 'devspace' : kind;
   const seed = JSON.parse(fs.readFileSync(new URL('out/test/vscode/attach/seed.json', import.meta.url), 'utf8'))[container];
   if (!seed) throw new Error(`out/test/vscode/attach/seed.json has no container "${container}".`);
   const base = configuration('attach', index, {}, { keepUserDataDir: restart });
+  if (kind === 'longopen' && !listsOnly) {
+    const pending = path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'globalStorage', `${manifest.publisher}.${manifest.name}`, 'pending');
+    for (const name of fs.existsSync(pending) ? fs.readdirSync(pending) : []) fs.rmSync(path.join(pending, name), { force: true });
+  }
   return {
     ...base,
     files: `out/test/vscode/attach/${kind}.test.js`,

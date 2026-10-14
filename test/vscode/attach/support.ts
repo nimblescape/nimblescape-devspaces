@@ -22,6 +22,9 @@ export interface Seed {
   folderUri: string;
   /** The user of the window in the container. */
   user: string;
+  /** The devspace only: the wait of its postStartCommand when the mark exists (prepare.ts, the run `longopen`). */
+  longStartSeconds?: number;
+  longStartMark?: string;
 }
 
 export function seed(): Seed {
