@@ -636,6 +636,11 @@ export function requestOpenRecords(
           if (!buildRecordFits(change.record, entry, devspaceImageName(entry.repository, entry.id, buildNumber), buildNumber)) {
             throw new HelperOperationError('invalid', 'The build record of the request is not one of an image of the devspace.', false);
           }
+          // A devspace never changes its kind: the record of a default-image devspace names its default image, the
+          // record of a configuration devspace none.
+          if ((change.record.defaultImage !== undefined) !== (entry.defaultImage !== undefined)) {
+            throw new HelperOperationError('invalid', 'The build record of the request is of another kind of devspace.', false);
+          }
         }
         // A rebaseline of another image than the one of the build record changes nothing (registryOpenRecords), as in the
         // extension's own open: another window's rebuild may have won the race; the image name is only compared.

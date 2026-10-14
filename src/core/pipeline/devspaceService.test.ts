@@ -633,6 +633,13 @@ describe('open: first open', () => {
     expect(h.helper.builds.map((build) => build.configPath)).toEqual(['.devcontainer/python/devcontainer.json']);
   });
 
+  it('uses the root configuration under its other file name silently: the same configuration, nothing to say', async () => {
+    h.helper.files = { '.devcontainer.json': { configText: DEFAULT_CONFIG_TEXT } };
+    await h.service.open(TARGET, options());
+    expect(h.ui.infos).toEqual([]);
+    expect((await h.registry.findForAccount(REPO, ACCOUNT.id))?.configPath).toBe('.devcontainer.json');
+  });
+
   it('uses the first configuration silently for an unknown repository without configuration paths', async () => {
     h.helper.files = { '.devcontainer.json': { configText: DEFAULT_CONFIG_TEXT } };
     await h.service.open({ ...TARGET, configPaths: [] }, options());

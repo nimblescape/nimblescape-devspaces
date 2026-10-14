@@ -1591,7 +1591,10 @@ export class DevspaceService extends OperationBase {
     if (ctx.prepare !== undefined && fallback) throw new PrepareSkipped(`its configuration ${ctx.configPath} is not on the checked-out branch`);
     if (fallback) {
       this.logger.info(`The configuration ${ctx.configPath} does not exist on this branch. ${configPath} is used.`);
-      if (ctx.announceConfigFallback && env.buildRecord?.configPath !== configPath) {
+      // Said once per fallback to another configuration; the root configuration under its other file name is the
+      // same configuration, so there is nothing to say.
+      const sameConfiguration = sameSource({ kind: 'configuration', configPath }, { kind: 'configuration', configPath: ctx.configPath });
+      if (ctx.announceConfigFallback && !sameConfiguration && env.buildRecord?.configPath !== configPath) {
         this.deps.ui.info(Messages.configurationNotFound(ctx.configPath, sourceLabel({ kind: 'configuration', configPath })));
       }
     }
@@ -6455,14 +6458,17 @@ export class DevspaceService extends OperationBase {
         this.logger.warn(candidate.skipped);
         continue;
       }
-      // A volume of version 0.5.0 or older (no source label): the source of the devspace from the build record of its
-      // newest devspace image (its kind, and the configuration it was built from); the label of its dev container, when
-      // it still exists, decides the configuration path below.
-      if (volume.labels[LABEL_DEFAULT_IMAGE] === undefined && volume.labels[LABEL_CONFIG_PATH] === undefined) {
+      // A volume without the configuration path in its labels: the configuration of the devspace from the build record
+      // of its newest devspace image (for a default-image devspace, the path its synthesized configuration is read
+      // under: the first configuration of the repository); for a volume of version 0.5.0 or older (no source label at
+      // all), its kind too. The label of its dev container, when it still exists, decides the configuration path below.
+      if (volume.labels[LABEL_CONFIG_PATH] === undefined) {
         const found = await this.newestImageRecord(candidate);
         if ('record' in found) {
           candidate.configPath = found.record.configPath;
-          if (found.record.defaultImage !== undefined) {
+          if (volume.labels[LABEL_DEFAULT_IMAGE] !== undefined) {
+            // The kind of the label; the record of a default-image devspace names its default image too.
+          } else if (found.record.defaultImage !== undefined) {
             candidate.defaultImage = found.record.defaultImage;
             this.logger.info(`The volume ${candidate.volumeName} is the default-image devspace of ${candidate.repository}, as its devspace image ${found.tag} records: it was built from ${found.record.defaultImage}.`);
           } else if (found.record.configPath !== DEFAULT_CONFIG_PATH) {
