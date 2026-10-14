@@ -3545,6 +3545,76 @@ describe('Accounts', () => {
     expect(h.connection.open).not.toHaveBeenCalled();
   });
 
+  it('waits for the removal of the token also before the second close', async () => {
+    recreateHarness({ leaveCheckMs: 20 });
+    const env = devspace();
+    await h.registry.add(env);
+    await connectHere(env);
+    h.connection.currentContainerName.mockReturnValue(CONTAINER);
+    h.auth.getAccount.mockResolvedValue(OTHER_ACCOUNT);
+    await h.controller.onSessionChanged();
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the first close');
+    let answer: (value: unknown) => void = () => {};
+    h.flow.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    await settle(() => tokenRemovals() >= 2, 'the second removal of the token');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.connection.closeRemoteConnection).toHaveBeenCalledTimes(1);
+    answer({ outcome: 'removed', container: 'c0ffeec0ffee' });
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length >= 2, 'the second close');
+  });
+
+  it('does not close the connection when the owner account signs in again while the token is removed', async () => {
+    const env = devspace();
+    await h.registry.add(env);
+    await connectHere(env);
+    h.connection.currentContainerName.mockReturnValue(CONTAINER);
+    let answer: (value: unknown) => void = () => {};
+    h.flow.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    h.auth.getAccount.mockResolvedValue(OTHER_ACCOUNT);
+    const left = h.controller.onSessionChanged();
+    await settle(() => tokenRemovals() > 0, 'the removal of the token');
+    h.auth.getAccount.mockResolvedValue(ACCOUNT);
+    await h.controller.onSessionChanged();
+    // The window reloads to open the devspace again (reopenLeftDevspace).
+    expect(h.connection.open).toHaveBeenCalledTimes(1);
+    answer({ outcome: 'removed', container: 'c0ffeec0ffee' });
+    await left;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.connection.closeRemoteConnection).not.toHaveBeenCalled();
+  });
+
+  it('does not end a Start in this window that began while the token is removed', async () => {
+    const env = devspace();
+    await h.registry.add(env);
+    await connectHere(env);
+    const other = devspace({
+      id: 'b1c2d3e4-0000-4000-8000-000000000002',
+      repository: 'acme/web',
+      containerName: 'web',
+      volumeName: 'web',
+      remoteWorkspaceFolder: '/workspaces/web',
+      owner: OTHER_ACCOUNT,
+    });
+    await h.registry.add(other);
+    let answer: (value: unknown) => void = () => {};
+    h.flow.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    h.auth.getAccount.mockResolvedValue(OTHER_ACCOUNT);
+    const left = h.controller.onSessionChanged();
+    await settle(() => tokenRemovals() > 0, 'the removal of the token');
+    const pipeline = deferred<OpenResult>();
+    h.service.openDevspaceInWorker.mockImplementation(async () => pipeline.promise);
+    const started = run('startInCurrentWindow', row('acme/web', other));
+    await settle(() => h.service.openDevspaceInWorker.mock.calls.length > 0, 'the open pipeline of the Start');
+    answer({ outcome: 'removed', container: 'c0ffeec0ffee' });
+    await left;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.connection.closeRemoteConnection).not.toHaveBeenCalled();
+    pipeline.resolve(openResult(other));
+    await started;
+    expect(h.connection.closeRemoteConnection).not.toHaveBeenCalled();
+    expect(h.connection.open).toHaveBeenCalled();
+  });
+
   it('role A: closes the connection again when a restored window of another account kept it', async () => {
     recreateHarness({ leaveCheckMs: 20 });
     const env = devspace({ owner: OTHER_ACCOUNT });

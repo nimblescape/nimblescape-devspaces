@@ -1977,7 +1977,7 @@ export class Controller implements vscode.Disposable {
    * Remote Connection", with `message` for the user. With `left` (a devspace that the window must not use), the
    * window does not rely on the close: VS Code lets the user keep the connection (Cancel in the dialog about unsaved
    * files), and `checkLeftConnection` closes the connection again. When the account is the reason, the token of the
-   * owner account leaves the container before the close (`removeGitTokenBeforeClose`).
+   * owner account leaves the container before the close (`awaitTokenRemoval`).
    */
   private async leaveDevspace(message?: string, left?: LeftDevspace): Promise<void> {
     this.current = undefined;
@@ -1988,9 +1988,16 @@ export class Controller implements vscode.Disposable {
     this.updateStatusBar();
     if (message) this.warn(message);
     if (left?.reason === 'account') {
-      await this.removeGitTokenBeforeClose(left);
+      const requests = this.connectRequests;
+      await this.awaitTokenRemoval(left, this.removeGitToken(left));
       // The owner account signed in again meanwhile, and the window reloads to open the devspace (reopenLeftDevspace).
       if (this.left !== left || this.disposed) return;
+      if ([...this.activeConnectRequests].some((request) => request > requests)) {
+        // A Start in this window began meanwhile and connects it elsewhere: the close must not end its pipeline.
+        // Checked again later (checkLeftConnection).
+        this.closeConnection(left, { closeFirst: false });
+        return;
+      }
     }
     this.closeConnection(left);
   }
@@ -2041,14 +2048,20 @@ export class Controller implements vscode.Disposable {
         return;
       }
       this.logger.warn(`This window is still connected to ${left.repository}, which it must not use. It closes its remote connection again.`);
-      const removal = left.reason === 'account' ? this.removeGitTokenBeforeClose(left) : undefined;
+      // The removal runs while the message is open; the limit of the wait counts from its end.
+      const removal = left.reason === 'account' ? this.removeGitToken(left) : undefined;
       await vscode.window
         .showWarningMessage(ControllerTexts.stillConnected(left.repository), { modal: true })
         .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
-      await removal;
+      if (removal) await this.awaitTokenRemoval(left, removal);
       // The owner account may have signed in while the message was open.
       if (await this.reopenLeftDevspace(left)) return;
       if (this.left !== left || this.current || this.disposed) return;
+      if (this.activeConnectRequests.size > 0) {
+        // A Start began while the message was open or during the wait (as above).
+        this.closeConnection(left, { closeFirst: false });
+        return;
+      }
       this.closeConnection(left);
     } finally {
       this.checkingLeft = false;
@@ -2077,12 +2090,12 @@ export class Controller implements vscode.Disposable {
    * the dev container, so it is removed from there when the container runs (the operation `tokenRemove`, a flow of the
    * worker, as root, or as the remote user of the entry when root may not); a stopped container holds no token. The
    * credential helper of the container then gives nothing; the next open of the owner writes the token again. Best
-   * effort: the result is logged.
+   * effort: the result is logged. Never throws.
    */
   private async removeGitToken(left: LeftDevspace): Promise<void> {
     const { containerName } = left;
-    if (!this.deps.docker.isInstalled()) return;
     try {
+      if (!this.deps.docker.isInstalled()) return;
       // Never on another Docker host (its container is not on the current engine).
       const known = await this.deps.registry.get(left.devspaceId).catch(() => undefined);
       if (known && !isOnDockerHost(known, await this.currentDockerHost())) {
@@ -2098,21 +2111,14 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * `removeGitToken` before "Close Remote Connection", which reloads the window and ends this extension host, and with
-   * it a removal that has not ended. Waits at most TOKEN_REMOVE_WAIT_MS; the removal continues after that while this
-   * extension host runs. Never throws.
+   * Waits for `removal` (removeGitToken) before "Close Remote Connection", which reloads the window and ends this
+   * extension host, and with it a removal that has not ended. Waits at most TOKEN_REMOVE_WAIT_MS; the removal continues
+   * after that while this extension host runs.
    */
-  private async removeGitTokenBeforeClose(left: LeftDevspace): Promise<void> {
+  private async awaitTokenRemoval(left: LeftDevspace, removal: Promise<void>): Promise<void> {
     const waited = new AbortController();
-    const removal = this.removeGitToken(left).then(
-      () => true,
-      (error: unknown) => {
-        this.logger.error('Could not remove the GitHub token.', error);
-        return true;
-      },
-    );
     const limit = this.delay(this.deps.timing?.tokenRemoveWaitMs ?? TOKEN_REMOVE_WAIT_MS, waited.signal).then(() => false);
-    const ended = await Promise.race([removal, limit]);
+    const ended = await Promise.race([removal.then(() => true), limit]);
     waited.abort();
     if (!ended) this.logger.warn(`The GitHub token is not removed from the container ${left.containerName} yet. The window closes its remote connection without waiting longer.`);
   }
