@@ -328,9 +328,9 @@ jobs:
           docker images
 
   vscode-attach-remote:
-    # The attach test of a devspace on the Docker engine of another computer, reached over SSH. test/vscode/attach/
-    # prepare.ts (DEVSPACE_TEST_ATTACH_PREPARE=remote) starts that computer as a container of the runner with its own
-    # Docker engine and an SSH server, adds it to the SSH config of the runner, puts the devspace without container on
+    # The attach test of a devspace on the Docker engine of another computer, reached over SSH.
+    # test/vscode/attach/prepare.ts (DEVSPACE_TEST_ATTACH_PREPARE=remote) starts that computer as a container of the
+    # runner with its own Docker engine and an SSH server, adds it to the SSH config of the runner, puts the devspace without container on
     # its engine, and makes its Docker context the current one, as "Use a Remote Docker Host…" does. The engine of the
     # runner gets a container with the name of the devspace container, which the window must not use. A job of its
     # own, so that the engine of the runner has no objects of the other attach tests.
@@ -362,7 +362,8 @@ jobs:
           DEVSPACE_TEST_ATTACH: remote
         run: xvfb-run -a npm run test:vscode:attach
 
-      # Each command runs also when one before failed (for example the engine of the other computer did not start).
+      # Each command runs also when one before failed (for example the engine of the other computer did not start), and
+      # none waits longer than a minute for an engine that does not answer.
       - name: Show the Docker objects of both engines
         if: ${{ failure() }}
         run: |
@@ -371,7 +372,8 @@ jobs:
           docker context ls
           for context in default devspaces-test-remote; do
             echo "===== $context"
-            docker --context "$context" ps -a
-            docker --context "$context" volume ls
-            docker --context "$context" images
+            timeout 60 docker --context "$context" ps -a
+            timeout 60 docker --context "$context" volume ls
+            timeout 60 docker --context "$context" images
           done
+          true

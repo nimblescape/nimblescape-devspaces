@@ -230,9 +230,10 @@ async function prepareRemote(local: BootstrapDocker, dockerPath: string, started
   fs.writeFileSync(knownHosts, `[127.0.0.1]:${port} ${hostKey}\n`, { mode: 0o600 });
   const config = path.join(sshFolder, 'config');
   const entry = [`Host ${REMOTE_HOST}`, '  HostName 127.0.0.1', `  Port ${port}`, '  User root', `  IdentityFile ${key}`, '  IdentitiesOnly yes', '  StrictHostKeyChecking yes', `  UserKnownHostsFile ${knownHosts}`];
-  // ssh takes the first value of each option, so the entry of an earlier preparation on this runner is replaced.
-  const earlier = fs.existsSync(config) ? fs.readFileSync(config, 'utf8').replace(new RegExp(`^Host ${REMOTE_HOST}\\n(?:[ \\t]+.*(?:\\n|$))*`, 'gm'), '').trimEnd() : '';
-  fs.writeFileSync(config, `${earlier === '' ? '' : `${earlier}\n\n`}${entry.join('\n')}\n`, { mode: 0o600 });
+  // ssh takes the first value of each option, so the entry comes first (before a `Host *` of the runner), and the entry
+  // of an earlier preparation on this runner is removed from the rest.
+  const rest = fs.existsSync(config) ? fs.readFileSync(config, 'utf8').replace(new RegExp(`^Host ${REMOTE_HOST}\\n(?:[ \\t]+.*(?:\\n|$))*`, 'gm'), '').trim() : '';
+  fs.writeFileSync(config, `${entry.join('\n')}\n${rest === '' ? '' : `\n${rest}\n`}`, { mode: 0o600 });
   fs.chmodSync(config, 0o600);
   log.info(`${config}: ${entry.join('; ')}`);
 
