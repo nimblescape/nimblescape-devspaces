@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The operations of a window (no bypass of the worker, by construction). Each sends its flow to the worker of the
-// Docker target: the open, Stop, Delete and its check, the listing of Select configuration, the reads of an attached
+// Docker target: the open, Stop, Delete and its check, the listing of the configurations, the reads of an attached
 // window, the refresh and the rebuild of the registry; the worker runs the pipeline (DevspaceService). Nothing of
 // the pipeline is imported here, so the extension's bundle holds none of it. No `vscode`.
 import { registryBusyMarks, type DevspaceBusyMarks } from './busyMarks';
@@ -15,7 +15,6 @@ import {
   LOCK_UNAVAILABLE_CODE,
   OP_DELETE,
   OP_DELETE_CHECK,
-  OP_LIST_CONFIGURATIONS,
   OP_OPEN,
   OPEN_PROGRESS_DETAIL,
   OP_RECONCILE,
@@ -26,10 +25,8 @@ import {
   parseDeleteCheckValue,
   parseDeleteParams,
   parseDeleteValue,
-  parseListConfigurationsParams,
   parseReconcileParams,
   parseReconcileValue,
-  parseListConfigurationsValue,
   parseOpenParams,
   parseOpenValue,
   parseStopParams,
@@ -66,7 +63,6 @@ import {
   DEVSPACE_LOCK_WAIT_SECONDS,
   STOP_FLOW_TIMEOUT_MS,
   WINDOW_STATE_FLOW_TIMEOUT_MS,
-  LIST_CONFIGURATIONS_FLOW_TIMEOUT_MS,
   DELETE_FLOW_TIMEOUT_MS,
   DELETE_CHECK_FLOW_TIMEOUT_MS,
   RECONCILE_FLOW_TIMEOUT_MS,
@@ -262,7 +258,6 @@ export class DevspaceOperations extends OperationBase {
       repository,
       ...what,
       ...(options.forceRebuild === true ? { forceRebuild: true } : {}),
-      ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
       ...(options.source !== undefined ? { source: options.source } : {}),
       ...(vscodeServer !== undefined ? { vscodeServer } : {}),
       ...(defaultExtensions !== undefined && defaultExtensions.length > 0 ? { defaultExtensions } : {}),
@@ -577,27 +572,6 @@ export class DevspaceOperations extends OperationBase {
         throw this.toUserError(error, options.signal);
       }
     });
-  }
-
-  /**
-   * The listing of Select configuration in the worker of the Docker host of the operation, where its own pipeline runs
-   * listConfigurations (the record and the account through its requests, the lock and the batch helper there). A
-   * refusal of that pipeline is thrown here as a user error (refusalError); a worker that cannot be reached or take the
-   * lock is refused as for Stop (workerFlow).
-   */
-  async listConfigurationsInWorker(devspaceId: string, options: OperationOptions): Promise<string[]> {
-    const env = await this.deps.registry.get(devspaceId);
-    if (!env) return [];
-    try {
-      const params = parseListConfigurationsParams({ devspaceId: env.id, dockerHost: await this.currentDockerHost(), owner: this.deps.owner });
-      if (params === undefined) throw new Error(`The listing of the configurations of ${env.repository} cannot be sent to the worker.`);
-      const value = parseListConfigurationsValue(await this.workerFlow(env, OP_LIST_CONFIGURATIONS, params, LIST_CONFIGURATIONS_FLOW_TIMEOUT_MS, options.signal));
-      if (value === undefined) throw new Error(`The worker answered the listing of the configurations of ${env.repository} with an invalid value.`);
-      if ('refused' in value) throw refusalError(value.refused);
-      return value.configPaths;
-    } catch (error) {
-      throw this.toUserError(error, options.signal);
-    }
   }
 
   /**

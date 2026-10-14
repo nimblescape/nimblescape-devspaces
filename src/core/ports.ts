@@ -176,11 +176,10 @@ export interface GitHubAuth {
 }
 
 /**
- * What the question configurationChanged names (ConfigurationChangeKind): `defaultImage`, the default image of a devspace built from one
- * changed; `source`, the source selected for the devspace (the default image, or its configuration) is not the one
- * it was built from (a switch that was not built yet); none, its configuration changed.
+ * What the question configurationChanged names (ConfigurationChangeKind): `defaultImage`, the default image of a
+ * default-image devspace changed (the setting); none, the configuration of the devspace changed.
  */
-export type ConfigurationChangeKind = 'defaultImage' | 'source';
+export type ConfigurationChangeKind = 'defaultImage';
 
 /** Decisions and messages that the open pipeline needs from the user interface. */
 export interface PipelineUi {
@@ -188,7 +187,7 @@ export interface PipelineUi {
   confirmUntrustedRepository(repository: string): Promise<boolean>;
   /**
    * The devcontainer.json changed since the last build; `what` (ConfigurationChangeKind) names a changed default image
-   * or a selected source that the devspace was not built from (the message names it).
+   * (the message names it).
    */
   configurationChanged(repository: string, what?: ConfigurationChangeKind): Promise<'rebuildNow' | 'later'>;
   /**

@@ -294,7 +294,7 @@ export function ownHelperOfEngine(engineOf: EngineOfOperation, hostname: () => s
 export type OpenWorkerBatch = (context: OperationContext, p: { volume: string; image: string; socket: string }) => Promise<HelperBatchSession>;
 
 /**
- * `listConfigurations`, the listing of Select configuration, run by the worker's own pipeline (workerServices): the
+ * `listConfigurations`, the listing of the configurations, run by the worker's own pipeline (workerServices): the
  * record and the account through the requests of the operation, the lock and the batch helper (on the worker's own
  * image) taken here.
  */
@@ -747,7 +747,6 @@ export function openOperation(
       progress: operationProgress(context),
       signal: context.signal,
       ...(checked.forceRebuild === true ? { forceRebuild: true } : {}),
-      ...(checked.configPath !== undefined ? { configPath: checked.configPath } : {}),
       ...(checked.source !== undefined ? { source: checked.source } : {}),
     };
     try {

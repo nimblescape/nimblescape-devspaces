@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The batch scope of the opens in the devspace service. Start, Rebuild, Select configuration, Clone again and a
+// The batch scope of the opens in the devspace service. Start, Rebuild, a change of the configuration, Clone again and a
 // first open run their helper steps in the batch scope of the volume of the devspace (batchScope.ts), opened under
 // the held lock and closed before its release: on success, on a failure, and on a cancel; before the removal of the
 // volume (a failed first open) its session is closed first. The listing of the configuration picker runs in a scope of
@@ -245,7 +245,7 @@ describe('the batch scope of the opens', () => {
   });
 
   it('the listing of the configuration picker runs in the batch helper under the lock', async () => {
-    // The listing of Select configuration runs as the step listConfigs in one session under the lock.
+    // The listing of the configurations runs as the step listConfigs in one session under the lock.
     await seedDevspace(h, { container: 'stopped' });
     // The helper of the worker (workerHelper).
     realHelper = workerHelper();
@@ -416,7 +416,7 @@ describe('the batch scope of the opens', () => {
 
 /**
  * A batch helper that cannot be opened is an inconsistent state: a refusal of the batch scope refuses Start, Rebuild
- * and Select configuration, also for a running container that is current: it is not opened as it is (that rule applies
+ * and a change of the configuration, also for a running container that is current: it is not opened as it is (that rule applies
  * only to a helper image that cannot be prepared).
  */
 describe('a batch helper that cannot be opened refuses the open', () => {
@@ -425,7 +425,7 @@ describe('a batch helper that cannot be opened refuses the open', () => {
     ['Start', () => ({})],
     ['Rebuild', () => ({ forceRebuild: true })],
     [
-      'Select configuration',
+      'a change of the configuration',
       () => {
         h.helper.files[PYTHON] = { configText: '{ "image": "python:3.12" }' };
         h.helper.config = { image: 'python:3.12' };

@@ -2,7 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The batch scope of an open operation (Start, Rebuild, Select configuration, Clone again, a first open). Every helper
+// The batch scope of an open operation (Start, Rebuild, Clone again, a first open). Every helper
 // step of the operation that needs the volume of the devspace runs in ONE batch helper of the operation
 // (HelperBatchSession), opened through the worker that holds the lock of the devspace (HeldDevspaceLock.batch),
 // never as a `docker run` of its own. WorkspaceHelper routes its volume steps here while the scope is active

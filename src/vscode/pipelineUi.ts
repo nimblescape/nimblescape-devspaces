@@ -43,7 +43,7 @@ export class VsCodePipelineUi implements PipelineUi {
     const rebuildNow: vscode.MessageItem = { title: Actions.rebuildNow };
     const later: vscode.MessageItem = { title: Actions.later, isCloseAffordance: true };
     const choice = await vscode.window.showInformationMessage(
-      what === 'defaultImage' ? Messages.defaultImageChanged : what === 'source' ? Messages.sourceChanged : Messages.configurationChanged,
+      what === 'defaultImage' ? Messages.defaultImageChanged : Messages.configurationChanged,
       { modal: true, detail: repository },
       rebuildNow,
       later,

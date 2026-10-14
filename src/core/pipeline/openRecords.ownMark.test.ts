@@ -181,7 +181,8 @@ describe('the call sites of DevspaceService', () => {
       extra: { configPath: PYTHON, refusedUpdate: refused },
     });
     h.helper.files = { [DEFAULT_CONFIG_PATH]: { configText: DEFAULT_CONFIG_TEXT } };
-    await h.service.open(TARGET, { progress: h.progress });
+    // The open of the devspace of the configuration python (its child row).
+    await h.service.open(TARGET, { progress: h.progress, source: { kind: 'configuration', configPath: PYTHON } });
     const env = await h.registry.get(ENV_ID);
     expect(env?.configPath).toBe(PYTHON);
     expect(env?.refusedUpdate).toEqual(refused);

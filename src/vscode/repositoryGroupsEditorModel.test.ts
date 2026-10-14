@@ -30,7 +30,7 @@ import {
   type PreviewJobMessage,
   type PreviewNode,
 } from './repositoryGroupsEditorModel';
-import { buildTreeModel, type GroupNode, type HintRow, type RepositoryRow, type TreeInput } from './treeModel';
+import { buildTreeModel, type GroupNode, type HintRow, type RepositoryEntry, type TreeInput } from './treeModel';
 
 const EXAMPLE = String.raw`^(\d{4}-[^-]+-[^-]+)-([^-]+-[^-]+)-(.+)$`;
 const T0 = '2026-09-24T17:00:00.000Z';
@@ -210,7 +210,7 @@ describe('preview', () => {
   type Shape = string | [string, Shape[]];
   const previewShape = (nodes: readonly PreviewNode[]): Shape[] =>
     nodes.map((node) => (node.kind === 'group' ? [node.label, previewShape(node.children ?? [])] : node.label));
-  const modelShape = (children: ReadonlyArray<RepositoryRow | HintRow | GroupNode>): Shape[] =>
+  const modelShape = (children: ReadonlyArray<RepositoryEntry | HintRow | GroupNode>): Shape[] =>
     children.map((child) => (child.kind === 'group' ? [child.label, modelShape(child.children)] : child.label));
 
   it('shows the tree of the sidebar for the example of the user, with counts, hidden repositories, and devspaces', () => {

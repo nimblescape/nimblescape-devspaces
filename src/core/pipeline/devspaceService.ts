@@ -112,6 +112,7 @@ import {
   LABEL_COMPOSE_SERVICE,
   LABEL_CONFIG_PATH,
   LABEL_DEVSPACE_ID,
+  LABEL_DEFAULT_IMAGE,
   LABEL_OWNER_ID,
   LABEL_PREPARED,
   LABEL_REPOSITORY,
@@ -134,6 +135,8 @@ import {
   resourceName,
   splitRepository,
 } from '../names';
+import { sourceOf, sourceOperationKey, sourceSegment } from '../devspaceSource';
+import { MAX_REFERENCE_LENGTH } from '../imageCheck/dockerfile';
 import { namePair } from '../namePairs';
 import { imageBuildRecord, imageRecordLabels, preparedImageLabels, preparedImageMismatch, type PrepareKey } from './imageRecord';
 import { ownerOf } from '../ownership';
@@ -266,7 +269,6 @@ import {
   cancelledError,
   devspaceMissing,
   devspaceBusy,
-  repositoryKey,
   BUSY_POLL_MS,
   DEVSPACE_LOCK_WAIT_SECONDS,
   type GitHubSession,
@@ -298,20 +300,6 @@ const VOLUME_REMOVE_ATTEMPTS = 3;
 const VOLUME_REMOVE_DELAY_MS = 1_000;
 // About 15,000 pairs (namePair): an ID whose pair is in use on the engine is rare; a few attempts are enough.
 const DEVSPACE_ID_ATTEMPTS = 20;
-
-/**
- * The source of an open for its PipelineContext (`source`): "Select configuration…" (OpenOptions.configPath) names the
- * configuration; else the source that the open names, if any.
- */
-function sourceField(options: Pick<OpenOptions, 'configPath' | 'source'>): { source?: DevspaceSource } {
-  if (options.configPath !== undefined) return { source: { kind: 'configuration' } };
-  return options.source !== undefined ? { source: options.source } : {};
-}
-
-/** A source for the log: the default image, or the configuration. */
-function sourceText(defaultImage: string | undefined, configPath: string): string {
-  return defaultImage !== undefined ? `the default image ${defaultImage}` : `the configuration ${configPath}`;
-}
 
 /** The values of the labels that the extension gives the images of `env` (imageLabelItems). */
 function ownImageLabels(env: Devspace): { id: string; repository: string; ownerId: string } {
@@ -393,14 +381,10 @@ interface PipelineContext {
   /** Configuration to read. Kept apart from `env`, which is replaced by the registry entry after each change. */
   configPath: string;
   /**
-   * The source that the open named (OpenOptions.source; "Select configuration…" names the configuration). Missing:
-   * the devspace keeps the source of its last open. decideSource turns it into `defaultImage`.
-   */
-  source?: DevspaceSource;
-  /**
-   * The default image that this run reads and builds in place of the configuration of the repository (DevspaceSource
-   * `defaultImage`); missing: the configuration `configPath`. Set by decideSource (runPipeline), once the build record
-   * is known; a prepare takes the one of its approved record.
+   * The default image that this run reads and builds in place of the configuration of the repository: the devspace
+   * is the default-image devspace of its repository (DevspaceSource `defaultImage`; the image of the setting now, as
+   * the open names it, else the one the devspace was last opened with). Missing: the devspace of the configuration
+   * `configPath`. A prepare takes the one of its approved record.
    */
   defaultImage?: string;
   firstOpen: boolean;
@@ -763,10 +747,20 @@ function configurationError(error: unknown): unknown {
   return new UserFacingError('buildFailed', Messages.buildFailed, errorDetail(error));
 }
 
+/** The labels of every volume of a devspace: its ID, its repository, and its owner (the account that created it). */
 function volumeLabels(devspace: Devspace): Record<string, string> {
-  const labels: Record<string, string> = { [LABEL_DEVSPACE_ID]: devspace.id, [LABEL_REPOSITORY]: devspace.repository };
-  // The owner comes back with the entry when the registry is lost.
-  labels[LABEL_OWNER_ID] = devspace.owner.id;
+  return { [LABEL_DEVSPACE_ID]: devspace.id, [LABEL_REPOSITORY]: devspace.repository, [LABEL_OWNER_ID]: devspace.owner.id };
+}
+
+/**
+ * The labels of the workspace volume of a devspace: volumeLabels, and its source (nimblescape.devspaces.default-image
+ * of a default-image devspace, else nimblescape.devspaces.config-path). The owner and the source come back with the
+ * entry when the registry is lost (devspaceOfVolume).
+ */
+function workspaceVolumeLabels(devspace: Devspace): Record<string, string> {
+  const labels = volumeLabels(devspace);
+  if (devspace.defaultImage !== undefined) labels[LABEL_DEFAULT_IMAGE] = devspace.defaultImage;
+  else labels[LABEL_CONFIG_PATH] = devspace.configPath;
   return labels;
 }
 
@@ -948,32 +942,51 @@ function durationText(ms: number): string {
   return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
 }
 
+/** A default image of the label of a volume, as `record restore` takes it: a valid image reference, bounded. */
+function isRestoredDefaultImage(value: string): boolean {
+  return value.length <= MAX_REFERENCE_LENGTH && !/[\u0000-\u001f\u007f]/.test(value) && parseImageReference(value) !== undefined;
+}
+
 /**
  * Registry lost (reconcileFromVolumes): the entry that the workspace volume `volume` (with the label
  * nimblescape.devspaces.id, and no nimblescape.devspaces.volume) stands for, with the owner of its label
- * nimblescape.devspaces.owner-id and the default configuration, at `now` on `dockerHost`; or why it is skipped
- * (`skipped`, the line of the log). Also the devspaces that a headless prepare knows (the worker's
- * engineDevspaceStore), which has no registry.
+ * nimblescape.devspaces.owner-id and the source of its labels nimblescape.devspaces.default-image or
+ * nimblescape.devspaces.config-path (a volume of version 0.5.0 or older has neither: the default configuration), at
+ * `now` on `dockerHost`; or why it is skipped (`skipped`, the line of the log). Also the devspaces that a headless
+ * prepare knows (the worker's engineDevspaceStore), which has no registry.
  */
 export function devspaceOfVolume(volume: VolumeInfo, now: string, dockerHost: string): Devspace | { skipped: string } {
   const id = volume.labels[LABEL_DEVSPACE_ID];
   const repository = volume.labels[LABEL_REPOSITORY];
   const ownerId = volume.labels[LABEL_OWNER_ID];
+  const defaultImage = volume.labels[LABEL_DEFAULT_IMAGE];
+  const labelledConfigPath = volume.labels[LABEL_CONFIG_PATH];
   // A repository as `record restore` takes it (no control characters, at most 256).
   if (!isStorageId(id) || !isRepositoryName(repository) || repository.length > 256 || /[\u0000-\u001f\u007f]/.test(repository) || !isStorageId(ownerId)) {
     return { skipped: `The volume ${volume.name} has invalid labels and is skipped.` };
   }
+  // The source of the labels, as `record restore` takes it: a valid image reference, or a configuration path.
+  if (defaultImage !== undefined && (!isRestoredDefaultImage(defaultImage) || labelledConfigPath !== undefined)) {
+    return { skipped: `The volume ${volume.name} has an invalid default image label and is skipped.` };
+  }
+  if (labelledConfigPath !== undefined && !isConfigPathLabelValue(labelledConfigPath)) {
+    return { skipped: `The volume ${volume.name} has an invalid configuration path label and is skipped.` };
+  }
+  const configPath = labelledConfigPath ?? DEFAULT_CONFIG_PATH;
+  const source: DevspaceSource = defaultImage !== undefined ? { kind: 'defaultImage', image: defaultImage } : { kind: 'configuration', configPath };
   // Only a volume with the name that the extension gives the devspace of these labels: a configuration cannot create
   // such a volume (the host access policy refuses these names and the labels of volumes), so labels on any other volume
-  // do not make it a devspace.
-  if (volume.name.toLowerCase() !== resourceName(repository, id).toLowerCase()) {
+  // do not make it a devspace. A volume of version 0.5.0 or older has no source in its name.
+  const expected = [resourceName(repository, id, sourceSegment(source)), resourceName(repository, id)].map((name) => name.toLowerCase());
+  if (!expected.includes(volume.name.toLowerCase())) {
     return { skipped: `The volume ${volume.name} has the labels of a devspace but not its name. It is skipped.` };
   }
   // The owner label of the volume gives the entry its owner again; its login follows at the next open.
   return {
     id,
     repository,
-    configPath: DEFAULT_CONFIG_PATH,
+    configPath,
+    ...(defaultImage !== undefined ? { defaultImage } : {}),
     volumeName: volume.name,
     containerName: volume.name,
     createdAt: now,
@@ -1008,21 +1021,23 @@ export class DevspaceService extends OperationBase {
   // Open pipeline
 
   /**
-   * Open pipeline for a repository: the devspace of the repository of the signed-in account. The first open of an
-   * account creates its devspace; a devspace of another account is neither used nor named. The worker's pipeline
-   * runs it (the operation `open`); the extension sends it with openInWorker.
+   * Open pipeline for a repository: the devspace of the source of the open (OpenOptions.source; without one, the
+   * first configuration of the repository) of the signed-in account. The first open of a source creates its devspace;
+   * a devspace of another account is neither used nor named. The worker's pipeline runs it (the operation `open`);
+   * the extension sends it with openInWorker.
    */
   async open(target: RepositoryTarget, options: OpenOptions): Promise<OpenResult> {
     splitRepository(target.repository);
-    return this.exclusive(repositoryKey(target.repository), options.signal, async () => {
+    const source: DevspaceSource = options.source ?? { kind: 'configuration', configPath: target.configPaths[0] ?? DEFAULT_CONFIG_PATH };
+    return this.exclusive(sourceOperationKey(target.repository, source), options.signal, async () => {
       try {
         // The account decides which devspace is used, and the token of the same session goes into it.
         const session = await this.requireSession();
-        const existing = await this.deps.registry.findForAccount(target.repository, session.account.id, await this.currentDockerHost());
+        const existing = await this.deps.registry.findForAccount(target.repository, session.account.id, await this.currentDockerHost(), source);
         if (existing) {
           return await this.openExisting(existing, options, target.defaultBranch ?? undefined, session);
         }
-        return await this.openFirst(target, options, session);
+        return await this.openFirst(target, options, session, source);
       } catch (error) {
         throw this.toUserError(error, options.signal);
       }
@@ -1037,7 +1052,7 @@ export class DevspaceService extends OperationBase {
     const devspace = await this.deps.registry.get(devspaceId);
     if (!devspace) throw devspaceMissing();
     await this.requireCurrentHost(devspace);
-    return this.exclusive(repositoryKey(devspace.repository), options.signal, async () => {
+    return this.exclusive(sourceOperationKey(devspace.repository, sourceOf(devspace)), options.signal, async () => {
       try {
         const current = await this.deps.registry.get(devspaceId);
         if (!current) throw devspaceMissing(devspace.repository);
@@ -1052,7 +1067,7 @@ export class DevspaceService extends OperationBase {
    * First open of the repository for the account of `session`: security confirmation, registry entry, workspace volume,
    * clone, then the pipeline.
    */
-  private async openFirst(target: RepositoryTarget, options: OpenOptions, session: GitHubSession): Promise<OpenResult> {
+  private async openFirst(target: RepositoryTarget, options: OpenOptions, session: GitHubSession, source: DevspaceSource): Promise<OpenResult> {
     const { signal } = options;
     const steps = new StepReporter(options.progress, this.logger);
     this.throwIfCancelled(signal);
@@ -1070,20 +1085,25 @@ export class DevspaceService extends OperationBase {
     // read also when the registry was lost while Docker was stopped, or when registry.json is invalid.
     const dockerHost = await this.currentDockerHost();
     if ((await this.reconcileFromVolumes()) > 0) {
-      const restored = await this.deps.registry.findForAccount(target.repository, session.account.id, dockerHost);
+      const restored = await this.deps.registry.findForAccount(target.repository, session.account.id, dockerHost, source);
       if (restored) {
         this.logger.info(`A devspace of ${target.repository} was restored from its volume ${restored.volumeName}. It is used.`);
         return this.openExisting(restored, options, target.defaultBranch ?? undefined, session);
       }
     }
 
-    const id = await this.unusedDevspaceId(target.repository);
-    const name = resourceName(target.repository, id);
+    const segment = sourceSegment(source);
+    const id = await this.unusedDevspaceId(target.repository, segment);
+    const name = resourceName(target.repository, id, segment);
     const now = isoTime(this.deps.clock);
     const devspace: Devspace = {
       id,
       repository: target.repository,
-      configPath: options.configPath ?? target.configPaths[0] ?? DEFAULT_CONFIG_PATH,
+      // The default-image devspace keeps the first configuration of the repository as the path of its synthesized
+      // configuration.
+      configPath: source.kind === 'configuration' ? source.configPath : (target.configPaths[0] ?? DEFAULT_CONFIG_PATH),
+      // The kind of the devspace, fixed at its creation (sourceOf).
+      ...(source.kind === 'defaultImage' ? { defaultImage: source.image } : {}),
       volumeName: name,
       containerName: name,
       createdAt: now,
@@ -1097,23 +1117,24 @@ export class DevspaceService extends OperationBase {
     try {
       await this.openRecords.createDevspace(devspace);
     } catch (error) {
-      // One devspace per repository and account: another window of the account may have created it right now.
-      const other = await this.deps.registry.findForAccount(target.repository, session.account.id, dockerHost);
+      // One devspace per repository, source and account: another window of the account may have created it right now.
+      const other = await this.deps.registry.findForAccount(target.repository, session.account.id, dockerHost, source);
       if (!other) throw error;
       this.logger.info(`A devspace of ${target.repository} was created in the meantime. It is used.`);
       return this.openExisting(other, options, target.defaultBranch ?? undefined, session);
     }
     this.logger.info(`First open of ${target.repository}: devspace ${id}, volume ${name}.`);
+    if (source.kind === 'defaultImage') this.logger.info(`${target.repository} opens with the default image ${source.image} in place of its configuration.`);
 
     const ctx: PipelineContext = {
       env: devspace,
       configPath: devspace.configPath,
-      ...sourceField(options),
+      ...(source.kind === 'defaultImage' ? { defaultImage: source.image } : {}),
       firstOpen: true,
       forced: false,
       steps,
       signal,
-      announceConfigFallback: options.configPath !== undefined || target.configPaths.length > 0,
+      announceConfigFallback: target.configPaths.length > 0,
       cloned: true,
       ownershipPrepared: false,
       busy: true,
@@ -1138,7 +1159,7 @@ export class DevspaceService extends OperationBase {
         locked = true;
         try {
           steps.step('downloadingRepository');
-          await this.deps.docker.createVolume(name, volumeLabels(devspace));
+          await this.deps.docker.createVolume(name, workspaceVolumeLabels(devspace));
           // `docker volume create` takes an existing volume as it is; one that another devspace created meanwhile
           // under the same name is never cloned into.
           await this.requireOwnVolume(devspace);
@@ -1200,7 +1221,7 @@ export class DevspaceService extends OperationBase {
     try {
       await this.startDocker(steps, signal);
       const env = await this.waitForOtherOperation(owned, signal);
-      // Start, Rebuild, Select configuration and Clone again run under the lock of the devspace on the Docker host,
+      // Start, Rebuild and Clone again run under the lock of the devspace on the Docker host,
       // from here through `finish` (in runPipeline): the check of the volume, Clone again (recoverMissingFiles, with
       // its Delete, which holds the lock already: re-entrant), the resumed clone, and the pipeline. Without the helper
       // image or the worker the open is refused before anything is changed; a lock held elsewhere is refused after 10
@@ -1218,10 +1239,15 @@ export class DevspaceService extends OperationBase {
             configPath = options.configPath;
           }
         }
+        // The default image of a default-image devspace: the one of the setting as the open names it, else the one
+        // of the last open (the setting was cleared). The devspace keeps its kind: a source of the other kind in the
+        // options is not followed.
+        const defaultImage = env.defaultImage !== undefined ? (options.source?.kind === 'defaultImage' ? options.source.image : env.defaultImage) : undefined;
+        if (defaultImage !== undefined) this.logger.info(`${env.repository} opens with the default image ${defaultImage} in place of its configuration.`);
         const opened: PipelineContext = {
           env,
           configPath,
-          ...sourceField(options),
+          ...(defaultImage !== undefined ? { defaultImage } : {}),
           firstOpen: false,
           forced,
           steps,
@@ -1292,7 +1318,7 @@ export class DevspaceService extends OperationBase {
     try {
       // Inside the try, as at the first open: a create that Docker did but reported as failed (a dropped connection)
       // leaves a volume that the catch below handles like any other.
-      await this.deps.docker.createVolume(env.volumeName, volumeLabels(env));
+      await this.deps.docker.createVolume(env.volumeName, workspaceVolumeLabels(env));
       // As the first open, never a volume of the name that another devspace created meanwhile (`docker volume
       // create` takes it as it is), and that volume is never removed.
       await this.requireOwnVolume(env);
@@ -1361,8 +1387,16 @@ export class DevspaceService extends OperationBase {
     ctx.composeContainer = container !== undefined && isComposeContainer(container.labels, composeProjectName(ctx.env.repository, ctx.env.id));
     // An entry without a build record (restored from its volume after a lost registry, or a devspace that another
     // computer created) takes the record of its newest image (adoptImageRecord).
+    const withoutRecord = ctx.env.buildRecord === undefined;
     const record = ctx.env.buildRecord ?? (await this.adoptImageRecord(ctx));
-    this.decideSource(ctx, record);
+    // The kind of a devspace comes back with its entry (the label of its volume); a volume of version 0.5.0 or older
+    // has no such label, so the entry of a default-image devspace restored from it names no default image. Its newest
+    // image records the default image it was built from: the devspace keeps its kind (the configuration of the
+    // repository is not read, and the next save of the configuration writes the kind into the entry again).
+    if (withoutRecord && ctx.env.defaultImage === undefined && ctx.defaultImage === undefined && record?.defaultImage !== undefined) {
+      ctx.defaultImage = record.defaultImage;
+      this.logger.info(`${ctx.env.repository} is the default-image devspace of its repository, as its devspace image records: it opens with the default image ${record.defaultImage}.`);
+    }
     const imagePresent = record !== undefined && (await this.pinnedImagePresent(record));
     this.logger.info(
       `State of ${ctx.env.repository}: container ${container ? container.state : 'missing'}, devspace image ` +
@@ -1390,7 +1424,7 @@ export class DevspaceService extends OperationBase {
       // too. Whether it opens as it is (a Docker listing) is asked only when the answer is needed, and a failure of the
       // listing counts as `false`, so the error of the configuration is never lost. A helper that cannot be opened is
       // an inconsistent state: the refusal of the batch scope (the session cannot be opened, a lost lock, a step
-      // without a batch kind) is rethrown before that rule: Start, Rebuild and Select configuration are refused, and a
+      // without a batch kind) is rethrown before that rule: Start and Rebuild are refused, and a
       // running, current container is not opened as it is.
       if (isBatchHelperUnavailable(error)) throw error;
       // Without the Monitor nothing is opened, not even a running container as it is.
@@ -1457,7 +1491,6 @@ export class DevspaceService extends OperationBase {
     }
     if (loaded) {
       const previousConfigPath = ctx.env.configPath;
-      const previousDefaultImage = ctx.env.defaultImage;
       await this.saveConfiguration(ctx, loaded, record);
       // A container of an older setup is created again; it does not count as a working container.
       const currentContainer = container !== undefined && containerIsCurrent(container.labels, true, ctx.hostAccessChecks);
@@ -1466,14 +1499,13 @@ export class DevspaceService extends OperationBase {
       try {
         if (plan.build) outcome = await this.buildAndReplace(ctx, loaded, plan, record, imagePresent, container);
       } catch (error) {
-        // A selected configuration that could not start does not stay selected, so the next open starts the devspace
-        // with the configuration that it had (its containers are of that one). The same for a selected source.
-        if (ctx.env.configPath !== previousConfigPath || ctx.env.defaultImage !== previousDefaultImage) {
-          this.logger.info(
-            `${sourceText(ctx.env.defaultImage, ctx.env.configPath)} of ${ctx.env.repository} could not be started; ${sourceText(previousDefaultImage, previousConfigPath)} stays selected.`,
-          );
+        // A configuration path that could not start (the fallback of a configuration that is missing on this branch)
+        // does not stay selected, so the next open starts the devspace with the path that it had (its containers are
+        // of that one).
+        if (ctx.env.configPath !== previousConfigPath) {
+          this.logger.info(`The configuration ${ctx.env.configPath} of ${ctx.env.repository} could not be started; ${previousConfigPath} stays selected.`);
           await this.quietly('restore the configuration path', async () =>
-            this.entryUpdated(ctx, await this.openRecords.configuration(ctx.env.id, { select: previousConfigPath, defaultImage: previousDefaultImage ?? null })),
+            this.entryUpdated(ctx, await this.openRecords.configuration(ctx.env.id, { select: previousConfigPath })),
           );
         }
         throw error;
@@ -1481,28 +1513,6 @@ export class DevspaceService extends OperationBase {
     }
     outcome ??= await this.startContainer(ctx, container, record, imagePresent, this.configurationOfKind(ctx, loaded, container, record));
     return this.finish(ctx, outcome, loaded);
-  }
-
-  /**
-   * The source of this run (PipelineContext.defaultImage): the one that the open named (`source`), else the one of the
-   * last open of the devspace (Devspace.defaultImage), else the one of its build record (an entry restored from its
-   * volume takes the record of its newest image). An open that names the other source than the devspace was built
-   * from (its record, else the entry without one) builds it again from this one, whatever the digests say: the
-   * container is created again from the other image; the files of the workspace volume stay. A kept source that the
-   * devspace was not built from (a switch whose build failed and fell back to the old devspace) and a changed default
-   * image of the same kind are a changed configuration: planUpdate asks Rebuild now or Later.
-   */
-  private decideSource(ctx: PipelineContext, record: BuildRecord | undefined): void {
-    const env = ctx.env;
-    const built = record !== undefined ? record.defaultImage : env.defaultImage;
-    const kept = env.defaultImage ?? record?.defaultImage;
-    const next = ctx.source === undefined ? kept : ctx.source.kind === 'defaultImage' ? ctx.source.image : undefined;
-    ctx.defaultImage = next;
-    if (next !== undefined) this.logger.info(`${env.repository} opens with the default image ${next} in place of its configuration.`);
-    if (ctx.source !== undefined && (record !== undefined || env.defaultImage !== undefined) && (built !== undefined) !== (next !== undefined)) {
-      this.logger.info(`Source of ${env.repository}: ${sourceText(built, record?.configPath ?? env.configPath)} → ${sourceText(next, ctx.configPath)}. The devspace is built again.`);
-      ctx.forced = true;
-    }
   }
 
   /**
@@ -2343,8 +2353,8 @@ export class DevspaceService extends OperationBase {
     const serviceVolumes = loaded.compose ? composeServiceVolumeNames(loaded.compose.output.model, loaded.compose.project, loaded.compose.service) : undefined;
     const updated = await this.openRecords.configuration(ctx.env.id, {
       select: configPath,
-      // The source of this open (DevspaceSource), which the next open keeps unless it names another one.
-      defaultImage: loaded.defaultImage ?? null,
+      // The default image of this open of a default-image devspace (the kind of the devspace never changes).
+      ...(loaded.defaultImage !== undefined ? { defaultImage: loaded.defaultImage } : {}),
       shutdownActionNone: loaded.config.shutdownAction === 'none',
       // Volumes recorded before stay: the pipeline adds those that it creates before `up` (createAdditionalVolumes), and
       // a volume that the devspace used may still hold its data.
@@ -2394,16 +2404,13 @@ export class DevspaceService extends OperationBase {
     let skipUpdate = false;
     const changed = record !== undefined && (record.configPath !== loaded.configPath || (await this.configHashChanged(ctx, record, loaded)));
     if (changed && !forced) {
-      // A changed default image (the setting) of a devspace built from one, or a selected source that the devspace
-      // was not built from (decideSource): the question names it.
+      // A changed default image (the setting) of a default-image devspace: the question names it.
       const what: ConfigurationChangeKind | undefined =
-        record.defaultImage === loaded.defaultImage ? undefined : record.defaultImage !== undefined && loaded.defaultImage !== undefined ? 'defaultImage' : 'source';
+        record.defaultImage !== undefined && loaded.defaultImage !== undefined && record.defaultImage !== loaded.defaultImage ? 'defaultImage' : undefined;
       this.logger.info(
         what === 'defaultImage'
           ? `The default image of ${ctx.env.repository} changed since the last build: ${record.defaultImage} → ${loaded.defaultImage}.`
-          : what === 'source'
-            ? `Source of ${ctx.env.repository}: built from ${sourceText(record.defaultImage, record.configPath)}, selected ${sourceText(loaded.defaultImage, loaded.configPath)}.`
-            : `The configuration of ${ctx.env.repository} changed since the last build.`,
+          : `The configuration of ${ctx.env.repository} changed since the last build.`,
       );
       const answer = await this.deps.ui.configurationChanged(ctx.env.repository, what);
       this.throwIfCancelled(ctx.signal);
@@ -2834,8 +2841,8 @@ export class DevspaceService extends OperationBase {
         }
         throw new UserFacingError('startFailed', PipelineTexts.startFailed, detail);
       }
-      // The build switched the dev service of the Docker Compose project (Select configuration… between two
-      // configurations of one compose file). The previous dev container was renamed out of the way and stopped
+      // The build switched the dev service of the Docker Compose project (a changed `service` in the compose
+      // configuration of the devspace). The previous dev container was renamed out of the way and stopped
       // (movePreviousDevContainer); an `up` with the new configuration would take it for another service (and Compose
       // would create it again, losing its files outside the volumes). It stays as it is, stopped: the previous
       // configuration stays selected (open), so the next open starts it again. The next build tries again. The guard
@@ -4277,8 +4284,8 @@ export class DevspaceService extends OperationBase {
     // running containers as they are.
     if (ctx.cloned && !ctx.ownershipPrepared) await this.prepareOwnership(ctx, image, userArgs);
     await this.prepareGit(ctx, true);
-    // The dev container of another service of the project (Select configuration… between two configurations of one
-    // compose file with another `service`): it holds the name that the new dev service gets.
+    // The dev container of another service of the project (the configuration of the devspace changed its `service`):
+    // it holds the name that the new dev service gets.
     const previousService = found !== undefined && replaced === undefined ? found.labels[COMPOSE_SERVICE_LABEL] : undefined;
     const movesPrevious = found !== undefined && previousService !== undefined && previousService !== compose.service;
     // Without a busy mark (Step 9, for example for a container of the mark Devspace.lifecycleIncomplete that a
@@ -6272,7 +6279,7 @@ export class DevspaceService extends OperationBase {
       return;
     }
     await this.requireCurrentHost(devspace);
-    await this.exclusive(repositoryKey(devspace.repository), options.signal, async () => {
+    await this.exclusive(sourceOperationKey(devspace.repository, sourceOf(devspace)), options.signal, async () => {
       try {
         const current = await this.deps.registry.get(devspaceId);
         if (!current) {
@@ -6375,8 +6382,9 @@ export class DevspaceService extends OperationBase {
   }
 
   /**
-   * Configuration paths in the volume (current branch), in the order of precedence. Runs in the worker
-   * (listConfigurationsInWorker sends it there).
+   * Configuration paths in the volume (current branch), in the order of precedence. Runs in the worker (the operation
+   * `listConfigurations`). No command of the extension sends it since version 0.6.0 (each configuration is its own
+   * devspace); the tests of the worker's pipeline use it as its simplest operation under the lock and the batch helper.
    */
   async listConfigurations(devspaceId: string, options: OperationOptions): Promise<string[]> {
     const env = await this.deps.registry.get(devspaceId);
@@ -6387,9 +6395,9 @@ export class DevspaceService extends OperationBase {
       await this.requireOwnAccount(env, true);
       await this.startDocker(steps, options.signal);
       await this.requireVolume(env);
-      // The listing of the picker runs as the step listConfigs of the batch helper of the volume (as the owner of the
-      // repository) under the lock of the devspace, released before the picker is shown (refused when either cannot
-      // be had; busy after 10 s).
+      // The listing runs as the step listConfigs of the batch helper of the volume (as the owner of the repository)
+      // under the lock of the devspace, released before the answer (refused when either cannot be had; busy after 10
+      // s).
       return await this.withDevspaceLock(
         env,
         options.signal,
@@ -6530,7 +6538,7 @@ export class DevspaceService extends OperationBase {
    * (nimblescape.devspaces.id) has its pair, or when its volume or its container exists (`docker volume
    * create` would take the existing volume, and a failed first open would remove it).
    */
-  private async unusedDevspaceId(repository: string): Promise<string> {
+  private async unusedDevspaceId(repository: string, segment: string): Promise<string> {
     const file = await this.deps.registry.read();
     // Nor a name that an entry records as an additional volume, or that the registry keeps for an account after a
     // Delete (the extension refuses an entry of such a name: createDevspace).
@@ -6543,8 +6551,18 @@ export class DevspaceService extends OperationBase {
     const create = this.deps.newDevspaceId ?? newDevspaceId;
     for (let attempt = 1; ; attempt++) {
       const id = create();
-      const name = resourceName(repository, id);
-      if (!used.has(namePair(id)) && !recorded.has(name.toLowerCase()) && !(await this.deps.docker.volumeExists(name)) && (await this.deps.docker.containerState(name)) === 'missing') return id;
+      // The names of the devspace (with the word of its source) and of its images (without it).
+      const name = resourceName(repository, id, segment);
+      const image = resourceName(repository, id);
+      if (
+        !used.has(namePair(id)) &&
+        !recorded.has(name.toLowerCase()) &&
+        !recorded.has(image.toLowerCase()) &&
+        !(await this.deps.docker.volumeExists(name)) &&
+        (await this.deps.docker.containerState(name)) === 'missing'
+      ) {
+        return id;
+      }
       if (attempt >= DEVSPACE_ID_ATTEMPTS) throw new Error(`No unused devspace ID was found for ${repository}.`);
     }
   }
@@ -7086,8 +7104,8 @@ export class DevspaceService extends OperationBase {
    * volume steps run in the batch helper of the lock (devspaceLock.ts); no Docker call goes through the lock, the
    * pipeline of the worker uses its engine. The lock is released in `finally`. Re-entrant: an operation that holds the
    * lock of `env` runs `fn` at once. The caller took its busy mark first (Delete), so a refusal leaves nothing behind
-   * that its own `finally` does not clear. Also the opens (openExisting: Start, Rebuild, Select configuration, Clone
-   * again; openFirst), see there.
+   * that its own `finally` does not clear. Also the opens (openExisting: Start, Rebuild, Clone again; openFirst), see
+   * there.
    */
   private async withDevspaceLock<T>(
     env: Devspace,

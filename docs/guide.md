@@ -46,7 +46,7 @@ All computers that use one Docker engine need the same version: an older version
 
 1. Select the **Devspaces** icon in the activity bar. If Docker is not installed, the view shows the steps to set it up (see [Installing Docker](#installing-docker)).
 2. Select **Sign in with GitHub**. The list shows your repositories that have a Dev Container configuration, grouped by owner (with a [default image](#default-image), also the repositories without one). The first load can take a moment with many repositories; the view shows the repositories as they arrive, and later updates read only the repositories that changed.
-3. Select **Start** on a repository, or double-click it. The first start creates the devspace: it clones the repository, builds the image, and creates the container, which can take several minutes. Later starts take seconds.
+3. Select **Start** on a repository, or double-click it. A repository with several sources (several configurations, or a configuration and a [default image](#default-image)) has one child row per source; **Start** is on the child rows then. The first start creates the devspace: it clones the repository, builds the image, and creates the container, which can take several minutes. Later starts take seconds.
 4. The window connects to the container. You work in the repository folder under `/workspaces/<name>`.
 
 The first start of a repository that belongs neither to you nor to one of your organizations asks for a confirmation, because it runs code from that repository.
@@ -61,7 +61,15 @@ The title bar has **Select Organizations…** (limits the list and the scan to t
 
 ### What a row shows
 
-A row shows the repository name, the branch that is checked out in the devspace, the configuration in brackets when the repository has several (or `(default image)` when the devspace was last started from the default image, see [Default image](#default-image)), and the state of its devspace. Uncommitted changes and unpushed commits show as numbers, for example `Stopped · 3 unpushed`. The tooltip shows more, for example the time of the last use.
+A row shows the repository name, the branch that is checked out in the devspace, and the state of its devspace. Uncommitted changes and unpushed commits show as numbers, for example `Stopped · 3 unpushed`. The tooltip shows more, for example the source of the devspace and the time of the last use.
+
+A repository with one possible source is one row: its one Dev Container configuration, or the [default image](#default-image) when it has no configuration (the row then shows `(default image)` next to the branch). A repository with several possible sources is a node with one child row per source: a configuration in `.devcontainer/<name>/devcontainer.json` next to the one at the root, or a configuration and the default image. Each child row is its own devspace, so two devspaces of one repository can run at the same time, and the buttons, the state and the context menu are on the child rows; the repository name is only a level of the tree. The label of a child row is the word of its source:
+
+- `default` for the default image;
+- `config` for the configuration at the root of the repository (`.devcontainer/devcontainer.json` or `.devcontainer.json`);
+- the folder name for another configuration, for example `python` for `.devcontainer/python/devcontainer.json`.
+
+The same word is in the Docker names of the devspace, for example `devspaces-acme-api-default-brave-curie` and `devspaces-acme-api-config-calm-noether`, and in the texts that name it, for example `acme/api · default`.
 
 | State | Meaning |
 |---|---|
@@ -87,36 +95,27 @@ More markers in a row:
 
 | Action | Effect |
 |---|---|
-| **Start** (or a double-click) | Starts the devspace and connects the current window. Creates the devspace on the first start. If another window is connected to it, that window comes to the front: a devspace is never open in two windows. |
+| **Start** (or a double-click) | Starts the devspace and connects the current window. Creates the devspace on the first start, from the source of the row. If another window is connected to it, that window comes to the front: a devspace is never open in two windows. |
 | **Start in New Window** | The same, but a new window connects, and the current window keeps its devspace. With the setting `devspaces.openInNewWindow` on, the menu offers **Start in Current Window** instead. |
-| **Start with Configuration** / **Start with Default Image** | Only with the setting `devspaces.defaultImage` set: starts the devspace from the other source than plain **Start** uses (see [Default image](#default-image)). A devspace that was last started from the other source is built again, and its container is created again; the files in its workspace stay. |
 | **Stop** | Stops the container at once. Your files stay. If a window is connected, the connection closes first. The Monitor on the Docker engine is told first, so the devspace stops even when you quit VS Code right after the click. A notification shows the progress until `owner/name stopped.` |
 | **Delete** | Removes the containers, the images, and the volume with the repository, after you confirm it. The confirmation shows uncommitted changes, unpushed commits, and stashes as far as Devspaces recorded them, and offers **Open devspace**. Additional volumes of the configuration, for example of a database, are removed only when you tick them. |
 | **Keep Running When Closed** | The devspace keeps running when no window uses it, for example for a server or an agent. Only **Stop** or **Delete** stops it. **Stop When Closed** switches back. The choice is stored with the devspace. |
 | **Close and Keep Running** | Only in a window that is connected to the devspace: closes the window, and the container keeps running this time. The next window that connects to it ends this. |
-| **Select Configuration…** | Only for repositories with several configurations: changes the configuration and creates the container again. |
 | **Rebuild** | Builds the image again and creates the container again. The volume with the repository stays. |
 | **Show on GitHub** | Opens the repository in the browser. |
 | **Turn Off Host Access Checks…** / **Turn On Host Access Checks** | Switches the host access checks of this repository (see [Security](#security)). |
 
-The actions after **Delete** are in the context menu of a row and in its **⋯** button.
+The actions after **Delete** are in the context menu of a row and in its **⋯** button. A repository with child rows has no actions of its own: every action is on its child rows.
 
 ### Default image
 
-By default, a devspace is built from the Dev Container configuration of its repository (`devcontainer.json`). With the setting `devspaces.defaultImage` you name one image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that **Start** uses instead for every repository. This is useful when the repositories of a course or a team have no configuration, or when one shared image should be used for all of them.
+By default, a devspace is built from the Dev Container configuration of its repository (`devcontainer.json`). With the setting `devspaces.defaultImage` you name one image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that every repository can start from next to its configuration. This is useful when the repositories of a course or a team have no configuration, or when one shared image should be used for all of them.
 
-A devspace started from the default image is created from that image alone, as if the configuration of the repository were `{ "image": "<default image>" }`: the `devcontainer.json` of the repository, its Dockerfile, Features, lifecycle commands, mounts, ports and extensions are not read. The metadata of the image (its user, its settings and extensions) applies, as for any image. The repository is cloned into the workspace volume as usual, and a repository without any Dev Container configuration can be started this way.
+With a default image, each repository with a configuration shows two child rows: `default` and `config` (and one more per configuration in `.devcontainer/<name>/devcontainer.json`). Each row is its own devspace with its own clone: **Start** on `default` creates the devspace of the default image, **Start** on `config` the devspace of the configuration, and both can run at the same time, also each in its own window. The setting `devspaces.startWithDefaultImage` (on by default) puts the `default` row first; off, it is the last row. A repository that has no Dev Container configuration on its default branch is listed too, as one row (the tooltip says so), and starts from the default image. Without a default image, these repositories are not listed, and no `default` row exists. **Search** and the switcher list the repositories the same way; when a repository has several sources, they ask which one to start.
 
-The setting `devspaces.startWithDefaultImage` (on by default) decides what plain **Start** uses while a default image is set:
+A devspace started from the default image is created from that image alone, as if the configuration of the repository were `{ "image": "<default image>" }`: the `devcontainer.json` of the repository, its Dockerfile, Features, lifecycle commands, mounts, ports and extensions are not read. The metadata of the image (its user, its settings and extensions) applies, as for any image. The repository is cloned into the workspace volume as usual.
 
-- On: **Start** uses the default image. The context menu of a row offers **Start with Configuration**.
-- Off: **Start** uses the configuration of the repository. The context menu offers **Start with Default Image**.
-
-Without a default image, every start uses the configuration, and the menu offers nothing else.
-
-With a default image, the list also shows your repositories that have no Dev Container configuration on their default branch (the tooltip of the row says so). Such a repository starts from the default image whatever the setting says, since it has no other source; its context menu offers no other source either. Without a default image, these repositories are not listed. **Search** and the switcher list them the same way.
-
-Every start that you ask for (**Start**, the switcher, **Search**, a double-click) follows the setting. A devspace keeps the source of its last start until a start names the other one: a restored window and the reopen at startup keep it. When a start names the other source, the devspace is built again from it and its container is created again; the files in its workspace stay. **Select Configuration…** always starts with the configuration that you select. When you change the default image in the settings, the next plain start of a devspace built from the old one asks **Rebuild now** or **Later**, as after a change of `devcontainer.json`; **Start with Default Image** from the context menu builds it again from the new image without asking. The same question comes when the source selected for a devspace could not be built and the old devspace started instead. The row of such a devspace shows `(default image)`, and its tooltip names the image.
+A devspace keeps the source it was created from. When you change the default image in the settings, the next start of a devspace built from the old image asks **Rebuild now** or **Later**, as after a change of `devcontainer.json`; **Later** opens the devspace with its current image, and the next start asks again. When you clear the setting, the `default` devspaces that exist keep their row and keep starting from the image they were built from, and a repository without any other devspace loses its `default` row until the setting is set again.
 
 ### Status bar and switcher
 
@@ -126,13 +125,12 @@ The status bar shows the devspace of the window (`owner/name · branch`), **Open
 
 ## Commands
 
-All commands are in the category **Devspaces** of the Command Palette. A command that acts on one devspace asks which one when you run it from the Command Palette.
+All commands are in the category **Devspaces** of the Command Palette. A command that acts on one devspace asks which one when you run it from the Command Palette, and a start of a repository with several sources asks which source.
 
 | Command | What it does |
 |---|---|
 | Start, Start in New Window, Start in Current Window | Start a devspace (see [Actions of a row](#actions-of-a-row)). |
-| Start with Default Image, Start with Configuration | Start a devspace from the other source than plain Start uses (see [Default image](#default-image)). Only with the setting `defaultImage`. |
-| Stop, Delete, Rebuild, Select Configuration…, Show on GitHub | The actions of a row. |
+| Stop, Delete, Rebuild, Show on GitHub | The actions of a row. |
 | Keep Running When Closed, Stop When Closed | Whether a devspace keeps running when no window uses it. |
 | Close and Keep Running | Closes this window; its devspace keeps running this time. Only in a connected window. |
 | Switch Devspace… (`Ctrl+Alt+E` / `Cmd+Alt+E`), Switch Devspace in New Window…, Switch Devspace in Current Window… | The switcher. |
@@ -159,8 +157,8 @@ Up to version 0.2.1 the prefix was `devspace.`. Settings with the old prefix are
 |---|---|---|
 | `reopenLastOnStartup` | `true` | When VS Code starts with an empty window, open the devspace that you used last, unless you stopped it with **Stop**. |
 | `openInNewWindow` | `false` | *User only.* On: **Start** and **Switch Devspace…** open a devspace in a new window, and the current window keeps its devspace (an empty window is used directly). The context menu always offers the other choice. |
-| `defaultImage` | `""` | *User only.* An image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that **Start** uses in place of the Dev Container configuration of the repository (see [Default image](#default-image)). Empty: every start uses the configuration. A value that is not an image reference is ignored, with a warning. |
-| `startWithDefaultImage` | `true` | *User only.* Only with `defaultImage`. On: **Start** uses the default image, and the context menu offers **Start with Configuration**. Off: **Start** uses the configuration, and the context menu offers **Start with Default Image**. |
+| `defaultImage` | `""` | *User only.* An image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that every repository can start from next to its Dev Container configuration: each repository gets a `default` row, its own devspace (see [Default image](#default-image)). Empty: every devspace uses a configuration of the repository. A value that is not an image reference is ignored, with a warning. |
+| `startWithDefaultImage` | `true` | *User only.* Only with `defaultImage`. On: the `default` row is the first child row of a repository. Off: it is the last one. |
 | `stopOnClose` | `true` | *User only.* Stop a devspace 5 minutes after its last window closes; the 5 minutes are enough for a window reload. Off: every devspace keeps running until you stop it, and its row shows `· kept`. To keep only some devspaces running, use **Keep Running When Closed** on them. |
 | `stopAfterMinutes` | `10` | *User only.* Minutes without any sign from a window before the Monitor stops the container anyway (5 to 1440). This covers a window that cannot say goodbye: the computer sleeps or goes offline, or VS Code crashes. Devspaces that keep running when closed are never stopped. |
 | `updateImagesOnConnect` | `true` | At each start, check whether the base image or the Features of the devspace have a newer version, and update the devspace if so (your files stay). Off: the devspace keeps its image until you choose **Rebuild**. |
@@ -209,7 +207,7 @@ When a newer image is available and the devspace has a container, running or sto
 - **Continue** updates the container. **Cancel** ends the start: nothing changes, and the window does not connect.
 - With `ask`, the buttons are **Update Now** and **Later**. **Later** opens the current container without the update; the next start asks again.
 
-A first start, a missing image, **Rebuild**, and **Select Configuration…** never ask.
+A first start, a missing image, and **Rebuild** never ask.
 
 After **Continue** or **Update Now**, Devspaces uses the image that the background run prepared when it fits. While the background run still prepares it, the progress shows "Preparing the newer image (3 min)…" and the start waits for it; cancel the progress to stop waiting. Otherwise Devspaces pulls and builds the new image. In every case the new image passes all checks again before the container is created.
 

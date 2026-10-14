@@ -64,7 +64,6 @@ import { DockerSetup } from './dockerSetup';
 import { OutputChannelLogger } from './logger';
 import { updateOwnersContextKey } from './ownerSelector';
 import { updateDevspacesOnlyContextKey } from './devspacesOnly';
-import { updateHasDefaultImageContextKey } from './defaultImage';
 import { isProcessAlive } from '../core/session/sessionRules';
 import { extensionFlow, extensionHostSide } from './hostSide';
 import { VsCodePipelineUi } from './pipelineUi';
@@ -710,7 +709,6 @@ async function activateExtension(
       invalidDefaultImage = warnInvalidDefaultImage(logger, invalidDefaultImage);
       updateOwnersContextKey(settings.owners, logger);
       updateDevspacesOnlyContextKey(settings.showOnlyDevspaces === true, logger);
-      updateHasDefaultImageContextKey(settings, logger);
       // Another scan scope loads the list again at once.
       if (!sameScope(previous.owners, settings.owners)) {
         background(sidebar.onScopeChanged(), 'load the repository list of the selected organizations');
@@ -723,8 +721,6 @@ async function activateExtension(
   // The icons of Select Organizations… and Show Only Devspaces in the view title bar.
   updateOwnersContextKey(settings.owners, logger);
   updateDevspacesOnlyContextKey(settings.showOnlyDevspaces === true, logger);
-  // The entries Start with Default Image and Start with Configuration of the menus.
-  updateHasDefaultImageContextKey(settings, logger);
   // The Docker host of the view title (every later read of the context updates it too).
   background(targets.resolve(), 'read the Docker host');
   // The stored list at once, then the background refresh.

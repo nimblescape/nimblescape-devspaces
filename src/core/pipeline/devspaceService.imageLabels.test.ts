@@ -371,7 +371,7 @@ describe('a failed update and a first open on a volume of another devspace', () 
     const FREE = '5e5e5e5e-0000-4000-8000-000000000005';
     h.cleanup();
     h = createHarness({ newDevspaceId: () => FREE });
-    const name = resourceName(REPO, FREE);
+    const name = resourceName(REPO, FREE, 'config');
     vi.spyOn(h.docker, 'volumeExists').mockResolvedValue(false);
     const theirs = { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: OTHER_ACCOUNT.id };
     h.docker.volumes.set(name, theirs);
@@ -426,7 +426,7 @@ describe('probes: the container and the image of the name', () => {
   it('a failed first open never removes the container of its name that another devspace created meanwhile', async () => {
     h.cleanup();
     h = createHarness({ newDevspaceId: () => FREE });
-    const name = resourceName(REPO, FREE);
+    const name = resourceName(REPO, FREE, 'config');
     vi.spyOn(h.docker, 'volumeExists').mockResolvedValue(false);
     vi.spyOn(h.docker, 'containerState').mockResolvedValue('missing');
     h.docker.volumes.set(name, { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: OTHER_ACCOUNT.id });
@@ -442,7 +442,7 @@ describe('probes: the container and the image of the name', () => {
   it('a failed first open without its volume still removes the container of its name and the entry', async () => {
     h.cleanup();
     h = createHarness({ newDevspaceId: () => FREE });
-    const name = resourceName(REPO, FREE);
+    const name = resourceName(REPO, FREE, 'config');
     vi.spyOn(h.docker, 'createVolume').mockRejectedValue(new CommandError(`docker volume create ${name}`, 1, '', 'no space left on device'));
     await expect(h.service.open(TARGET, options())).rejects.toBeDefined();
     expect(h.docker.log).toContain(`rm ${name}`);
@@ -587,7 +587,7 @@ describe('a workspace volume of the name with another devspace\'s ID', () => {
     const FREE = '5e5e5e5e-0000-4000-8000-000000000005';
     h.cleanup();
     h = createHarness({ newDevspaceId: () => FREE });
-    const name = resourceName(REPO, FREE);
+    const name = resourceName(REPO, FREE, 'config');
     const exists = vi.spyOn(h.docker, 'volumeExists').mockResolvedValue(false);
     h.docker.volumes.set(name, theirs);
     const inspect = h.docker.inspectVolumes.bind(h.docker);
@@ -638,7 +638,7 @@ describe('a failed first open and a volume of its name without labels', () => {
     const FREE = '5e5e5e5e-0000-4000-8000-000000000005';
     h.cleanup();
     h = createHarness({ newDevspaceId: () => FREE });
-    const name = resourceName(REPO, FREE);
+    const name = resourceName(REPO, FREE, 'config');
     vi.spyOn(h.docker, 'volumeExists').mockResolvedValue(false);
     // A volume of the name without the labels of Devspace (made by hand, or by another program).
     h.docker.volumes.set(name, {});
@@ -663,7 +663,7 @@ describe('probes: volume labels that cannot be read, and the survivor of a faile
     h = createHarness({ newDevspaceId: () => FREE });
     vi.spyOn(h.docker, 'volumeExists').mockResolvedValue(false);
     vi.spyOn(h.docker, 'containerState').mockResolvedValue('missing');
-    return resourceName(REPO, FREE);
+    return resourceName(REPO, FREE, 'config');
   }
 
   // When the labels of the volume cannot be read after a failed clone, nothing of the name is removed (the container,
@@ -792,7 +792,7 @@ describe('probes: volume labels that cannot be read, and the survivor of a faile
   });
 });
 
-describe('Clone again and Select configuration on a volume of the name', () => {
+describe('Clone again and the listing of the configurations on a volume of the name', () => {
   const theirs = { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: OTHER_ACCOUNT.id };
 
   /** The question about the missing files is open while another devspace of the same pair creates the volume. */
@@ -823,7 +823,7 @@ describe('Clone again and Select configuration on a volume of the name', () => {
     expect(h.docker.volumes.has(NAME)).toBe(false);
   });
 
-  it('Select configuration never lists the configurations of a volume of its name that is another devspace\'s', async () => {
+  it('the listing of the configurations never lists those of a volume of its name that is another devspace\'s', async () => {
     await seedDevspace(h, { container: null });
     h.docker.volumes.set(NAME, { ...theirs });
     const listed = await h.service.listConfigurations(ENV_ID, options()).catch(() => 'refused');
@@ -868,7 +868,7 @@ describe('Delete when the volume of the name is another devspace\'s', () => {
 
 // requireOwnVolume refuses a volume that is missing right after `docker volume create` (removed concurrently, or
 // created on another context): a helper run on it would create an empty volume without labels. Also for Clone again and
-// Select configuration.
+// The listing of the configurations.
 describe('a workspace volume that is missing where its own is required', () => {
   it('a first open whose volume is missing after the create clones nothing', async () => {
     vi.spyOn(h.docker, 'createVolume').mockResolvedValue(undefined);
@@ -889,7 +889,7 @@ describe('a workspace volume that is missing where its own is required', () => {
     expect(h.helper.calls.filter((call) => call.startsWith('up'))).toEqual([]);
   });
 
-  it('Select configuration lists nothing of a volume that is gone when the lock is held', async () => {
+  it('the listing of the configurations lists nothing of a volume that is gone when the lock is held', async () => {
     await seedDevspace(h, { container: null });
     // The volume existed at the check before the lock (requireVolume), and is gone under the lock.
     vi.spyOn(h.docker, 'volumeExists').mockResolvedValue(true);

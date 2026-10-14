@@ -192,8 +192,8 @@ export function workerHostSide(ask: AskHost, secretOf: SecretOf): HostSide {
       read: async () => (await call('record', 'read')) as RegistryFile,
       get: async (id) => ((await call('record', 'get', id)) ?? undefined) as Devspace | undefined,
       list: async () => ((await call('record', 'list')) ?? []) as Devspace[],
-      findForAccount: async (repository, accountId, dockerHost) =>
-        ((await call('record', 'findForAccount', repository, accountId, dockerHost)) ?? undefined) as Devspace | undefined,
+      findForAccount: async (repository, accountId, dockerHost, source) =>
+        ((await call('record', 'findForAccount', repository, accountId, dockerHost, ...(source !== undefined ? [source] : []))) ?? undefined) as Devspace | undefined,
       remove: async (id, volumes) => void (await call('record', 'remove', id, volumes)),
       forgetKeptVolumes: async (names) => void (await call('record', 'forgetKeptVolumes', [...names])),
       // The window's memory of the container whose lifecycle mark could not be recorded.
@@ -217,7 +217,8 @@ export function workerHostSide(ask: AskHost, secretOf: SecretOf): HostSide {
       openFinished: async (devspaceId, finish) => parseEntryAnswer(await call('record', 'openFinished', devspaceId, finish), devspaceId),
       // The entry of a first open (its ID, repository and configuration only), its removal, the configuration and the
       // build records.
-      createDevspace: async (id, repository, configPath) => parseCreatedAnswer(await call('record', 'createDevspace', { id, repository, configPath }), repository),
+      createDevspace: async (id, repository, configPath, _scope, defaultImage) =>
+        parseCreatedAnswer(await call('record', 'createDevspace', { id, repository, configPath, ...(defaultImage !== undefined ? { defaultImage } : {}) }), repository),
       dropCreated: async (devspaceId) => void (await call('record', 'dropCreated', devspaceId)),
       configuration: async (devspaceId, change) => parseEntryAnswer(await call('record', 'configuration', devspaceId, change), devspaceId),
       build: async (devspaceId, change) => parseEntryAnswer(await call('record', 'build', devspaceId, ...buildArguments(change)), devspaceId),

@@ -19,7 +19,7 @@ describe('the parameters of the open', () => {
     expect(parseOpenParams(EXISTING)).toEqual(EXISTING);
     expect(parseOpenParams(FIRST)).toEqual(FIRST);
     // No image list (`repositories`).
-    const full = { ...EXISTING, settings: { ...SETTINGS, stopAfterMinutes: 30 }, forceRebuild: true, configPath: '.devcontainer/b/devcontainer.json' };
+    const full = { ...EXISTING, settings: { ...SETTINGS, stopAfterMinutes: 30 }, forceRebuild: true, source: { kind: 'configuration', configPath: '.devcontainer/b/devcontainer.json' } };
     expect(parseOpenParams(full)).toEqual(full);
     // An unknown default branch (null) and none at all.
     expect(parseOpenParams({ ...FIRST, target: { ...FIRST.target, defaultBranch: null } })?.target?.defaultBranch).toBeNull();

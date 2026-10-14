@@ -23,7 +23,7 @@ import {
   checkedOpenFinish,
   type OpenRequestScope,
 } from './openRequests';
-import { MAX_RESTORE_ENTRIES } from '../helperChannel/protocol';
+import { MAX_RESTORE_ENTRIES, parseDevspaceSource } from '../helperChannel/protocol';
 import { parseConfigCheckEntry } from '../storage/configCheckEntry';
 import { isConfigPathLabelValue, repositoryFolder, resourceName } from '../names';
 import { DEFAULT_CONFIG_PATH, isRepositoryName } from '../pipeline/recordRules';
@@ -358,7 +358,7 @@ async function question(host: HostSide, call: string, args: unknown[]): Promise<
       // The second argument, when given, names what changed (ConfigurationChangeKind).
       const [repository] = strings(args, 1);
       const what = args.length === 2 ? args[1] : undefined;
-      if (args.length > 2 || (what !== undefined && what !== 'defaultImage' && what !== 'source')) {
+      if (args.length > 2 || (what !== undefined && what !== 'defaultImage')) {
         throw new HelperOperationError('invalid', 'The arguments of the request are invalid.', false);
       }
       return ui.configurationChanged(repository, what);
@@ -477,6 +477,11 @@ async function record(host: HostSide, call: string, args: unknown[], context: Re
       return (await records.get(strings(args, 1)[0])) ?? null;
     case 'findForAccount': {
       const [repository, accountId, onHost] = strings(args, 3);
+      // The source of the devspace, when the request names one (exactly a DevspaceSource); else any devspace of the
+      // repository.
+      if (args.length > 4) throw new HelperOperationError('invalid', 'The arguments of the request are invalid.', false);
+      const source = args.length === 4 ? parseDevspaceSource(args[3]) : undefined;
+      if (args.length === 4 && source === undefined) throw new HelperOperationError('invalid', 'The source of the request is invalid.', false);
       // An operation of a repository without its devspace yet (the open of a repository) is bound to the devspace
       // that it finds for the repository of the operation, the account signed in here and the Docker host of the
       // operation: the existing one, or the one that its `record restore` added. Only then may it change that entry
@@ -486,7 +491,7 @@ async function record(host: HostSide, call: string, args: unknown[], context: Re
         const account = await host.state.account(false);
         if (account === undefined || account.id !== accountId) throw new HelperOperationError('invalid', 'The account of the request is not the one signed in.', false);
       }
-      const found = await records.findForAccount(repository, accountId, onHost);
+      const found = await records.findForAccount(repository, accountId, onHost, source);
       if (found !== undefined && bindable) {
         if (context.devspace.id === undefined) context.devspace.id = found.id;
         else if (context.devspace.id !== found.id) throw new HelperOperationError('invalid', 'The operation found another devspace than its own.', false);
@@ -608,7 +613,7 @@ async function record(host: HostSide, call: string, args: unknown[], context: Re
       if (context.repository === undefined || request.repository !== context.repository) {
         throw new HelperOperationError('invalid', 'The devspace of the request is of another repository than the one of the operation.', false);
       }
-      const entry = await records.createDevspace(request.id, request.repository, request.configPath, openScope(dockerHost));
+      const entry = await records.createDevspace(request.id, request.repository, request.configPath, openScope(dockerHost), request.defaultImage);
       // The new entry, or the one of the repository of the account on the Docker host that another window created
       // meanwhile (the open uses it, as openFirst does): every later request of the operation is for it.
       context.devspace.id = entry.id;

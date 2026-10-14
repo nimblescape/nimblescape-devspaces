@@ -154,7 +154,7 @@ describe('the requests of a flow in the worker', () => {
     });
     expect(await worker.questions.confirmUntrustedRepository('acme/app')).toBe(true);
     expect(await worker.questions.configurationChanged('acme/app')).toBe('rebuildNow');
-    expect(await worker.questions.configurationChanged('acme/app', 'source')).toBe('rebuildNow');
+    expect(await worker.questions.configurationChanged('acme/app', 'defaultImage')).toBe('rebuildNow');
     expect(await worker.questions.configurationKindChanged('acme/app', 'the kind changed')).toBe('rebuildNow');
     expect(await worker.questions.filesMissing('acme/app')).toBe('cloneAgain');
     expect(await worker.questions.recreateContainer('acme/app', { message: 'm', detail: 'd' })).toBe(true);
@@ -169,7 +169,7 @@ describe('the requests of a flow in the worker', () => {
       'recreateContainer',
       'message',
     ]);
-    expect(calls[2]).toEqual({ call: 'configurationChanged', args: ['acme/app', 'source'] });
+    expect(calls[2]).toEqual({ call: 'configurationChanged', args: ['acme/app', 'defaultImage'] });
     expect(calls.at(-1)).toEqual({ call: 'message', args: ['warn', 'careful'] });
   });
 

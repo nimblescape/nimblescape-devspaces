@@ -38,7 +38,7 @@ import type {
   RepositoryInfo,
   WindowStatus,
 } from '../core/types';
-import { defaultImageOf, hasConfiguration, sourceDiffers, startSource } from '../core/defaultImage';
+import { possibleSources, sourceOf, sourceOperationKey } from '../core/devspaceSource';
 import { isProcessAlive, stopAfterSeconds } from '../core/session/sessionRules';
 import { decideReopen, pipelineJustRan, sortPendingOperations } from './activationRules';
 import type { VsCodeGitHubAuth } from './auth';
@@ -66,14 +66,8 @@ import type { Sidebar } from './sidebar';
 import type { DevspaceStatusBar } from './statusBar';
 import { pickRepository, showSwitcher } from './switcher';
 import { CoalescingTask, OperationGate } from './tasks';
-import {
-  configurationChoices,
-  parseCommandArgument,
-  repositoryKey,
-  repositoryTarget,
-  type CommandArgument,
-} from './targets';
-import { TreeTexts, recentDevspaces, stateIcon } from './treeModel';
+import { parseCommandArgument, repositoryTarget, sourceChoices, type CommandArgument } from './targets';
+import { TreeTexts, devspaceName, recentDevspaces, repositoryRows, stateIcon } from './treeModel';
 import { opensNewWindow, type WindowRequest } from './windowChoice';
 
 /**
@@ -217,6 +211,12 @@ interface Target {
    * account that is signed in then.
    */
   named?: boolean;
+  /**
+   * The source of the target (DevspaceSource): the one of its devspace (sourceOf), or, without a devspace, the one of
+   * the row or of the pick of the source, which the first Start creates the devspace from. Missing: a target of a
+   * repository with one source that the discovery does not know yet (the open takes its first configuration).
+   */
+  source?: DevspaceSource;
 }
 
 interface StartOptions {
@@ -225,17 +225,11 @@ interface StartOptions {
    * in Current Window name it. Default: `default`.
    */
   window?: WindowRequest;
-  /** First open only: the configuration (Select configuration… without devspace). */
-  configPath?: string;
   /**
-   * What the open builds the devspace from (DevspaceSource): the default image of the settings, or the configuration.
-   * Every Start of the user names it (startSource: the settings, or the other source from the context menu). Missing:
-   * the devspace keeps the source of its last open (a restored window, the reopen at startup, Reconnect of a flow).
-   * A Start on the devspace of this window (Reconnect) keeps it too, whatever the options name.
+   * First open only: what the open builds the devspace from (DevspaceSource), when the target names none. An existing
+   * devspace keeps the source it was created with (sourceOf), whatever the options name.
    */
   source?: DevspaceSource;
-  /** The devspace is built again before it starts (Start with Default Image or Start with Configuration on another source). */
-  forceRebuild?: boolean;
 }
 
 /** The devspace that this window is attached to. A window changes its devspace only by reloading. */
@@ -265,7 +259,7 @@ interface LeftDevspace {
 /** A flow that connects this window (numbered, see `connectingFlow`), or a new window. */
 type ConnectRequest = { newWindow: false; number: number } | { newWindow: true };
 
-type HandOffRequest = Pick<PendingOperation, 'operation' | 'reason' | 'configPath' | 'source' | 'additionalVolumesToRemove'>;
+type HandOffRequest = Pick<PendingOperation, 'operation' | 'reason' | 'additionalVolumesToRemove'>;
 
 /** What a command without argument asks for: `open` is a repository that the command opens (Start). */
 type PickKind = 'open' | 'repository' | 'devspace' | 'gitHub';
@@ -338,11 +332,8 @@ export class Controller implements vscode.Disposable {
       start: (argument) => this.start(parseCommandArgument(argument)),
       startInNewWindow: (argument) => this.start(parseCommandArgument(argument), 'newWindow'),
       startInCurrentWindow: (argument) => this.start(parseCommandArgument(argument), 'currentWindow'),
-      startWithDefaultImage: (argument) => this.startWithSource(parseCommandArgument(argument), 'defaultImage'),
-      startWithConfiguration: (argument) => this.startWithSource(parseCommandArgument(argument), 'configuration'),
       stop: (argument) => this.stop(parseCommandArgument(argument)),
       delete: (argument) => this.delete(parseCommandArgument(argument)),
-      selectConfiguration: (argument) => this.selectConfiguration(parseCommandArgument(argument)),
       rebuild: (argument) => this.rebuild(parseCommandArgument(argument)),
       showOnGitHub: (argument) => this.showOnGitHub(parseCommandArgument(argument)),
       switchDevspace: () => this.switchDevspace(),
@@ -497,11 +488,11 @@ export class Controller implements vscode.Disposable {
       // Assumption: activation through ATTACHED_CONTAINER_ACTIVATION_EVENT blocks the connection until activate()
       // resolves, also when the pipeline starts Docker or updates the devspace for several minutes.
       const succeeded = await this.operation(
-        repository,
+        this.keyOfDevspace(repository, devspace),
         'Open',
         () =>
           runWithProgress({
-            title: Messages.opening(repository),
+            title: Messages.opening(this.shownName(this.devspaceTarget(devspace))),
             repository,
             cancellable: true,
             task: async (progress, signal) => {
@@ -681,46 +672,7 @@ export class Controller implements vscode.Disposable {
    */
   async start(argument: CommandArgument, window: WindowRequest = 'default'): Promise<void> {
     const target = await this.resolveTarget(argument, 'open', ControllerTexts.selectRepositoryToStart);
-    if (target) await this.startTarget(target, { window, source: this.startSource(target) });
-  }
-
-  /**
-   * Start with Default Image and Start with Configuration: Start with the source that the menu names (the other one
-   * than the setting startWithDefaultImage gives plain Start). A devspace that was last opened from another source
-   * (the other kind, or another default image) is built again from this one (the pipeline creates its container
-   * again; the files of the volume stay). A devspace connected here or in another window hands off for that, as
-   * Rebuild does; otherwise the window of the setting openInNewWindow connects. A repository without a configuration
-   * has only the default image.
-   */
-  async startWithSource(argument: CommandArgument, kind: DevspaceSource['kind']): Promise<void> {
-    const image = defaultImageOf(this.deps.settings());
-    if (kind === 'defaultImage' && image === undefined) {
-      this.inform(ControllerTexts.noDefaultImage);
-      return;
-    }
-    const target = await this.resolveTarget(argument, 'open', ControllerTexts.selectRepositoryToStart);
-    if (!target) return;
-    if (kind === 'configuration' && !hasConfiguration(target.info)) {
-      this.inform(Messages.noConfiguration(this.displayName(target)));
-      return;
-    }
-    const source: DevspaceSource = kind === 'defaultImage' && image !== undefined ? { kind: 'defaultImage', image } : { kind: 'configuration' };
-    const devspace = target.devspace;
-    const differs = devspace !== undefined && sourceDiffers(devspace, source);
-    if (devspace && differs && (this.isConnectedHere(devspace) || (await this.connectedInOtherWindow(devspace.id)))) {
-      await this.rebuildDevspace(target, devspace, { reason: 'sourceSelected', source });
-      return;
-    }
-    // Another source (also another default image): built again, without the question of a changed configuration.
-    await this.startTarget(target, { source, ...(differs ? { forceRebuild: true } : {}) });
-  }
-
-  /**
-   * The source of a Start of the user (startSource): the settings defaultImage and startWithDefaultImage; a repository
-   * without a configuration starts from the default image, and keeps its last source without one.
-   */
-  private startSource(target: Pick<Target, 'info'>): DevspaceSource | undefined {
-    return startSource(this.deps.settings(), target.info);
+    if (target) await this.startTarget(target, { window });
   }
 
   /**
@@ -748,12 +700,12 @@ export class Controller implements vscode.Disposable {
       await this.handOff(target, devspace, { operation: 'stop', reason: 'manual' });
       return;
     }
-    const repository = this.displayName(target);
+    const shown = this.shownName(target);
     if (await this.connectedInOtherWindow(devspace.id)) {
       // The other window closes its connection first, and its reloaded window stops the container.
-      if (!(await this.confirmOtherWindow(repository, ControllerTexts.stop))) return;
-      await this.operation(repository, 'Stop', () =>
-        this.requestOtherWindowHandOff(repository, devspace, { operation: 'stop', reason: 'manual' }),
+      if (!(await this.confirmOtherWindow(shown, ControllerTexts.stop))) return;
+      await this.operation(this.operationKey(target), 'Stop', () =>
+        this.requestOtherWindowHandOff(shown, devspace, { operation: 'stop', reason: 'manual' }),
       );
       return;
     }
@@ -863,14 +815,14 @@ export class Controller implements vscode.Disposable {
     const target = await this.resolveTarget(argument, 'devspace', ControllerTexts.selectDevspaceToDelete);
     const devspace = this.requireDevspace(target);
     if (!target || !devspace) return;
-    const repository = this.displayName(target);
+    const repository = this.shownName(target);
     if ((await this.otherWindowMark(devspace.id))?.operation === 'delete') {
       this.inform(ControllerTexts.alreadyDeleting(repository));
       return;
     }
     let openInstead = false;
     await this.operation(
-      repository,
+      this.operationKey(target),
       'Delete',
       async () => {
         // The check of Delete and its questions run in the worker of the Docker host (deleteCheck.ts: the Git state,
@@ -908,8 +860,7 @@ export class Controller implements vscode.Disposable {
     if (openInstead) {
       const fresh = await this.deps.registry.get(devspace.id);
       if (fresh) {
-        const target = this.devspaceTarget(fresh);
-        await this.startTarget(target, { source: this.startSource(target) });
+        await this.startTarget(this.devspaceTarget(fresh));
       }
     }
   }
@@ -920,64 +871,6 @@ export class Controller implements vscode.Disposable {
     const devspace = this.requireDevspace(target);
     if (!target || !devspace) return;
     await this.rebuildDevspace(target, devspace, { reason: 'manual' });
-  }
-
-  /** Select configuration…: changes the configuration of the devspace and rebuilds it. */
-  async selectConfiguration(argument: CommandArgument): Promise<void> {
-    const target = await this.resolveTarget(argument, 'repository', ControllerTexts.selectRepositoryForConfiguration);
-    if (!target) return;
-    const repository = this.displayName(target);
-    const devspace = target.devspace;
-    let configPaths = target.info?.configPaths ?? [];
-    if (devspace) {
-      let listed: string[] | undefined;
-      await this.operation(repository, 'Select configuration', async () => {
-        listed = await runWithProgress({
-          title: ControllerTexts.readingConfigurations(repository),
-          cancellable: true,
-          task: (progress, signal) => this.deps.service.listConfigurationsInWorker(devspace.id, { progress, signal }),
-        });
-      });
-      if (!listed) return;
-      configPaths = listed;
-    }
-    if (configPaths.length === 0) {
-      this.inform(Messages.noConfiguration(repository));
-      return;
-    }
-    const picked = await vscode.window.showQuickPick(
-      configurationChoices(configPaths, devspace?.configPath).map((choice) => ({
-        label: choice.label,
-        description: choice.description,
-        configPath: choice.configPath,
-      })),
-      {
-        title: ControllerTexts.selectConfigurationTitle,
-        placeHolder: ControllerTexts.configurationPlaceholder(repository),
-        matchOnDescription: true,
-      },
-    );
-    if (!picked) return;
-    await this.applyConfiguration(target, picked.configPath);
-  }
-
-  /**
-   * Select configuration… after the pick. Try again of a first open that failed runs this step again with the same
-   * configuration, for the devspace of the repository that the account signed in now has then, as the command does.
-   */
-  private async applyConfiguration(target: Target, configPath: string): Promise<void> {
-    const devspace = target.devspace;
-    if (!devspace) {
-      await this.startTarget(target, { configPath, window: 'currentWindow' }, async () =>
-        this.applyConfiguration(await this.refreshedTarget(target, 'token'), configPath),
-      );
-      return;
-    }
-    if (configPath === devspace.configPath) {
-      this.logger.info(`${this.displayName(target)} uses the configuration ${configPath} already.`);
-      return;
-    }
-    await this.rebuildDevspace(target, devspace, { reason: 'configurationSelected', configPath });
   }
 
   /** Show on GitHub. */
@@ -1015,11 +908,11 @@ export class Controller implements vscode.Disposable {
         return;
       }
       const target = await this.ownTarget(this.devspaceTarget(devspace));
-      if (target) await this.startTarget(target, { window, source: this.startSource(target) });
+      if (target) await this.startTarget(target, { window });
       return;
     }
-    const target = await this.repositoryTargetFor(choice.repository.nameWithOwner, 'token');
-    await this.startTarget(target, { window, source: this.startSource(target) });
+    const target = await this.pickedRepositoryTarget(choice.repository.nameWithOwner, 'token');
+    if (target) await this.startTarget(target, { window });
   }
 
   /** Refresh: the repository list (sign-in first when needed), a lost registry, and the states. */
@@ -1059,8 +952,8 @@ export class Controller implements vscode.Disposable {
     }
     const info = await pickRepository(repositories, ControllerTexts.selectRepositoryToStart);
     if (!info) return;
-    const target = await this.repositoryTargetFor(info.nameWithOwner, 'token');
-    await this.startTarget(target, { source: this.startSource(target) });
+    const target = await this.pickedRepositoryTarget(info.nameWithOwner, 'token');
+    if (target) await this.startTarget(target);
   }
 
   /**
@@ -1182,8 +1075,12 @@ export class Controller implements vscode.Disposable {
     const { service, connection } = this.deps;
     const devspace = target.devspace;
     const repository = this.displayName(target);
-    // A Start on the devspace of this window is Reconnect (or already connected): the source of its last open stays.
-    const source = devspace !== undefined && this.isConnectedHere(devspace) ? undefined : options.source;
+    const shown = this.shownName(target);
+    const key = this.operationKey(target);
+    // The source of the open: the one of an existing devspace, fixed at its creation (with the default image of the
+    // settings now, sourceOf, so that a changed setting is noticed: Rebuild now / Later); else the one of the target
+    // (its row, or the pick of the source), which the first open creates the devspace from.
+    const source = devspace !== undefined ? sourceOf(devspace, this.deps.settings()) : (target.source ?? options.source);
     let reconnecting = false;
     let otherWindow: WindowStatus | undefined;
     // The container of this window whose state is read again within the operation, and what that read found running.
@@ -1195,7 +1092,7 @@ export class Controller implements vscode.Disposable {
       if (this.isConnectedHere(devspace)) {
         // While an operation of this devspace runs in this window (the open pipeline of a restored window,
         // Reconnect), its end decides the state: nothing is read or left here.
-        const running = this.gate.runningFor(repositoryKey(repository));
+        const running = this.gate.runningFor(key);
         if (running !== undefined) {
           this.logger.info(`Start of ${repository} was not started: ${running} of ${repository} is still running.`);
           return;
@@ -1205,7 +1102,7 @@ export class Controller implements vscode.Disposable {
         // One read of the worker gives whether it runs and whether it is outdated.
         const value = await this.windowState(devspace, containerName);
         // An operation of this devspace may have started, or the window may have left it, while the worker read.
-        if (this.gate.runningFor(repositoryKey(repository)) !== undefined || this.current?.devspace.id !== devspace.id) {
+        if (this.gate.runningFor(key) !== undefined || this.current?.devspace.id !== devspace.id) {
           this.logger.info(`Start of ${repository} was not started: the window or its operation changed while the state of its container was read.`);
           return;
         }
@@ -1233,7 +1130,7 @@ export class Controller implements vscode.Disposable {
             this.current.unknown = false;
             this.updateStatusBar();
           }
-          this.inform(ControllerTexts.alreadyConnected(repository));
+          this.inform(ControllerTexts.alreadyConnected(shown));
           return;
         }
         if (value === undefined) {
@@ -1267,11 +1164,11 @@ export class Controller implements vscode.Disposable {
     }
     const newWindow = this.opensNewWindow(options.window ?? 'default', reconnecting);
     const started = await this.operation(
-      repository,
+      key,
       'Start',
       () =>
         runWithProgress({
-          title: Messages.opening(repository),
+          title: Messages.opening(shown),
           repository,
           cancellable: true,
           task: (progress, signal) =>
@@ -1287,21 +1184,10 @@ export class Controller implements vscode.Disposable {
                 }
               }
               if (devspace) {
-                result = await service.openDevspaceInWorker(devspace.id, {
-                  progress,
-                  signal,
-                  configPath: options.configPath,
-                  source,
-                  ...(options.forceRebuild === true ? { forceRebuild: true } : {}),
-                });
+                result = await service.openDevspaceInWorker(devspace.id, { progress, signal, source });
               } else {
                 const trusted = await this.firstOpenTrust(repository);
-                result = await service.openInWorker(repositoryTarget(repository, target.info, trusted), {
-                  progress,
-                  signal,
-                  configPath: options.configPath,
-                  source,
-                });
+                result = await service.openInWorker(repositoryTarget(repository, target.info, trusted), { progress, signal, source });
               }
               await this.connect(result, progress, request, signal);
             }),
@@ -1312,11 +1198,7 @@ export class Controller implements vscode.Disposable {
         retry:
           retry ??
           (async () =>
-            this.startTarget(await this.refreshedTarget(target, 'token'), {
-              window: options.window,
-              source: options.source,
-              ...(options.forceRebuild === true ? { forceRebuild: true } : {}),
-            })),
+            this.startTarget(await this.refreshedTarget(target, 'token'), { window: options.window, source: options.source })),
         refused: () => (refused = true),
       },
     );
@@ -1334,7 +1216,7 @@ export class Controller implements vscode.Disposable {
       this.current.lost = false;
       this.current.unknown = false;
       this.updateStatusBar();
-      this.inform(ControllerTexts.alreadyConnected(repository));
+      this.inform(ControllerTexts.alreadyConnected(shown));
       return;
     }
     if (!started && !refused && reconnecting && devspace) {
@@ -1475,11 +1357,11 @@ export class Controller implements vscode.Disposable {
    * (usually faster), and "<owner/name> stopped." at its end. The reopen record of the devspace goes (forgetReopen).
    */
   private async stopNow(target: Target, devspace: Devspace): Promise<void> {
-    const repository = this.displayName(target);
+    const repository = this.shownName(target);
     await this.stopThroughMonitor(repository, devspace);
     await this.forgetReopen(devspace.id);
     const stopped = await this.operation(
-      repository,
+      this.operationKey(target),
       'Stop',
       () => runWithProgress({ title: ControllerTexts.stopping(repository), task: () => this.deps.service.stop(devspace.id) }),
       { retry: () => this.stopNow(target, devspace) },
@@ -1533,12 +1415,8 @@ export class Controller implements vscode.Disposable {
   }
 
   /** Rebuild of a devspace that this window may be connected to. */
-  private async rebuildDevspace(
-    target: Target,
-    devspace: Devspace,
-    request: { reason: PendingOperation['reason']; configPath?: string; source?: DevspaceSource },
-  ): Promise<void> {
-    const repository = this.displayName(target);
+  private async rebuildDevspace(target: Target, devspace: Devspace, request: { reason: PendingOperation['reason'] }): Promise<void> {
+    const repository = this.shownName(target);
     if (this.isConnectedHere(devspace)) {
       await this.handOff(target, devspace, { operation: 'rebuild', ...request }, 'rebuild');
       return;
@@ -1546,13 +1424,13 @@ export class Controller implements vscode.Disposable {
     if (await this.connectedInOtherWindow(devspace.id)) {
       // The other window closes its connection, and its reloaded window rebuilds and connects again.
       if (!(await this.confirmOtherWindow(repository, Actions.rebuildNow))) return;
-      await this.operation(repository, 'Rebuild', () =>
+      await this.operation(this.operationKey(target), 'Rebuild', () =>
         this.requestOtherWindowHandOff(repository, devspace, { operation: 'rebuild', ...request }),
       );
       return;
     }
     await this.operation(
-      repository,
+      this.operationKey(target),
       'Rebuild',
       () =>
         runWithProgress({
@@ -1561,14 +1439,8 @@ export class Controller implements vscode.Disposable {
           cancellable: true,
           task: async (progress, signal) => {
             // The window is not connected to this devspace, so it does not connect (the container runs until the
-            // Monitor stops it).
-            await this.deps.service.openDevspaceInWorker(devspace.id, {
-              progress,
-              signal,
-              forceRebuild: true,
-              configPath: request.configPath,
-              source: request.source,
-            });
+            // Monitor stops it). The devspace is built again from its source (sourceOf).
+            await this.deps.service.openDevspaceInWorker(devspace.id, { progress, signal, forceRebuild: true, source: sourceOf(devspace, this.deps.settings()) });
           },
         }),
       { retry: () => this.rebuildDevspace(target, devspace, request) },
@@ -1580,8 +1452,8 @@ export class Controller implements vscode.Disposable {
    * Connection". The window becomes an empty local window, and the extension there runs the operation (role B).
    */
   private async handOff(target: Target, devspace: Devspace, request: HandOffRequest, busy?: BusyOperation): Promise<void> {
-    const repository = this.displayName(target);
-    await this.operation(repository, request.operation, () => this.handOffNow(repository, devspace, request, busy));
+    const repository = this.shownName(target);
+    await this.operation(this.operationKey(target), request.operation, () => this.handOffNow(repository, devspace, request, busy));
   }
 
   private async handOffNow(
@@ -1602,8 +1474,6 @@ export class Controller implements vscode.Disposable {
         requestedAt: isoTime(this.clock),
         requestedBy: coordinator.windowId,
         reason: request.reason,
-        configPath: request.configPath,
-        source: request.source,
         additionalVolumesToRemove: request.additionalVolumesToRemove,
       });
       await connection.closeRemoteConnection();
@@ -1749,8 +1619,6 @@ export class Controller implements vscode.Disposable {
       requestedAt: isoTime(this.clock),
       requestedBy: this.deps.coordinator.windowId,
       reason: request.reason,
-      configPath: request.configPath,
-      source: request.source,
       additionalVolumesToRemove: request.additionalVolumesToRemove,
     };
     await this.deps.disconnectRequests.write(sent);
@@ -1799,7 +1667,7 @@ export class Controller implements vscode.Disposable {
       return;
     }
     // An operation of this devspace runs in this window (for example Reconnect): a later check answers the request.
-    if (this.gate.runningFor(repositoryKey(repository)) !== undefined) return;
+    if (this.gate.runningFor(this.keyOfDevspace(repository, current.devspace)) !== undefined) return;
     if (!(await disconnectRequests.take(devspaceId))) return;
     const devspace = await registry.get(devspaceId);
     if (!devspace || this.current !== current) {
@@ -1817,8 +1685,6 @@ export class Controller implements vscode.Disposable {
       {
         operation: request.operation,
         reason: request.reason,
-        configPath: request.configPath,
-        source: request.source,
         additionalVolumesToRemove: request.operation === 'delete' ? (request.additionalVolumesToRemove ?? []) : undefined,
       },
       HAND_OFF_BUSY[request.operation],
@@ -1841,15 +1707,13 @@ export class Controller implements vscode.Disposable {
       switch (operation.operation) {
         case 'rebuild':
           // The update order, then this window connects again.
-          await this.rebuildAndConnect(target, devspace, { configPath: operation.configPath, source: operation.source }, () =>
-            this.removeOperationQuietly(operation.devspaceId),
-          );
+          await this.rebuildAndConnect(target, devspace, () => this.removeOperationQuietly(operation.devspaceId));
           return;
         case 'delete':
           await this.operation(
-            this.displayName(target),
+            this.operationKey(target),
             'Delete',
-            () => this.deleteWithProgress(this.displayName(target), devspace, operation.additionalVolumesToRemove ?? []),
+            () => this.deleteWithProgress(this.shownName(target), devspace, operation.additionalVolumesToRemove ?? []),
             { retry: () => this.delete({ kind: 'devspace', devspaceId: devspace.id }) },
           );
           return;
@@ -1864,15 +1728,10 @@ export class Controller implements vscode.Disposable {
     }
   }
 
-  private async rebuildAndConnect(
-    target: Target,
-    devspace: Devspace,
-    request: { configPath?: string; source?: DevspaceSource },
-    beforeConnect: () => Promise<void>,
-  ): Promise<void> {
-    const repository = this.displayName(target);
+  private async rebuildAndConnect(target: Target, devspace: Devspace, beforeConnect: () => Promise<void>): Promise<void> {
+    const repository = this.shownName(target);
     await this.operation(
-      repository,
+      this.operationKey(target),
       'Rebuild',
       () =>
         runWithProgress({
@@ -1881,19 +1740,14 @@ export class Controller implements vscode.Disposable {
           cancellable: true,
           task: (progress, signal) =>
             this.connectingFlow(false, async (connectRequest) => {
-              const result = await this.deps.service.openDevspaceInWorker(devspace.id, {
-                progress,
-                signal,
-                forceRebuild: true,
-                configPath: request.configPath,
-                source: request.source,
-              });
+              // The devspace is built again from its source (sourceOf).
+              const result = await this.deps.service.openDevspaceInWorker(devspace.id, { progress, signal, forceRebuild: true, source: sourceOf(devspace, this.deps.settings()) });
               // The window reloads when it connects; nothing after `connect` is sure to run.
               await beforeConnect();
               await this.connect(result, progress, connectRequest, signal);
             }),
         }),
-      { retry: () => this.rebuildAndConnect(target, devspace, request, beforeConnect) },
+      { retry: () => this.rebuildAndConnect(target, devspace, beforeConnect) },
     );
   }
 
@@ -2217,13 +2071,14 @@ export class Controller implements vscode.Disposable {
     // the container is being started or replaced; the operation's end decides the state. Otherwise a check during the
     // pipeline could leave "Reconnect" in the status bar after a successful start.
     const repository = this.displayName({ repository: current.devspace.repository });
-    if (this.gate.runningFor(repositoryKey(repository)) !== undefined) return;
+    const key = this.keyOfDevspace(repository, current.devspace);
+    if (this.gate.runningFor(key) !== undefined) return;
     this.checkingConnection = true;
     try {
       const value = await this.windowState(current.devspace, current.containerName);
       const runs = this.deps.docker.isInstalled() ? (value === undefined ? undefined : value.state === 'running') : false;
       // The window or its operation may have changed while the worker read.
-      if (this.current !== current || this.disposed || this.gate.runningFor(repositoryKey(repository)) !== undefined) return;
+      if (this.current !== current || this.disposed || this.gate.runningFor(key) !== undefined) return;
       // Whether it is outdated could not be read when the window attached; now it can.
       const unchecked = this.outdatedUncheckedFor;
       if (value !== undefined && unchecked?.devspaceId === current.devspace.id) {
@@ -2312,7 +2167,7 @@ export class Controller implements vscode.Disposable {
       statusBar.showNotConnected();
       return;
     }
-    const repository = this.displayName({ repository: current.devspace.repository });
+    const repository = this.shownName(this.devspaceTarget(current.devspace));
     statusBar.showStateUnknown(current.unknown === true);
     if (current.lost) statusBar.showConnectionLost(repository, current.devspace.id);
     else statusBar.showConnected(repository, current.branch ?? current.devspace.gitSummary?.branch ?? undefined);
@@ -2422,16 +2277,16 @@ export class Controller implements vscode.Disposable {
 
   private async resolveTargetOfAnyAccount(argument: CommandArgument, pick: PickKind, placeholder: string): Promise<Target | undefined> {
     const { registry, sidebar } = this.deps;
-    // Show on GitHub needs neither a devspace nor a sign-in; Start and Select configuration… need a working token.
+    // Show on GitHub needs neither a devspace nor a sign-in; Start needs a working token.
     const signIn = pick === 'gitHub' ? false : pick === 'open' || pick === 'repository' ? 'token' : true;
     switch (argument.kind) {
       case 'row': {
         const info = sidebar.repositoryInfo(argument.repository) ?? argument.info;
         // The devspace of the row while it exists; otherwise (a row without devspace, or one deleted meanwhile)
-        // the devspace of the repository of the signed-in account.
+        // the devspace of the source of the row of the signed-in account.
         const named = argument.devspaceId !== undefined ? await registry.get(argument.devspaceId) : undefined;
-        if (named) return { repository: argument.repository, info, devspace: named, named: true };
-        const target = await this.repositoryTargetFor(argument.repository, signIn);
+        if (named) return { repository: argument.repository, info, devspace: named, named: true, source: sourceOf(named) };
+        const target = await this.repositoryTargetFor(argument.repository, signIn, argument.source);
         return { ...target, info: target.info ?? info };
       }
       case 'devspace': {
@@ -2457,13 +2312,30 @@ export class Controller implements vscode.Disposable {
         }
         // The title "Open repository…" only where the pick opens the repository.
         const info = await pickRepository(repositories, placeholder, pick === 'open' ? undefined : null);
-        return info ? this.repositoryTargetFor(info.nameWithOwner, signIn) : undefined;
+        return info ? this.pickedRepositoryTarget(info.nameWithOwner, signIn) : undefined;
       }
     }
   }
 
   private devspaceTarget(devspace: Devspace): Target {
-    return { repository: devspace.repository, info: this.deps.sidebar.repositoryInfo(devspace.repository), devspace, named: true };
+    return { repository: devspace.repository, info: this.deps.sidebar.repositoryInfo(devspace.repository), devspace, named: true, source: sourceOf(devspace) };
+  }
+
+  /**
+   * The target of a repository that a Quick Pick chose (the Command Palette, Search, the switcher): with one possible
+   * source (possibleSources), that source; with several, the source that the user picks (sourceChoices), or
+   * `undefined` when the pick is cancelled. `signIn` as for `repositoryTargetFor`.
+   */
+  private async pickedRepositoryTarget(repository: string, signIn: boolean | 'token'): Promise<Target | undefined> {
+    const info = this.deps.sidebar.repositoryInfo(repository);
+    const own = (await this.deps.sidebar.availableDevspaces()).filter((devspace) => devspace.repository.toLowerCase() === repository.toLowerCase());
+    const sources = possibleSources({ info, devspaces: own, settings: this.deps.settings() });
+    if (sources.length <= 1) return this.repositoryTargetFor(repository, signIn, sources[0]);
+    const picked = await vscode.window.showQuickPick(
+      sourceChoices(sources, own).map((choice) => ({ label: choice.label, description: choice.description, source: choice.source })),
+      { title: ControllerTexts.selectSourceTitle, placeHolder: ControllerTexts.sourcePlaceholder(info?.nameWithOwner ?? repository), matchOnDescription: true },
+    );
+    return picked ? this.repositoryTargetFor(repository, signIn, picked.source) : undefined;
   }
 
   /**
@@ -2471,31 +2343,33 @@ export class Controller implements vscode.Disposable {
    * devspaces of other accounts are not looked at: they neither block nor name anything, and the first Start of an
    * account creates its own. The account decides the devspace, so with `signIn` a sign-in is asked for when nobody
    * is signed in; without it, the target has no devspace then. With `'token'` (a command that needs a working token:
-   * Start, Select configuration…) the account comes from a session with a working token, so that the new sign-in while
+   * Start) the account comes from a session with a working token, so that the new sign-in while
    * GitHub rejects the token happens before the devspace is chosen: an account change at that sign-in then chooses
    * the devspace of the new account.
    */
-  private async repositoryTargetFor(repository: string, signIn: boolean | 'token'): Promise<Target> {
+  private async repositoryTargetFor(repository: string, signIn: boolean | 'token', source?: DevspaceSource): Promise<Target> {
     const info = this.deps.sidebar.repositoryInfo(repository);
     const account = signIn === 'token' ? await this.readWorkingAccount() : await this.readAccount(signIn);
     if (signIn && !account) throw new UserFacingError('signInRequired', Messages.signInRequired);
+    // The devspace of the source of the repository; without a source (a repository with one source that the discovery
+    // does not know), its most recently used devspace.
     const devspace = account
-      ? await this.deps.registry.findForAccount(repository, account.id, await this.currentDockerHost())
+      ? await this.deps.registry.findForAccount(repository, account.id, await this.currentDockerHost(), source)
       : undefined;
-    return { repository, info, devspace };
+    return { repository, info, devspace, ...(source !== undefined ? { source } : {}) };
   }
 
   /**
    * The target with the current registry entry (for Try again, and after a change of the devspace): a named
    * devspace while it exists, otherwise the devspace of the repository of the account that is signed in now, if
    * any. A repository never carries the devspace of the account that was signed in before. `signIn` as for
-   * `repositoryTargetFor`.
+   * `repositoryTargetFor`. The source stays the one of the target.
    */
   private async refreshedTarget(target: Target, signIn: boolean | 'token' = false): Promise<Target> {
     const current = target.named && target.devspace ? await this.deps.registry.get(target.devspace.id) : undefined;
     const fresh = current
       ? this.devspaceTarget(current)
-      : await this.repositoryTargetFor(target.devspace?.repository ?? target.repository, signIn);
+      : await this.repositoryTargetFor(target.devspace?.repository ?? target.repository, signIn, target.source ?? (target.devspace ? sourceOf(target.devspace) : undefined));
     return { ...fresh, info: fresh.info ?? target.info };
   }
 
@@ -2514,6 +2388,51 @@ export class Controller implements vscode.Disposable {
     );
   }
 
+  /**
+   * The name of a target in the texts of the user, as the sidebar names it (devspaceName): its repository
+   * (displayName), with the word of its source when the repository has child rows (`acme/api · default`,
+   * `acme/api · config`, `acme/api · python`); the repository alone when it has one row.
+   */
+  private shownName(target: Target): string {
+    const repository = this.displayName(target);
+    const source = target.devspace ? sourceOf(target.devspace) : target.source;
+    if (source === undefined) return repository;
+    return devspaceName(repository, source, this.hasChildRows(target));
+  }
+
+  /**
+   * Whether the sidebar shows the repository of a target with child rows: it has two or more possible sources
+   * (possibleSources, as repositoryEntries of the tree model counts them) from its GitHub data, the devspaces of its
+   * rows in the last render of the sidebar, the devspace of the target, and the settings (the default image of the
+   * settings counts only for a repository that GitHub lists).
+   */
+  private hasChildRows(target: Target): boolean {
+    const key = target.repository.toLowerCase();
+    const info = target.info ?? this.deps.sidebar.repositoryInfo(target.repository);
+    const devspaces = repositoryRows(this.deps.sidebar.model())
+      .filter((row) => row.repository.toLowerCase() === key || row.devspace?.repository.toLowerCase() === key)
+      .flatMap((row) => (row.devspace ? [row.devspace] : []));
+    if (target.devspace && !devspaces.some((devspace) => devspace.id === target.devspace?.id)) devspaces.push(target.devspace);
+    const settings = this.deps.settings();
+    return possibleSources({ info, devspaces, settings: info === undefined ? { ...settings, defaultImage: undefined } : settings }).length >= 2;
+  }
+
+  /**
+   * The key of the operations of a target in the gate of this window (sourceOperationKey): the operations of one
+   * devspace run one after the other, those of two devspaces of one repository (its sources) next to each other.
+   * A target without a source (a repository with one source that the discovery does not know) has a key of its own.
+   */
+  private operationKey(target: Target): string {
+    const repository = this.displayName(target);
+    const source = target.devspace ? sourceOf(target.devspace) : target.source;
+    return source !== undefined ? sourceOperationKey(repository, source) : `${repository.toLowerCase()}#`;
+  }
+
+  /** The key of the operations of a devspace (operationKey) under the name `repository`. */
+  private keyOfDevspace(repository: string, devspace: Devspace): string {
+    return sourceOperationKey(repository, sourceOf(devspace));
+  }
+
   private async pickDevspace(placeholder: string): Promise<Devspace | undefined> {
     const { sidebar } = this.deps;
     const devspaces = await sidebar.availableDevspaces();
@@ -2523,7 +2442,7 @@ export class Controller implements vscode.Disposable {
     }
     await this.renderQuietly();
     const items = recentDevspaces(sidebar.model(), devspaces).map((entry) => ({
-      label: entry.state ? `$(${stateIcon(entry.state).id}) ${entry.repository}` : entry.repository,
+      label: entry.state ? `$(${stateIcon(entry.state).id}) ${entry.name}` : entry.name,
       description: entry.description,
       devspaceId: entry.devspaceId,
     }));
@@ -2535,21 +2454,21 @@ export class Controller implements vscode.Disposable {
   // Helpers
 
   /**
-   * Runs an operation: at most one per devspace in this window (a second request is ignored with a log line), errors
-   * are shown with the action Try again where the error offers it (errors.ts), and the sidebar is updated afterwards.
-   * Returns true when the operation ran without an error.
+   * Runs an operation: at most one per devspace in this window (`key`: operationKey; a second request is ignored with a
+   * log line), errors are shown with the action Try again where the error offers it (errors.ts), and the sidebar is
+   * updated afterwards. Returns true when the operation ran without an error.
    */
   private async operation(
-    repository: string,
+    key: string,
     label: string,
     fn: () => Promise<void>,
     options: { retry?: () => Promise<void>; refused?: () => void } = {},
   ): Promise<boolean> {
     await this.ready;
     try {
-      const outcome = await this.gate.run(repositoryKey(repository), label, () => this.withDockerTarget(fn));
+      const outcome = await this.gate.run(key, label, () => this.withDockerTarget(fn));
       if (!outcome.started) {
-        this.logger.info(`${label} of ${repository} was not started: ${outcome.running} of ${repository} is still running.`);
+        this.logger.info(`${label} of ${key} was not started: ${outcome.running} of ${key} is still running.`);
         options.refused?.();
         return false;
       }

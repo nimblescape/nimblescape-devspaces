@@ -63,7 +63,7 @@ export function hostStore(records: HostSide['records']): DevspaceStore {
     read: () => records.read(),
     get: (id) => records.get(id),
     list: () => records.list(),
-    findForAccount: (repository, accountId, dockerHost = '') => records.findForAccount(repository, accountId, dockerHost),
+    findForAccount: (repository, accountId, dockerHost = '', source) => records.findForAccount(repository, accountId, dockerHost, source),
     remove: (id, volumes = {}) => records.remove(id, volumes),
     forgetKeptVolumes: (names) => records.forgetKeptVolumes(names),
     // The entries rebuilt from the volumes of the engine.
@@ -108,7 +108,7 @@ export function hostOpenRecords(host: HostSide): OpenRecords {
   const { records } = host;
   return {
     createDevspace: async (devspace) => {
-      const entry = await records.createDevspace(devspace.id, devspace.repository, devspace.configPath);
+      const entry = await records.createDevspace(devspace.id, devspace.repository, devspace.configPath, undefined, devspace.defaultImage);
       // The extension answered the devspace of the repository that another window of the account created meanwhile:
       // the open finds it and uses it (openFirst), as when the registry refuses a second one.
       if (entry.id !== devspace.id) throw new Error(`A devspace of ${devspace.repository} of the GitHub account exists already.`);

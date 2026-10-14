@@ -6,13 +6,14 @@ import { describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Messages, StateTexts } from '../core/messages';
-import type { DiscoveryData, Devspace, DevspaceState, GitSummary, RepositoryInfo } from '../core/types';
+import type { DiscoveryData, Devspace, DevspaceSource, DevspaceState, GitSummary, RepositoryInfo } from '../core/types';
 import {
   buildTreeModel,
   contextValue,
   devspaceState,
   recentDevspaces,
   repositoriesForPicker,
+  repositoryEntriesOf,
   repositoryRows,
   rootNodes,
   rowActions,
@@ -24,6 +25,8 @@ import {
   type GroupNode,
   type HintRow,
   type OwnerGroup,
+  type RepositoryEntry,
+  type RepositoryNode,
   type RepositoryRow,
   type TreeInput,
 } from './treeModel';
@@ -105,6 +108,30 @@ function runtime(entries: Record<string, DevspaceRuntime>): Map<string, Devspace
 function rows(groups: OwnerGroup[]): RepositoryRow[] {
   return repositoryRows(groups);
 }
+
+/** The repository entries (single rows and nodes with child rows) in display order. */
+function entries(groups: OwnerGroup[]): RepositoryEntry[] {
+  return repositoryEntriesOf(groups);
+}
+
+/** The node of a repository with child rows (`owner/name`, case-insensitive). */
+function node(groups: OwnerGroup[], repository: string): RepositoryNode {
+  const key = repository.toLowerCase();
+  const found = repositoryEntriesOf(groups).find((entry) => entry.kind === 'repositoryNode' && entry.repository.toLowerCase() === key);
+  if (!found || found.kind !== 'repositoryNode') throw new Error(`No node for ${repository}`);
+  return found;
+}
+
+/** The child row of a source of a repository with child rows. */
+function childRow(groups: OwnerGroup[], repository: string, label: string): RepositoryRow {
+  const found = node(groups, repository).children.find((child) => child.label === label);
+  if (!found) throw new Error(`No child row ${label} of ${repository}`);
+  return found;
+}
+
+const IMAGE = 'ghcr.io/majikmate/devcontainer-base:latest';
+const DEFAULT_SOURCE: DevspaceSource = { kind: 'defaultImage', image: IMAGE };
+const ROOT_SOURCE: DevspaceSource = { kind: 'configuration', configPath: '.devcontainer/devcontainer.json' };
 
 /** The row of a devspace (only the tests use it). */
 function findRowByDevspaceId(groups: readonly OwnerGroup[], devspaceId: string): RepositoryRow | undefined {
@@ -235,13 +262,13 @@ describe('row actions and contextValue', () => {
   });
 
   it.each<[DevspaceState | undefined, string]>([
-    [undefined, 'repository;canStart;canChooseSource;onGitHub'],
-    ['connected', 'repository;canStop;canDelete;canRebuild;canChooseSource;onGitHub'],
-    ['connectedOtherWindow', 'repository;canStart;canStop;canDelete;canRebuild;canChooseSource;onGitHub'],
-    ['running', 'repository;canStart;canStop;canDelete;canRebuild;canChooseSource;onGitHub'],
-    ['stopped', 'repository;canStart;canDelete;canRebuild;canChooseSource;onGitHub'],
-    ['noContainer', 'repository;canStart;canDelete;canRebuild;canChooseSource;onGitHub'],
-    ['filesMissing', 'repository;canStart;canDelete;canRebuild;canChooseSource;onGitHub'],
+    [undefined, 'repository;canStart;onGitHub'],
+    ['connected', 'repository;canStop;canDelete;canRebuild;onGitHub'],
+    ['connectedOtherWindow', 'repository;canStart;canStop;canDelete;canRebuild;onGitHub'],
+    ['running', 'repository;canStart;canStop;canDelete;canRebuild;onGitHub'],
+    ['stopped', 'repository;canStart;canDelete;canRebuild;onGitHub'],
+    ['noContainer', 'repository;canStart;canDelete;canRebuild;onGitHub'],
+    ['filesMissing', 'repository;canStart;canDelete;canRebuild;onGitHub'],
     ['updating', 'repository;canDelete;onGitHub'],
   ])('state %s → %s', (state, expected) => {
     expect(contextValue(rowActions(state, info))).toBe(expected);
@@ -266,11 +293,9 @@ describe('row actions and contextValue', () => {
     expect(rowFor(mark('rebuild')).actions.canStart).toBe(false);
   });
 
-  it('adds multiConfig only for more than one configuration, and onGitHub only with discovery data', () => {
-    expect(flags(contextValue(rowActions('stopped', multi)))).toContain('multiConfig');
-    expect(flags(contextValue(rowActions('stopped', info)))).not.toContain('multiConfig');
+  it('adds onGitHub only with discovery data; the number of configurations changes no flag (the sources are rows)', () => {
     expect(flags(contextValue(rowActions('stopped', undefined)))).not.toContain('onGitHub');
-    expect(flags(contextValue(rowActions('stopped', undefined)))).not.toContain('multiConfig');
+    expect(contextValue(rowActions('stopped', multi))).toBe(contextValue(rowActions('stopped', info)));
   });
 
   it('matches the when clauses of package.json', () => {
@@ -289,7 +314,6 @@ describe('row actions and contextValue', () => {
       ['devspaces.stop', 'canStop'],
       ['devspaces.delete', 'canDelete'],
       ['devspaces.rebuild', 'canRebuild'],
-      ['devspaces.selectConfiguration', 'multiConfig'],
       ['devspaces.showOnGitHub', 'onGitHub'],
     ];
     const states: Array<DevspaceState | undefined> = [
@@ -357,6 +381,14 @@ describe('buildTreeModel', () => {
     );
 
     expect(groups.map((group) => group.owner)).toEqual(['acme-university', 'me']);
+    // A repository with two configurations is a node with a child row per configuration; its devspace is on the row
+    // of its configuration.
+    expect(groups[0].children.map((child) => (child.kind === 'repositoryNode' ? [child.label, child.children.map((row) => row.label)] : child.label))).toEqual([
+      ['api', ['config', 'python']],
+      'docs',
+      'infra',
+      'web',
+    ]);
     const view = groups.map((group) => ({
       owner: group.owner,
       rows: rows([group]).map((entry) => [entry.label, entry.state, entry.description, entry.contextValue]),
@@ -368,17 +400,18 @@ describe('buildTreeModel', () => {
       {
         owner: 'acme-university',
         rows: [
-          ['api', 'connected', 'main (python)   Connected', 'repository;canStop;canDelete;canRebuild;multiConfig;canChooseSource;onGitHub;hostAccessChecked;canKeepRunning;canCloseAndKeepRunning'],
-          ['docs', 'running', 'main   Running', 'repository;canStart;canStop;canDelete;canRebuild;canChooseSource;onGitHub;hostAccessChecked;canKeepRunning'],
-          ['infra', undefined, '', 'repository;canStart;canChooseSource;onGitHub;hostAccessChecked'],
-          ['web', 'stopped', 'feature-x   Stopped · 3 unpushed', 'repository;canStart;canDelete;canRebuild;canChooseSource;onGitHub;hostAccessChecked;canKeepRunning'],
+          ['config', undefined, '', 'repository;canStart;onGitHub;hostAccessChecked'],
+          ['python', 'connected', 'main   Connected', 'repository;canStop;canDelete;canRebuild;onGitHub;hostAccessChecked;canKeepRunning;canCloseAndKeepRunning'],
+          ['docs', 'running', 'main   Running', 'repository;canStart;canStop;canDelete;canRebuild;onGitHub;hostAccessChecked;canKeepRunning'],
+          ['infra', undefined, '', 'repository;canStart;onGitHub;hostAccessChecked'],
+          ['web', 'stopped', 'feature-x   Stopped · 3 unpushed', 'repository;canStart;canDelete;canRebuild;onGitHub;hostAccessChecked;canKeepRunning'],
         ],
       },
       {
         owner: 'me',
         rows: [
-          ['dotfiles', 'stopped', 'main   Stopped', 'repository;canStart;canDelete;canRebuild;canChooseSource;onGitHub;hostAccessChecked;canKeepRunning'],
-          ['website', undefined, '', 'repository;canStart;canChooseSource;onGitHub;hostAccessChecked'],
+          ['dotfiles', 'stopped', 'main   Stopped', 'repository;canStart;canDelete;canRebuild;onGitHub;hostAccessChecked;canKeepRunning'],
+          ['website', undefined, '', 'repository;canStart;onGitHub;hostAccessChecked'],
         ],
       },
     ]);
@@ -441,30 +474,35 @@ describe('buildTreeModel', () => {
     expect(old.notOnGitHub).toBe(true);
     expect(old.description).toBe('dev   Stopped · 2 uncommitted · not on GitHub');
     // The flag of the host access checks (on by default).
-    expect(old.contextValue).toBe('repository;canStart;canDelete;canRebuild;canChooseSource;hostAccessChecked;canKeepRunning');
+    expect(old.contextValue).toBe('repository;canStart;canDelete;canRebuild;hostAccessChecked;canKeepRunning');
     expect(old.tooltip).toContain(TreeTexts.notListedOnGitHub);
     expect(row(groups, 'lost/repo').description).toBe('main   Stopped · not on GitHub');
     expect(groups.map((group) => group.owner)).toEqual(['acme', 'lost']);
   });
 
   describe('repositories without a Dev Container configuration (the setting defaultImage)', () => {
-    const IMAGE = 'ghcr.io/majikmate/devcontainer-base:latest';
     const empty = repo('acme/empty', { configPaths: [] });
+    const withImage = { owners: [], includeArchived: false, includeForks: true, defaultImage: IMAGE };
 
-    it('lists them only with a default image: their devspaces start from it, so the row offers no other source', () => {
+    it('lists them only with a default image, as one row that starts from it; a repository with a configuration gets child rows', () => {
       const without = buildTreeModel(input({ discovery: discovery([repo('acme/api')], { withoutConfiguration: [empty] }) }));
-      expect(rows(without).map((entry) => entry.repository)).toEqual(['acme/api']);
+      expect(entries(without).map((entry) => [entry.kind, entry.repository])).toEqual([['repository', 'acme/api']]);
 
-      const groups = buildTreeModel(
-        input({ discovery: discovery([repo('acme/api')], { withoutConfiguration: [empty] }), settings: { owners: [], includeArchived: false, includeForks: true, defaultImage: IMAGE } }),
-      );
-      expect(rows(groups).map((entry) => entry.repository)).toEqual(['acme/api', 'acme/empty']);
+      const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api')], { withoutConfiguration: [empty] }), settings: withImage }));
+      expect(entries(groups).map((entry) => [entry.kind, entry.repository])).toEqual([
+        ['repositoryNode', 'acme/api'],
+        ['repository', 'acme/empty'],
+      ]);
       const entry = row(groups, 'acme/empty');
       expect(entry.info).toBe(empty);
+      expect(entry.child).toBe(false);
+      expect(entry.source).toEqual(DEFAULT_SOURCE);
+      expect(entry.label).toBe('empty');
       expect(entry.tooltip).toContain(TreeTexts.noConfiguration);
+      expect(entry.tooltip).toContain(TreeTexts.sourceDefaultImage(IMAGE));
       expect(flags(entry.contextValue)).toEqual(['repository', 'canStart', 'onGitHub', 'hostAccessChecked']);
-      expect(flags(row(groups, 'acme/api').contextValue)).toContain('canChooseSource');
-      expect(row(groups, 'acme/api').tooltip).not.toContain(TreeTexts.noConfiguration);
+      expect(node(groups, 'acme/api').children.map((child) => child.label)).toEqual(['default', 'config']);
+      expect(childRow(groups, 'acme/api', 'config').tooltip).not.toContain(TreeTexts.noConfiguration);
     });
 
     it('filters them like the other repositories (settings owners, includeArchived, includeForks)', () => {
@@ -474,7 +512,7 @@ describe('buildTreeModel', () => {
           settings: { owners: ['acme'], includeArchived: false, includeForks: true, defaultImage: IMAGE },
         }),
       );
-      expect(rows(groups).map((entry) => entry.repository)).toEqual(['acme/api', 'acme/empty']);
+      expect(entries(groups).map((entry) => entry.repository)).toEqual(['acme/api', 'acme/empty']);
     });
 
     it('gives the row of a devspace of such a repository its GitHub data, with or without a default image', () => {
@@ -482,9 +520,111 @@ describe('buildTreeModel', () => {
       const entry = row(groups, 'acme/empty');
       expect(entry.info).toBe(empty);
       expect(entry.notOnGitHub).toBe(false);
+      expect(entry.child).toBe(false);
+      expect(entry.source).toEqual(DEFAULT_SOURCE);
       expect(entry.description).toBe('main (default image)   Stopped');
       expect(flags(entry.contextValue)).toContain('onGitHub');
-      expect(flags(entry.contextValue)).not.toContain('canChooseSource');
+    });
+  });
+
+  describe('the child rows of a repository with several sources', () => {
+    const withImage = { owners: [], includeArchived: false, includeForks: true, defaultImage: IMAGE };
+    const python = '.devcontainer/python/devcontainer.json';
+
+    it('makes a node with one child row per source: the default image first, then the configurations (the root one first)', () => {
+      const groups = buildTreeModel(
+        input({
+          discovery: discovery([repo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', python] })]),
+          devspaces: [devspace('e1', 'acme/api', { defaultImage: IMAGE }), devspace('e2', 'acme/api', { configPath: python })],
+          settings: withImage,
+          currentDevspaceId: 'e2',
+        }),
+      );
+      const api = node(groups, 'acme/api');
+      expect(api).toMatchObject({ kind: 'repositoryNode', id: 'repo:acme/api', repository: 'acme/api', owner: 'acme', name: 'api', label: 'api', expanded: true });
+      expect(api.tooltip).toBe(`acme/api\n${TreeTexts.sources(3)}`);
+      expect(api.children.map((child) => [child.id, child.label, child.source, child.child, child.devspace?.id])).toEqual([
+        ['repo:acme/api:default', 'default', DEFAULT_SOURCE, true, 'e1'],
+        ['repo:acme/api:config:default', 'config', ROOT_SOURCE, true, undefined],
+        ['repo:acme/api:config:python', 'python', { kind: 'configuration', configPath: python }, true, 'e2'],
+      ]);
+      // A child row names its source in its label, not in the description; the tooltip names the devspace with it.
+      expect(childRow(groups, 'acme/api', 'default').description).toBe('main   Stopped');
+      expect(childRow(groups, 'acme/api', 'default').tooltip.split('\n')[0]).toBe('acme/api · default');
+      expect(childRow(groups, 'acme/api', 'default').tooltip).toContain(TreeTexts.sourceDefaultImage(IMAGE));
+      expect(childRow(groups, 'acme/api', 'python').tooltip.split('\n')[0]).toBe('acme/api · python');
+      expect(childRow(groups, 'acme/api', 'python').tooltip).toContain(TreeTexts.sourceConfiguration(python));
+      expect(childRow(groups, 'acme/api', 'python').contextValue).toBe('repository;canStop;canDelete;canRebuild;onGitHub;hostAccessChecked;canKeepRunning;canCloseAndKeepRunning');
+      expect(childRow(groups, 'acme/api', 'config').contextValue).toBe('repository;canStart;onGitHub;hostAccessChecked');
+      expect(childRow(groups, 'acme/api', 'config').tooltip).toContain(TreeTexts.noDevspace);
+    });
+
+    it('puts the default row last while the setting startWithDefaultImage is off', () => {
+      const groups = buildTreeModel(
+        input({ discovery: discovery([repo('acme/api')]), settings: { ...withImage, startWithDefaultImage: false } }),
+      );
+      expect(node(groups, 'acme/api').children.map((child) => child.label)).toEqual(['config', 'default']);
+      const first = buildTreeModel(input({ discovery: discovery([repo('acme/api')]), settings: { ...withImage, startWithDefaultImage: true } }));
+      expect(node(first, 'acme/api').children.map((child) => child.label)).toEqual(['default', 'config']);
+    });
+
+    it('makes child rows for the configurations of a repository also without a default image', () => {
+      const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', python] }), repo('acme/web')]) }));
+      expect(entries(groups).map((entry) => [entry.kind, entry.label])).toEqual([
+        ['repositoryNode', 'api'],
+        ['repository', 'web'],
+      ]);
+      expect(node(groups, 'acme/api').children.map((child) => child.label)).toEqual(['config', 'python']);
+      expect(row(groups, 'acme/web')).toMatchObject({ child: false, label: 'web', source: ROOT_SOURCE });
+    });
+
+    it('adds the default row for a default-image devspace that exists after the setting was cleared, with its image', () => {
+      const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api')]), devspaces: [devspace('e1', 'acme/api', { defaultImage: 'ghcr.io/acme/old:1' })] }));
+      expect(node(groups, 'acme/api').children.map((child) => [child.label, child.source, child.devspace?.id])).toEqual([
+        ['default', { kind: 'defaultImage', image: 'ghcr.io/acme/old:1' }, 'e1'],
+        ['config', ROOT_SOURCE, undefined],
+      ]);
+    });
+
+    it('shows a default-image devspace of a repository that GitHub does not list as one row, without the default image of the settings', () => {
+      // A source without devspace would need the clone of a repository that cannot be found.
+      const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api')]), devspaces: [devspace('e1', 'acme/gone', { defaultImage: IMAGE })], settings: withImage }));
+      const gone = row(groups, 'acme/gone');
+      expect(gone).toMatchObject({ child: false, label: 'gone', source: DEFAULT_SOURCE });
+      expect(gone.description).toBe('main (default image)   Stopped · not on GitHub');
+      const config = buildTreeModel(input({ discovery: discovery([repo('acme/api')]), devspaces: [devspace('e1', 'acme/gone')], settings: withImage }));
+      expect(row(config, 'acme/gone')).toMatchObject({ child: false, label: 'gone', source: ROOT_SOURCE });
+    });
+
+    it('gives a source with several devspaces (one per Docker host) a child row per devspace', () => {
+      const groups = buildTreeModel(
+        input({
+          discovery: discovery([repo('acme/api')]),
+          devspaces: [
+            devspace('local', 'acme/api', { lastUsedAt: iso(T0) }),
+            devspace('remote', 'acme/api', { lastUsedAt: iso(T0 - 1000), dockerHost: 'ssh://build' }),
+          ],
+          settings: withImage,
+        }),
+      );
+      expect(node(groups, 'acme/api').children.map((child) => [child.id, child.label, child.devspace?.id])).toEqual([
+        ['repo:acme/api:default', 'default', undefined],
+        ['repo:acme/api:config:default', 'config', 'local'],
+        ['repo:acme/api:config:default#remote', 'config', 'remote'],
+      ]);
+    });
+
+    it('lists the child rows in repositoryRows, finds them by devspace, and names the devspaces with their source in the switcher', () => {
+      const devspaces = [devspace('e1', 'acme/api', { defaultImage: IMAGE, lastUsedAt: iso(T0 + 1000) }), devspace('e2', 'acme/api', { lastUsedAt: iso(T0) })];
+      const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api'), repo('acme/web')]), devspaces, settings: withImage }));
+      expect(rows(groups).map((entry) => entry.label)).toEqual(['default', 'config', 'default', 'config']);
+      expect(findRowByDevspaceId(groups, 'e2')?.id).toBe('repo:acme/api:config:default');
+      expect(recentDevspaces(groups, devspaces).map((entry) => [entry.devspaceId, entry.name, entry.state])).toEqual([
+        ['e1', 'acme/api · default', 'stopped'],
+        ['e2', 'acme/api · config', 'stopped'],
+      ]);
+      const single = buildTreeModel(input({ discovery: discovery([repo('acme/api')]), devspaces: [devspaces[1]] }));
+      expect(recentDevspaces(single, [devspaces[1]]).map((entry) => entry.name)).toEqual(['acme/api']);
     });
   });
 
@@ -503,7 +643,7 @@ describe('buildTreeModel', () => {
       expect(entry.info).toBe(found);
       expect(entry.description).toBe('main   Stopped');
       expect(flags(entry.contextValue)).toContain('onGitHub');
-      expect(flags(entry.contextValue)).not.toContain('multiConfig');
+      expect(entry.child).toBe(false);
     });
 
     it('shows "not on GitHub" only for a repository that the lookup did not find', () => {
@@ -534,8 +674,9 @@ describe('buildTreeModel', () => {
           ]),
         }),
       );
-      expect(row(groups, 'acme/api').info).toBe(listed);
-      expect(rows(groups).map((entry) => entry.repository)).toEqual(['acme/api']);
+      expect(node(groups, 'acme/api').info).toBe(listed);
+      expect(node(groups, 'acme/api').children.map((child) => child.label)).toEqual(['config', 'a', 'b']);
+      expect(entries(groups).map((entry) => entry.repository)).toEqual(['acme/api']);
     });
   });
 
@@ -589,7 +730,7 @@ describe('buildTreeModel', () => {
     const groups = buildTreeModel(input({ discovery: undefined, devspaces: [devspace('e1', 'acme/api')] }));
     // The flag of the host access checks (on by default).
     expect(rows(groups).map((entry) => [entry.repository, entry.description, entry.contextValue])).toEqual([
-      ['acme/api', 'main   Stopped', 'repository;canStart;canDelete;canRebuild;canChooseSource;hostAccessChecked;canKeepRunning'],
+      ['acme/api', 'main   Stopped', 'repository;canStart;canDelete;canRebuild;hostAccessChecked;canKeepRunning'],
     ]);
   });
 
@@ -677,28 +818,7 @@ describe('buildTreeModel', () => {
     expect(filtered.map((group) => group.owner)).toEqual(['acme']);
   });
 
-  it('shows the default image of the last open in place of the configuration name', () => {
-    const configs = ['.devcontainer/devcontainer.json', '.devcontainer/node/devcontainer.json'];
-    const groups = buildTreeModel(
-      input({
-        discovery: discovery([repo('acme/multi', { configPaths: configs }), repo('acme/single')]),
-        devspaces: [
-          devspace('e1', 'acme/multi', { configPath: '.devcontainer/node/devcontainer.json', defaultImage: 'ghcr.io/acme/base:latest' }),
-          devspace('e2', 'acme/single', { defaultImage: 'ghcr.io/acme/base:latest' }),
-        ],
-      }),
-    );
-    for (const name of ['acme/multi', 'acme/single']) {
-      expect(row(groups, name).description).toBe('main (default image)   Stopped');
-      expect(row(groups, name).defaultImage).toBe('ghcr.io/acme/base:latest');
-      expect(row(groups, name).tooltip).toContain(TreeTexts.defaultImage('ghcr.io/acme/base:latest'));
-      expect(row(groups, name).tooltip).not.toContain('Configuration:');
-    }
-    // The configuration name stays known for Select Configuration….
-    expect(row(groups, 'acme/multi').configurationName).toBe('node');
-  });
-
-  it('shows the configuration name only when the repository has more than one configuration', () => {
+  it('shows the devspace of an alternative configuration on the child row of that configuration', () => {
     const configs = ['.devcontainer/devcontainer.json', '.devcontainer.json', '.devcontainer/node/devcontainer.json'];
     const groups = buildTreeModel(
       input({
@@ -710,11 +830,15 @@ describe('buildTreeModel', () => {
         ],
       }),
     );
-    expect(row(groups, 'acme/multi').description).toBe('main (node)   Stopped');
-    expect(row(groups, 'acme/multi').configurationName).toBe('node');
-    expect(row(groups, 'acme/multi').tooltip).toContain(TreeTexts.configuration('node'));
-    expect(row(groups, 'acme/single').description).toBe('main   Stopped');
-    expect(row(groups, 'acme/single').configurationName).toBeUndefined();
+    // `.devcontainer/devcontainer.json` and `.devcontainer.json` are the one configuration at the root: one row.
+    expect(node(groups, 'acme/multi').children.map((child) => [child.label, child.devspace?.id])).toEqual([
+      ['config', undefined],
+      ['node', 'e1'],
+    ]);
+    expect(childRow(groups, 'acme/multi', 'node').description).toBe('main   Stopped');
+    expect(childRow(groups, 'acme/multi', 'node').tooltip).toContain(TreeTexts.sourceConfiguration('.devcontainer/node/devcontainer.json'));
+    expect(row(groups, 'acme/single')).toMatchObject({ child: false, label: 'single', description: 'main   Stopped' });
+    expect(row(groups, 'acme/root')).toMatchObject({ child: false, label: 'root', description: 'main   Stopped · not on GitHub' });
 
     const defaultConfig = buildTreeModel(
       input({
@@ -722,7 +846,10 @@ describe('buildTreeModel', () => {
         devspaces: [devspace('e1', 'acme/multi', { configPath: '.devcontainer.json' })],
       }),
     );
-    expect(row(defaultConfig, 'acme/multi').description).toBe('main (default)   Stopped');
+    expect(node(defaultConfig, 'acme/multi').children.map((child) => [child.label, child.devspace?.id])).toEqual([
+      ['config', 'e1'],
+      ['node', undefined],
+    ]);
   });
 
   it('uses the live branch while the container runs, and the recorded branch otherwise', () => {
@@ -782,7 +909,7 @@ describe('buildTreeModel', () => {
     });
     const groups = buildTreeModel(input({ discovery: discovery([repo('acme/api')]), devspaces: [env] }));
     expect(row(groups, 'acme/api').tooltip).toBe(
-      ['acme/api', 'Stopped · 3 unpushed', 'Branch: main', 'Last used: T(2026-09-24T17:10:00.000Z)'].join('\n'),
+      ['acme/api', 'Stopped · 3 unpushed', 'Branch: main', 'Source: the configuration .devcontainer/devcontainer.json', 'Last used: T(2026-09-24T17:10:00.000Z)'].join('\n'),
     );
   });
 
@@ -804,7 +931,7 @@ describe('buildTreeModel', () => {
     expect(entry.state).toBeUndefined();
     expect(entry.devspace).toBeUndefined();
     expect(entry.description).toBe('');
-    expect(entry.tooltip).toBe(['acme/api', TreeTexts.noDevspace, 'Default branch: trunk'].join('\n'));
+    expect(entry.tooltip).toBe(['acme/api', TreeTexts.noDevspace, 'Source: the configuration .devcontainer/devcontainer.json', 'Default branch: trunk'].join('\n'));
   });
 
   it('keeps tree item IDs unique if the registry holds two devspaces of one repository', () => {
@@ -896,16 +1023,16 @@ describe('switcher helpers', () => {
       }),
     );
     expect(recentDevspaces(groups, devspaces)).toEqual([
-      { devspaceId: 'new', repository: 'acme/api', state: 'connected', description: 'dev   Connected' },
-      { devspaceId: 'old', repository: 'acme/web', state: 'stopped', description: 'main   Stopped' },
-      { devspaceId: 'gone', repository: 'lost/repo', state: 'stopped', description: 'main   Stopped · not on GitHub' },
+      { devspaceId: 'new', repository: 'acme/api', name: 'acme/api', state: 'connected', description: 'dev   Connected' },
+      { devspaceId: 'old', repository: 'acme/web', name: 'acme/web', state: 'stopped', description: 'main   Stopped' },
+      { devspaceId: 'gone', repository: 'lost/repo', name: 'lost/repo', state: 'stopped', description: 'main   Stopped · not on GitHub' },
     ]);
   });
 
   it('falls back to the registry entry when the model has no row', () => {
     const devspaces = [devspace('e1', 'acme/api')];
     expect(recentDevspaces([], devspaces)).toEqual([
-      { devspaceId: 'e1', repository: 'acme/api', state: undefined, description: '' },
+      { devspaceId: 'e1', repository: 'acme/api', name: 'acme/api', state: undefined, description: '' },
     ]);
     expect(recentDevspaces([], [])).toEqual([]);
   });
@@ -1008,13 +1135,13 @@ describe('the switch of the host access checks in the rows', () => {
     const web = findRowByRepository(groups, 'acme/web');
     expect(web?.description).toBe(StateTexts.hostAccessUnrestricted);
     expect(web?.tooltip.split('\n')).toContain(Messages.hostAccessUnrestrictedTooltip);
-    expect(web?.contextValue).toBe('repository;canStart;canChooseSource;onGitHub;hostAccessUnrestricted');
+    expect(web?.contextValue).toBe('repository;canStart;onGitHub;hostAccessUnrestricted');
     // The checks of other repositories stay on: no marker, and Turn Off.
     const docs = findRowByRepository(groups, 'acme/docs');
     expect(docs?.hostAccessChecks).toBe('on');
     expect(docs?.description).toBe('');
     expect(docs?.tooltip).not.toContain(Messages.hostAccessUnrestrictedTooltip);
-    expect(docs?.contextValue).toBe('repository;canStart;canChooseSource;onGitHub;hostAccessChecked');
+    expect(docs?.contextValue).toBe('repository;canStart;onGitHub;hostAccessChecked');
   });
 
   // The row shows the switch as the pipeline applies it, under the registry name only (either name could show the
@@ -1046,9 +1173,9 @@ describe('the switch of the host access checks in the rows', () => {
 
   it('adds no flag of the switch to contextValue without it', () => {
     const actions = rowActions('stopped', repo('acme/api'));
-    expect(contextValue(actions)).toBe('repository;canStart;canDelete;canRebuild;canChooseSource;onGitHub');
-    expect(contextValue(actions, 'on')).toBe('repository;canStart;canDelete;canRebuild;canChooseSource;onGitHub;hostAccessChecked');
-    expect(contextValue(actions, 'off')).toBe('repository;canStart;canDelete;canRebuild;canChooseSource;onGitHub;hostAccessUnrestricted');
+    expect(contextValue(actions)).toBe('repository;canStart;canDelete;canRebuild;onGitHub');
+    expect(contextValue(actions, 'on')).toBe('repository;canStart;canDelete;canRebuild;onGitHub;hostAccessChecked');
+    expect(contextValue(actions, 'off')).toBe('repository;canStart;canDelete;canRebuild;onGitHub;hostAccessUnrestricted');
     // The when clauses of package.json tell the two flags apart.
     expect(/hostAccessChecked/.test('hostAccessUnrestricted')).toBe(false);
     expect(/hostAccessUnrestricted/.test('hostAccessChecked')).toBe(false);
@@ -1581,9 +1708,9 @@ describe('Keep Running When Closed in the sidebar', () => {
 
   it('adds the flag only for a row with a devspace', () => {
     const actions = rowActions('running', repo('acme/api'));
-    expect(contextValue(actions, 'on', true)).toBe('repository;canStart;canStop;canDelete;canRebuild;canChooseSource;onGitHub;hostAccessChecked;kept');
-    expect(contextValue(actions, 'on', false)).toBe('repository;canStart;canStop;canDelete;canRebuild;canChooseSource;onGitHub;hostAccessChecked;canKeepRunning');
-    expect(contextValue(rowActions(undefined, repo('acme/api')), 'on')).toBe('repository;canStart;canChooseSource;onGitHub;hostAccessChecked');
+    expect(contextValue(actions, 'on', true)).toBe('repository;canStart;canStop;canDelete;canRebuild;onGitHub;hostAccessChecked;kept');
+    expect(contextValue(actions, 'on', false)).toBe('repository;canStart;canStop;canDelete;canRebuild;onGitHub;hostAccessChecked;canKeepRunning');
+    expect(contextValue(rowActions(undefined, repo('acme/api')), 'on')).toBe('repository;canStart;onGitHub;hostAccessChecked');
     // The when clauses of package.json tell the two flags apart.
     expect(/;kept(;|$)/.test('repository;canKeepRunning')).toBe(false);
     expect(/;canKeepRunning(;|$)/.test('repository;kept')).toBe(false);

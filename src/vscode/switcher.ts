@@ -50,7 +50,7 @@ export async function showSwitcher(input: {
   const items: ChoiceItem[] = [
     { label: SwitcherTexts.recentDevspaces, kind: vscode.QuickPickItemKind.Separator },
     ...recent.map((entry): ChoiceItem => ({
-      label: entry.state ? `$(${stateIcon(entry.state).id}) ${entry.repository}` : entry.repository,
+      label: entry.state ? `$(${stateIcon(entry.state).id}) ${entry.name}` : entry.name,
       description: entry.description,
       choice: { kind: 'devspace', devspaceId: entry.devspaceId },
     })),

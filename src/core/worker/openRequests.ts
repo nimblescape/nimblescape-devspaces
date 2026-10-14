@@ -15,9 +15,10 @@ import { HelperOperationError } from '../helperChannel/helperChannel';
 import { dockerHostField, isOnDockerHost } from '../docker/dockerHost';
 import { devspaceImageName, isConfigPathLabelValue, repositoryFolder, resourceName } from '../names';
 import { ownerOf } from '../ownership';
+import { sourceSegment } from '../devspaceSource';
 import { parseImageReference } from '../remoteMonitor/protocol';
 import { isoTime } from '../ports';
-import type { BuildRecord, BusyMark, BusyOperation, ComposeBuildRecord, Devspace, GitHubAccount, GitSummary, RefusedUpdate, RegistryFile } from '../types';
+import type { BuildRecord, BusyMark, BusyOperation, ComposeBuildRecord, Devspace, DevspaceSource, GitHubAccount, GitSummary, RefusedUpdate, RegistryFile } from '../types';
 import { isBuildRecord, isDevspaceOf, type DevspaceRegistry } from '../storage/registry';
 import { isStorageId } from '../storage/paths';
 import { BUSY_OPERATIONS, type BusyMarkView } from '../pipeline/busyMarks';
@@ -62,7 +63,7 @@ const BUSY_MARK_FIELDS = new Set(['operation', 'since', 'pid', 'windowId']);
 /** The fields of the end of an open that the worker sends (HostOpenFinish). */
 const FINISH_FIELDS = new Set(['lifecycleMarkRead', 'lifecycleRanFor', 'remoteUser', 'remoteWorkspaceFolder', 'gitSummary']);
 /** The fields of the entry of a first open that the worker sends (CreateRequest). */
-const CREATE_FIELDS = new Set(['id', 'repository', 'configPath']);
+const CREATE_FIELDS = new Set(['id', 'repository', 'configPath', 'defaultImage']);
 /** The fields of a change of the configuration (ConfigurationChange). */
 const CONFIGURATION_FIELDS = new Set(['select', 'defaultImage', 'shutdownActionNone', 'addVolumes', 'addServiceVolumes', 'keepRefusedFor', 'serviceFolders', 'cloned']);
 /** The fields of a build record (BuildRecord) and of its Docker Compose part (ComposeBuildRecord). */
@@ -174,9 +175,10 @@ export interface CreateRequest {
   id: string;
   repository: string;
   configPath: string;
+  /** The default image of a default-image devspace (DevspaceSource `defaultImage`); missing: a configuration devspace. */
+  defaultImage?: string;
 }
 
-/** The default configuration, or the path of a configuration of a repository (as its label takes it). */
 /** A default image of a request (DevspaceSource `defaultImage`): a valid image reference (parseImageReference), bounded. */
 function isDefaultImage(value: unknown): value is string {
   return plainText(value, MAX_REFERENCE_LENGTH) && parseImageReference(value) !== undefined;
@@ -198,16 +200,18 @@ function volumeNames(value: unknown, what: string): string[] {
 }
 
 /**
- * The entry of a first open of a request: its ID, a repository name and a configuration path, nothing else (the owner,
- * the Docker host, the times, the names and the create mark are the extension's).
+ * The entry of a first open of a request: its ID, a repository name, a configuration path and, for a default-image
+ * devspace, its default image, nothing else (the owner, the Docker host, the times, the names and the create mark are
+ * the extension's).
  */
 export function checkedCreateRequest(value: unknown): CreateRequest {
   if (!isRecord(value) || !hasOnlyFields(value, CREATE_FIELDS)) throw invalid('devspace');
-  const { id, repository, configPath } = value;
+  const { id, repository, configPath, defaultImage } = value;
   if (!isStorageId(id)) throw invalid('devspace ID');
   if (!isRepositoryName(repository) || !plainText(repository, MAX_REPOSITORY_LENGTH)) throw invalid('repository');
   if (!isConfigPath(configPath)) throw invalid('configuration path');
-  return { id, repository, configPath };
+  if (defaultImage !== undefined && !isDefaultImage(defaultImage)) throw invalid('default image');
+  return { id, repository, configPath, ...(defaultImage !== undefined ? { defaultImage } : {}) };
 }
 
 /**
@@ -539,14 +543,16 @@ export function requestOpenRecords(
         liveness,
       });
     },
-    createDevspace: async ({ id, repository, configPath }) => {
+    createDevspace: async ({ id, repository, configPath, defaultImage }) => {
       const now = isoTime(view.clock);
-      const name = resourceName(repository, id);
+      const source: DevspaceSource = defaultImage !== undefined ? { kind: 'defaultImage', image: defaultImage } : { kind: 'configuration', configPath };
+      const name = resourceName(repository, id, sourceSegment(source));
       // As openFirst builds it, with this window's clock, create mark, account and the operation's Docker host.
       const devspace: Devspace = {
         id,
         repository,
         configPath,
+        ...(defaultImage !== undefined ? { defaultImage } : {}),
         volumeName: name,
         containerName: name,
         createdAt: now,
@@ -556,10 +562,10 @@ export function requestOpenRecords(
         ...dockerHostField(scope.dockerHost),
       };
       return registry.update((file) => {
-        // One devspace per repository and account on a Docker host: the one that another window created meanwhile is
-        // the answer, and the open uses it (as openFirst does).
+        // One devspace per repository, source and account on a Docker host: the one that another window created
+        // meanwhile is the answer, and the open uses it (as openFirst does).
         const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-        const existing = file.devspaces.find((entry) => isDevspaceOf(entry, repository, scope.account.id, scope.dockerHost));
+        const existing = file.devspaces.find((entry) => isDevspaceOf(entry, repository, scope.account.id, scope.dockerHost, source));
         // An answer of an existing entry never has the ID of the request, so the operation never counts it as its
         // created one (which dropCreated would remove).
         if (existing && !same(existing.id, id)) return existing;

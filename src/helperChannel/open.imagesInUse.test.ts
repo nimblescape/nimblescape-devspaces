@@ -78,10 +78,22 @@ describe('the image references in use of an open, to the Monitor', () => {
       devspaceId: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d',
     };
     // The source of the open (DevspaceSource), strictly.
-    expect(parseOpenParams({ ...base, source: { kind: 'configuration' } })?.source).toEqual({ kind: 'configuration' });
+    const configuration = { kind: 'configuration', configPath: '.devcontainer/python/devcontainer.json' };
+    expect(parseOpenParams({ ...base, source: configuration })?.source).toEqual(configuration);
     expect(parseOpenParams({ ...base, source: { kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' } })?.source).toEqual({ kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' });
     expect(parseOpenParams(base)).not.toHaveProperty('source');
-    for (const odd of [{ kind: 'defaultImage' }, { kind: 'defaultImage', image: 'not an image' }, { kind: 'configuration', image: 'node:20' }, { kind: 'other' }, 'configuration', null]) {
+    for (const odd of [
+      { kind: 'defaultImage' },
+      { kind: 'defaultImage', image: 'not an image' },
+      { kind: 'configuration' },
+      { kind: 'configuration', configPath: '' },
+      { kind: 'configuration', configPath: 'a\nb' },
+      { kind: 'configuration', image: 'node:20' },
+      { kind: 'configuration', configPath: '.devcontainer/devcontainer.json', image: 'node:20' },
+      { kind: 'other' },
+      'configuration',
+      null,
+    ]) {
       expect(parseOpenParams({ ...base, source: odd }), JSON.stringify(odd)).toBeUndefined();
       expect(parseDevspaceSource(odd), JSON.stringify(odd)).toBeUndefined();
     }

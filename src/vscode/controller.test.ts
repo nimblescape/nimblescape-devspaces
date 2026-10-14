@@ -31,7 +31,7 @@ import { availableDevspaces } from '../core/ownership';
 import { dockerTargetOf, ownContextDescription, remoteContextNames, type DockerTarget } from '../core/docker/dockerHost';
 import { DockerTargets, operationDockerTarget, runWithDockerTarget } from '../core/docker/dockerTargets';
 import { silentLogger } from '../core/ports';
-import type { Devspace, ExtensionSettings, GitHubAccount, GitSummary, RepositoryInfo, WindowStatus } from '../core/types';
+import type { Devspace, DevspaceSource, ExtensionSettings, GitHubAccount, GitSummary, RepositoryInfo, WindowStatus } from '../core/types';
 import { SIGNED_IN_CONTEXT_KEY } from './auth';
 import { Commands } from './commands';
 import { CONNECTED_CONTEXT_KEY, Controller, type ControllerDeps } from './controller';
@@ -41,7 +41,7 @@ import { DOUBLE_CLICK_INTERVAL_MS, type ListOpenMode } from './rowActivation';
 import { DEFAULT_SETTINGS, SETTINGS_SECTION } from './settings';
 import { LOADED_CONTEXT_KEY, LOAD_FAILED_CONTEXT_KEY } from './sidebar';
 import { DEVSPACES_ONLY_CONTEXT_KEY } from './devspacesOnly';
-import { contextValue as treeContextValue, rowActions } from './treeModel';
+import { contextValue as treeContextValue, REPOSITORY_NODE_CONTEXT, rowActions } from './treeModel';
 import type { RemoteDockerCommands } from './remoteDockerCommands';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
 
@@ -130,10 +130,14 @@ function openResult(env: Devspace): OpenResult {
   return { devspace: env, containerName: env.containerName, remoteWorkspaceFolder: env.remoteWorkspaceFolder ?? '/workspaces/api' };
 }
 
-/** A row of the sidebar as the menus pass it. */
-function row(repository: string, env?: Devspace, info?: RepositoryInfo): unknown {
-  return { kind: 'repository', id: `repo:${repository}`, repository, info, devspace: env };
+/** A row of the sidebar as the menus pass it: the one row of a repository, or a child row with its source. */
+function row(repository: string, env?: Devspace, info?: RepositoryInfo, source?: DevspaceSource): unknown {
+  return { kind: 'repository', id: `repo:${repository}`, repository, info, devspace: env, ...(source !== undefined ? { source } : {}) };
 }
+
+const ROOT_SOURCE: DevspaceSource = { kind: 'configuration', configPath: '.devcontainer/devcontainer.json' };
+const PYTHON_SOURCE: DevspaceSource = { kind: 'configuration', configPath: '.devcontainer/python/devcontainer.json' };
+const DEFAULT_SOURCE: DevspaceSource = { kind: 'defaultImage', image: DEFAULT_IMAGE };
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -619,11 +623,11 @@ describe('Controller commands', () => {
     };
     const declared = manifest.contributes.commands.map((command) => command.command).sort();
     expect([...h.commands.keys()].sort()).toEqual(declared);
-    // 39 commands, among them hidden ones: Show Docker Setup (the action Install Docker… of an error: it looks for the
+    // 36 commands, among them hidden ones: Show Docker Setup (the action Install Docker… of an error: it looks for the
     // CLI, then shows the view), the command of a repository row (a double-click runs Start), the link Show details of
     // a progress notification (which also closes it), and the choice of the Docker host (the command of the first row
     // of the view).
-    expect(declared).toHaveLength(39);
+    expect(declared).toHaveLength(36);
   });
 
   it('uses the settings and the context keys of package.json', () => {
@@ -787,7 +791,7 @@ describe('Start', () => {
       return openResult(env);
     });
 
-    await run('start', row('acme/api', undefined, info));
+    await run('start', row('acme/api', undefined, info, ROOT_SOURCE));
 
     expect(h.service.openInWorker).toHaveBeenCalledTimes(1);
     expect(h.service.openInWorker.mock.calls[0][0]).toEqual({
@@ -800,7 +804,8 @@ describe('Start', () => {
     expect(h.coordinator.writePending).toHaveBeenCalledWith(ENV_ID);
     expect((await h.sessionFiles.readPendings()).map((pending) => pending.devspaceId)).toEqual([ENV_ID]);
     expect(h.connection.open).toHaveBeenCalledWith(CONTAINER, '/workspaces/api');
-    expect(h.progressTitles[0]).toContain(Messages.opening('acme/api'));
+    // The repository has two configurations, so its rows are child rows: the texts name the source too.
+    expect(h.progressTitles[0]).toContain(Messages.opening('acme/api · config'));
     expect(h.progressTitles.some((message) => message.includes('Connecting.'))).toBe(true);
   });
 
@@ -808,68 +813,82 @@ describe('Start', () => {
     await h.registry.add(devspace());
     await run('start', row('acme/api', devspace()));
     expect(h.service.openInWorker).not.toHaveBeenCalled();
-    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ configPath: undefined }));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ source: ROOT_SOURCE }));
     expect(h.connection.open).toHaveBeenCalledWith(CONTAINER, '/workspaces/api');
   });
 
-  it('names the source of the settings at every Start: the default image while startWithDefaultImage is on', async () => {
+  it('opens an existing devspace with its own source, whatever the settings say', async () => {
     await h.registry.add(devspace());
     h.settings.defaultImage = DEFAULT_IMAGE;
     await run('start', row('acme/api', devspace()));
-    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: { kind: 'defaultImage', image: DEFAULT_IMAGE } }));
+    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: ROOT_SOURCE }));
     h.settings.startWithDefaultImage = false;
     await run('startInNewWindow', row('acme/api', devspace()));
-    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: { kind: 'configuration' } }));
-    // Without a default image, the flag changes nothing.
-    h.settings.defaultImage = '';
-    h.settings.startWithDefaultImage = true;
-    await run('start', row('acme/api', devspace()));
-    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: { kind: 'configuration' } }));
+    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: ROOT_SOURCE }));
+    // A row that names another source changes nothing for an existing devspace: the devspace keeps its source.
+    await run('start', row('acme/api', devspace(), undefined, DEFAULT_SOURCE));
+    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: ROOT_SOURCE }));
     expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(3);
   });
 
-  it('Start with Default Image and Start with Configuration name the other source than plain Start', async () => {
-    await h.registry.add(devspace());
+  it('opens a default-image devspace with the default image of the settings now; the pipeline asks Rebuild now / Later', async () => {
+    await h.registry.add(devspace({ defaultImage: 'node:22' }));
     h.settings.defaultImage = DEFAULT_IMAGE;
-    await run('startWithConfiguration', row('acme/api', devspace()));
-    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: { kind: 'configuration' } }));
-    h.settings.startWithDefaultImage = false;
-    await run('startWithDefaultImage', row('acme/api', devspace()));
-    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: { kind: 'defaultImage', image: DEFAULT_IMAGE } }));
+    await run('start', row('acme/api', devspace({ defaultImage: 'node:22' })));
+    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: DEFAULT_SOURCE }));
+    expect(h.service.openDevspaceInWorker.mock.calls[0][1]).not.toHaveProperty('forceRebuild');
+    // The setting cleared: the devspace keeps starting from the image it was built from.
+    h.settings.defaultImage = '';
+    await run('start', row('acme/api', devspace({ defaultImage: 'node:22' })));
+    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: { kind: 'defaultImage', image: 'node:22' } }));
     expect(h.connection.open).toHaveBeenCalledTimes(2);
   });
 
-  it('Start with Default Image creates the devspace of a repository from the default image', async () => {
+  it('Start on the default row of a repository creates its default-image devspace', async () => {
     const info = repositoryInfo('acme/api');
     h.sidebar.infos.set('acme/api', info);
     h.settings.defaultImage = DEFAULT_IMAGE;
-    h.settings.startWithDefaultImage = false;
     h.service.openInWorker.mockImplementation(async () => {
       const env = devspace({ defaultImage: DEFAULT_IMAGE });
       await h.registry.add(env);
       return openResult(env);
     });
-    await run('startWithDefaultImage', row('acme/api', undefined, info));
-    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: { kind: 'defaultImage', image: DEFAULT_IMAGE } }));
+    await run('start', row('acme/api', undefined, info, DEFAULT_SOURCE));
+    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: DEFAULT_SOURCE }));
     expect(h.connection.open).toHaveBeenCalledWith(CONTAINER, '/workspaces/api');
+    expect(h.progressTitles[0]).toContain(Messages.opening('acme/api · default'));
   });
 
-  it('Start with Default Image on a devspace built from another default image builds it again, without the question', async () => {
-    await h.registry.add(devspace({ defaultImage: 'node:22' }));
-    h.settings.defaultImage = DEFAULT_IMAGE;
-    h.settings.startWithDefaultImage = false;
-    await run('startWithDefaultImage', row('acme/api', devspace({ defaultImage: 'node:22' })));
-    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ forceRebuild: true, source: { kind: 'defaultImage', image: DEFAULT_IMAGE } }));
-    expect(h.connection.open).toHaveBeenCalledTimes(1);
-    // The same source (the registry entry decides): a plain Start.
-    await h.registry.updateDevspace(ENV_ID, (entry) => {
-      entry.defaultImage = DEFAULT_IMAGE;
+  it('Start on the row of an alternative configuration creates the devspace of that configuration', async () => {
+    const info = repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] });
+    h.sidebar.infos.set('acme/api', info);
+    h.service.openInWorker.mockImplementation(async () => {
+      const env = devspace({ configPath: '.devcontainer/python/devcontainer.json' });
+      await h.registry.add(env);
+      return openResult(env);
     });
-    await run('startWithDefaultImage', row('acme/api', devspace({ defaultImage: DEFAULT_IMAGE })));
-    expect(h.service.openDevspaceInWorker.mock.calls[1][1]).not.toHaveProperty('forceRebuild');
+    await run('start', row('acme/api', undefined, info, PYTHON_SOURCE));
+    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: PYTHON_SOURCE }));
+    expect(h.progressTitles[0]).toContain(Messages.opening('acme/api · python'));
   });
 
-  it('a repository without a Dev Container configuration starts from the default image, whatever the flag says', async () => {
+  it('Start on a row of a source that has a devspace already opens that devspace (the row was built before it existed)', async () => {
+    await h.registry.add(devspace({ defaultImage: DEFAULT_IMAGE }));
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    await run('start', row('acme/api', undefined, repositoryInfo('acme/api'), DEFAULT_SOURCE));
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ source: DEFAULT_SOURCE }));
+    // The configuration row of the same repository has no devspace: a first open.
+    h.service.openInWorker.mockImplementation(async () => {
+      const env = devspace({ id: OTHER_ENV_ID, containerName: 'devspaces-acme-api-config-7c1d2e3f', volumeName: 'devspaces-acme-api-config-7c1d2e3f' });
+      await h.registry.add(env);
+      return openResult(env);
+    });
+    await run('start', row('acme/api', undefined, repositoryInfo('acme/api'), ROOT_SOURCE));
+    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: ROOT_SOURCE }));
+  });
+
+  it('a repository without a Dev Container configuration starts from the default image (its only row)', async () => {
     const info = repositoryInfo('acme/api', { configPaths: [] });
     h.sidebar.infos.set('acme/api', info);
     h.settings.defaultImage = DEFAULT_IMAGE;
@@ -879,45 +898,51 @@ describe('Start', () => {
       await h.registry.add(env);
       return openResult(env);
     });
-    await run('start', row('acme/api', undefined, info));
-    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: { kind: 'defaultImage', image: DEFAULT_IMAGE } }));
-    // Start with Configuration has nothing to start.
-    await run('startWithConfiguration', row('acme/api', undefined, info));
-    expect(h.service.openInWorker).toHaveBeenCalledTimes(1);
-    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
-    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(Messages.noConfiguration('acme/api'));
+    await run('start', row('acme/api', undefined, info, DEFAULT_SOURCE));
+    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: DEFAULT_SOURCE }));
+    // The one row of a repository: the progress names the repository alone.
+    expect(h.progressTitles[0]).toContain(Messages.opening('acme/api'));
   });
 
-  it('Start with Default Image without the setting only says so', async () => {
-    await h.registry.add(devspace());
-    await run('startWithDefaultImage', row('acme/api', devspace()));
-    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
-    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(ControllerTexts.noDefaultImage);
+  it('runs the operations of two devspaces of one repository next to each other, and those of one devspace one after the other', async () => {
+    const config = devspace();
+    const image = devspace({ id: OTHER_ENV_ID, defaultImage: DEFAULT_IMAGE, containerName: 'devspaces-acme-api-default-7c1d2e3f', volumeName: 'devspaces-acme-api-default-7c1d2e3f' });
+    await h.registry.add(config);
+    await h.registry.add(image);
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    const first = deferred<OpenResult>();
+    h.service.openDevspaceInWorker.mockImplementationOnce(() => first.promise);
+    const configStart = run('start', row('acme/api', config));
+    await settle(() => h.service.openDevspaceInWorker.mock.calls.length === 1, 'the first open');
+    // The default-image devspace of the same repository starts while the configuration devspace is opening.
+    await run('stop', row('acme/api', image));
+    expect(h.service.stop).toHaveBeenCalledWith(OTHER_ENV_ID);
+    // A second operation of the configuration devspace waits for the first one: refused with a message.
+    await run('stop', row('acme/api', config));
+    expect(h.service.stop).toHaveBeenCalledTimes(1);
+    first.resolve(openResult(config));
+    await configStart;
   });
 
-  it('Start with Configuration on the connected devspace of this window hands off a rebuild with the source', async () => {
+  it('names the devspace with the word of its source when this window is connected to it', async () => {
     const env = devspace({ defaultImage: DEFAULT_IMAGE });
     await h.registry.add(env);
     await connectHere(env);
+    // The repository has a configuration and the default image: child rows, so the texts name the source.
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
     h.settings.defaultImage = DEFAULT_IMAGE;
-    await run('startWithConfiguration', row('acme/api', env));
-    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
-    expect(await h.sessionFiles.readOperations()).toEqual([
-      expect.objectContaining({ devspaceId: ENV_ID, operation: 'rebuild', reason: 'sourceSelected', source: { kind: 'configuration' } }),
-    ]);
-    expect((await h.registry.get(ENV_ID))?.busy?.operation).toBe('rebuild');
-    expect(h.connection.closeRemoteConnection).toHaveBeenCalled();
-  });
-
-  it('Start with Default Image on the connected devspace that uses it already is a plain Start', async () => {
-    const env = devspace({ defaultImage: DEFAULT_IMAGE });
-    await h.registry.add(env);
-    await connectHere(env);
-    h.settings.defaultImage = DEFAULT_IMAGE;
-    h.settings.startWithDefaultImage = false;
-    await run('startWithDefaultImage', row('acme/api', env));
+    await run('start', row('acme/api', env));
     expect(await h.sessionFiles.readOperations()).toEqual([]);
     expect(h.connection.closeRemoteConnection).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(ControllerTexts.alreadyConnected('acme/api · default'));
+  });
+
+  it('names a devspace by its repository alone when the repository has one row (GitHub does not list it)', async () => {
+    const env = devspace({ defaultImage: DEFAULT_IMAGE });
+    await h.registry.add(env);
+    await connectHere(env);
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    await run('start', row('acme/api', env));
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(ControllerTexts.alreadyConnected('acme/api'));
   });
 
@@ -937,11 +962,11 @@ describe('Start', () => {
     await connectHere(env);
     h.docker.containerState.mockResolvedValue('stopped');
     pipelineStartsContainer(); // The window connects only to a running container.
-    // Reconnect keeps the source of the last open: the default image of the settings does not change the devspace.
+    // Reconnect opens with the source of the devspace: the default image of the settings does not change the devspace.
     h.settings.defaultImage = DEFAULT_IMAGE;
     await run('start', { devspaceId: ENV_ID });
     expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
-    expect(h.service.openDevspaceInWorker.mock.calls[0][1].source).toBeUndefined();
+    expect(h.service.openDevspaceInWorker.mock.calls[0][1].source).toEqual(ROOT_SOURCE);
     expect(h.connection.open).toHaveBeenCalledWith(CONTAINER, '/workspaces/api');
   });
 
@@ -1850,41 +1875,33 @@ describe('Rebuild', () => {
     );
   });
 
-  it('passes the selected configuration to the other window', async () => {
-    await h.registry.add(devspace());
+  it('passes the rebuild of a default-image devspace to the other window as a plain rebuild (the devspace keeps its source)', async () => {
+    await h.registry.add(devspace({ defaultImage: DEFAULT_IMAGE }));
     otherWindowConnected();
-    h.service.listConfigurationsInWorker.mockResolvedValue(['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json']);
-    fakeVscode.window.showQuickPick.mockImplementationOnce(async (items: unknown[]) => items[1]);
-    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.rebuildNow);
-    await run('selectConfiguration', row('acme/api', devspace()));
-    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
-    expect(await h.disconnectRequests.read(ENV_ID)).toEqual(
-      expect.objectContaining({
-        operation: 'rebuild',
-        reason: 'configurationSelected',
-        configPath: '.devcontainer/python/devcontainer.json',
-      }),
-    );
-  });
-
-  it('passes the selected source to the other window', async () => {
-    await h.registry.add(devspace());
-    otherWindowConnected();
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
     h.settings.defaultImage = DEFAULT_IMAGE;
-    h.settings.startWithDefaultImage = false;
     fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.rebuildNow);
-    await run('startWithDefaultImage', row('acme/api', devspace()));
+    await run('rebuild', row('acme/api', devspace({ defaultImage: DEFAULT_IMAGE })));
     expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
-    expect(await h.disconnectRequests.read(ENV_ID)).toEqual(
-      expect.objectContaining({ operation: 'rebuild', reason: 'sourceSelected', source: { kind: 'defaultImage', image: DEFAULT_IMAGE } }),
-    );
+    expect(warningMessages()).toEqual([ControllerTexts.otherWindowClosesConnection('acme/api · default')]);
+    const request = await h.disconnectRequests.read(ENV_ID);
+    expect(request).toEqual(expect.objectContaining({ operation: 'rebuild', reason: 'manual', requestedBy: WINDOW_ID }));
+    expect(request).not.toHaveProperty('source');
+    expect(request).not.toHaveProperty('configPath');
   });
 
   it('rebuilds a devspace of no window without connecting this window', async () => {
     await h.registry.add(devspace());
     await run('rebuild', row('acme/api', devspace()));
-    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ forceRebuild: true }));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ forceRebuild: true, source: ROOT_SOURCE }));
     expect(h.connection.open).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds a default-image devspace from the default image of the settings now', async () => {
+    await h.registry.add(devspace({ defaultImage: 'node:22' }));
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    await run('rebuild', row('acme/api', devspace({ defaultImage: 'node:22' })));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ forceRebuild: true, source: DEFAULT_SOURCE }));
   });
 
   it('refuses to hand off while another live window changes the devspace', async () => {
@@ -1977,52 +1994,75 @@ describe('Rebuild', () => {
   }
 });
 
-describe('Select configuration…', () => {
-  it('rebuilds a devspace of no window with the selected configuration', async () => {
-    await h.registry.add(devspace());
-    h.service.listConfigurationsInWorker.mockResolvedValue(['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json']);
-    fakeVscode.window.showQuickPick.mockImplementationOnce(async (items: Array<{ label: string; description: string }>) => {
-      expect(items.map((item) => [item.label, item.description])).toEqual([
-        ['default', '.devcontainer/devcontainer.json · current'],
-        ['python', '.devcontainer/python/devcontainer.json'],
-      ]);
-      return items[1];
+describe('the pick of the source of a repository with several sources', () => {
+  const info = () => repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] });
+
+  it('asks for the source when the switcher opens a repository with several sources, and starts the picked one', async () => {
+    h.sidebar.infos.set('acme/api', info());
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    const picks: unknown[][] = [];
+    fakeVscode.window.showQuickPick.mockImplementation(async (items: Array<{ choice?: { kind: string }; repository?: RepositoryInfo; label: string; description?: string; source?: DevspaceSource }>) => {
+      picks.push(items.map((item) => [item.label, item.description]));
+      const open = items.find((item) => item.choice?.kind === 'openRepository');
+      if (open) return open;
+      const repository = items.find((item) => item.repository?.nameWithOwner === 'acme/api');
+      if (repository) return repository;
+      return items.find((item) => item.source?.kind === 'configuration' && item.source.configPath === '.devcontainer/python/devcontainer.json');
     });
-    await run('selectConfiguration', row('acme/api', devspace()));
-    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(
-      ENV_ID,
-      expect.objectContaining({ configPath: '.devcontainer/python/devcontainer.json', forceRebuild: true }),
-    );
-    expect(h.connection.open).not.toHaveBeenCalled();
-  });
-
-  it('hands off a rebuild with the configuration when this window is connected', async () => {
-    const env = devspace();
-    await h.registry.add(env);
-    await connectHere(env);
-    h.service.listConfigurationsInWorker.mockResolvedValue(['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json']);
-    fakeVscode.window.showQuickPick.mockImplementationOnce(async (items: unknown[]) => items[1]);
-    await run('selectConfiguration', row('acme/api', env));
-    expect(await h.sessionFiles.readOperations()).toEqual([
-      expect.objectContaining({
-        operation: 'rebuild',
-        reason: 'configurationSelected',
-        configPath: '.devcontainer/python/devcontainer.json',
-      }),
+    await run('switchDevspace');
+    expect(picks[picks.length - 1]).toEqual([
+      ['default', DEFAULT_IMAGE],
+      ['config', '.devcontainer/devcontainer.json'],
+      ['python', '.devcontainer/python/devcontainer.json'],
     ]);
+    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: PYTHON_SOURCE }));
   });
 
-  it('creates the devspace with the selected configuration when the repository has none', async () => {
-    const info = repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/go/devcontainer.json'] });
-    h.sidebar.infos.set('acme/api', info);
-    fakeVscode.window.showQuickPick.mockImplementationOnce(async (items: unknown[]) => items[1]);
-    await run('selectConfiguration', row('acme/api', undefined, info));
-    // The listing goes through the worker.
-    expect(h.service.listConfigurationsInWorker).not.toHaveBeenCalled();
-    expect(h.service.openInWorker).toHaveBeenCalledWith(
-      expect.objectContaining({ repository: 'acme/api' }),
-      expect.objectContaining({ configPath: '.devcontainer/go/devcontainer.json' }),
-    );
+  it('marks the sources that have a devspace, and opens that devspace for its source', async () => {
+    h.sidebar.infos.set('acme/api', info());
+    await h.registry.add(devspace({ configPath: '.devcontainer/python/devcontainer.json' }));
+    let sources: unknown[] = [];
+    fakeVscode.window.showQuickPick.mockImplementation(async (items: Array<{ choice?: { kind: string }; repository?: RepositoryInfo; label: string; description?: string; source?: DevspaceSource }>) => {
+      const open = items.find((item) => item.choice?.kind === 'openRepository');
+      if (open) return open;
+      const repository = items.find((item) => item.repository?.nameWithOwner === 'acme/api');
+      if (repository) return repository;
+      sources = items.map((item) => [item.label, item.description]);
+      return items.find((item) => item.label === 'python');
+    });
+    await run('switchDevspace');
+    expect(sources).toEqual([
+      ['config', '.devcontainer/devcontainer.json'],
+      ['python', `.devcontainer/python/devcontainer.json · ${ControllerTexts.devspaceExists}`],
+    ]);
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ source: PYTHON_SOURCE }));
+  });
+
+  it('does nothing when the pick of the source is cancelled', async () => {
+    h.sidebar.infos.set('acme/api', info());
+    fakeVscode.window.showQuickPick.mockImplementation(async (items: Array<{ choice?: { kind: string }; repository?: RepositoryInfo; source?: DevspaceSource }>) => {
+      const open = items.find((item) => item.choice?.kind === 'openRepository');
+      if (open) return open;
+      const repository = items.find((item) => item.repository?.nameWithOwner === 'acme/api');
+      if (repository) return repository;
+      return undefined;
+    });
+    await run('switchDevspace');
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+  });
+
+  it('asks nothing for a repository with one source', async () => {
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    let asked = 0;
+    fakeVscode.window.showQuickPick.mockImplementation(async (items: Array<{ choice?: { kind: string }; repository?: RepositoryInfo }>) => {
+      asked += 1;
+      return items.find((item) => item.choice?.kind === 'openRepository') ?? items.find((item) => item.repository?.nameWithOwner === 'acme/api');
+    });
+    await run('switchDevspace');
+    expect(asked).toBe(1);
+    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: ROOT_SOURCE }));
   });
 });
 
@@ -2343,8 +2383,7 @@ describe('Window roles', () => {
       operation: 'rebuild',
       requestedAt: iso(NOW - 5000),
       requestedBy: 'old-window',
-      reason: 'configurationSelected',
-      configPath: '.devcontainer/python/devcontainer.json',
+      reason: 'configChanged',
     });
     h.connection.isEmptyWindow.mockReturnValue(true);
     let operationsAtConnect: number | undefined;
@@ -2352,27 +2391,24 @@ describe('Window roles', () => {
       operationsAtConnect = fs.readdirSync(h.paths.operationsDir).length;
     });
     await h.controller.runEmptyWindowTasks();
-    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(
-      ENV_ID,
-      expect.objectContaining({ forceRebuild: true, configPath: '.devcontainer/python/devcontainer.json' }),
-    );
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ forceRebuild: true, source: ROOT_SOURCE }));
     expect(operationsAtConnect).toBe(0);
     expect(h.connection.open).toHaveBeenCalledWith(CONTAINER, '/workspaces/api');
   });
 
-  it('role B: runs a pending rebuild with the selected source', async () => {
-    await h.registry.add(devspace());
+  it('role B: runs a pending rebuild of a default-image devspace from the default image of the settings now', async () => {
+    await h.registry.add(devspace({ defaultImage: 'node:22' }));
+    h.settings.defaultImage = DEFAULT_IMAGE;
     await h.sessionFiles.writeOperation({
       devspaceId: ENV_ID,
       operation: 'rebuild',
       requestedAt: iso(NOW - 5000),
       requestedBy: 'old-window',
-      reason: 'sourceSelected',
-      source: { kind: 'defaultImage', image: DEFAULT_IMAGE },
+      reason: 'manual',
     });
     h.connection.isEmptyWindow.mockReturnValue(true);
     await h.controller.runEmptyWindowTasks();
-    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ forceRebuild: true, source: { kind: 'defaultImage', image: DEFAULT_IMAGE } }));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ forceRebuild: true, source: DEFAULT_SOURCE }));
     expect(h.connection.open).toHaveBeenCalledWith(CONTAINER, '/workspaces/api');
   });
 
@@ -3053,7 +3089,7 @@ describe('Connection of this window', () => {
     expect(h.service.deleteInWorker).not.toHaveBeenCalled();
   });
 
-  it('hands off a requested rebuild with its configuration, and a requested stop without a busy mark', async () => {
+  it('hands off a requested rebuild with its reason', async () => {
     const env = devspace();
     await h.registry.add(env);
     await connectHere(env);
@@ -3062,18 +3098,11 @@ describe('Connection of this window', () => {
       operation: 'rebuild',
       requestedAt: iso(NOW - 2000),
       requestedBy: OTHER_WINDOW_ID,
-      reason: 'configurationSelected',
-      configPath: '.devcontainer/python/devcontainer.json',
+      reason: 'configChanged',
     });
     h.controller.onHeartbeat();
     await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close');
-    expect(await h.sessionFiles.readOperations()).toEqual([
-      expect.objectContaining({
-        operation: 'rebuild',
-        reason: 'configurationSelected',
-        configPath: '.devcontainer/python/devcontainer.json',
-      }),
-    ]);
+    expect(await h.sessionFiles.readOperations()).toEqual([expect.objectContaining({ operation: 'rebuild', reason: 'configChanged' })]);
     expect((await h.registry.get(ENV_ID))?.busy?.operation).toBe('rebuild');
   });
 
@@ -3156,15 +3185,15 @@ describe('Connection of this window', () => {
 });
 
 describe('Accounts', () => {
-  it('refuses Start, Stop, Delete, Rebuild, and Select configuration of a devspace of another account', async () => {
+  it('refuses Start, Stop, Delete, and Rebuild of a devspace of another account', async () => {
     const env = devspace({ owner: OTHER_ACCOUNT });
     await h.registry.add(env);
-    for (const command of ['start', 'stop', 'delete', 'rebuild', 'selectConfiguration'] as const) {
+    for (const command of ['start', 'stop', 'delete', 'rebuild'] as const) {
       await run(command, row('acme/api', env));
     }
     // The status bar item Reconnect.
     await run('start', { devspaceId: ENV_ID });
-    expect(warningMessages()).toEqual(Array(6).fill(Messages.otherAccount('acme/api')));
+    expect(warningMessages()).toEqual(Array(5).fill(Messages.otherAccount('acme/api')));
     for (const call of Object.values(h.service)) expect(call).not.toHaveBeenCalled();
     expect(h.connection.open).not.toHaveBeenCalled();
     expect(fakeVscode.window.createQuickPick).not.toHaveBeenCalled();
@@ -3834,19 +3863,11 @@ describe('Accounts', () => {
       expect(warningMessages()).not.toContain(Messages.otherAccount('acme/api'));
     });
 
-    it('Select configuration… of the repository creates the devspace of the new account with the configuration', async () => {
+    it('Start on the child row of a configuration creates the devspace of the new account with that configuration', async () => {
       h.sidebar.infos.set('acme/api', repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] }));
-      fakeVscode.window.showQuickPick.mockImplementationOnce(async (items: Array<{ configPath: string }>) =>
-        items.find((item) => item.configPath === '.devcontainer/python/devcontainer.json'),
-      );
-      await run('selectConfiguration', row('acme/api'));
-      // The listing goes through the worker.
-      expect(h.service.listConfigurationsInWorker).not.toHaveBeenCalled();
+      await run('start', row('acme/api', undefined, undefined, PYTHON_SOURCE));
       expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
-      expect(h.service.openInWorker).toHaveBeenCalledWith(
-        expect.objectContaining({ repository: 'acme/api' }),
-        expect.objectContaining({ configPath: '.devcontainer/python/devcontainer.json' }),
-      );
+      expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: PYTHON_SOURCE }));
       expect(warningMessages()).not.toContain(Messages.otherAccount('acme/api'));
     });
 
@@ -3879,12 +3900,12 @@ describe('Accounts', () => {
     });
   });
 
-  describe('Try again of a first open of Select configuration… after the account changed', () => {
+  describe('Try again of a first open of a child row after the account changed', () => {
     const OTHER_ENV = () =>
       devspace({ id: OTHER_ENV_ID, owner: OTHER_ACCOUNT, containerName: 'devspaces-acme-api-7c1d2e3f', volumeName: 'devspaces-acme-api-7c1d2e3f' });
 
     beforeEach(async () => {
-      // ACCOUNT has no devspace of acme/api; OTHER_ACCOUNT has one.
+      // ACCOUNT has no devspace of acme/api; OTHER_ACCOUNT has one of the configuration at the root.
       await h.registry.add(OTHER_ENV());
       h.sidebar.infos.set('acme/api', repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] }));
       h.service.openInWorker.mockRejectedValueOnce(new UserFacingError('buildFailed', Messages.buildFailed, 'log'));
@@ -3896,37 +3917,19 @@ describe('Accounts', () => {
       });
     });
 
-    it('rebuilds the devspace of the account signed in now with the selected configuration', async () => {
-      fakeVscode.window.showQuickPick.mockImplementationOnce(async (items: Array<{ configPath: string }>) =>
-        items.find((item) => item.configPath === '.devcontainer/python/devcontainer.json'),
-      );
-      await run('selectConfiguration', row('acme/api'));
+    it('opens the devspace of the account signed in now when it has one of that source', async () => {
+      await run('start', row('acme/api', undefined, undefined, ROOT_SOURCE));
       await settle(() => h.service.openDevspaceInWorker.mock.calls.length === 1, 'Try again');
-      expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(
-        OTHER_ENV_ID,
-        expect.objectContaining({ configPath: '.devcontainer/python/devcontainer.json', forceRebuild: true }),
-      );
+      expect(h.service.openInWorker).toHaveBeenCalledTimes(1);
+      expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(OTHER_ENV_ID, expect.objectContaining({ source: ROOT_SOURCE }));
     });
-  });
 
-  it('Try again of a first open of Select configuration… with the configuration of the devspace of the new account already does nothing more', async () => {
-    await h.registry.add(devspace({ id: OTHER_ENV_ID, owner: OTHER_ACCOUNT, containerName: 'devspaces-acme-api-7c1d2e3f', volumeName: 'devspaces-acme-api-7c1d2e3f' }));
-    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] }));
-    h.service.openInWorker.mockRejectedValueOnce(new UserFacingError('buildFailed', Messages.buildFailed, 'log'));
-    let retried = false;
-    fakeVscode.window.showErrorMessage.mockImplementationOnce(async () => {
-      h.auth.getAccount.mockResolvedValue(OTHER_ACCOUNT);
-      h.auth.getToken.mockResolvedValue('gho_other');
-      retried = true;
-      return Actions.tryAgain;
+    it('creates the devspace of the account signed in now for a source it has no devspace of', async () => {
+      await run('start', row('acme/api', undefined, undefined, PYTHON_SOURCE));
+      await settle(() => h.service.openInWorker.mock.calls.length === 2, 'Try again');
+      expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+      expect(h.service.openInWorker).toHaveBeenLastCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: PYTHON_SOURCE }));
     });
-    fakeVscode.window.showQuickPick.mockImplementationOnce(async (items: Array<{ configPath: string }>) =>
-      items.find((item) => item.configPath === '.devcontainer/devcontainer.json'),
-    );
-    await run('selectConfiguration', row('acme/api'));
-    await settle(() => retried && h.logger.info.mock.calls.some((call: unknown[]) => String(call[0]).includes('uses the configuration')), 'Try again');
-    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
-    expect(h.service.openInWorker).toHaveBeenCalledTimes(1);
   });
 
   it('offers no Try again of the command itself for an error', async () => {
@@ -4338,47 +4341,41 @@ describe('Start in a new window', () => {
     });
   });
 
-  it('offers Start with Configuration, or Start with Default Image while the flag is off, only with a default image (package.json)', () => {
+  it('offers no command of the source: the rows of the sources carry Start, and the node of a repository has no menu (package.json)', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: {
-        menus: Record<string, Array<{ command?: string; when?: string; group?: string }>>;
+        commands: Array<{ command: string }>;
+        menus: Record<string, Array<{ command?: string; submenu?: string; when?: string; group?: string }>>;
         configuration: { properties: Record<string, { scope?: string; default?: unknown; type?: string }> };
       };
     };
+    const commands = manifest.contributes.commands.map((command) => command.command);
+    for (const gone of ['startWithDefaultImage', 'startWithConfiguration', 'selectConfiguration']) expect(commands).not.toContain(`devspaces.${gone}`);
     const menus = manifest.contributes.menus;
-    const entries = (menu: string, command: string) =>
-      menus[menu].filter((item) => item.command === command).map((item) => [item.when, item.group]);
-    // Right after Start in New Window (1_actions@2), also on a connected row (a hand-off), never while the devspace is
-    // updating, and not on a repository without a configuration (canChooseSource, treeModel.ts).
-    expect(entries('view/item/context', Commands.startWithConfiguration)).toEqual([
-      ['view == devspaces.repositories && viewItem =~ /canChooseSource/ && devspaces.hasDefaultImage && config.devspaces.startWithDefaultImage', '1_actions@3'],
-    ]);
-    expect(entries('view/item/context', Commands.startWithDefaultImage)).toEqual([
-      ['view == devspaces.repositories && viewItem =~ /canChooseSource/ && devspaces.hasDefaultImage && !config.devspaces.startWithDefaultImage', '1_actions@3'],
-    ]);
-    expect(entries('devspaces.more', Commands.startWithConfiguration)).toEqual([
-      ['viewItem =~ /canChooseSource/ && devspaces.hasDefaultImage && config.devspaces.startWithDefaultImage', '0_start@2'],
-    ]);
-    expect(entries('devspaces.more', Commands.startWithDefaultImage)).toEqual([
-      ['viewItem =~ /canChooseSource/ && devspaces.hasDefaultImage && !config.devspaces.startWithDefaultImage', '0_start@2'],
-    ]);
-    expect(entries('commandPalette', Commands.startWithConfiguration)).toEqual([['devspaces.hasDefaultImage && config.devspaces.startWithDefaultImage', undefined]]);
-    expect(entries('commandPalette', Commands.startWithDefaultImage)).toEqual([['devspaces.hasDefaultImage && !config.devspaces.startWithDefaultImage', undefined]]);
-    // Stop and the others follow, in their order.
+    for (const items of Object.values(menus)) {
+      for (const item of items) expect(item.when ?? '').not.toMatch(/hasDefaultImage|canChooseSource|multiConfig/);
+    }
+    // No item of the context menu, inline or in the submenu, matches the node of a repository (REPOSITORY_NODE_CONTEXT).
+    const matches = (when: string | undefined, value: string) => {
+      const regex = /viewItem =~ \/(.+?)\//.exec(when ?? '');
+      return regex ? new RegExp(regex[1]).test(value) : true;
+    };
+    for (const item of [...menus['view/item/context'], ...menus['devspaces.more']]) {
+      expect(matches(item.when, REPOSITORY_NODE_CONTEXT), `${item.command ?? item.submenu} for a repository node`).toBe(false);
+    }
+    // Stop and the others follow Start, in their order.
     const actions = menus['view/item/context'].filter((item) => item.group?.startsWith('1_actions@')).map((item) => `${item.group} ${item.command}`);
     expect(actions).toEqual([
       '1_actions@1 devspaces.start',
       '1_actions@2 devspaces.startInNewWindow',
       '1_actions@2 devspaces.startInCurrentWindow',
-      '1_actions@3 devspaces.startWithConfiguration',
-      '1_actions@3 devspaces.startWithDefaultImage',
       '1_actions@4 devspaces.stop',
       '1_actions@5 devspaces.delete',
       '1_actions@6 devspaces.keepRunning',
       '1_actions@6 devspaces.stopWhenClosed',
       '1_actions@7 devspaces.closeAndKeepRunning',
     ]);
-    // Only the user settings decide the source.
+    // The settings of the default image: the image, and the place of its row.
     expect(manifest.contributes.configuration.properties[`${SETTINGS_SECTION}.defaultImage`]).toMatchObject({ type: 'string', scope: 'application', default: '' });
     expect(manifest.contributes.configuration.properties[`${SETTINGS_SECTION}.startWithDefaultImage`]).toMatchObject({ type: 'boolean', scope: 'application', default: true });
   });

@@ -172,12 +172,12 @@ describe('pending operations', () => {
   it('writes and reads operations', async () => {
     await files.writeOperation(operation(ENV_A));
     await files.writeOperation(
-      operation(ENV_B, { operation: 'delete', reason: 'configurationSelected', configPath: '.devcontainer/py/devcontainer.json', additionalVolumesToRemove: ['api-db'] }),
+      operation(ENV_B, { operation: 'delete', reason: 'configChanged', additionalVolumesToRemove: ['api-db'] }),
     );
     const operations = await files.readOperations();
     expect(operations).toEqual([
       operation(ENV_A),
-      operation(ENV_B, { operation: 'delete', reason: 'configurationSelected', configPath: '.devcontainer/py/devcontainer.json', additionalVolumesToRemove: ['api-db'] }),
+      operation(ENV_B, { operation: 'delete', reason: 'configChanged', additionalVolumesToRemove: ['api-db'] }),
     ]);
   });
 
@@ -357,17 +357,12 @@ describe('validators', () => {
     expect(isPendingConnection({ devspaceId: ENV_A, windowId: '', createdAt: '2026-09-24T17:40:15Z' })).toBe(false);
     expect(isPendingOperation(operation(ENV_A))).toBe(true);
     expect(isPendingOperation({ ...operation(ENV_A), reason: 'whim' })).toBe(false);
-    expect(isPendingOperation({ ...operation(ENV_A), configPath: 3 })).toBe(false);
     expect(isPendingOperation({ ...operation(ENV_A), additionalVolumesToRemove: 'yes' })).toBe(false);
     expect(isPendingOperation({ ...operation(ENV_A), additionalVolumesToRemove: ['db', 3] })).toBe(false);
     expect(isPendingOperation({ ...operation(ENV_A), additionalVolumesToRemove: ['db'] })).toBe(true);
-    // The source of Start with Default Image and Start with Configuration (DevspaceSource), strictly.
-    expect(isPendingOperation({ ...operation(ENV_A), reason: 'sourceSelected', source: { kind: 'configuration' } })).toBe(true);
-    expect(isPendingOperation({ ...operation(ENV_A), reason: 'sourceSelected', source: { kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' } })).toBe(true);
-    expect(isPendingOperation({ ...operation(ENV_A), source: { kind: 'defaultImage' } })).toBe(false);
-    expect(isPendingOperation({ ...operation(ENV_A), source: { kind: 'defaultImage', image: 'not an image' } })).toBe(false);
-    expect(isPendingOperation({ ...operation(ENV_A), source: { kind: 'configuration', image: 'node:22' } })).toBe(false);
-    expect(isPendingOperation({ ...operation(ENV_A), source: 'configuration' })).toBe(false);
+    // A devspace never switches its source (one devspace per source since 0.6.0): no operation carries one.
+    expect(isPendingOperation({ ...operation(ENV_A), reason: 'sourceSelected' })).toBe(false);
+    expect(isPendingOperation({ ...operation(ENV_A), reason: 'configurationSelected' })).toBe(false);
     expect(isReopenRecord({ devspaceId: ENV_A, closedAt: '2026-09-24T18:02:11Z' })).toBe(true);
     expect(isReopenRecord(null)).toBe(false);
   });

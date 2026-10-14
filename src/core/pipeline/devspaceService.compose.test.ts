@@ -18,6 +18,7 @@ import {
 } from '../helper/compose';
 import { DEVCONTAINER_ID_PLACEHOLDER, devspaceDevcontainerId } from '../helper/cliVariables';
 import { DevcontainerCommandError } from '../helper/devcontainerCli';
+import { sourceSegment } from '../devspaceSource';
 import { HOME_GIT_CONFIG_SCRIPT } from '../helper/containerGit';
 import { TOKEN_WRITE_SCRIPT } from '../helper/containerToken';
 import { scriptCommand } from '../worker/containerScripts';
@@ -76,6 +77,8 @@ import { MAX_ITEM_LENGTH, MAX_LISTED_ITEMS } from '../policy';
 
 const TARGET: RepositoryTarget = { repository: REPO, defaultBranch: 'main', configPaths: [DEFAULT_CONFIG_PATH], trusted: true };
 const NAME = resourceName(REPO, ENV_ID);
+/** The names of a devspace that a first open of TARGET creates: with the word of its source, `config`. */
+const FIRST_OPEN_NAME = resourceName(REPO, ENV_ID, 'config');
 const PROJECT = composeProjectName(REPO, ENV_ID);
 /** The Compose project of the devspace OTHER_ID of acme/web. */
 const OTHER_PROJECT = composeProjectName('acme/web', OTHER_ID);
@@ -230,6 +233,8 @@ async function seedCompose(
 }
 
 describe('first open of a Docker Compose configuration', () => {
+  // The first opens of this group create the devspace, so its names carry the word of the source.
+  const NAME = FIRST_OPEN_NAME;
   it('reads the model, checks it, builds the dev service image, and starts both services', async () => {
     const result = await h.service.open(TARGET, options());
 
@@ -2433,7 +2438,7 @@ describe('failed switches and the label of the configuration path', () => {
     });
     await h.service.openDevspace(ENV_ID, options());
     expect(h.ui.kindQuestions).toEqual([Messages.configurationKindChanged(false, DEFAULT_CONFIG_PATH)]);
-    expect(h.ui.kindQuestions[0]).toContain('Select configuration…');
+    expect(h.ui.kindQuestions[0]).toContain('is its own row in the list of devspaces');
     expect(h.ui.kindQuestions[0]).toContain('named volumes are kept');
     expect(h.helper.ups.map((up) => up.image)).toEqual([IMAGE_1]);
     expect(h.helper.builds).toEqual([]);
@@ -2499,7 +2504,8 @@ describe('configurations that share a compose file, and the report of a switch',
         other.helper.files = { [configPath]: { configText: DEFAULT_CONFIG_TEXT } };
         other.checker.outcome = checked({ [BASE_IMAGE]: DIGEST_NEW }, { [FEATURE]: FEATURE_DIGEST });
         const result = await other.service.open({ ...TARGET, configPaths: [configPath] }, { progress: other.progress });
-        expect(result.containerName).toBe(NAME);
+        // The names carry the word of the source: the folder name of the configuration, lower case, `[a-z0-9-]`.
+        expect(result.containerName).toBe(resourceName(REPO, ENV_ID, sourceSegment({ kind: 'configuration', configPath })));
         expect(other.helper.ups[0].override.runArgs).toEqual(expect.arrayContaining(['--label', `${LABEL_CONFIG_PATH}=${configPath}`]));
         expect(other.docker.containersOf(ENV_ID)[0].labels[LABEL_CONFIG_PATH]).toBe(configPath);
       } finally {
@@ -2539,7 +2545,7 @@ describe('configurations that share a compose file, and the report of a switch',
     const question = Messages.configurationKindChangedDevContainerMissing(DEFAULT_CONFIG_PATH);
     expect(question).toContain('Later starts nothing');
     expect(question).toContain('choose Rebuild');
-    expect(question).toContain('Select configuration…');
+    expect(question).toContain('is its own row in the list of devspaces');
     expect(question).not.toContain('Later keeps');
     // The pipeline asks the same question; Later starts nothing.
     const error = await rejection(h.service.openDevspace(ENV_ID, options()));
@@ -3629,6 +3635,8 @@ describe('the `mounts` of a Compose configuration as the Dev Container CLI write
 });
 
 describe('the ownership fixes after up', () => {
+  // The first opens of this group create the devspace, so its names carry the word of the source.
+  const NAME = FIRST_OPEN_NAME;
   const CONFIG = '/workspaces/.devspace+';
 
   /** The execs in the dev container that walk a folder with an ownership fix: [folder, user, …]. */
@@ -3945,7 +3953,9 @@ describe('the checked Dockerfile of the dev service', () => {
   });
 });
 
-describe('Select configuration… between two configurations of one compose file with another service', () => {
+describe('a change of the configuration between two configurations of one compose file with another service', () => {
+  // The first opens of this group create the devspace, so its names carry the word of the source.
+  const NAME = FIRST_OPEN_NAME;
   const WEB_PATH = '.devcontainer/web/devcontainer.json';
   const WEB_TEXT = CONFIG_TEXT.replace('"service": "app"', '"service": "web"').replace('["compose.yml"]', '["../compose.yml"]');
 
@@ -4472,6 +4482,8 @@ describe('Select configuration… between two configurations of one compose file
 });
 
 describe('lifecycle token: Docker Compose', () => {
+  // The first opens of this group create the devspace, so its names carry the word of the source.
+  const NAME = FIRST_OPEN_NAME;
   it('first open: up, the token into the dev container, then run-user-commands with the model and the project of up', async () => {
     await h.service.open(TARGET, options());
     const dev = devContainer();

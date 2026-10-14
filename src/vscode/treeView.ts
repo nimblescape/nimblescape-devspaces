@@ -9,11 +9,13 @@ import type { Logger } from '../core/ports';
 import { Commands } from './commands';
 import {
   MonitorIcons,
+  REPOSITORY_NODE_CONTEXT,
   rootNodes,
   stateIcon,
   type GroupNode,
   type HintRow,
   type OwnerGroup,
+  type RepositoryNode,
   type RepositoryRow,
   type SignInRow,
 } from './treeModel';
@@ -64,14 +66,17 @@ const DOCKER_HOST_ICONS: Record<ShownDockerHost['kind'], string> = {
 };
 
 /** Command handlers of row actions receive a RepositoryRow as the first argument. */
-export type TreeNode = OwnerGroup | GroupNode | RepositoryRow | HintRow | SignInRow | DockerHostRow;
+export type TreeNode = OwnerGroup | GroupNode | RepositoryNode | RepositoryRow | HintRow | SignInRow | DockerHostRow;
+
+/** The nodes of the view that have children. */
+type ParentNode = OwnerGroup | GroupNode | RepositoryNode;
 
 export class RepositoriesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<TreeNode | undefined>();
   private groups: OwnerGroup[] = [];
   private roots: TreeNode[] = [];
   private dockerHost: ShownDockerHost | undefined;
-  private readonly parents = new Map<string, OwnerGroup | GroupNode>();
+  private readonly parents = new Map<string, ParentNode>();
 
   readonly onDidChangeTreeData: vscode.Event<TreeNode | undefined> = this.changeEmitter.event;
 
@@ -85,11 +90,12 @@ export class RepositoriesTreeProvider implements vscode.TreeDataProvider<TreeNod
     this.groups = groups;
     this.roots = rootNodes(groups, options.signedIn ?? true);
     this.parents.clear();
-    // The nodes of the setting repositoryGroups nest the rows: every parent is recorded, so reveal finds each row.
-    const record = (parent: OwnerGroup | GroupNode): void => {
+    // The nodes of the setting repositoryGroups and the repository nodes nest the rows: every parent is recorded, so
+    // reveal finds each row.
+    const record = (parent: ParentNode): void => {
       for (const child of parent.children) {
         this.parents.set(child.id, parent);
-        if (child.kind === 'group') record(child);
+        if (child.kind === 'group' || child.kind === 'repositoryNode') record(child);
       }
     };
     for (const group of groups) record(group);
@@ -118,6 +124,8 @@ export class RepositoriesTreeProvider implements vscode.TreeDataProvider<TreeNod
           return ownerItem(node);
         case 'group':
           return groupItem(node);
+        case 'repositoryNode':
+          return repositoryNodeItem(node);
         case 'repository':
           return repositoryItem(node);
         case 'hint':
@@ -139,7 +147,7 @@ export class RepositoriesTreeProvider implements vscode.TreeDataProvider<TreeNod
       const row: DockerHostRow = { kind: 'dockerHost', id: DOCKER_HOST_ROW_ID, host: this.dockerHost };
       return [row, ...this.roots];
     }
-    return node.kind === 'owner' || node.kind === 'group' ? node.children : [];
+    return node.kind === 'owner' || node.kind === 'group' || node.kind === 'repositoryNode' ? node.children : [];
   }
 
   getParent(node: TreeNode): TreeNode | undefined {
@@ -152,15 +160,15 @@ export class RepositoriesTreeProvider implements vscode.TreeDataProvider<TreeNod
 }
 
 /**
- * Expand All in the title bar of the view (the twin of VS Code's Collapse All): opens every owner and every node of the
- * setting repositoryGroups. Reveal opens a node and its parents; it neither selects nor focuses a row. A node that the
- * view no longer has (the model changed meanwhile) is skipped.
+ * Expand All in the title bar of the view (the twin of VS Code's Collapse All): opens every owner, every node of the
+ * setting repositoryGroups, and every repository node. Reveal opens a node and its parents; it neither selects nor
+ * focuses a row. A node that the view no longer has (the model changed meanwhile) is skipped.
  */
 export async function expandAll(view: Pick<vscode.TreeView<TreeNode>, 'reveal'>, groups: readonly OwnerGroup[]): Promise<void> {
-  const nodes: Array<OwnerGroup | GroupNode> = [];
-  const collect = (node: OwnerGroup | GroupNode): void => {
+  const nodes: ParentNode[] = [];
+  const collect = (node: ParentNode): void => {
     nodes.push(node);
-    for (const child of node.children) if (child.kind === 'group') collect(child);
+    for (const child of node.children) if (child.kind === 'group' || child.kind === 'repositoryNode') collect(child);
   };
   for (const group of groups) collect(group);
   for (const node of nodes) {
@@ -191,6 +199,21 @@ function groupItem(node: GroupNode): vscode.TreeItem {
   return item;
 }
 
+/**
+ * A repository with several sources: a level of the tree with the repository name, expanded at first (its child rows
+ * carry the buttons). No state icon (the blank icon keeps the names aligned), no description, no command, and a
+ * contextValue without any flag of a row, so no row action applies to it.
+ */
+function repositoryNodeItem(node: RepositoryNode): vscode.TreeItem {
+  const item = new vscode.TreeItem(node.label, node.expanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+  item.id = node.id;
+  item.tooltip = node.tooltip;
+  item.contextValue = REPOSITORY_NODE_CONTEXT;
+  item.iconPath = new vscode.ThemeIcon('blank');
+  item.accessibilityInformation = { label: node.repository };
+  return item;
+}
+
 function repositoryItem(row: RepositoryRow): vscode.TreeItem {
   const item = new vscode.TreeItem(row.label, vscode.TreeItemCollapsibleState.None);
   item.id = row.id;
@@ -204,7 +227,7 @@ function repositoryItem(row: RepositoryRow): vscode.TreeItem {
     // A repository without devspace has no symbol; the blank icon keeps the names aligned.
     item.iconPath = new vscode.ThemeIcon('blank');
   }
-  item.accessibilityInformation = { label: [row.repository, row.description].filter((text) => text !== '').join(', ') };
+  item.accessibilityInformation = { label: [row.child ? `${row.repository} ${row.label}` : row.repository, row.description].filter((text) => text !== '').join(', ') };
   // VS Code runs this command on each click (or only on a double-click, per workbench.list.openMode); the controller
   // runs Start on a double-click (rowActivation.ts).
   item.command = { command: Commands.rowActivated, title: 'Start', arguments: [row] };

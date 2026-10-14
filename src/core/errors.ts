@@ -60,8 +60,8 @@ export function isUserFacingError(error: unknown): error is UserFacingError {
  * inconsistent state, so the operation is refused. Its code is `helperFailed`, so that every rule of a failed helper
  * applies to it (a helperFailed in Step 8 fails the open, the container of a failed `up` is withdrawn); but it is told
  * apart from a helperFailed of the helper image (isBatchHelperUnavailable): the rule under which a running, current
- * container opens as it is when the helper cannot be prepared at the start does not apply to it. Start, Rebuild and
- * Select configuration are refused.
+ * container opens as it is when the helper cannot be prepared at the start does not apply to it. Start and Rebuild
+ * are refused.
  */
 export class BatchHelperUnavailableError extends UserFacingError {
   readonly batchHelperUnavailable = true;

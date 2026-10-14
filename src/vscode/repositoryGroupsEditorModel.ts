@@ -8,7 +8,7 @@
 // sidebar (parseRepositoryGroups, matchRepositoryGroup, buildTreeModel), so it shows what the sidebar will show.
 // repositoryGroupsEditor.ts is the thin webview glue.
 import { checkRepositoryGroupEntry, matchRepositoryGroup, parseRepositoryGroups } from './repositoryGroups';
-import { buildTreeModel, repositoryRows, type GroupNode, type HintRow, type RepositoryRow, type TreeInput } from './treeModel';
+import { buildTreeModel, repositoryEntriesOf, repositoryRows, type GroupNode, type HintRow, type RepositoryEntry, type TreeInput } from './treeModel';
 import { hasExactKeys } from '../core/valueChecks';
 
 /** The flags that the editor offers, in this order (the only flags that parseRepositoryGroups keeps). */
@@ -387,7 +387,7 @@ export function buildGroupsPreview(input: TreeInput | undefined, entries: readon
   const budget = { left: MAX_PREVIEW_NODES, truncated: 0 };
   const owners = plain.map((plainGroup): OwnerPreview => {
     const groupedGroup = grouped.get(plainGroup.id) ?? plainGroup;
-    const rows = plainGroup.children.filter((child): child is RepositoryRow => child.kind === 'repository');
+    const rows = repositoryEntriesOf([plainGroup]);
     const counts = entries.map(() => 0);
     let unmatched = 0;
     const unmatchedWithDevspace: string[] = [];
@@ -397,11 +397,11 @@ export function buildGroupsPreview(input: TreeInput | undefined, entries: readon
         counts[match.pattern.index] += 1;
       } else {
         unmatched += 1;
-        if (row.devspace) unmatchedWithDevspace.push(row.name);
+        if (hasDevspace(row)) unmatchedWithDevspace.push(row.name);
       }
     }
     const isGrouped = unmatched < rows.length;
-    const shown = new Set(repositoryRows([groupedGroup]).map((row) => row.id));
+    const shown = new Set(repositoryEntriesOf([groupedGroup]).map((entry) => entry.id));
     return {
       owner: plainGroup.owner,
       grouped: isGrouped,
@@ -417,7 +417,7 @@ export function buildGroupsPreview(input: TreeInput | undefined, entries: readon
 }
 
 function previewNodes(
-  children: ReadonlyArray<RepositoryRow | HintRow | GroupNode>,
+  children: ReadonlyArray<RepositoryEntry | HintRow | GroupNode>,
   budget: { left: number; truncated: number },
 ): PreviewNode[] {
   const nodes: PreviewNode[] = [];
@@ -438,18 +438,24 @@ function previewNodes(
         children: previewNodes(child.children, budget),
       });
     } else {
+      // A repository with several sources (RepositoryNode) is one repository of the preview: the setting groups
+      // repositories, and the child rows of its sources are the same under every entry.
       nodes.push({
         kind: 'repository',
         label: child.label,
         ...(child.label !== child.name ? { detail: child.name } : {}),
-        ...(child.devspace ? { devspace: true } : {}),
+        ...(hasDevspace(child) ? { devspace: true } : {}),
       });
     }
   }
   return nodes;
 }
 
-function countNodes(node: RepositoryRow | HintRow | GroupNode): number {
+function hasDevspace(entry: RepositoryEntry): boolean {
+  return entry.kind === 'repository' ? entry.devspace !== undefined : entry.children.some((row) => row.devspace !== undefined);
+}
+
+function countNodes(node: RepositoryEntry | HintRow | GroupNode): number {
   return node.kind === 'group' ? 1 + node.children.reduce((sum, child) => sum + countNodes(child), 0) : 1;
 }
 

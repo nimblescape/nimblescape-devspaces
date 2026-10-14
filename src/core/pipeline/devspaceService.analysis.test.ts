@@ -15,6 +15,7 @@ import { UserFacingError } from '../errors';
 import { analysisInternalItem } from '../helper/configurationAnalysis';
 import { ANALYSIS_LIMITS, WorkerConfigurationAnalyzer, type AnalysisLimits } from '../helper/configurationAnalysisRunner';
 import { Messages } from '../messages';
+import { resourceName } from '../names';
 import type { RepositoryTarget } from './operationBase';
 import { REPO, createHarness, type Harness } from './devspaceService.testkit';
 import { DEFAULT_CONFIG_PATH } from './recordRules';
@@ -91,8 +92,10 @@ describe('the open pipeline with the host access analysis in the worker', () => 
       await local.service.open(TARGET, { progress: local.progress });
       // The name of the devspace (resourceName).
       const names = new Map<Harness, string>();
-      for (const one of [worker, local]) names.set(one, (await one.registry.list())[0].volumeName);
-      const calls = (harness: Harness): string[] => harness.helper.calls.map((call) => call.split(names.get(harness)!).join('<name>'));
+      for (const one of [worker, local]) names.set(one, (await one.registry.list())[0].id);
+      // The volume carries the word of the source, the images do not: both are the name of the devspace here.
+      const calls = (harness: Harness): string[] =>
+        harness.helper.calls.map((call) => call.split(resourceName(REPO, names.get(harness)!, 'config')).join('<name>').split(resourceName(REPO, names.get(harness)!)).join('<name>'));
       expect(calls(worker)).toEqual(calls(local));
       expect(calls(worker)).toContain('build <name>:1');
       expect(worker.checker.calls).toEqual(local.checker.calls);

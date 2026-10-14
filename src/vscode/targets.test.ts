@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { DiscoveryData, Devspace, RepositoryInfo } from '../core/types';
 import { ControllerTexts } from './controllerTexts';
 import { dockerStoppedRuntime, devspaceIdsOf, liveBusyDevspaceIds } from './sidebarData';
-import { configurationChoices, findRepositoryInfo, gitHubUrl, listedRepositories, ownerTrust, parseCommandArgument, pickerRepositories, placeholderRepositoryInfo, repositoriesToLookUp, repositoryKey, repositoryTarget } from './targets';
+import { findRepositoryInfo, gitHubUrl, listedRepositories, ownerTrust, parseCommandArgument, pickerRepositories, placeholderRepositoryInfo, repositoriesToLookUp, repositoryKey, repositoryTarget, sourceChoices } from './targets';
 import { buildTreeModel, type RepositoryRow } from './treeModel';
 
 const NOW = Date.parse('2026-09-25T08:00:00.000Z');
@@ -63,8 +63,9 @@ describe('parseCommandArgument', () => {
       signedIn: true,
     });
     const rows = groups[0].children as RepositoryRow[];
-    expect(parseCommandArgument(rows[0])).toEqual({ kind: 'row', repository: 'acme/api', info: rows[0].info, devspaceId: 'e1' });
-    expect(parseCommandArgument(rows[1])).toEqual({ kind: 'row', repository: 'acme/web', info: rows[1].info, devspaceId: undefined });
+    const source = { kind: 'configuration', configPath: '.devcontainer/devcontainer.json' };
+    expect(parseCommandArgument(rows[0])).toEqual({ kind: 'row', repository: 'acme/api', info: rows[0].info, devspaceId: 'e1', source });
+    expect(parseCommandArgument(rows[1])).toEqual({ kind: 'row', repository: 'acme/web', info: rows[1].info, devspaceId: undefined, source });
   });
 
   it('reads the argument of the status bar item Reconnect', () => {
@@ -197,21 +198,29 @@ describe('repository lists', () => {
   });
 });
 
-describe('configurationChoices', () => {
-  it('names each configuration, shows its path, and marks the current one', () => {
-    expect(
-      configurationChoices(
-        ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json', '.devcontainer/python/devcontainer.json'],
-        '.devcontainer/python/devcontainer.json',
-      ),
-    ).toEqual([
-      { configPath: '.devcontainer/devcontainer.json', label: 'default', description: '.devcontainer/devcontainer.json', current: false },
+describe('sourceChoices', () => {
+  it('names each source by its word, shows its image or path, and marks the sources that have a devspace', () => {
+    const sources = [
+      { kind: 'defaultImage' as const, image: 'ghcr.io/acme/base:latest' },
+      { kind: 'configuration' as const, configPath: '.devcontainer/devcontainer.json' },
+      { kind: 'configuration' as const, configPath: '.devcontainer/python/devcontainer.json' },
+    ];
+    expect(sourceChoices(sources, [devspace('e1', 'acme/api', { configPath: '.devcontainer/python/devcontainer.json' })])).toEqual([
+      { source: sources[0], label: 'default', description: 'ghcr.io/acme/base:latest', hasDevspace: false },
+      { source: sources[1], label: 'config', description: '.devcontainer/devcontainer.json', hasDevspace: false },
       {
-        configPath: '.devcontainer/python/devcontainer.json',
+        source: sources[2],
         label: 'python',
-        description: `.devcontainer/python/devcontainer.json · ${ControllerTexts.current}`,
-        current: true,
+        description: `.devcontainer/python/devcontainer.json · ${ControllerTexts.devspaceExists}`,
+        hasDevspace: true,
       },
+    ]);
+  });
+
+  it('marks the default-image source when a default-image devspace exists, whatever image it was built from', () => {
+    const source = { kind: 'defaultImage' as const, image: 'ghcr.io/acme/base:2' };
+    expect(sourceChoices([source], [devspace('e1', 'acme/api', { defaultImage: 'ghcr.io/acme/base:1' })])).toEqual([
+      { source, label: 'default', description: `ghcr.io/acme/base:2 · ${ControllerTexts.devspaceExists}`, hasDevspace: true },
     ]);
   });
 });

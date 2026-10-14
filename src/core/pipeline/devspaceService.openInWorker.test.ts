@@ -56,7 +56,7 @@ describe('the open in the worker, from the extension', () => {
     const { h, sent } = harness(async () => ({ opened: OPENED }));
     const seeded = await seedDevspace(h, { container: 'stopped' });
     const controller = new AbortController();
-    const result = await h.operations.openDevspaceInWorker(ENV_ID, { progress: h.progress, signal: controller.signal, forceRebuild: true, configPath: 'b/devcontainer.json' });
+    const result = await h.operations.openDevspaceInWorker(ENV_ID, { progress: h.progress, signal: controller.signal, forceRebuild: true });
     expect(result).toEqual({ devspace: await h.registry.get(ENV_ID), containerName: OPENED.containerName, remoteWorkspaceFolder: OPENED.remoteWorkspaceFolder });
     expect(result.devspace.id).toBe(seeded.id);
     expect(sent).toEqual([
@@ -75,7 +75,6 @@ describe('the open in the worker, from the extension', () => {
           repository: REPO,
           devspaceId: ENV_ID,
           forceRebuild: true,
-          configPath: 'b/devcontainer.json',
         },
         timeoutMs: OPEN_FLOW_TIMEOUT_MS,
         signal: controller.signal,

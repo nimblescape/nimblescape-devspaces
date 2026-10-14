@@ -99,7 +99,7 @@ describe('the registry writes of an open: build numbers and volume names', () =>
   });
 
   it('a volume that a Delete of another account kept is a clash in any case', async () => {
-    const name = resourceName(REPOSITORY, NEW);
+    const name = resourceName(REPOSITORY, NEW, 'config');
     const { records, file } = setup([], [{ name: name.toUpperCase(), owner: THEIRS, keptAt: '2026-10-01T00:00:00.000Z' }]);
     await expect(records.createDevspace({ id: NEW, repository: REPOSITORY, configPath: DEFAULT })).rejects.toMatchObject({ code: 'invalid', message: expect.stringContaining('another account') });
     expect(file().devspaces).toEqual([]);

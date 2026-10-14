@@ -59,13 +59,12 @@ describe('the helper image maintenance of the open', () => {
       await settle(h.operations.stop(ENV_ID));
       await settle(h.operations.deleteCheckInWorker(ENV_ID, { progress: h.progress, repository: REPO, otherWindow: false }));
       await settle(h.operations.deleteInWorker(ENV_ID, { progress: h.progress, additionalVolumesToRemove: [] }));
-      await settle(h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress }));
       await settle(h.operations.windowStateInWorker(devspace, devspace.containerName));
       await settle(h.operations.windowStateInWorker(devspace, devspace.containerName, { signal: new AbortController().signal }));
       await settle(h.operations.reconcileInWorker({ passive: true }));
       await settle(h.operations.reconcileInWorker({ passive: false }));
       const others = flows.slice(2);
-      expect(others.map((flow) => flow.op)).toEqual(['stop', 'deleteCheck', 'delete', 'listConfigurations', 'windowState', 'windowState', 'reconcile', 'reconcile']);
+      expect(others.map((flow) => flow.op)).toEqual(['stop', 'deleteCheck', 'delete', 'windowState', 'windowState', 'reconcile', 'reconcile']);
       expect(others.filter((flow) => flow.maintenance !== undefined)).toEqual([]);
     } finally {
       h.cleanup();

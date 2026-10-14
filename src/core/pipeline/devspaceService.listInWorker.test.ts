@@ -2,16 +2,15 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The listing of Select configuration from the extension's side: it sends `listConfigurations` to the worker of the
+// The listing of the configurations from the extension's side: it sends `listConfigurations` to the worker of the
 // Docker host of the operation and gives back its paths, or the refusal of the worker's pipeline as a UserFacingError.
 // Nothing is listed here.
 import type { DevspaceOperationsDeps } from './devspaceOperations';
 import type { OperationFlow } from './devspaceOperations';
 import { describe, expect, it, vi } from 'vitest';
-import { BatchHelperUnavailableError, UserFacingError, isBatchHelperUnavailable } from '../errors';
 import { HelperChannelError, HelperOperationError } from '../helperChannel/helperChannel';
-import { LOCK_BUSY_CODE, OP_DELETE, OP_DELETE_CHECK, OP_LIST_CONFIGURATIONS, OP_WINDOW_STATE } from '../helperChannel/protocol';
-import { DELETE_CHECK_FLOW_TIMEOUT_MS, DELETE_FLOW_TIMEOUT_MS, LIST_CONFIGURATIONS_FLOW_TIMEOUT_MS, PipelineTexts, WINDOW_STATE_FLOW_TIMEOUT_MS } from './operationBase';
+import { LOCK_BUSY_CODE, OP_DELETE, OP_DELETE_CHECK, OP_WINDOW_STATE } from '../helperChannel/protocol';
+import { DELETE_CHECK_FLOW_TIMEOUT_MS, DELETE_FLOW_TIMEOUT_MS, PipelineTexts, WINDOW_STATE_FLOW_TIMEOUT_MS } from './operationBase';
 import { ENV_ID, PID, REPO, WINDOW_ID, createHarness, seedDevspace } from './devspaceService.testkit';
 import type { DevspaceServiceDeps } from './devspacePorts';
 
@@ -35,96 +34,6 @@ async function rejection(promise: Promise<unknown>): Promise<unknown> {
     (error: unknown) => error,
   );
 }
-
-describe('the listing of Select configuration in the worker, from the extension', () => {
-  it('sends the devspace, the Docker host and this window, and gives back the paths of the worker', async () => {
-    const { h, sent } = harness(async () => ({ configPaths: ['.devcontainer/devcontainer.json', 'b/devcontainer.json'] }));
-    await seedDevspace(h, { container: 'stopped' });
-    const controller = new AbortController();
-    expect(await h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress, signal: controller.signal })).toEqual(['.devcontainer/devcontainer.json', 'b/devcontainer.json']);
-    expect(sent).toEqual([
-      { op: OP_LIST_CONFIGURATIONS, params: { devspaceId: ENV_ID, dockerHost: '', owner: { windowId: WINDOW_ID, pid: PID } }, timeoutMs: LIST_CONFIGURATIONS_FLOW_TIMEOUT_MS, signal: controller.signal },
-    ]);
-    // Nothing runs here: no helper step, no lock of this window.
-    expect(h.helper.calls).toEqual([]);
-    expect(h.lock.acquired).toEqual([]);
-  });
-
-  it('throws the refusal of the worker as the UserFacingError it was, the refusal of the batch scope with its kind', async () => {
-    let refused: unknown = { code: 'signInRequired', message: 'Sign in to GitHub.' };
-    const { h } = harness(async () => ({ refused }));
-    await seedDevspace(h, { container: 'stopped' });
-    const first = await rejection(h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress }));
-    expect(first).toBeInstanceOf(UserFacingError);
-    expect(first).toMatchObject({ code: 'signInRequired', message: 'Sign in to GitHub.' });
-    expect(isBatchHelperUnavailable(first)).toBe(false);
-    refused = { code: 'helperFailed', message: 'The helper could not be opened.', detail: 'no image', batchHelperUnavailable: true };
-    const second = await rejection(h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress }));
-    expect(second).toBeInstanceOf(BatchHelperUnavailableError);
-    // With its message.
-    expect(second).toMatchObject({ code: 'helperFailed', message: 'The helper could not be opened.', detail: 'no image' });
-    // A refusal that is not one (an unknown code, `cancelled`) is an invalid answer, never a UserFacingError of the worker.
-    for (const odd of [{ code: 'rootAccess', message: 'x' }, { code: 'cancelled', message: 'x' }, { code: 'startFailed', message: '' }]) {
-      refused = odd;
-      const error = await rejection(h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress }));
-      expect(error).not.toBeInstanceOf(UserFacingError);
-      expect((error as Error).message).toContain('with an invalid value');
-    }
-  });
-
-  it('a lock held elsewhere, or a worker that cannot be reached, is refused as for Stop; a devspace that does not exist lists nothing', async () => {
-    let failure: Error = new HelperOperationError(LOCK_BUSY_CODE, 'held', false);
-    const { h, sent } = harness(async () => {
-      throw failure;
-    });
-    await seedDevspace(h, { container: 'stopped' });
-    expect(await rejection(h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress }))).toMatchObject({ code: 'startFailed', message: PipelineTexts.devspaceLockBusy(REPO) });
-    failure = new HelperChannelError('unavailable', 'no worker');
-    expect(await rejection(h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress }))).toMatchObject({ code: 'helperFailed' });
-    expect(await h.operations.listConfigurationsInWorker('6b1f0c2e-1d4a-4f5e-9a8b-7c6d5e4f3a2b', { progress: h.progress })).toEqual([]);
-    expect(sent).toHaveLength(2);
-  });
-
-  it('a cancel is cancelled', async () => {
-    const controller = new AbortController();
-    const { h } = harness(async () => {
-      controller.abort();
-      throw Object.assign(new Error('aborted'), { name: 'AbortError' });
-    });
-    await seedDevspace(h, { container: 'stopped' });
-    expect(await rejection(h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress, signal: controller.signal }))).toMatchObject({ code: 'cancelled' });
-  });
-});
-
-// The Docker host of the operation, the detail.
-describe('the listing in the worker from the extension: the Docker host and the detail', () => {
-  it('sends the remote Docker host of the operation', async () => {
-    const { h, sent } = harness(async () => ({ configPaths: [] }), { dockerTarget: async () => ({ kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box' }) });
-    await seedDevspace(h, { container: 'stopped' });
-    await h.registry.updateDevspace(ENV_ID, (entry) => {
-      entry.dockerHost = 'build-box';
-    });
-    await h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress });
-    expect((sent[0].params as { dockerHost: string }).dockerHost).toBe('build-box');
-  });
-
-  // The extension takes no lock of a devspace (the worker takes it); a refusal of the worker keeps its detail.
-  it('a refusal keeps its detail', async () => {
-    const { h } = harness(async () => ({ refused: { code: 'startFailed', message: 'm', detail: 'd' } }));
-    await seedDevspace(h, { container: 'stopped' });
-    expect(await rejection(h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress }))).toMatchObject({ code: 'startFailed', message: 'm', detail: 'd' });
-  });
-});
-
-// Parameters that the worker would refuse are never sent.
-describe('the listing in the worker from the extension: parameters that are never sent', () => {
-  it('a window without a valid owner sends nothing', async () => {
-    const { h, sent } = harness(async () => ({ configPaths: [] }), { owner: { windowId: 'window-1', pid: 0 } });
-    await seedDevspace(h, { container: 'stopped' });
-    expect(await rejection(h.operations.listConfigurationsInWorker(ENV_ID, { progress: h.progress }))).toMatchObject({ message: expect.stringContaining('cannot be sent to the worker') });
-    expect(sent).toEqual([]);
-  });
-});
 
 // The reads of an attached window through the worker.
 describe('the reads of an attached window through the worker, from the extension', () => {
