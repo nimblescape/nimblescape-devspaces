@@ -272,22 +272,22 @@ async function prepareRemote(local: BootstrapDocker, dockerPath: string, started
 }
 
 /**
- * The last release of this repository on GitHub and its VSIX, downloaded into `folder`: the package that the release
- * workflow published to the Marketplace (its publish job publishes the VSIX of the GitHub release). The VS Code CLI did
- * not find the extension on the Marketplace (PR #20), so the test installs this file. The token (GITHUB_TOKEN, see
- * main) only raises the rate limit of the GitHub API.
+ * The last release of this repository on GitHub and its VSIX, downloaded into `folder`: the file that the release
+ * workflow attaches to the GitHub release (its publish job publishes this file to the Marketplace). The VS Code CLI did
+ * not find the extension on the Marketplace, and the gallery API of the Marketplace listed no extension of this ID (PR
+ * #20), so the test installs this file. The token (GITHUB_TOKEN, see main) only raises the rate limit of the GitHub API.
  */
 async function latestReleaseVsix(folder: string, token: string | undefined): Promise<{ tag: string; file: string }> {
   const repository = process.env.GITHUB_REPOSITORY;
   if (!repository) throw new Error('GITHUB_REPOSITORY is not set (GitHub Actions sets it).');
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const answer = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, { headers });
+  const answer = await fetch(`https://api.github.com/repos/${repository}/releases/latest`, { headers, signal: AbortSignal.timeout(30_000) });
   if (!answer.ok) throw new Error(`The latest release of ${repository} could not be read: ${answer.status} ${await answer.text()}`);
   const release = (await answer.json()) as { tag_name: string; assets: { name: string; browser_download_url: string }[] };
   const assets = release.assets.filter((asset) => asset.name.endsWith('.vsix'));
   if (assets.length !== 1) throw new Error(`The release ${release.tag_name} of ${repository} has ${assets.length} VSIX files: ${assets.map((asset) => asset.name).join(', ')}`);
-  const download = await fetch(assets[0].browser_download_url);
+  const download = await fetch(assets[0].browser_download_url, { signal: AbortSignal.timeout(120_000) });
   if (!download.ok) throw new Error(`${assets[0].browser_download_url} could not be downloaded: ${download.status}`);
   fs.mkdirSync(folder, { recursive: true });
   const file = path.join(folder, assets[0].name);
@@ -295,28 +295,11 @@ async function latestReleaseVsix(folder: string, token: string | undefined): Pro
   return { tag: release.tag_name, file };
 }
 
-/**
- * What the Marketplace answers for the extension, for the log only: its flags and versions as the gallery API lists
- * them without the filters of VS Code (the VS Code CLI did not find the extension there, PR #20).
- */
-async function marketplaceAnswer(): Promise<string> {
-  try {
-    const answer = await fetch('https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json;api-version=3.0-preview.1' },
-      // filterType 7: the extension ID; flags 0x111: versions, their properties, statistics.
-      body: JSON.stringify({ filters: [{ criteria: [{ filterType: 7, value: EXTENSION_ID }], pageSize: 5 }], flags: 0x111 }),
-    });
-    const text = await answer.text();
-    if (!answer.ok) return `${answer.status} ${text.slice(0, 2_000)}`;
-    const extensions = ((JSON.parse(text) as { results?: { extensions?: { flags?: string; versions?: { version: string; flags?: string; lastUpdated?: string }[] }[] }[] }).results ?? []).flatMap((result) => result.extensions ?? []);
-    if (extensions.length === 0) return 'no extension';
-    return extensions
-      .map((extension) => `flags "${extension.flags}", versions ${(extension.versions ?? []).map((version) => `${version.version} ("${version.flags}", ${version.lastUpdated})`).join(', ')}`)
-      .join('; ');
-  } catch (error) {
-    return `no answer: ${String(error)}`;
-  }
+/** Whether the version `a` (major.minor.patch) is greater than `b`. */
+function newerVersion(a: string, b: string): boolean {
+  const [pa, pb] = [a, b].map((value) => value.split('.').map((part) => Number.parseInt(part, 10)));
+  for (let index = 0; index < 3; index++) if ((pa[index] ?? 0) !== (pb[index] ?? 0)) return (pa[index] ?? 0) > (pb[index] ?? 0);
+  return false;
 }
 
 /**
@@ -324,11 +307,12 @@ async function marketplaceAnswer(): Promise<string> {
  * release into the extensions folder of the test VS Code as users install a VSIX, the helper image of that version (its
  * Dockerfile can differ from the one of this checkout; that version restores the devspace at activation only when its
  * helper tag exists), and the devspace without container. The seed names the version and the SHA-256 of its
- * dist/extension.js, so that the run `previous` can check that VS Code loads it. The devspace has the volume labels of
- * this checkout; a version that changes them must seed the devspace with the labels of the released version here.
+ * dist/extension.js, so that the run `previous` can check that VS Code loads it. Only the tag of the helper image comes
+ * from the released version: its image name and labels, and the volume labels of the devspace, are those of this
+ * checkout. A version that changes them must build the image or seed the devspace with those of the released version
+ * here. A checkout older than the latest release fails: its VSIX would replace a newer version (a downgrade).
  */
 async function prepareUpdate(docker: BootstrapDocker, vscode: TestVscode, started: number, githubToken: string | undefined): Promise<Record<string, unknown>> {
-  log.info(`The Marketplace lists ${EXTENSION_ID}: ${await marketplaceAnswer()}`);
   const release = await latestReleaseVsix(path.join(ROOT, 'out', 'test', 'vscode', 'attach', 'previous'), githubToken);
   const install = childProcess.spawnSync(vscode.cli, [...vscode.cliArgs, '--install-extension', release.file], { encoding: 'utf8' });
   log.info(`${release.file} of the release ${release.tag}: exit code ${install.status}\n${install.stdout}${install.stderr}`);
@@ -338,6 +322,8 @@ async function prepareUpdate(docker: BootstrapDocker, vscode: TestVscode, starte
   const folder = path.join(vscode.extensionsDir, folders[0]);
   const version = (JSON.parse(fs.readFileSync(path.join(folder, 'package.json'), 'utf8')) as { version: string }).version;
   if (release.tag !== `v${version}`) throw new Error(`The release ${release.tag} holds the version ${version}.`);
+  const own = (JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { version: string }).version;
+  if (newerVersion(version, own)) throw new Error(`The latest release ${version} is newer than the version ${own} of this checkout: the update would be a downgrade. Merge main.`);
   const extensionSha256 = crypto.createHash('sha256').update(fs.readFileSync(path.join(folder, 'dist', 'extension.js'))).digest('hex');
   log.info(`The previous version ${version} is in ${folder} (dist/extension.js ${extensionSha256}).`);
   const helper = await helperImage(docker, started, path.join(folder, 'resources', 'helper', 'Dockerfile'));

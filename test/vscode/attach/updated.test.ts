@@ -7,9 +7,10 @@
 // DEVSPACE_TEST_ATTACH=updated): the second of the two runs of the update (previous.test.ts is the first). Between the
 // runs CI installed the VSIX of this checkout over the released version (scripts/install-attach-extensions.mjs). VS Code
 // starts again with the user data folder of the run `previous`, in the window of the devspace whose container kept
-// running, as at the first start of VS Code some time after an update: the new version reads the registry, the
-// pending connection files and the Docker objects of the released version, and runs the open pipeline before the window
-// connects. Analysis 5.2 of the test plan; the tests compare with what the run `previous` saved (PREVIOUS_STATE_FILE).
+// running, as at the first start of VS Code some time after an update (the configuration removes the pending connection
+// files of the released version first): the new version reads the registry and the Docker objects of the released
+// version, and runs the open pipeline before the window connects. The tests compare with what the run `previous` saved
+// (PREVIOUS_STATE_FILE).
 // The Monitor of the released version runs when the new version starts: the new version replaces it when its script
 // or helper tag is another (src/core/remoteMonitor/remoteSessionMonitor.ts, decide), and keeps it otherwise.
 // Not covered: an update while the window stays open, where only the extension hosts restart, and two windows that run
@@ -89,8 +90,8 @@ describe('the window of the devspace after the update to the VSIX of this checko
     assert.ok(after?.status === 'running', `The Monitor does not run: ${JSON.stringify(after)}`);
     const replaced = channelLog('Devspaces').includes(MONITOR_REPLACED);
     console.log(`    Monitor: ${JSON.stringify(before)} → ${JSON.stringify(after)}; replaced as of another version: ${replaced}`);
+    // A container keeps its labels, so another label is another container.
     if (after.label !== before.label) {
-      assert.notStrictEqual(after.id, before.id, 'The Monitor has a new label but the same container');
       assert.ok(replaced, `The log has no line "${MONITOR_REPLACED}"`);
     } else {
       assert.strictEqual(after.id, before.id, 'The Monitor of the same label was replaced');

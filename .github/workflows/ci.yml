@@ -393,9 +393,9 @@ jobs:
 
   vscode-update:
     # The update from the last released version (.vscode-test.mjs, label attach, kinds previous and updated).
-    # test/vscode/attach/prepare.ts (DEVSPACE_TEST_ATTACH_PREPARE=update) installs that version from the VSIX of the
-    # latest GitHub release (the package that the release published to the Marketplace) into the test VS Code, and puts
-    # the devspace without container on the Docker engine of the runner. The first start runs the released version in
+    # test/vscode/attach/prepare.ts (DEVSPACE_TEST_ATTACH_PREPARE=update) installs that version into the test VS Code
+    # from the VSIX of the latest GitHub release (the file that the release workflow publishes to the Marketplace), and
+    # puts the devspace without container on the Docker engine of the runner. The first start runs the released version in
     # the window of the devspace; then the VSIX of this commit is installed over it, and the second start, with the same
     # user data folder, runs the new version in the same window. A job of its own, so that the engine of the runner has
     # no objects of the other attach tests.
@@ -434,7 +434,7 @@ jobs:
           name=$(node -p "require('./out/test/vscode/attach/seed.json').devspace.containerName")
           test "$(docker inspect --type container -f '{{.State.Running}}' "$name")" = true
 
-      # Over the released version (--force), as an update replaces it.
+      # Over the released version, as an update replaces it (prepare.ts fails when the release is newer than this commit).
       - name: Install the VSIX of this commit into the test VS Code
         run: node scripts/install-attach-extensions.mjs
 
