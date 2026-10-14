@@ -253,6 +253,11 @@ jobs:
         shell: bash
         run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}npm run test:vscode:vsix
 
+      # The programs that the test VS Code of the two steps above left running (Linux, from /proc).
+      - name: List the programs that the test VS Code left running
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: node scripts/leftoverPrograms.mjs
+
   vscode-attach:
     # The attach tests (.vscode-test.mjs, label attach): VS Code starts in the window of a container on the Docker
     # Engine of the runner, through the real Dev Containers extension. test/vscode/attach/prepare.ts prepares the engine
