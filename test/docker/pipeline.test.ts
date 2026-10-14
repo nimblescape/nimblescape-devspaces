@@ -1155,8 +1155,11 @@ describe.skipIf(engineHadMonitor)('open pipeline on a seeded devspace', () => {
         });
       }
       const [defaultImage, configuration] = entries;
-      expect(defaultImage.name).toMatch(/^devspaces-devspaces-test-default-image-default-[a-z]+-[a-z]+$/);
-      expect(configuration.name).toMatch(/^devspaces-devspaces-test-default-image-config-[a-z]+-[a-z]+$/);
+      // The word of the source before the pair; the long `<owner>-<repository>` is shortened to keep the name within
+      // 63 characters (resourceName), so only its start is fixed.
+      expect(defaultImage.name).toMatch(/^devspaces-devspaces-test-default[a-z-]*-default-[a-z]+-[a-z]+$/);
+      expect(configuration.name).toMatch(/^devspaces-devspaces-test-default[a-z-]*-config-[a-z]+-[a-z]+$/);
+      for (const { name } of entries) expect(name.length).toBeLessThanOrEqual(63);
 
       // The open of the default-image devspace: the configuration of the repository (its Dockerfile, its runArgs) is
       // not read; the synthesized configuration `{ "image": … }` goes to the Dev Container CLI in its place.
