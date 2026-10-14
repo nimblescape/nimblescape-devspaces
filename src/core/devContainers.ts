@@ -48,8 +48,9 @@ export const ATTACHED_CONTAINER_ACTIVATION_EVENT = `onResolveRemoteAuthority:${A
  * configuration win over those of the repository, the Features, and the image, because its entry of the label
  * devcontainer.metadata is the last one.
  * Assumption: at the first attach of a new container, the Dev Containers extension writes these settings into
- * ~/.vscode-server/data/Machine/settings.json of the container and reads them from there at each attach (verified in its
- * code, not documented; so CONTAINER_VERSION changes when they change). A process in the container can change that file;
+ * ~/.vscode-server/data/Machine/settings.json (~/.vscode-server-insiders/… for VS Code Insiders) of the container and
+ * reads them from there at each attach (verified in its code, not documented; so CONTAINER_VERSION changes when they
+ * change). A process in the container can change that file;
  * the variables of containerEnvironment keep Git and Docker on the configuration of the volume also then.
  */
 export function devContainersSettings(): Record<string, boolean | string> {

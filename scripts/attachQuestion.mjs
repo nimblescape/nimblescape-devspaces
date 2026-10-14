@@ -32,7 +32,7 @@ export function answerAttachQuestion(extensionsDir) {
   for (const folder of fs.readdirSync(extensionsDir).filter((name) => name.startsWith(FOLDER_PREFIX)).sort()) {
     const version = folder.slice(FOLDER_PREFIX.length);
     const file = path.join(extensionsDir, folder, 'dist', 'extension', 'extension.js');
-    // VS Code removes the folder of a replaced release at its next start, possibly while this runs.
+    // VS Code removes the folder of a replaced release at its next start; an earlier run can leave it half removed.
     if (!fs.existsSync(file)) {
       lines.push(`Dev Containers ${version}: ${file} does not exist; the folder is skipped.`);
       continue;
