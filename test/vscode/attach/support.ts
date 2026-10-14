@@ -23,6 +23,8 @@ export interface Seed {
   folderUri: string;
   /** The user of the window in the container. */
   user: string;
+  /** The devspace only: its ID (the argument of the command devspaces.start). */
+  devspaceId?: string;
   /** The devspace only: the wait of its postStartCommand when the mark exists (prepare.ts, the run `longopen`). */
   longStartSeconds?: number;
   longStartMark?: string;
@@ -188,6 +190,20 @@ export function outputLogs(): Map<string, string> {
 /** The log of one output channel (`Devspaces`, `Dev Containers`), empty when it has none. */
 export function channelLog(channel: string): string {
   return [...outputLogs()].filter(([name]) => path.basename(name).endsWith(`-${channel}.log`)).map(([, text]) => text).join('\n');
+}
+
+/**
+ * The log of one output channel by window of this start (the first folder of the log path, for example `window1`; the
+ * window that runs the tests is the first one).
+ */
+export function channelLogByWindow(channel: string): Map<string, string> {
+  const byWindow = new Map<string, string>();
+  for (const [name, text] of outputLogs()) {
+    if (!path.basename(name).endsWith(`-${channel}.log`)) continue;
+    const window = name.split(/[\\/]/)[0];
+    byWindow.set(window, `${byWindow.get(window) ?? ''}${text}\n`);
+  }
+  return byWindow;
 }
 
 /** Prints every output channel of this start; the evidence of a failed test on CI. */

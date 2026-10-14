@@ -117,18 +117,22 @@ function attachConfiguration(kind, index) {
     const pending = path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'globalStorage', `${manifest.publisher}.${manifest.name}`, 'pending');
     for (const name of fs.existsSync(pending) ? fs.readdirSync(pending) : []) fs.rmSync(path.join(pending, name), { force: true });
   }
+  // `stopped` starts with a local folder; its tests open the devspace in a second window (test/vscode/attach/stopped.test.ts).
+  const local = path.join(os.tmpdir(), `devspaces attach local ${checkoutId}`);
+  if (kind === 'stopped' && !listsOnly) fs.mkdirSync(local, { recursive: true });
   return {
     ...base,
     files: `out/test/vscode/attach/${kind}.test.js`,
     extensionDevelopmentPath: [fileURLToPath(new URL('.', import.meta.url)), fileURLToPath(new URL('test/vscode/github', import.meta.url))],
-    launchArgs: [...base.launchArgs, `--folder-uri=${seed.folderUri}`, '--disable-extension=vscode.github-authentication'],
+    ...(kind === 'stopped' ? { workspaceFolder: local } : {}),
+    launchArgs: [...base.launchArgs, ...(kind === 'stopped' ? [] : [`--folder-uri=${seed.folderUri}`]), '--disable-extension=vscode.github-authentication'],
     env: {
       DEVSPACE_TEST_USER_DATA_DIR: base.env.DEVSPACE_TEST_USER_DATA_DIR,
       DEVSPACE_TEST_ATTACH: kind,
       DEVSPACE_TEST_ATTACH_SEED: JSON.stringify(seed),
       ...(kind === 'account' ? { DEVSPACE_TEST_GITHUB_ACCOUNT: JSON.stringify({ id: '9999', label: 'devspaces-other' }) } : {}),
     },
-    // The longest wait of a test is one minute (postAttachCommand).
+    // The longest wait of a test is one minute (postAttachCommand); the tests of `stopped` set their own.
     mocha: { ...base.mocha, timeout: 120_000 },
   };
 }
