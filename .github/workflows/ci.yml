@@ -24,7 +24,9 @@
 # version. The VSIX of the job "test" stays a
 # workflow artifact for inspection. This workflow publishes nothing: the
 # release workflow calls it for the commit of a version and publishes the VSIX
-# of that call.
+# of that call. The workflow "VS Code versions" calls it once per week with
+# another VS Code version for the VS Code jobs; such a call skips the jobs that
+# do not run VS Code.
 
 name: CI
 
@@ -42,10 +44,20 @@ on:
         type: string
         required: false
         default: ''
+      vscode-version:
+        description: The VS Code version of the VS Code jobs, "insiders" or a version such as 1.125.0; empty for stable. When set, the jobs that do not run VS Code are skipped.
+        type: string
+        required: false
+        default: ''
 
 permissions:
   # Checkout needs repository reads; the checks get no write scope.
   contents: read
+
+env:
+  # .vscode-test.mjs, test/vscode/attach/prepare.ts and scripts/install-attach-extensions.mjs download this VS Code
+  # version; empty (also for every event but a call) gives stable.
+  VSCODE_TEST_VERSION: ${{ inputs.vscode-version }}
 
 jobs:
   test:
@@ -93,6 +105,7 @@ jobs:
 
   test-root:
     name: test as root
+    if: ${{ !inputs.vscode-version }}
     # The runner itself, not a container: a container refuses mount --bind, which some tests need.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -165,6 +178,7 @@ jobs:
     # so three groups of files run side by side, each on its own runner and engine. vitest.docker.config.mts names the
     # files of each group (DEVSPACE_TEST_GROUP); the group "other" runs every file that the others do not name.
     name: docker (${{ matrix.group }})
+    if: ${{ !inputs.vscode-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:

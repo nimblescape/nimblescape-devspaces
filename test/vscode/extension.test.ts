@@ -13,6 +13,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 const EXTENSION_ID = 'nimblescape.nimblescape-devspaces';
+const DEV_CONTAINERS_ID = 'ms-vscode-remote.remote-containers';
 /** The name of the output channel of the extension (src/vscode/logger.ts, OUTPUT_CHANNEL_NAME). */
 const OUTPUT_CHANNEL_NAME = 'Devspaces';
 /** VS Code writes the output channels to files in the logs folder after a short delay. */
@@ -30,6 +31,10 @@ describe('the extension in VS Code', () => {
     assert.ok(extension, `${EXTENSION_ID} is not loaded`);
     await extension.activate();
     assert.strictEqual(extension.isActive, true);
+    // A failure of the weekly run on other VS Code versions (.github/workflows/vscode-versions.yml) can come from a
+    // release of VS Code or of Dev Containers.
+    const devContainers = vscode.extensions.getExtension(DEV_CONTAINERS_ID)?.packageJSON as { version: string } | undefined;
+    console.log(`    VS Code ${vscode.version}, Dev Containers ${devContainers?.version ?? 'not installed'}`);
   });
 
   it('runs from the build of the test configuration', () => {

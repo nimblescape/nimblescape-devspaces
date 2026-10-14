@@ -131,7 +131,7 @@ function confirmAttach(extensionsDir: string): void {
   const question = /(="userConfirmedAttachToContainerRequiresTrust";async function [\w$]+\([\w$]+\)\{)/;
   if (!question.test(code)) throw new Error(`The attach question was not found in ${file}.`);
   fs.writeFileSync(file, code.replace(question, '$1return!0;'));
-  log.info(`${file}: the attach question is answered.`);
+  log.info(`Dev Containers ${folder.slice('ms-vscode-remote.remote-containers-'.length)}: the attach question is answered (${file}).`);
 }
 
 /**
@@ -148,7 +148,9 @@ async function trustExtension(): Promise<TestVscode> {
   if (!extensionsDir) throw new Error(`No extensions folder in ${cliArgs.join(' ')}.`);
   confirmAttach(extensionsDir);
   const productJson = path.join(path.dirname(executable), 'resources', 'app', 'product.json');
-  const product = JSON.parse(fs.readFileSync(productJson, 'utf8')) as { trustedExtensionAuthAccess?: string[] | Record<string, string[]> };
+  const product = JSON.parse(fs.readFileSync(productJson, 'utf8')) as { quality?: string; trustedExtensionAuthAccess?: string[] | Record<string, string[]> };
+  const { version } = JSON.parse(fs.readFileSync(path.join(path.dirname(productJson), 'package.json'), 'utf8')) as { version: string };
+  log.info(`VS Code ${version} (${product.quality ?? 'no quality'}) in ${path.dirname(executable)}.`);
   const trusted = product.trustedExtensionAuthAccess;
   if (Array.isArray(trusted)) trusted.push(EXTENSION_ID);
   else product.trustedExtensionAuthAccess = { ...trusted, github: [...(trusted?.github ?? []), EXTENSION_ID] };
