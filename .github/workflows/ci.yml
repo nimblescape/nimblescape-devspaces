@@ -276,10 +276,12 @@ jobs:
     steps:
       # .vscode-test.mjs, test/vscode/attach/prepare.ts and scripts/install-attach-extensions.mjs download the VS Code
       # version of VSCODE_TEST_VERSION; empty (also for every event but a call) gives stable. @vscode/test-electron
-      # downloads VS Code Insiders again when a newer build has come out, without the changes of prepare.ts, so the job
-      # uses the commit of the newest Insiders build at its start. Stable stays unpinned: a stable release during a job
-      # is rare, and @vscode/test-electron takes a stable version only with a patch number of one digit. This step
-      # writes the version for the later steps.
+      # downloads VS Code again when a newer build or release has come out, into a folder without the changes of
+      # prepare.ts (seen in PR #22: the preparation ran on 1.141.1, the tests on 1.141.2, and the extension's GitHub
+      # sign-in asked a question). So the job uses the commit of the newest Insiders build, or the newest stable release
+      # (as @vscode/test-electron resolves stable), at its start. @vscode/test-electron takes a stable version only with a
+      # patch number of one digit; with more digits, stable stays unpinned. This step writes the version for the later
+      # steps.
       - name: Choose the VS Code version
         env:
           VERSION: ${{ inputs.vscode-version }}
@@ -287,6 +289,12 @@ jobs:
           if [ "$VERSION" = insiders ]; then
             VERSION=$(curl -fsS --retry 3 https://update.code.visualstudio.com/api/update/linux-x64/insider/latest | jq -er .version)
             [[ "$VERSION" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::The newest VS Code Insiders build has no commit: $VERSION"; exit 1; }
+          elif [ -z "$VERSION" ]; then
+            VERSION=$(curl -fsS --retry 3 'https://update.code.visualstudio.com/api/releases/stable?released=true' | jq -er '.[0]')
+            if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]$ ]]; then
+              echo "::warning::The newest stable VS Code $VERSION is not pinned: @vscode/test-electron takes a stable version only with a patch number of one digit."
+              VERSION=
+            fi
           fi
           echo "VS Code ${VERSION:-stable}"
           echo "VSCODE_TEST_VERSION=$VERSION" >> "$GITHUB_ENV"
@@ -399,6 +407,12 @@ jobs:
           if [ "$VERSION" = insiders ]; then
             VERSION=$(curl -fsS --retry 3 https://update.code.visualstudio.com/api/update/linux-x64/insider/latest | jq -er .version)
             [[ "$VERSION" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::The newest VS Code Insiders build has no commit: $VERSION"; exit 1; }
+          elif [ -z "$VERSION" ]; then
+            VERSION=$(curl -fsS --retry 3 'https://update.code.visualstudio.com/api/releases/stable?released=true' | jq -er '.[0]')
+            if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]$ ]]; then
+              echo "::warning::The newest stable VS Code $VERSION is not pinned: @vscode/test-electron takes a stable version only with a patch number of one digit."
+              VERSION=
+            fi
           fi
           echo "VS Code ${VERSION:-stable}"
           echo "VSCODE_TEST_VERSION=$VERSION" >> "$GITHUB_ENV"
@@ -463,6 +477,12 @@ jobs:
           if [ "$VERSION" = insiders ]; then
             VERSION=$(curl -fsS --retry 3 https://update.code.visualstudio.com/api/update/linux-x64/insider/latest | jq -er .version)
             [[ "$VERSION" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::The newest VS Code Insiders build has no commit: $VERSION"; exit 1; }
+          elif [ -z "$VERSION" ]; then
+            VERSION=$(curl -fsS --retry 3 'https://update.code.visualstudio.com/api/releases/stable?released=true' | jq -er '.[0]')
+            if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]$ ]]; then
+              echo "::warning::The newest stable VS Code $VERSION is not pinned: @vscode/test-electron takes a stable version only with a patch number of one digit."
+              VERSION=
+            fi
           fi
           echo "VS Code ${VERSION:-stable}"
           echo "VSCODE_TEST_VERSION=$VERSION" >> "$GITHUB_ENV"
