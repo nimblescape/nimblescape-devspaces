@@ -23,8 +23,6 @@ export interface Seed {
   folderUri: string;
   /** The user of the window in the container. */
   user: string;
-  /** The devspace only: its ID (the argument of the command devspaces.start). */
-  devspaceId?: string;
   /** The devspace only: the wait of its postStartCommand when the mark exists (prepare.ts, the run `longopen`). */
   longStartSeconds?: number;
   longStartMark?: string;
@@ -172,43 +170,36 @@ export async function credentialPaths(user: string): Promise<CredentialPaths> {
   return { gitConfigOfRunner, gitCredentialHelper, dockerCredentialHelper, githubCli, sshAgentKeys };
 }
 
-/** The files of the output channels of the last start of VS Code (output_logging_* of each window) by name. */
-export function outputLogs(): Map<string, string> {
-  const userDataDir = process.env.DEVSPACE_TEST_USER_DATA_DIR;
+/**
+ * The log files of the last start of VS Code with the user data folder `userDataDir` (default: the one of the test VS
+ * Code) by their path in the folder of that start, for example `window1/renderer.log`.
+ */
+export function sessionLogs(userDataDir = process.env.DEVSPACE_TEST_USER_DATA_DIR): Map<string, string> {
   assert.ok(userDataDir, 'DEVSPACE_TEST_USER_DATA_DIR is not set (.vscode-test.mjs)');
   const logs = path.join(userDataDir, 'logs');
   const sessions = fs.existsSync(logs) ? fs.readdirSync(logs).filter((name) => /^\d{8}T\d{6}$/.test(name)).sort() : [];
   const folder = path.join(logs, sessions.at(-1) ?? '');
   const files = new Map<string, string>();
-  if (!fs.existsSync(folder)) return files;
+  if (sessions.length === 0 || !fs.existsSync(folder)) return files;
   for (const name of fs.readdirSync(folder, { recursive: true, encoding: 'utf8' })) {
-    if (/output_logging_/.test(name) && name.endsWith('.log')) files.set(name, fs.readFileSync(path.join(folder, name), 'utf8'));
+    if (name.endsWith('.log')) files.set(name, fs.readFileSync(path.join(folder, name), 'utf8'));
   }
   return files;
 }
 
+/** The files of the output channels of the last start of VS Code (output_logging_* of each window) by name. */
+export function outputLogs(userDataDir?: string): Map<string, string> {
+  return new Map([...sessionLogs(userDataDir)].filter(([name]) => /output_logging_/.test(name)));
+}
+
 /** The log of one output channel (`Devspaces`, `Dev Containers`), empty when it has none. */
-export function channelLog(channel: string): string {
-  return [...outputLogs()].filter(([name]) => path.basename(name).endsWith(`-${channel}.log`)).map(([, text]) => text).join('\n');
+export function channelLog(channel: string, userDataDir?: string): string {
+  return [...outputLogs(userDataDir)].filter(([name]) => path.basename(name).endsWith(`-${channel}.log`)).map(([, text]) => text).join('\n');
 }
 
-/**
- * The log of one output channel by window of this start (the first folder of the log path, for example `window1`; the
- * window that runs the tests is the first one).
- */
-export function channelLogByWindow(channel: string): Map<string, string> {
-  const byWindow = new Map<string, string>();
-  for (const [name, text] of outputLogs()) {
-    if (!path.basename(name).endsWith(`-${channel}.log`)) continue;
-    const window = name.split(/[\\/]/)[0];
-    byWindow.set(window, `${byWindow.get(window) ?? ''}${text}\n`);
-  }
-  return byWindow;
-}
-
-/** Prints every output channel of this start; the evidence of a failed test on CI. */
-export function printLogs(): void {
-  for (const [name, text] of outputLogs()) console.log(`\n===== ${name} =====\n${text}`);
+/** Prints every output channel of the last start of VS Code; the evidence of a failed test on CI. */
+export function printLogs(userDataDir?: string): void {
+  for (const [name, text] of outputLogs(userDataDir)) console.log(`\n===== ${name} =====\n${text}`);
 }
 
 /**
