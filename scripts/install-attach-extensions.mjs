@@ -14,10 +14,12 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath } from '@vscode/test-electron';
 import { createVSIX } from '@vscode/vsce';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
+// @vscode/test-electron takes its folder .vscode-test from the current folder when it loads.
+process.chdir(root);
+const { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath } = await import('@vscode/test-electron');
 const folder = path.join(root, 'out', 'test', 'vscode', 'attach', 'vsix');
 const extension = path.join(folder, 'nimblescape-devspaces.vsix');
 const github = path.join(folder, 'devspaces-vscode-test-github.vsix');
