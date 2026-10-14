@@ -724,7 +724,8 @@ async function activateExtension(
   // The Docker host of the view title (every later read of the context updates it too).
   background(targets.resolve(), 'read the Docker host');
   // The stored list at once, then the background refresh.
-  background(sidebar.initialize(), 'show the repository list');
+  const listed = sidebar.initialize();
+  background(listed, 'show the repository list');
   if (view.visible) background(sidebar.refreshStates(), 'update the sidebar');
   // A lost registry is rebuilt from the volume labels (only when Docker runs). A window whose container the registry
   // did not know takes its restored devspace.
@@ -787,6 +788,9 @@ async function activateExtension(
     // Role A: the open pipeline runs before VS Code connects this window (awaited). Assumption
     // (ATTACHED_CONTAINER_ACTIVATION_EVENT): VS Code waits for activate() before it resolves the authority.
     const pending = await started;
+    // The stored list first, so that the progress and the status bar name the devspace as the sidebar shows it (with
+    // the word of its source when the repository has several sources).
+    await listed.catch(() => undefined);
     await controller.openAttachedWindow(currentDevspace, containerName, pending);
     return;
   }

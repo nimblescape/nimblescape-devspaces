@@ -127,7 +127,7 @@ export function extensionHostSide(deps: HostSideDeps): HostSide {
       read: () => deps.registry.read(),
       get: (id) => deps.registry.get(id),
       list: () => deps.registry.list(),
-      findForAccount: (repository, accountId, dockerHost) => deps.registry.findForAccount(repository, accountId, dockerHost),
+      findForAccount: (repository, accountId, dockerHost, source) => deps.registry.findForAccount(repository, accountId, dockerHost, source),
       // The volumes of a removal are the additional volumes of the entry, never the kept volumes of another devspace
       // or account.
       remove: async (id, volumes) => {

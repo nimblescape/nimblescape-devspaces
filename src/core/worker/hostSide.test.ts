@@ -79,7 +79,7 @@ function fakeHost(answers: Partial<Record<string, unknown>> = {}) {
       read: async () => (record('read'), of('read', { version: 1, devspaces: [] } as RegistryFile)),
       get: async (id) => (record('get', id), of('get', undefined)),
       list: async () => (record('list'), of('list', [] as Devspace[])),
-      findForAccount: async (repository, accountId, dockerHost) => (record('findForAccount', repository, accountId, dockerHost), of('findForAccount', undefined)),
+      findForAccount: async (repository, accountId, dockerHost, source) => (record('findForAccount', repository, accountId, dockerHost, ...(source === undefined ? [] : [source])), of('findForAccount', undefined)),
       remove: async (id, volumes) => void record('remove', id, volumes),
       forgetKeptVolumes: async (names) => void record('forgetKeptVolumes', names),
       // The lifecycle of a container.
@@ -180,11 +180,17 @@ describe('the requests of a flow in the worker', () => {
     expect(await worker.records.get('e1')).toEqual(DEVSPACE);
     expect(await worker.records.list()).toEqual([DEVSPACE]);
     expect(await worker.records.findForAccount('acme/app', 'a1', '')).toEqual(DEVSPACE);
+    // The source of the devspace reaches the records of this computer as the worker sends it.
+    expect(await worker.records.findForAccount('acme/app', 'a1', '', { kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' })).toEqual(DEVSPACE);
+    expect(calls.filter((call) => call.call === 'findForAccount').map((call) => call.args)).toEqual([
+      ['acme/app', 'a1', ''],
+      ['acme/app', 'a1', '', { kind: 'defaultImage', image: 'ghcr.io/acme/base:latest' }],
+    ]);
     await worker.records.remove('e1', { kept: ['v1'] });
     await worker.records.forgetKeptVolumes(['v1']);
     await worker.records.sessionFile('removePending', 'e1');
     // There is no `record add`, no `record update` and no `local settings`.
-    expect(requests.map((request) => request.kind)).toEqual(['local', 'local', 'record', 'record', 'record', 'record', 'record', 'record']);
+    expect(requests.map((request) => request.kind)).toEqual(['local', 'local', 'record', 'record', 'record', 'record', 'record', 'record', 'record']);
     expect(calls.filter((call) => call.call === 'processAlive')).toEqual([{ call: 'processAlive', args: [42] }]);
     expect(calls.at(-1)).toEqual({ call: 'sessionFile', args: ['removePending', 'e1'] });
   });

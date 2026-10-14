@@ -95,7 +95,8 @@ describe('the state of the devspaces on an engine that the refresh could not rea
     expect(before.remote.description).toBe('main   Connected · kept');
     const { remote } = rows({ currentDevspaceId: ON_DEVSPACE.id, kept: true, statesUnknown: { dockerHost: 'devspace', reason: 'notReady' } });
     expect(remote.description).toBe('main   State unknown (devspace not ready) · kept');
-    expect(remote.tooltip.split('\n')[1]).toBe('State unknown · kept');
+    // The source line comes first, the state line second.
+    expect(remote.tooltip.split('\n')[2]).toBe('State unknown · kept');
     expect(remote.state).toBe('connected');
     expect(remote.contextValue).toBe(before.remote.contextValue);
   });

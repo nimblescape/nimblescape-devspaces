@@ -419,8 +419,10 @@ describe('the entry of a first open, the configuration and the build records as 
   describe('configuration', () => {
     it('applies its closed list of fields as registryOpenRecords does', async () => {
       const { ask } = setup([entryOf(ID, { refusedUpdate: REFUSED, gitSummary: { branch: 'main', uncommittedFiles: 0, unpushedCommits: 0, stashes: 0, recordedAt: '2026-10-05T11:00:00.000Z' } })]);
+      // The root configuration under its other file name (the same source; another source is refused:
+      // hostSide.openVolumeNames.test.ts).
       const updated = (await ask('configuration', ID, {
-        select: '.devcontainer/python/devcontainer.json',
+        select: '.devcontainer.json',
         shutdownActionNone: true,
         addVolumes: ['devspaces-cache', 'devspaces-db'],
         addServiceVolumes: ['devspaces-db'],
@@ -429,7 +431,7 @@ describe('the entry of a first open, the configuration and the build records as 
         cloned: true,
       })) as Devspace;
       expect(updated).toMatchObject({
-        configPath: '.devcontainer/python/devcontainer.json',
+        configPath: '.devcontainer.json',
         shutdownActionNone: true,
         additionalVolumes: ['devspaces-cache', 'devspaces-db'],
         serviceVolumes: ['devspaces-db'],

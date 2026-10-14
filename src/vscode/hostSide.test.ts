@@ -92,6 +92,17 @@ describe('the HostSide of this computer', () => {
     expect(auth.getAccount).toHaveBeenLastCalledWith({ interactive: false });
   });
 
+  it('finds the devspace of a repository for an account with the source that the worker names, or without one', async () => {
+    const { all, registry, devspace } = deps();
+    registry.findForAccount.mockResolvedValue(devspace);
+    const host = extensionHostSide(all);
+    const source = { kind: 'configuration' as const, configPath: '.devcontainer/python/devcontainer.json' };
+    expect(await host.records.findForAccount('acme/app', '42', 'ssh://box', source)).toBe(devspace);
+    expect(registry.findForAccount).toHaveBeenLastCalledWith('acme/app', '42', 'ssh://box', source);
+    expect(await host.records.findForAccount('acme/app', '42', '')).toBe(devspace);
+    expect(registry.findForAccount).toHaveBeenLastCalledWith('acme/app', '42', '', undefined);
+  });
+
   // No generic change of a record (`record update`); the specific writes of the open: hostSide.openRequests.test.ts.
   it('writes the pending file of this window', async () => {
     const { all, sessionFiles } = deps();

@@ -1001,8 +1001,9 @@ export function devspaceOfVolume(volume: VolumeInfo, now: string, dockerHost: st
 }
 
 /**
- * The open pipeline and the devspace operations. Operations on the same repository run one after the other in this
- * window; busy marks in the registry keep other windows and the Monitor away while a devspace changes.
+ * The open pipeline and the devspace operations. Operations on the same devspace (the repository and the source,
+ * sourceOperationKey) run one after the other in this window; busy marks in the registry keep other windows and the
+ * Monitor away while a devspace changes.
  */
 export class DevspaceService extends OperationBase {
   /**
@@ -6454,13 +6455,19 @@ export class DevspaceService extends OperationBase {
         this.logger.warn(candidate.skipped);
         continue;
       }
-      // A volume of version 0.5.0 or older (no source label): the kind of the devspace from the build record of its
-      // newest devspace image.
+      // A volume of version 0.5.0 or older (no source label): the source of the devspace from the build record of its
+      // newest devspace image (its kind, and the configuration it was built from); the label of its dev container, when
+      // it still exists, decides the configuration path below.
       if (volume.labels[LABEL_DEFAULT_IMAGE] === undefined && volume.labels[LABEL_CONFIG_PATH] === undefined) {
         const found = await this.newestImageRecord(candidate);
-        if ('record' in found && found.record.defaultImage !== undefined) {
-          candidate.defaultImage = found.record.defaultImage;
-          this.logger.info(`The volume ${candidate.volumeName} is the default-image devspace of ${candidate.repository}, as its devspace image ${found.tag} records: it was built from ${found.record.defaultImage}.`);
+        if ('record' in found) {
+          candidate.configPath = found.record.configPath;
+          if (found.record.defaultImage !== undefined) {
+            candidate.defaultImage = found.record.defaultImage;
+            this.logger.info(`The volume ${candidate.volumeName} is the default-image devspace of ${candidate.repository}, as its devspace image ${found.tag} records: it was built from ${found.record.defaultImage}.`);
+          } else if (found.record.configPath !== DEFAULT_CONFIG_PATH) {
+            this.logger.info(`The volume ${candidate.volumeName} is the devspace of the configuration ${found.record.configPath} of ${candidate.repository}, as its devspace image ${found.tag} records.`);
+          }
         }
       }
       candidates.push(candidate);

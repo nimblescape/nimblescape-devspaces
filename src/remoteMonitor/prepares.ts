@@ -33,8 +33,10 @@ import { errorMessage } from '../core/errors';
 import { HelperChannel } from '../core/helperChannel/helperChannel';
 import { CHANNEL_ENTRY, OP_PREPARE, parsePrepareValue, type PrepareValue } from '../core/helperChannel/protocol';
 import { loaderCommand } from '../core/loader/pipeLoader';
-import { LABEL_DEVSPACE_ID, LABEL_PREPARED, LABEL_REPOSITORY, LABEL_VOLUME, PREPARED_IMAGE_TAG, devspaceImageRepository, resourceName } from '../core/names';
-import { isRepositoryName } from '../core/pipeline/recordRules';
+import { sourceSegment } from '../core/devspaceSource';
+import { LABEL_CONFIG_PATH, LABEL_DEFAULT_IMAGE, LABEL_DEVSPACE_ID, LABEL_PREPARED, LABEL_REPOSITORY, LABEL_VOLUME, PREPARED_IMAGE_TAG, devspaceImageRepository, resourceName } from '../core/names';
+import { DEFAULT_CONFIG_PATH, isRepositoryName } from '../core/pipeline/recordRules';
+import type { DevspaceSource } from '../core/types';
 import { NodeProcessRunner } from '../core/process';
 import type { Logger, StartOptions, StartedProcess } from '../core/ports';
 import { isWorkerScriptHash, readWorkerScript, removeOtherWorkerScripts } from '../core/remoteMonitor/workerScript';
@@ -94,9 +96,14 @@ export async function workspaceDevspaces(engine: Pick<PrepareEngine, 'volumeName
     const volume = (await engine.inspect('volume', name, AbortSignal.timeout(PREPARE_ENGINE_TIMEOUT_MS))) as { Name?: unknown; Labels?: unknown } | undefined;
     const labels = volume?.Labels;
     if (typeof volume?.Name !== 'string' || typeof labels !== 'object' || labels === null) continue;
-    const { [LABEL_DEVSPACE_ID]: id, [LABEL_REPOSITORY]: repository, [LABEL_VOLUME]: additional } = labels as Record<string, unknown>;
+    const { [LABEL_DEVSPACE_ID]: id, [LABEL_REPOSITORY]: repository, [LABEL_VOLUME]: additional, [LABEL_DEFAULT_IMAGE]: defaultImage, [LABEL_CONFIG_PATH]: configPath } = labels as Record<string, unknown>;
     if (additional !== undefined || !isStorageId(id) || !isPreparedRepository(repository)) continue;
-    if (volume.Name.toLowerCase() !== resourceName(repository, id).toLowerCase()) continue;
+    // The name of the devspace of these labels: with the word of its source (the labels of the volume name it), or
+    // without (a volume of version 0.5.0 or older). The worker's prepare checks the labels in full (devspaceOfVolume).
+    const source: DevspaceSource =
+      typeof defaultImage === 'string' ? { kind: 'defaultImage', image: defaultImage } : { kind: 'configuration', configPath: typeof configPath === 'string' ? configPath : DEFAULT_CONFIG_PATH };
+    const expected = [resourceName(repository, id, sourceSegment(source)), resourceName(repository, id)].map((name) => name.toLowerCase());
+    if (!expected.includes(volume.Name.toLowerCase())) continue;
     found.set(id, { id, repository });
   }
   return [...found.values()];

@@ -424,15 +424,17 @@ export class Controller implements vscode.Disposable {
     this.background(this.disconnectTask.request(), 'check the requests of other windows');
   }
 
-  /** The branches of the running containers were read: the status bar shows the current one. */
+  /**
+   * The branches of the running containers were read: the status bar shows the current one, and the name of the
+   * devspace as the sidebar shows it now (with the word of its source when the repository has several sources, which
+   * the list of the sidebar and the settings decide).
+   */
   onStatesRefreshed(): void {
     const current = this.current;
     if (!current) return;
     const branch = this.deps.sidebar.liveBranch(current.devspace.id);
-    if (branch && branch !== current.branch) {
-      current.branch = branch;
-      this.updateStatusBar();
-    }
+    if (branch && branch !== current.branch) current.branch = branch;
+    this.updateStatusBar();
   }
 
   dispose(): void {
@@ -1010,7 +1012,10 @@ export class Controller implements vscode.Disposable {
   ): Promise<{ repository: string; key: string; all: string[] } | undefined> {
     if (argument.kind === 'row') {
       const devspace = argument.devspaceId !== undefined ? await this.deps.registry.get(argument.devspaceId) : undefined;
-      const key = devspace?.repository ?? argument.repository;
+      // A row without a devspace of a repository that has one (a child row of another source): the switch of the
+      // repository is the one of its devspaces, under their registry name, as the sidebar shows it on every row.
+      const sibling = devspace ?? repositoryRows(this.deps.sidebar.model()).find((row) => row.repository.toLowerCase() === argument.repository.toLowerCase() && row.devspace !== undefined)?.devspace;
+      const key = sibling?.repository ?? argument.repository;
       return { repository: argument.repository, key, all: uniqueNames([argument.repository, key]) };
     }
     if (argument.kind === 'devspace') {
@@ -2315,7 +2320,10 @@ export class Controller implements vscode.Disposable {
         }
         // The title "Open repository…" only where the pick opens the repository.
         const info = await pickRepository(repositories, placeholder, pick === 'open' ? undefined : null);
-        return info ? this.pickedRepositoryTarget(info.nameWithOwner, signIn) : undefined;
+        if (!info) return undefined;
+        // Show on GitHub needs the repository only: no source, no devspace.
+        if (pick === 'gitHub') return { repository: info.nameWithOwner, info };
+        return this.pickedRepositoryTarget(info.nameWithOwner, signIn);
       }
     }
   }
@@ -2377,7 +2385,7 @@ export class Controller implements vscode.Disposable {
   }
 
   private requireDevspace(target: Target | undefined): Devspace | undefined {
-    if (target && !target.devspace) this.inform(Messages.noDevspace(this.displayName(target)));
+    if (target && !target.devspace) this.inform(Messages.noDevspace(this.shownName(target)));
     return target?.devspace;
   }
 

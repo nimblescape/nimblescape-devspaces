@@ -182,7 +182,8 @@ export class DevspaceOperations extends OperationBase {
 
   /**
    * The open of a repository (`open`) by the worker of the Docker target, as the operation `open` (openThroughWorker).
-   * The worker's pipeline finds the devspace of the repository of the signed-in account, or creates it.
+   * The worker's pipeline finds the devspace of the source of the repository (`options.source`, else the first
+   * configuration of the target) of the signed-in account, or creates it.
    */
   async openInWorker(target: RepositoryTarget, options: OpenOptions): Promise<OpenResult> {
     splitRepository(target.repository);

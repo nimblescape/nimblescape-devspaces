@@ -3,7 +3,8 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // Devspaces belong to the GitHub account that created them (docs/security.md "Accounts"). An account never sees,
-// starts, or connects to a devspace of another account; an account has at most one devspace per repository.
+// starts, or connects to a devspace of another account; an account has at most one devspace per repository, Docker
+// host and source (a Dev Container configuration, or the default image; devspaceSource.ts).
 import type { Devspace, GitHubAccount } from './types';
 
 /**

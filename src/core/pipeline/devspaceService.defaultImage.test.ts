@@ -219,6 +219,32 @@ describe('the default-image devspace of a repository', () => {
     expect((await h.registry.findForAccount(REPO, ACCOUNT.id, '', CONFIGURATION))?.id).toBe(OTHER_ID);
   });
 
+  it('registry lost: a volume of an alternative configuration without the source label (version 0.5.0) takes the configuration of its newest devspace image', async () => {
+    const python = '.devcontainer/python/devcontainer.json';
+    const name = resourceName(REPO, OTHER_ID);
+    const tag = devspaceImageName(REPO, OTHER_ID, 2);
+    const record: BuildRecord = {
+      builtAt: '2026-09-20T10:00:00.000Z',
+      devspaceImage: tag,
+      imageId: `sha256:image-of-${tag}`,
+      buildNumber: 2,
+      configPath: python,
+      configHash: 'sha256:config',
+      images: { [BASE_IMAGE]: DIGEST_NEW },
+      features: {},
+    };
+    h.docker.volumes.set(name, { [LABEL_DEVSPACE_ID]: OTHER_ID, [LABEL_REPOSITORY]: REPO, [LABEL_OWNER_ID]: ACCOUNT.id });
+    h.docker.images.add(tag);
+    h.docker.imageConfigs.set(tag, { ...imageConfigWithUser('vscode'), Labels: imageRecordLabels({ id: OTHER_ID, repository: REPO, owner: ACCOUNT }, record) });
+    expect(await h.service.reconcileFromVolumes()).toBe(1);
+    expect(await h.registry.get(OTHER_ID)).toMatchObject({ configPath: python, volumeName: name });
+    expect(await h.registry.get(OTHER_ID)).not.toHaveProperty('defaultImage');
+    expect(h.logger.infos).toContain(`The volume ${name} is the devspace of the configuration ${python} of ${REPO}, as its devspace image ${tag} records.`);
+    // The row of the configuration `python` finds it; the root configuration has no devspace.
+    expect((await h.registry.findForAccount(REPO, ACCOUNT.id, '', { kind: 'configuration', configPath: python }))?.id).toBe(OTHER_ID);
+    expect(await h.registry.findForAccount(REPO, ACCOUNT.id, '', CONFIGURATION)).toBeUndefined();
+  });
+
   it('asks Rebuild now or Later when the default image of the settings changed; Later keeps the container and records the new image', async () => {
     await seedDefaultImageDevspace({ container: 'stopped' });
     h.ui.configurationChangedAnswer = 'later';

@@ -172,7 +172,8 @@ export interface RepositoryRow {
   kind: 'repository';
   /**
    * Stable tree item ID: `repo:` + lower-case owner/name for the one row of a repository; `repo:<owner/name>:<source
-   * key>` (sourceKey) for a child row.
+   * key>` (sourceKey) for a child row; with the suffix `#<devspace ID>` for the second and further devspaces of one
+   * source (one per Docker host).
    */
   id: string;
   /** `owner/name`, with the case that GitHub uses when the discovery lists it. */
@@ -234,7 +235,7 @@ export interface RepositoryNode {
   /** The repository name. */
   label: string;
   tooltip: string;
-  /** Initial state in the view: expanded, so that the rows with the buttons show. */
+  /** Initial state in the view: expanded while a child row has a devspace, so that its state and buttons show. */
   expanded: boolean;
   /** One row per source, in the order of possibleSources; a source with several devspaces (one per Docker host) has a row per devspace. */
   children: RepositoryRow[];
@@ -576,11 +577,14 @@ export function buildTreeModel(input: TreeInput): OwnerGroup[] {
  */
 function repositoryEntries(key: string, info: RepositoryInfo | undefined, devspaces: readonly Devspace[], confirmedMissing: boolean, input: TreeInput): RepositoryEntry[] {
   const repository = info?.nameWithOwner ?? devspaces[0]?.repository ?? key;
+  // The host access checks of the repository are read under the registry name of its devspaces (the name the pipeline
+  // reads, which keeps the old name after a rename or a transfer on GitHub), on every row of the repository alike.
+  const checksName = devspaces[0]?.repository ?? repository;
   const sources = possibleSources({ info, devspaces, settings: input.settings });
   const baseId = `repo:${key}`;
   const rowsOf = (source: DevspaceSource, id: string, child: boolean): RepositoryRow[] => {
     const matching = devspaces.filter((devspace) => isSourceOf(devspace, source));
-    if (matching.length === 0) return [repositoryRow(id, repository, info, source, child, input)];
+    if (matching.length === 0) return [repositoryRow(id, repository, checksName, info, source, child, input)];
     return matching.map((devspace, index) => devspaceRow(index === 0 ? id : `${id}#${devspace.id}`, devspace, info, source, child, confirmedMissing, input));
   };
   if (sources.length <= 1) {
@@ -592,7 +596,7 @@ function repositoryEntries(key: string, info: RepositoryInfo | undefined, devspa
   const children = sources.flatMap((source) => rowsOf(source, `${baseId}:${sourceKey(source)}`, true));
   const { owner, name } = info ? { owner: info.owner, name: info.name } : splitName(repository);
   const tooltip = [repository, TreeTexts.sources(sources.length), info?.isArchived ? TreeTexts.archived : undefined].filter(isText).join('\n');
-  return [{ kind: 'repositoryNode', id: baseId, repository, owner, name, info, label: name, tooltip, expanded: true, children }];
+  return [{ kind: 'repositoryNode', id: baseId, repository, owner, name, info, label: name, tooltip, expanded: children.some((row) => row.devspace !== undefined), children }];
 }
 
 /** Whether a repository entry carries a devspace: the row has one, or a child row of the node has one. */
@@ -863,6 +867,7 @@ function devspaceRow(
   const formatTime = input.formatTime ?? defaultFormatTime;
   const tooltip = [
     devspaceName(repository, source, child),
+    sourceLine(source),
     [unknown !== undefined ? [StateTexts.unknown, keptAny ? StateTexts.kept : undefined].filter(isText).join(' · ') : rowStateText(state, keptAny), services, changes]
       .filter(isText)
       .join(' · '),
@@ -872,7 +877,6 @@ function devspaceRow(
     keptBySettingText,
     servicesRunning ? TreeTexts.servicesRunning : undefined,
     branch !== undefined ? TreeTexts.branch(branch) : undefined,
-    sourceLine(source),
     timeValue(devspace.lastUsedAt) > 0 ? TreeTexts.lastUsed(formatTime(devspace.lastUsedAt)) : undefined,
     notOnGitHub ? TreeTexts.notListedOnGitHub : undefined,
     info?.isArchived ? TreeTexts.archived : undefined,
@@ -910,15 +914,16 @@ function devspaceRow(
  * The row of a source of a repository without devspace of the signed-in account. A devspace of another account does
  * not change it: Start creates the account's own devspace.
  */
-function repositoryRow(id: string, repository: string, info: RepositoryInfo | undefined, source: DevspaceSource, child: boolean, input: Pick<TreeInput, 'settings'>): RepositoryRow {
+/** The row of a source without a devspace; `checksName` is the name the host access checks are read under. */
+function repositoryRow(id: string, repository: string, checksName: string, info: RepositoryInfo | undefined, source: DevspaceSource, child: boolean, input: Pick<TreeInput, 'settings'>): RepositoryRow {
   const { owner, name } = info ? { owner: info.owner, name: info.name } : splitName(repository);
   const actions = rowActions(undefined, info);
-  const checks = hostAccessChecks(repository, input.settings);
+  const checks = hostAccessChecks(checksName, input.settings);
   const tooltip = [
     devspaceName(repository, source, child),
+    sourceLine(source),
     TreeTexts.noDevspace,
     !child && source.kind === 'defaultImage' && !hasConfiguration(info) ? TreeTexts.noConfiguration : undefined,
-    sourceLine(source),
     info?.defaultBranch ? TreeTexts.defaultBranch(info.defaultBranch) : undefined,
     info?.isArchived ? TreeTexts.archived : undefined,
     checks === 'off' ? Messages.hostAccessUnrestrictedTooltip : undefined,
