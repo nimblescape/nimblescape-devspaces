@@ -33,12 +33,18 @@ describe('the restored window of a devspace whose open pipeline takes several mi
     return Number(result.out);
   }
 
-  it('ran the open pipeline before it connected', async () => {
+  it('ran the open pipeline before it connected, and it started the stopped container', async () => {
     await connectedFolder();
     const log = channelLog('Devspaces');
     assert.match(log, /This window was restored or reloaded\. The open pipeline of devspaces-test\/attach runs before it connects\./);
+    // The progress of the open in the worker (helperChannel.ts): the step of the container start.
+    assert.match(log, /\] open#\d+: starting/);
     assert.match(log, /devspaces-test\/attach is ready in the container /);
-    assert.strictEqual(docker(['inspect', '-f', '{{.State.Status}}', containerName]).trim(), 'running');
+    const [status, created, started] = docker(['inspect', '-f', '{{.State.Status}} {{.Created}} {{.State.StartedAt}}', containerName]).trim().split(' ');
+    assert.strictEqual(status, 'running');
+    // The container of the earlier runs, not a new one (for example after an image update): the mark of the CI job is
+    // only in that one.
+    assert.ok(Date.parse(started) - Date.parse(created) > 10_000, `The pipeline made the container again (created ${created}, started ${started})`);
   });
 
   it('waited for the long postStartCommand in the pipeline', () => {
