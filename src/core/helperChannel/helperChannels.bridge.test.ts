@@ -129,6 +129,11 @@ describe('the bridge fallback of openHelperChannel', () => {
     }
   });
 
+  it('starts again without network also when the refused start ended before its input was written', async () => {
+    const { networks } = await open(() => refused('docker: Error response from daemon: network "bridge" not found.\n', { ended: true }));
+    expect(networks).toEqual(['bridge', 'none']);
+  });
+
   it('another failure that names the bridge is not retried', async () => {
     await expect(open(() => refused('docker: Error response from daemon: failed to create endpoint on network bridge: address already in use.\n'))).rejects.toMatchObject({
       networks: ['bridge'],
@@ -174,7 +179,8 @@ describe('the number of a worker name in use', () => {
     expect(linked.names).toEqual(['devspaces-api-worker1', 'devspaces-api-worker3']);
   });
 
-  // The Docker CLI can end before the extension writes the input of `docker run`: the name in use is in its end only.
+  // The Docker CLI can end before the extension writes the input of `docker run`: Docker's refusal of the name is only
+  // in its error output, which comes after the failed write.
   it('takes the next number also when the refused start ended before its input was written', async () => {
     const { names, infos } = await openWith({ containers: ['devspaces-api-worker1'] }, () => refused(IN_USE, { ended: true }));
     expect(names).toEqual(['devspaces-api-worker1', 'devspaces-api-worker2']);

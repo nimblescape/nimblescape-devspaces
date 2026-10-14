@@ -321,6 +321,8 @@ export class HelperChannel {
   private readonly closeListeners = new Set<(reason: string) => void>();
   private pingTimer: ReturnType<typeof setInterval> | undefined;
   private stderrTail = '';
+  /** A write failed while the channel opened (write): the process is stopped, and its end loses the channel. */
+  private inputClosed = false;
   private helloReceived: ((message: Extract<ServerMessage, { t: 'hello' }>) => void) | undefined;
   private closedReason: string | undefined;
   private lastUsedAt = Date.now();
@@ -381,8 +383,14 @@ export class HelperChannel {
       // Only the short lines of the tail reach the log (Node.js prints the source line of an uncaught error, and the
       // script is one long line). The script has short lines too, so readableStderr also drops the source excerpt by
       // its shape.
-      const detail = error ? error.message : readableStderr(this.stderrTail, STDERR_TAIL_LENGTH) || `exit code ${exitCode}`;
-      this.lose(`the helper ended (${detail})`);
+      const stderr = error ? '' : readableStderr(this.stderrTail, STDERR_TAIL_LENGTH);
+      // A process that the stop after a failed write ended (by a signal, so no exit code), and that said nothing: the
+      // write is the better reason.
+      if (!error && stderr === '' && exitCode === null && this.inputClosed) {
+        this.lose('its input cannot be written');
+        return;
+      }
+      this.lose(`the helper ended (${error ? error.message : stderr || `exit code ${exitCode}`})`);
     });
     // The loader limits the escaped line, so the same is checked here (the memory guard of the pipe loader,
     // MAX_BUNDLE_LINE_LENGTH).
@@ -432,11 +440,12 @@ export class HelperChannel {
   }
 
   /**
-   * Writes a line; a failed write loses the channel. While the channel opens, a failed write means that the process
-   * ended before it read its input, for example a `docker run` that the daemon refused at once (the name of the
-   * container in use: openHelperChannel then takes the next name). Only the end of the process says why (its error
-   * output, which is read after this write), so the process is stopped, and the channel is lost with the reason of its
-   * end (start), as when the end comes before the write.
+   * Writes a line; a failed write loses the channel. While the channel opens, a failed write means that the input of
+   * the process is closed: usually the process ended before it read its input, for example a `docker run` that the
+   * daemon refused at once (the name of the container in use: openHelperChannel then takes the next name). Only the end
+   * of the process says why (its error output, which the extension reads after this write), so the process is stopped
+   * (in case it still runs), and the channel is lost with the reason of its end (start), as when the process ends after
+   * a write that succeeded.
    */
   private write(line: string): boolean {
     if (this.state === 'closed') return false;
@@ -447,8 +456,10 @@ export class HelperChannel {
       written = false;
     }
     if (!written) {
-      if (this.state === 'opening') this.process.kill();
-      else this.lose('its input cannot be written');
+      if (this.state === 'opening') {
+        this.inputClosed = true;
+        this.process.kill();
+      } else this.lose('its input cannot be written');
     }
     return written;
   }

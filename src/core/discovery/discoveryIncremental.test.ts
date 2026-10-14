@@ -64,9 +64,10 @@ class FakeGitHub implements HttpTransport {
   private listEnd?: { promise: Promise<void>; resolve: () => void };
 
   /**
-   * From now on, a batch of lookups answers only when the last page of the list (DISCOVERY_QUERY) was answered, after
-   * its own delay: the order of the answers no longer depends on the speed of the computer, as it does with the delays
-   * alone. A page that waits for a batch then waits for good, and the test ends with its timeout.
+   * Until the next list ends, a batch of lookups answers only after the last page of that list (DISCOVERY_QUERY; a list
+   * of the owners of a scope never ends the hold) was answered, and after its own delay: the order of the answers no
+   * longer depends on the speed of the computer, as it does with the delays alone. A page that waits for a batch then
+   * waits until the test reaches its timeout.
    */
   holdLookupsUntilListEnd(): void {
     let resolve!: () => void;
@@ -575,8 +576,8 @@ describe('the request pattern of a refresh: list pages beside the lookups, at mo
     ]);
     expect(github.lookups().map((request) => Object.keys(request.variables).length / 2)).toEqual([...Array(13).fill(50), 14]);
     expect(github.requests).toHaveLength(21);
-    // The pages started while 3 batches were open, and loaded although no batch ended before the last page: the pages
-    // overlap with the lookups and never wait for them.
+    // The later pages started while 3 batches were open, and loaded although no batch ended before the last page: the
+    // pages overlap with the lookups and never wait for them.
     expect(github.events.indexOf('start Configurations')).toBeLessThan(github.events.lastIndexOf('start Discover'));
     const counts = openCounts(github.events);
     expect(counts.lookupsAtPageStart).toBe(DISCOVERY_CONCURRENCY - 1);

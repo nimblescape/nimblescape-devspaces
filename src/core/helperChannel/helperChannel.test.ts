@@ -128,7 +128,8 @@ describe('HelperChannel', () => {
   });
 
   // A `docker run` that the daemon refused at once can end before the extension writes the script: the write fails,
-  // and its error output and its end come after the write, as the pipes of an ended process are read.
+  // and its error output and its end come after the write, because the extension reads the pipes of the ended process
+  // only later.
   it('fails to open with the reason of the end of a process that ended before its input was written, not of the write', async () => {
     let stderr: ((text: string) => void) | undefined;
     let exit!: (value: { exitCode: number | null }) => void;
@@ -156,6 +157,13 @@ describe('HelperChannel', () => {
     exit({ exitCode: 125 });
     expect((await failure)?.message).toBe(
       'The helper channel to build-box could not be opened: the helper ended (docker: Error response from daemon: Conflict. The container name "/devspaces-api-worker1" is already in use by container "0123456789ab".)',
+    );
+
+    // A process with a closed input that the stop ended, and that said nothing: the failed write is the reason.
+    let exitSilent!: (value: { exitCode: number | null }) => void;
+    const silent: StartedProcess = { ...ended, kill: () => exitSilent({ exitCode: null }), exited: new Promise((resolve) => (exitSilent = resolve)) };
+    await expect(HelperChannel.open(silent, 'SCRIPT', { logger, name: 'build-box' })).rejects.toThrow(
+      'The helper channel to build-box could not be opened: its input cannot be written',
     );
   });
 
@@ -842,8 +850,8 @@ describe('HelperChannel: the requests of an operation', () => {
   });
 });
 
-// The same with a real program (NodeProcessRunner.start) that ended before the channel wrote to it: its input is
-// closed, and its error output is read only after the failed write.
+// The same with a real program (NodeProcessRunner.start) that ended before the channel wrote to it: the write fails,
+// and the end of the program is handled only after that write.
 describe('HelperChannel with a program that ended before its input was written', () => {
   it('fails to open with the error output of the program', async () => {
     const conflict = 'docker: Error response from daemon: Conflict. The container name "/devspaces-window-worker1" is already in use by container "0123456789ab".';
