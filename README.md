@@ -4,6 +4,16 @@ Open your GitHub repositories in dev containers with one click, much like GitHub
 
 Devspaces lists the GitHub repositories that you can access and that contain a Dev Container configuration. **Start** opens a repository in its own dev container, a **devspace**, and connects the VS Code window to it. The containers run on the Docker of your computer, or on Docker on another computer that you reach over SSH.
 
+## What Devspaces does on your computer
+
+- **GitHub sign-in.** Devspaces uses the GitHub sign-in of VS Code with the scopes `repo` (list and clone your repositories, also the private ones) and `read:org` (read your organization memberships). Only for a private image on `ghcr.io`, it also asks for `read:packages`. It stores no token.
+- **Docker and the Dev Containers CLI.** Devspaces runs the Docker CLI on your computer. On the Docker engine, the Docker of your computer or Docker on another computer that you reach over SSH, its helper containers clone your repositories into Docker volumes, and build, create, start, stop and remove the containers of your devspaces with the Docker Engine API and the Dev Containers CLI.
+- **Docker installation.** When Docker is missing, Devspaces can install it. It first shows the exact commands, or the download address of the installer, and runs them only after you confirm, in a terminal of VS Code that you see.
+- **Background container.** On each Docker engine, the container `devspaces-monitor` runs in the background, also while no devspace runs. It keeps the images of your devspaces, the VS Code Server and your extensions up to date, removes older versions of those images that no container uses, and stops a devspace a few minutes after its last window closes, unless you keep it running.
+- **Network.** Devspaces and its containers connect to GitHub, to the image registries of your Dev Container configurations, to the update service of VS Code, to the Visual Studio Marketplace, and to Docker for its installation. Devspaces collects no telemetry.
+
+[Security](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/security.md#what-devspaces-does-on-your-computer) describes each step and what Devspaces protects.
+
 ## Features
 
 - **One click to code.** Devspaces clones the repository into a Docker volume, builds the image, creates the container, and connects the window. Git on your computer is not needed.

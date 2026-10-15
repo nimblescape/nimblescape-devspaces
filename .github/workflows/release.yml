@@ -24,12 +24,17 @@
 # is stored. A re-run keeps the VSIX that the release already holds, and the
 # Marketplace skips a version that it already holds, so no version is
 # published twice. A dry run, also from another branch than main, runs the
-# version job and CI only and then deletes its temporary branch, so it tests a
-# release, and a change of this workflow, without a change of main, a tag, a
-# release or the Marketplace.
+# version job, CI and the check of the package only and then deletes its
+# temporary branch, so it tests a release, and a change of this workflow,
+# without a change of main, a tag, a release or the Marketplace; its run name
+# ends with "(dry run)". The script scripts/release-checks.mjs checks the
+# release rules of CONTRIBUTING.md: the version job checks the extension ID and
+# the publishing steps, and the job "Check the package" and the publish job
+# check that the VSIX holds the extension ID of package.json and changes more
+# than the version and the change log since the last release.
 
 name: Release
-run-name: Release ${{ inputs.version }}
+run-name: Release ${{ inputs.version }}${{ inputs.dry_run && ' (dry run)' || '' }}
 
 on:
   workflow_dispatch:
@@ -119,6 +124,10 @@ jobs:
             echo "tag=v$version"
             echo "vsix=$(node -p 'require("./package.json").name')-$version.vsix"
           } >> "$GITHUB_OUTPUT"
+
+      # Rules 1, 2 and 5 of CONTRIBUTING.md: the extension ID, and who publishes how.
+      - name: Check the release rules
+        run: node scripts/release-checks.mjs rules
 
       # package.json keeps its formatting, so only its version line changes. npm
       # writes package-lock.json with two spaces and a final line break.
@@ -211,9 +220,41 @@ jobs:
     with:
       ref: ${{ needs.version.outputs.sha }}
 
+  # Rules 1 and 3 of CONTRIBUTING.md in the VSIX of the CI job, also in a dry run.
+  package:
+    name: Check the package
+    needs: [version, ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the source of the release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up the pinned Node release
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Download the VSIX of the CI job
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vsix
+
+      # The check downloads the VSIX of the last release with the GitHub CLI.
+      - name: Check the extension ID and the changes since the last release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VSIX: ${{ needs.version.outputs.vsix }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: node scripts/release-checks.mjs package "$VSIX" $DRY_RUN
+
   github-release:
     name: Main, tag and GitHub release
-    needs: [version, ci]
+    needs: [version, ci, package]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -352,6 +393,14 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           VSIX: ${{ needs.version.outputs.vsix }}
         run: gh release download "$TAG" --pattern "$VSIX"
+
+      # The VSIX of the GitHub release is the file that the Marketplace receives, so the rules 1 and 3 hold for it.
+      - name: Check the extension ID and the changes since the last release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VSIX: ${{ needs.version.outputs.vsix }}
+        run: node scripts/release-checks.mjs package "$VSIX"
 
       - name: Sign in to Microsoft Entra ID
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0

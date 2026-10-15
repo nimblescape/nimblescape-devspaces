@@ -14,15 +14,16 @@ the extension. The [README](README.md) describes the use in short, the
 | `test/docker/` | The integration tests against a running Docker engine. |
 | `test/vscode/` | The tests in a real VS Code: mocha runs them in the extension host of a VS Code that `@vscode/test-cli` downloads. `test/vscode/host/` is a development extension without code, for the tests of the packaged VSIX. `test/vscode/attach/` holds the attach tests, `test/vscode/github/` the sign-in provider `github` that they use instead of the real GitHub sign-in, and `test/vscode/untrusted/` the tests in a folder that VS Code does not trust. |
 | `resources/` | The files of the package beside the bundles: the icons, the Dockerfile of the workspace helper, and the editor of the repository groups. |
-| `scripts/` | The build of the icon font, the local installation, the Marketplace setup of the repository (`marketplace-setup.sh`), the reset of a Docker engine for tests (`purge-docker-context.sh`), and the programs of the tests in a real VS Code, for example `vscode-with-trust.mjs`, which starts the test VS Code without `--disable-workspace-trust` for the configuration `untrusted`. |
+| `scripts/` | The build of the icon font, the local installation, the Marketplace setup of the repository (`marketplace-setup.sh`), the checks of the [release rules](#release-rules) (`release-checks.mjs`, with its test `release-checks.test.mjs`), the reset of a Docker engine for tests (`purge-docker-context.sh`), and the programs of the tests in a real VS Code, for example `vscode-with-trust.mjs`, which starts the test VS Code without `--disable-workspace-trust` for the configuration `untrusted`. |
 | `docs/` | The user guide, the architecture, and the security model. |
 | `esbuild.mjs` | Bundles the three entry points into `dist/`. |
 | `.vscode-test.mjs` | The configurations of the tests in a real VS Code: `vscode` for the development build (`npm run test:vscode`), `vsix` for the packaged VSIX (`npm run test:vscode:vsix`), `untrusted` for the packaged VSIX in a local folder that VS Code does not trust (Restricted Mode, also `npm run test:vscode:vsix`), and `attach` for the attach tests (only when `DEVSPACE_TEST_ATTACH` is `plain`, `devspace`, `reattach`, a restart of VS Code in the window of the devspace, `account`, that window under another GitHub account, `longopen`, that window with an open pipeline of several minutes, `remote`, the window of a devspace on the Docker engine of another computer over SSH, `stopped`, a local folder whose tests start a second VS Code in the window of the devspace and stop and remove its container, `previous`, the window of the devspace with the last released version of the extension, or `updated`, that window again after the update to the VSIX of the checkout), with the VS Code version, the test files in `out/test/vscode/`, and the options of VS Code and mocha. |
 | `package.json` | The extension manifest. The section [Manifest](#manifest) explains it. |
 | `package-lock.json` | The locked development tools. npm writes this file, and nobody edits it by hand. |
 | `.node-version` | The Node release of the release workflow and of `npm run package`. `actions/setup-node` in the workflows and local Node version managers read it. |
-| `.github/workflows/ci.yml` | Tests and packages every push to `main`, every pull request and the commit of every release, runs the unit tests a second time as root, fails when a unit test ran in neither run, runs the integration tests against Docker, and runs the tests in a real VS Code under a virtual display (`xvfb-run`). After the tests in VS Code of the job "vscode" on Linux, `node scripts/leftoverPrograms.mjs` fails when a program of that VS Code still runs 10 seconds after it quit, except the `docker exec` programs of Dev Containers and their `ssh` programs. |
+| `.github/workflows/ci.yml` | Tests and packages every push to `main`, every pull request and the commit of every release, runs the unit tests a second time as root, fails when a unit test ran in neither run, checks the [release rules](#release-rules) of the source, runs the integration tests against Docker, and runs the tests in a real VS Code under a virtual display (`xvfb-run`). After the tests in VS Code of the job "vscode" on Linux, `node scripts/leftoverPrograms.mjs` fails when a program of that VS Code still runs 10 seconds after it quit, except the `docker exec` programs of Dev Containers and their `ssh` programs. |
 | `.github/workflows/release.yml` | Releases a version on a manual start: commits the version to a temporary branch, tests and packages it with `ci.yml`, and only then moves `main` to it, creates its tag and GitHub release and publishes it to the Marketplace. A dry run tests without a change. The section [Release](#release) explains it. |
+| `.github/workflows/release-dry-run.yml` | Fails on a pull request that changes the release process until a dry run on its branch tested the change (rule 4 of the [release rules](#release-rules)). |
 | `.github/workflows/vscode-versions.yml` | Runs the VS Code jobs of `ci.yml` once per week (Mondays at 04:23 UTC) and on a manual start, on VS Code Insiders and on the version of `engines.vscode` in `package.json`, the lowest version that the extension supports. A change of the workflow runs it on its pull request. The VS Code CLI installs the newest release of Dev Containers that supports the VS Code version, and the tests print both versions. Each attach job keeps the Insiders build that is the newest at its start. GitHub documents that it sends the notice of a failed scheduled run to the person who last changed the `cron` line, and that it turns off the schedule of a public repository after 60 days without activity in the repository; the tab "Actions" turns it on again. |
 | `.github/workflows/marketplace-identity.yml` | Prints the Marketplace member ID of the publishing identity, to check the setup of the repository. |
 | `.github/dependabot.yml` | Proposes weekly updates of the development tools and of the pinned actions. |
@@ -96,28 +97,33 @@ in `package.json`. The workflow "Release" creates the version, its tag, its
 GitHub release and its Marketplace version in one run. To release a version,
 follow these steps:
 
-1. Optional: add a section `## <version>` to `CHANGELOG.md` on `main`.
+1. Optional: add a section `## <version>` to `CHANGELOG.md` on `main`. The section describes the changes for the users (see [Release rules](#release-rules)).
 2. In the tab "Actions", choose the workflow "Release", then "Run workflow" on the branch `main`. Enter the version, for example `0.1.7`. When `CHANGELOG.md` has no section for the version, enter its notes too: they become the section. The GitHub website starts a workflow also in the browser of a phone.
 
-The run has four jobs:
+The run has five jobs:
 
-1. "Version commit" checks that the run starts from `main`, that the version has the form `<major>.<minor>.<patch>`, that it is not lower than the version in `package.json` and that its tag does not exist. It sets the version in `package.json` and `package-lock.json`, adds the section of the notes to `CHANGELOG.md` when the file has none, commits the change as "Release `<version>`" and pushes it to the temporary branch `release/run-<run ID>`, not to `main`. When `main` holds the version and its section already, it commits nothing. It also deletes the temporary branches of earlier runs that failed.
+1. "Version commit" checks that the run starts from `main`, that the version has the form `<major>.<minor>.<patch>`, that it is not lower than the version in `package.json` and that its tag does not exist, and it checks the [release rules](#release-rules) of the source with `scripts/release-checks.mjs rules`. It sets the version in `package.json` and `package-lock.json`, adds the section of the notes to `CHANGELOG.md` when the file has none, commits the change as "Release `<version>`" and pushes it to the temporary branch `release/run-<run ID>`, not to `main`. When `main` holds the version and its section already, it commits nothing. It also deletes the temporary branches of earlier runs that failed.
 2. "CI" runs the workflow `ci.yml` for the commit of the version, because a push with the token of a workflow starts no other workflow. The VSIX that this job tests and builds is the VSIX of the release, so the release repeats no test and no build.
-3. "Main, tag and GitHub release" runs only when CI passed. It moves `main` to the commit of the version as a fast-forward and deletes the temporary branch. When `main` changed during the run, it stops before the tag. Then it creates the tag `v<version>` on the commit and the release of the tag with the GitHub CLI `gh`. The section of the version in `CHANGELOG.md` becomes the notes, and the VSIX becomes the file of the release. A release that exists keeps its notes and receives the VSIX only when it holds none.
-4. "Publish to the Visual Studio Marketplace" downloads the VSIX of the GitHub release, signs in to Microsoft Entra ID with the official [`azure/login`](https://github.com/Azure/login) action and publishes the VSIX with `vsce publish --azure-credential`.
+3. "Check the package" checks the VSIX of CI with `scripts/release-checks.mjs package`: the VSIX holds the extension ID and the version of `package.json`, and it changes more than the version and the change log since the newest release before the version.
+4. "Main, tag and GitHub release" runs only when CI and the check of the package passed. It moves `main` to the commit of the version as a fast-forward and deletes the temporary branch. When `main` changed during the run, it stops before the tag. Then it creates the tag `v<version>` on the commit and the release of the tag with the GitHub CLI `gh`. The section of the version in `CHANGELOG.md` becomes the notes, and the VSIX becomes the file of the release. A release that exists keeps its notes and receives the VSIX only when it holds none.
+5. "Publish to the Visual Studio Marketplace" downloads the VSIX of the GitHub release, checks it again as the job "Check the package" does, signs in to Microsoft Entra ID with the official [`azure/login`](https://github.com/Azure/login) action and publishes the VSIX with `vsce publish --azure-credential`.
 
-`main` receives the version commit only after CI passed. When CI fails,
-`main`, the tags, the releases and the Marketplace stay unchanged, and the
-version stays free: fix the cause on `main` and start the release of the same
-version again. The jobs move and push with the token of the workflow, so a
-rule of `main` that blocks direct pushes stops the release.
+`main` receives the version commit only after CI and the check of the
+package passed. When one of them fails, `main`, the tags, the releases and the
+Marketplace stay unchanged, and the version stays free: fix the cause on
+`main` and start the release of the same version again. The jobs move and push
+with the token of the workflow, so a rule of `main` that blocks direct pushes
+stops the release.
 
 A dry run tests a release without a change: choose "Dry run" when you start
 the workflow. The run makes the version commit on its temporary branch, runs
-CI for it and deletes the branch; it changes neither `main`, a tag, a release
-nor the Marketplace. A dry run may start from another branch than `main`, so
-it also tests a change of `release.yml` on that branch before the change
-reaches `main`.
+CI and the check of the package for it and deletes the branch; it changes
+neither `main`, a tag, a release nor the Marketplace. Its run name ends with
+"(dry run)". A dry run may start from another branch than `main`, so it also
+tests a change of `release.yml` on that branch before the change reaches
+`main`. In a dry run, a package that changes nothing for the users is a
+warning, not an error, so that a change of the release process can be tested
+also when no change for the users waits for its release.
 
 When a job fails, remove the cause and choose "Re-run failed jobs" on the
 run. A re-run keeps the tag and the VSIX that the GitHub release already
@@ -125,9 +131,26 @@ holds, and the Marketplace skips a version that it already holds, so a re-run
 never publishes a version twice. A new run deletes the temporary branch of a
 failed run, so a failed run can no longer be re-run after a new run started.
 
-The workflows `release.yml` and `marketplace-identity.yml` and this section
-are the same in every extension repository of nimblescape. A change to them
-goes into every repository.
+The workflows `release.yml`, `release-dry-run.yml` and
+`marketplace-identity.yml`, the script `scripts/release-checks.mjs` with its
+test `scripts/release-checks.test.mjs`, and this section are the same in every
+extension repository of nimblescape. A change to them goes into every
+repository.
+
+### Release rules
+
+On 15 October 2026, nimblescape promised these rules to the Visual Studio
+Marketplace team, after the Marketplace had removed all extensions of the
+publisher `nimblescape` as "Untrustworthy" on 13 October 2026. The script
+`scripts/release-checks.mjs` checks each rule that a program can check, and
+the workflows run it. The checks also run in a clone, for example
+`node scripts/release-checks.mjs rules`.
+
+1. **One ID for good.** An extension keeps its ID `nimblescape.nimblescape-<name>` (see [Naming](#naming)), and nimblescape never publishes an extension under a new ID. The check `rules`, in CI and in the job "Version commit", fails when `publisher` is not `nimblescape`, when `name` does not have the form `nimblescape-<name>` or is not the name of the repository, when `displayName` does not have the form `nimblescape <Title>`, or when the ID differs from the ID of the newest release tag. The check `package`, in the jobs "Check the package" and "Publish to the Visual Studio Marketplace", fails when the VSIX holds another ID or version than `package.json`.
+2. **No deletion.** nimblescape never deletes an extension. The check `rules` fails when a workflow or an npm script runs `vsce unpublish`, which deletes the extension on the Marketplace. An extension that is no longer wanted is unpublished on the publisher management page, as [Naming](#naming) describes.
+3. **Only changes for the users.** A version is published only when it changes something for the users, and its section in `CHANGELOG.md` describes that change. The check `package` compares the files of the extension in the VSIX with those of the newest release before the version, without the version in `package.json` and without the change log. When nothing else differs, the release stops before its tag.
+4. **Dry run first.** A change of the release process is tested with a dry run before it reaches `main`. On a pull request that changes `release.yml` or `scripts/release-checks.mjs`, also an update by Dependabot, the workflow "Release dry run" fails until a dry run on the branch of the pull request succeeded with these two files as they are at the head of the pull request. Start the workflow "Release" on that branch with "Dry run" and a version without a tag (with notes when `CHANGELOG.md` has no section for the version), then re-run the job "release dry run" of the pull request.
+5. **Only GitHub Actions with Microsoft Entra ID.** Only the job "Publish to the Visual Studio Marketplace" publishes, signed in with the app registration of [Marketplace setup](#marketplace-setup). No personal access token exists for the publisher, and nobody runs `vsce login` or `vsce publish` on a computer. The check `rules` fails when a workflow other than `release.yml` runs `vsce publish`, when `vsce publish` runs without `--azure-credential`, when a workflow uses `VSCE_PAT`, `vsce login` or the option `-p` or `--pat` of vsce, or when an npm script runs `vsce publish`, `vsce unpublish` or `vsce login`.
 
 ## Marketplace setup
 
