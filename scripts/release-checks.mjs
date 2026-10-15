@@ -376,9 +376,18 @@ async function checkDryRun() {
       await Promise.all(RELEASE_FILES.map(async (file) => (await api(`repos/${repository}/contents/${file}?ref=${ref}`, true))?.sha ?? null)),
     );
   const wanted = await blobs(head);
+  // The release of the newest tag ran with its files, so the same files need no new dry run.
+  const tag = newestTag(releaseTags());
+  if (tag !== undefined && (await blobs(tag)) === wanted) {
+    console.log(`The files of the release process at ${head} are the files of the release ${tag}, which ran with them.`);
+    return;
+  }
   const query = 'event=workflow_dispatch&status=success&per_page=100';
   const runs = (await api(`repos/${repository}/actions/workflows/release.yml/runs?${query}`)).workflow_runs;
+  const tested = new Set();
   for (const dryRun of runs.filter((candidate) => candidate.display_title.endsWith(DRY_RUN_SUFFIX))) {
+    if (tested.has(dryRun.head_sha)) continue;
+    tested.add(dryRun.head_sha);
     if ((await blobs(dryRun.head_sha)) === wanted) {
       console.log(`The dry run ${dryRun.html_url} tested ${touched.join(' and ')} as they are at ${head}.`);
       return;

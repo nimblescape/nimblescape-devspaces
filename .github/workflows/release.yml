@@ -359,7 +359,8 @@ jobs:
             gh release create "$TAG" "$VSIX" --title "$TAG" --notes-file notes.md --verify-tag
           fi
 
-  # After the check of the package, also when a job failed, so that the temporary branch never stays.
+  # After the check of the package, also when a job failed, so that the temporary branch never stays. A re-run of the
+  # failed jobs runs this job again, after the branch is gone.
   dry-run:
     name: Dry run, delete the temporary branch
     needs: [version, ci, package]
@@ -375,7 +376,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           BRANCH: ${{ needs.version.outputs.branch }}
-        run: gh api --method DELETE "repos/$GH_REPO/git/refs/heads/$BRANCH"
+        run: |
+          if gh api "repos/$GH_REPO/git/ref/heads/$BRANCH" > /dev/null 2>&1; then
+            gh api --method DELETE "repos/$GH_REPO/git/refs/heads/$BRANCH"
+          fi
 
   publish:
     name: Publish to the Visual Studio Marketplace
