@@ -376,10 +376,12 @@ async function checkDryRun() {
       await Promise.all(RELEASE_FILES.map(async (file) => (await api(`repos/${repository}/contents/${file}?ref=${ref}`, true))?.sha ?? null)),
     );
   const wanted = await blobs(head);
-  // The release of the newest tag ran with its files, so the same files need no new dry run.
+  // The release of the newest tag ran this check with its files, so the same files need no new dry run. A tag from
+  // before the rules lacks a file of the release process and does not count.
   const tag = newestTag(releaseTags());
-  if (tag !== undefined && (await blobs(tag)) === wanted) {
-    console.log(`The files of the release process at ${head} are the files of the release ${tag}, which ran with them.`);
+  const tagged = tag === undefined ? undefined : await blobs(tag);
+  if (tagged !== undefined && !JSON.parse(tagged).includes(null) && tagged === wanted) {
+    console.log(`The files of the release process at ${head} are the files of the release ${tag}, which passed this check.`);
     return;
   }
   const query = 'event=workflow_dispatch&status=success&per_page=100';
