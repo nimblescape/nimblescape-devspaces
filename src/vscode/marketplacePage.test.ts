@@ -32,7 +32,8 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
     expect(readme.match(/^## .*$/m)?.[0]).toBe(`## ${HEADING}`);
     const text = section(readme, HEADING);
     for (const scope of PACKAGES_SCOPES) expect(text).toContain(`\`${scope}\``);
-    for (const words of ['Docker CLI', 'Dev Containers CLI', 'install', 'devspaces-monitor', 'VS Code Server', 'extensions']) {
+    const behaviors = ['Docker CLI', 'Dev Containers CLI', '`ssh`', 'docker-credential-', 'install', 'devspaces-monitor', 'VS Code Server', 'extensions'];
+    for (const words of behaviors) {
       expect(text).toContain(words);
     }
     expect(text).toContain(`(${SECURITY_LINK})`);
@@ -41,6 +42,7 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
   it('has the section in docs/security.md, as the target of the link', () => {
     const text = section(read('docs/security.md'), HEADING);
     for (const scope of PACKAGES_SCOPES) expect(text).toContain(`\`${scope}\``);
+    for (const words of ['`ssh`', 'docker-credential-', '#registry-access']) expect(text).toContain(words);
     expect(text).toContain('guide.md#installing-docker');
   });
 

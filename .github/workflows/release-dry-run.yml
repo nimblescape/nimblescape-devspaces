@@ -7,8 +7,10 @@
 # changes release.yml or scripts/release-checks.mjs, the job fails until a
 # successful dry run of the workflow "Release" on the branch of the pull
 # request had these files as they are at the head of the pull request. After
-# the dry run, re-run the job. On every other pull request, the job passes, so
-# that a rule of main can require it. The job only reads; it is a workflow of
+# the dry run, re-run the job. On every other pull request, the job passes.
+# Do not make the job a required check of main: the release moves main to its
+# version commit, which has no result of this job. The version job of the
+# release checks the same rule again. The job only reads; it is a workflow of
 # its own, so that the workflows that call ci.yml need no more permissions.
 
 name: Release dry run
