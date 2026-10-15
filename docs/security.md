@@ -2,6 +2,17 @@
 
 This document describes what Devspaces protects, how, and where its protection ends. The user guide is [guide.md](guide.md); how the parts work together is in [architecture.md](architecture.md).
 
+## What Devspaces does on your computer
+
+The README and the Marketplace page list these behaviors at the top. Each item links to its details.
+
+- **GitHub sign-in.** Devspaces uses the GitHub sign-in of VS Code with the scopes `repo` and `read:org`, and with `read:packages` only when a private image on `ghcr.io` needs it. It stores no token. See [The GitHub token](#the-github-token).
+- **Docker CLI.** Devspaces runs the Docker CLI on your computer, with the Docker context that is current: it checks and starts Docker, builds its helper image `devspaces-worker` on the Docker engine, and starts its helper containers there. The engine is the Docker of your computer, or Docker on another computer that you reach over SSH. See [Trust boundaries](#trust-boundaries) and [the worker](architecture.md#the-worker-and-the-helper-channel).
+- **Dev Containers CLI.** The helper containers clone the repository into a Docker volume, and build, create, start, stop and remove the containers of a devspace with the Docker Engine API and the Dev Containers CLI. The lifecycle commands of the Dev Container configuration run in the dev container; `initializeCommand` is refused. See [Host access checks](#host-access-checks) and [the batch helper](architecture.md#the-batch-helper).
+- **Docker installation.** When Docker is missing, Devspaces installs it only after a dialog that lists the exact commands, or the download address and the file. The commands run in a terminal of VS Code that you see, and downloads come only from Docker over HTTPS. Devspaces never installs Docker on another computer. See [Installing Docker](guide.md#installing-docker).
+- **Background container.** On each Docker engine, the Monitor, the container `devspaces-monitor`, runs also while no devspace runs; the setting `devspaces.stopMonitorWhenIdle` ends it after 5 minutes without a running devspace. At the times of the setting `devspaces.cacheUpdateSchedule`, it pulls newer images of your devspaces, prepares their next images, removes older images of the same image repositories that no container uses, and downloads the newest VS Code Server and the extensions of your recent opens into a volume that the dev containers share. It stops a devspace a few minutes after its last window closes, unless you keep it running. It uses no token and no credentials. See [the Monitor](architecture.md#the-monitor) and [Registry access](#registry-access).
+- **Network.** Devspaces and its containers connect to GitHub, to the image registries of your Dev Container configurations, to the update service of VS Code, to the Visual Studio Marketplace, and to Docker for its installation. Devspaces collects no telemetry. See [Stored data](#stored-data).
+
 ## The trust model
 
 **A repository that you open is code that you run.** A malicious dev container can do harm. Its Dockerfile and build, its Features, its lifecycle commands, and the extensions in its container run with the rights of the container. They can:
