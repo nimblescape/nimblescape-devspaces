@@ -83,6 +83,12 @@ describe('rules 2 and 5: no deletion, only GitHub Actions with Microsoft Entra I
     expect(publishingProblems(release(text))).toEqual([]);
   });
 
+  it('reads each command of a line on its own', () => {
+    expect(publishingProblems(release('run: npx vsce package && mkdir -p out; ls | head -p 1'))).toEqual([]);
+    expect(publishingProblems(release('run: mkdir -p out && npx vsce publish --azure-credential'))).toEqual([]);
+    expect(publishingProblems(release('run: npx vsce package --azure-credential && npx vsce publish'))).toHaveLength(1);
+  });
+
   it('refuses vsce unpublish, which deletes the extension', () => {
     expect(publishingProblems(release('run: npx vsce unpublish nimblescape.nimblescape-sample'))).toEqual([
       `${RELEASE_WORKFLOW}:1: vsce unpublish deletes the extension on the Marketplace.`,
@@ -95,6 +101,7 @@ describe('rules 2 and 5: no deletion, only GitHub Actions with Microsoft Entra I
       'run: npx vsce publish --azure-credential --pat=x',
       'run: npx vsce login nimblescape',
       'VSCE_PAT: ${{ secrets.VSCE_PAT }}',
+      '          pat: ${{ secrets.TOKEN }}',
     ]) {
       expect(publishingProblems(release(text)), text).toHaveLength(1);
     }
@@ -102,11 +109,13 @@ describe('rules 2 and 5: no deletion, only GitHub Actions with Microsoft Entra I
 
   it('refuses a publish without Microsoft Entra ID or outside the workflow "Release"', () => {
     expect(publishingProblems(release('run: npx vsce publish'))).toHaveLength(1);
+    expect(publishingProblems(release('run: npx @vscode/vsce@4.0.0 publish'))).toHaveLength(1);
     expect(publishingProblems([{ file: '.github/workflows/ci.yml', text: 'run: npx vsce publish --azure-credential' }])).toHaveLength(1);
+    expect(publishingProblems([{ file: '.github/actions/publish/action.yml', text: 'run: vsce publish --azure-credential' }])).toHaveLength(1);
   });
 
   it('refuses an npm script that publishes, deletes or signs in', () => {
-    for (const command of ['vsce publish', 'npx vsce unpublish nimblescape.x', 'vsce login nimblescape']) {
+    for (const command of ['vsce publish', 'npm run build && npx vsce unpublish nimblescape.x', 'vsce@4 login nimblescape']) {
       expect(publishingProblems([], { release: command }), command).toHaveLength(1);
     }
   });
@@ -119,6 +128,12 @@ describe('rule 3: only changes for users', () => {
   it('sees no change when only the version and the change log differ', () => {
     const previous = files({ 'package.json': manifest('1.2.3'), 'changelog.md': 'a', 'dist/extension.js': 'code' });
     const next = files({ 'package.json': manifest('1.2.4'), 'changelog.md': 'b', 'dist/extension.js': 'code' });
+    expect(changedFiles(previous, next)).toEqual([]);
+  });
+
+  it('sees no change when only the development tools in package.json differ', () => {
+    const previous = files({ 'package.json': manifest('1.2.3', { scripts: { test: 'a' }, devDependencies: { x: '^1.0.0' } }) });
+    const next = files({ 'package.json': manifest('1.2.4', { scripts: { test: 'b' }, devDependencies: { x: '^1.0.1' }, overrides: {} }) });
     expect(changedFiles(previous, next)).toEqual([]);
   });
 

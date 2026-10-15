@@ -29,9 +29,10 @@
 # without a change of main, a tag, a release or the Marketplace; its run name
 # ends with "(dry run)". The script scripts/release-checks.mjs checks the
 # release rules of CONTRIBUTING.md: the version job checks the extension ID and
-# the publishing steps, and the job "Check the package" and the publish job
-# check that the VSIX holds the extension ID of package.json and changes more
-# than the version and the change log since the last release.
+# the publishing steps and, in a release, that a successful dry run tested the
+# files of the release process as they are; the job "Check the package" and the
+# publish job check that the VSIX holds the extension ID of package.json and
+# changes more than the version and the change log since the last release.
 
 name: Release
 run-name: Release ${{ inputs.version }}${{ inputs.dry_run && ' (dry run)' || '' }}
@@ -70,6 +71,8 @@ jobs:
     permissions:
       # Pushes the version commit to a temporary branch and deletes the branches of earlier runs.
       contents: write
+      # Reads the runs of this workflow for the check of the dry run.
+      actions: read
     outputs:
       version: ${{ steps.check.outputs.version }}
       # The tag v<version> of the release.
@@ -90,6 +93,11 @@ jobs:
       # The job pushes the version commit with the token of the job.
       - name: Check out the source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up the pinned Node release
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
 
       - name: Check the version
         id: check
@@ -128,6 +136,14 @@ jobs:
       # Rules 1, 2 and 5 of CONTRIBUTING.md: the extension ID, and who publishes how.
       - name: Check the release rules
         run: node scripts/release-checks.mjs rules
+
+      # Rule 4 of CONTRIBUTING.md: a release runs only with the files of the release process that a dry run tested.
+      - name: Check that a dry run tested the release process
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node scripts/release-checks.mjs dry-run
 
       # package.json keeps its formatting, so only its version line changes. npm
       # writes package-lock.json with two spaces and a final line break.
@@ -343,10 +359,11 @@ jobs:
             gh release create "$TAG" "$VSIX" --title "$TAG" --notes-file notes.md --verify-tag
           fi
 
+  # After the check of the package, also when a job failed, so that the temporary branch never stays.
   dry-run:
     name: Dry run, delete the temporary branch
-    needs: [version, ci]
-    if: ${{ inputs.dry_run && needs.version.outputs.branch != '' }}
+    needs: [version, ci, package]
+    if: ${{ always() && inputs.dry_run && needs.version.outputs.branch != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

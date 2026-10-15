@@ -16,9 +16,9 @@
 //     GitHub CLI downloads the package of that release (environment GH_TOKEN and GH_REPO). In a dry run, a package
 //     without such a change is a warning; in a release, it is an error.
 //   node scripts/release-checks.mjs dry-run
-//     Rule 4 on a pull request (environment GITHUB_REPOSITORY, GH_TOKEN, PR_NUMBER, HEAD_SHA and HEAD_REF). When the
-//     pull request changes a file of the release process, a successful dry run of the workflow "Release" on its
-//     branch tested the files of the release process as they are at the head of the pull request.
+//     Rule 4 (environment GITHUB_REPOSITORY, GH_TOKEN and HEAD_SHA). A successful dry run of the workflow "Release"
+//     tested the files of the release process as they are at the commit HEAD_SHA. On a pull request (also PR_NUMBER
+//     and HEAD_REF), the check applies only when the pull request changes one of these files.
 //
 // The script is the same in every extension repository of nimblescape.
 import { execFileSync } from 'child_process';
@@ -107,48 +107,61 @@ export function namingProblems(manifest, repository) {
   return problems;
 }
 
+/** A command of vsce, also of a pinned version such as `vsce@4 publish`; group 1 is the command. */
+const VSCE_COMMAND = /\bvsce(?:@\S*)?\s+([a-z-]+)/;
+
 /**
- * The breaches of rules 2 and 5 by the workflows and the npm scripts. A line that ends with a backslash continues on
- * the next line, as in a shell, and a `#` at the start of a line or after a space starts a comment of YAML.
- * @param {{ file: string, text: string }[]} workflows The workflow files, with their paths relative to the repository.
+ * The breaches of rules 2 and 5 by the workflows, the actions of the repository and the npm scripts. A line that ends
+ * with a backslash continues on the next line, as in a shell; a `#` at the start of a line or after a space starts a
+ * comment of YAML; and `&&`, `||`, `;` and `|` separate the commands of a line.
+ * @param {{ file: string, text: string }[]} workflows The files of the workflows and of the actions, with their paths
+ *   relative to the repository.
  * @param {Record<string, string>} [scripts] The npm scripts of package.json.
  * @returns {string[]}
  */
 export function publishingProblems(workflows, scripts = {}) {
   const problems = [];
+  const check = (at, command, file) => {
+    const vsce = VSCE_COMMAND.exec(command)?.[1];
+    if (vsce === 'unpublish') problems.push(`${at}: vsce unpublish deletes the extension on the Marketplace.`);
+    if (vsce === 'login' || /\bVSCE_PAT\b/.test(command) || (vsce && /\s(-p|--pat)(\s|=|$)/.test(command))) {
+      problems.push(`${at}: a personal access token signs in to the Marketplace.`);
+    }
+    if (vsce === 'publish') {
+      if (file !== RELEASE_WORKFLOW) problems.push(`${at}: only ${RELEASE_WORKFLOW} may publish.`);
+      if (!/\s--azure-credential\b/.test(command)) {
+        problems.push(`${at}: vsce publish needs the sign-in to Microsoft Entra ID, --azure-credential.`);
+      }
+    }
+  };
   for (const { file, text } of workflows) {
     const lines = text.split(/\r?\n/);
     for (let start = 0; start < lines.length; ) {
-      let command = '';
+      let joined = '';
       let end = start;
       for (;;) {
         const line = lines[end].replace(/(^|\s)#.*$/, '');
         end++;
         if (!line.endsWith('\\') || end >= lines.length) {
-          command += line;
+          joined += line;
           break;
         }
-        command += `${line.slice(0, -1)} `;
+        joined += `${line.slice(0, -1)} `;
       }
       const at = `${file}:${start + 1}`;
       start = end;
-      if (/\bvsce\s+unpublish\b/.test(command)) {
-        problems.push(`${at}: vsce unpublish deletes the extension on the Marketplace.`);
-      }
-      if (/\bvsce\s+login\b/.test(command) || /\bVSCE_PAT\b/.test(command) || /\bvsce\b.*\s(-p|--pat)(\s|=|$)/.test(command)) {
-        problems.push(`${at}: a personal access token signs in to the Marketplace.`);
-      }
-      if (/\bvsce\s+publish\b/.test(command)) {
-        if (file !== RELEASE_WORKFLOW) problems.push(`${at}: only ${RELEASE_WORKFLOW} may publish.`);
-        if (!/\s--azure-credential\b/.test(command)) {
-          problems.push(`${at}: vsce publish needs the sign-in to Microsoft Entra ID, --azure-credential.`);
-        }
-      }
+      // The input `pat` of the publishing actions of other authors, for example HaaLeo/publish-vscode-extension.
+      if (/^\s*pat\s*:/.test(joined)) problems.push(`${at}: a personal access token signs in to the Marketplace.`);
+      for (const command of joined.split(/&&|\|\||;|\|/)) check(at, command, file);
     }
   }
-  for (const [name, command] of Object.entries(scripts)) {
-    const vsce = /\bvsce\s+(publish|unpublish|login)\b/.exec(command);
-    if (vsce) problems.push(`The npm script "${name}" runs vsce ${vsce[1]}: only the workflow "Release" publishes.`);
+  for (const [name, line] of Object.entries(scripts)) {
+    for (const command of line.split(/&&|\|\||;|\|/)) {
+      const vsce = VSCE_COMMAND.exec(command)?.[1];
+      if (vsce === 'publish' || vsce === 'unpublish' || vsce === 'login') {
+        problems.push(`The npm script "${name}" runs vsce ${vsce}: only the workflow "Release" publishes.`);
+      }
+    }
   }
   return problems;
 }
@@ -178,16 +191,16 @@ export function packageProblems(vsixManifest, packed, manifest) {
 }
 
 /**
- * The files of the extension that differ between two packages, without the change log and without the version in
- * package.json (rule 3).
+ * The files of the extension that differ between two packages, without the change log, and without the version and
+ * the development tools in package.json (rule 3): vsce packs package.json with its `scripts`, `devDependencies` and
+ * `overrides`, which change for users only through the files that the build makes.
  * @param {Map<string, Buffer>} previous The files below extension/ of the earlier package, by their path below it.
  * @param {Map<string, Buffer>} next The files below extension/ of the new package.
  * @returns {string[]} The paths below extension/ of the files that were added, removed or changed.
  */
 export function changedFiles(previous, next) {
   const withoutVersion = (content) => {
-    const manifest = JSON.parse(content.toString('utf8'));
-    delete manifest.version;
+    const { version, scripts, devDependencies, overrides, ...manifest } = JSON.parse(content.toString('utf8'));
     return JSON.stringify(manifest);
   };
   const changed = [];
@@ -242,14 +255,18 @@ function manifestAtTag(tag) {
   return JSON.parse(run('git', ['show', 'FETCH_HEAD:package.json']));
 }
 
-/** The files of the workflows, with their paths relative to the repository. */
+/** The files of the workflows and of the actions of the repository, with their paths relative to the repository. */
 function workflowFiles() {
-  const folder = path.join(ROOT, '.github', 'workflows');
-  return fs
-    .readdirSync(folder)
-    .filter((name) => /\.ya?ml$/.test(name))
-    .sort()
-    .map((name) => ({ file: `.github/workflows/${name}`, text: fs.readFileSync(path.join(folder, name), 'utf8') }));
+  const files = [];
+  for (const folder of ['workflows', 'actions']) {
+    const root = path.join(ROOT, '.github', folder);
+    if (!fs.existsSync(root)) continue;
+    for (const name of fs.readdirSync(root, { recursive: true }).sort()) {
+      if (!/\.ya?ml$/.test(name)) continue;
+      files.push({ file: `.github/${folder}/${name.split(path.sep).join('/')}`, text: fs.readFileSync(path.join(root, name), 'utf8') });
+    }
+  }
+  return files;
 }
 
 function checkRules() {
@@ -320,52 +337,65 @@ function checkPackage(vsix, dryRun) {
 }
 
 async function checkDryRun() {
-  const { GITHUB_REPOSITORY: repository, GH_TOKEN: token, PR_NUMBER: number, HEAD_SHA: head, HEAD_REF: branch } = process.env;
-  if (!repository || !token || !number || !head || !branch) {
-    error('The check of the dry run needs GITHUB_REPOSITORY, GH_TOKEN, PR_NUMBER, HEAD_SHA and HEAD_REF.');
+  const { GITHUB_REPOSITORY: repository, GH_TOKEN: token, HEAD_SHA: head, PR_NUMBER: number, HEAD_REF: branch } = process.env;
+  if (!repository || !token || !head || (number && !branch)) {
+    error('The check of the dry run needs GITHUB_REPOSITORY, GH_TOKEN and HEAD_SHA, and on a pull request PR_NUMBER and HEAD_REF.');
     return;
   }
-  const api = async (request) => {
+  /** The answer of the GitHub API as JSON; undefined for a missing file of a commit (`missing`), else an error. */
+  const api = async (request, missing = false) => {
     const response = await fetch(`https://api.github.com/${request}`, {
       headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}`, 'x-github-api-version': '2022-11-28' },
     });
-    if (response.status === 404) return undefined;
+    if (missing && response.status === 404) return undefined;
     if (!response.ok) throw new Error(`The GitHub API answered ${request} with HTTP ${response.status}.`);
     return response.json();
   };
 
-  const changed = new Set();
-  for (let page = 1; ; page++) {
-    const files = (await api(`repos/${repository}/pulls/${number}/files?per_page=100&page=${page}`)) ?? [];
-    for (const file of files) {
-      changed.add(file.filename);
-      if (file.previous_filename) changed.add(file.previous_filename);
+  let touched = RELEASE_FILES;
+  if (number) {
+    const changed = new Set();
+    for (let page = 1; ; page++) {
+      const files = await api(`repos/${repository}/pulls/${number}/files?per_page=100&page=${page}`);
+      for (const file of files) {
+        changed.add(file.filename);
+        if (file.previous_filename) changed.add(file.previous_filename);
+      }
+      if (files.length < 100) break;
     }
-    if (files.length < 100) break;
-  }
-  const touched = RELEASE_FILES.filter((file) => changed.has(file));
-  if (touched.length === 0) {
-    console.log('The pull request changes no file of the release process.');
-    return;
+    touched = RELEASE_FILES.filter((file) => changed.has(file));
+    if (touched.length === 0) {
+      console.log('The pull request changes no file of the release process.');
+      return;
+    }
   }
 
   // The Git blob of each file of the release process at a commit (null for a missing file): equal blobs, equal files.
   const blobs = async (ref) =>
-    JSON.stringify(await Promise.all(RELEASE_FILES.map(async (file) => (await api(`repos/${repository}/contents/${file}?ref=${ref}`))?.sha ?? null)));
+    JSON.stringify(
+      await Promise.all(RELEASE_FILES.map(async (file) => (await api(`repos/${repository}/contents/${file}?ref=${ref}`, true))?.sha ?? null)),
+    );
   const wanted = await blobs(head);
-  const query = `branch=${encodeURIComponent(branch)}&event=workflow_dispatch&status=success&per_page=100`;
-  const runs = (await api(`repos/${repository}/actions/workflows/release.yml/runs?${query}`))?.workflow_runs ?? [];
+  const query = 'event=workflow_dispatch&status=success&per_page=100';
+  const runs = (await api(`repos/${repository}/actions/workflows/release.yml/runs?${query}`)).workflow_runs;
   for (const dryRun of runs.filter((candidate) => candidate.display_title.endsWith(DRY_RUN_SUFFIX))) {
     if ((await blobs(dryRun.head_sha)) === wanted) {
       console.log(`The dry run ${dryRun.html_url} tested ${touched.join(' and ')} as they are at ${head}.`);
       return;
     }
   }
-  error(
-    `The pull request changes ${touched.join(' and ')}, and no successful dry run on the branch ${branch} tested them ` +
-      `as they are at ${head}. Start the workflow "Release" on the branch ${branch} with "Dry run", then re-run this ` +
-      'job. (rule 4)',
-  );
+  const files = touched.join(' and ');
+  if (number) {
+    error(
+      `The pull request changes ${files}, and no successful dry run tested them as they are at ${head}. Start the ` +
+        `workflow "Release" on the branch ${branch} with "Dry run", then re-run this job. (rule 4)`,
+    );
+  } else {
+    error(
+      `No successful dry run tested ${files} as they are at ${head}. Start the workflow "Release" on this branch with ` +
+        '"Dry run" first. (rule 4)',
+    );
+  }
 }
 
 // The tests import the functions above; only a start as a program runs a check.
