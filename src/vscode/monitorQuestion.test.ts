@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
-import { DockerEngineRecords } from '../core/storage/dockerEngineRecords';
+import { DockerEngineRecords, type EngineRemoval } from '../core/storage/dockerEngineRecords';
 import { ControllerTexts } from './controllerTexts';
 import { MonitorQuestion, STOP_MONITOR_WHEN_IDLE_SETTING } from './monitorQuestion';
 import { SETTINGS_SECTION } from './settings';
@@ -49,9 +49,9 @@ afterEach(() => {
 function question(over: Partial<ConstructorParameters<typeof MonitorQuestion>[0]> = {}): MonitorQuestion {
   const recording = {
     monitorAnswered: (host: string) => records.monitorAnswered(host),
-    recordMonitorAnswer: async (host: string, now: number) => {
+    recordMonitorAnswer: async (host: string, now: number, runs?: (removal: EngineRemoval) => boolean) => {
       writes.push(`record ${host}`);
-      await records.recordMonitorAnswer(host, now);
+      return records.recordMonitorAnswer(host, now, runs);
     },
   };
   return new MonitorQuestion({ records: recording, settings: () => settings, logger, clock: { now: () => NOW }, ...over });
@@ -149,6 +149,40 @@ describe('the question about the Monitor of an engine', () => {
     });
     await expect(failing.askIfNeeded('')).resolves.toBe('closed');
     expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(2);
+  });
+
+  // Another window began "Remove Devspaces from This Docker Engine…" there while the question was open: its mark forgot
+  // the answer of the engine. Mutation: an answer written into the marked record outlives the removal, and the next
+  // Start there does not ask.
+  it('an answer while another window removes Devspaces from the engine is not recorded for it; the next flow asks again', async () => {
+    const other: EngineRemoval = { windowId: 'window-b', pid: 4200, since: '2026-10-16T07:59:00.000Z' };
+    fakeVscode.window.showInformationMessage.mockImplementationOnce(async () => {
+      await records.startRemoval('build-box', other, NOW, () => true);
+      return ControllerTexts.keepMonitorRunning;
+    });
+    let read = 0;
+    // The liveness rule of the busy marks (the controller's): the process 4200 runs.
+    const removalRuns = async () => {
+      read += 1;
+      return (removal: EngineRemoval) => removal.pid === other.pid;
+    };
+    await expect(question().askIfNeeded('build-box', removalRuns)).resolves.toBe('closed');
+    expect(read).toBe(1);
+    expect(logger.info).toHaveBeenCalledWith('The answer about the Monitor on build-box is not recorded for that engine: Devspaces is being removed from there in another window (process 4200).');
+    // The setting holds the answer; the engine has none, also after the end of that removal.
+    expect(writes).toEqual(['stopMonitorWhenIdle=false', 'record build-box']);
+    await records.endRemoval('build-box', other);
+    expect(await records.monitorAnswered('build-box')).toBe(false);
+    fakeVscode.window.showInformationMessage.mockResolvedValueOnce(ControllerTexts.keepMonitorRunning);
+    await expect(question().askIfNeeded('build-box', removalRuns)).resolves.toBe('keepRunning');
+    expect(modals()).toHaveLength(2);
+    expect(await records.monitorAnswered('build-box')).toBe(true);
+    // The entry of a removal whose window ended keeps no answer away.
+    await records.startRemoval('', other, NOW, () => true);
+    fakeVscode.window.showInformationMessage.mockResolvedValueOnce(ControllerTexts.stopMonitorWhenIdle);
+    settings = {};
+    await expect(question().askIfNeeded('', async () => () => false)).resolves.toBe('stopWhenIdle');
+    expect(await records.monitorAnswered('')).toBe(true);
   });
 
   it('a question that cannot be shown counts as closed and stores nothing', async () => {

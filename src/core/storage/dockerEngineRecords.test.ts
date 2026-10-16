@@ -213,11 +213,14 @@ describe('DockerEngineRecords: the removal that runs (the entry removing)', () =
     if (!start.started) throw new Error('not started');
     await records.endRemoval('build-box', REMOVAL, start.before);
     expect(await records.read()).toEqual([{ host: 'build-box', monitorAnsweredAt: NOW - 5 }]);
-    // An engine that had the mark keeps the mark from before, and a newer answer stays.
+    // An engine that had the mark keeps the mark from before; an answer given meanwhile (by a window for which the
+    // removal does not run, such as its own) stays over the one from before. Mutation: the answer from before wins.
     await records.setRemoved('', NOW - 9);
+    await records.recordMonitorAnswer('', NOW - 8);
     const again = await records.startRemoval('', REMOVAL, NOW, runs);
     if (!again.started) throw new Error('not started');
-    await records.recordMonitorAnswer('', NOW + 1);
+    expect(again.before).toEqual({ host: '', removedAt: NOW - 9, monitorAnsweredAt: NOW - 8 });
+    expect(await records.recordMonitorAnswer('', NOW + 1, ended)).toEqual({ recorded: true });
     await records.endRemoval('', REMOVAL, again.before);
     expect(await records.record('')).toEqual({ host: '', removedAt: NOW - 9, monitorAnsweredAt: NOW + 1 });
     // Without an earlier record nothing is left.
@@ -259,6 +262,26 @@ describe('DockerEngineRecords: the removal that runs (the entry removing)', () =
     expect(await records.clearRemoved('', runs)).toEqual({ cleared: false });
     expect(inode()).toBe(written);
     expect(await records.record('')).toEqual({ host: '', monitorAnsweredAt: NOW });
+  });
+
+  // The mark of a removal forgets the answer of the engine, so the next flow of the user there asks again. Mutation: an
+  // answer written while the removal runs outlives it.
+  it('writes no answer while a removal runs; the answer of a window whose removal ended is written', async () => {
+    await records.startRemoval('build-box', OTHER, NOW, runs);
+    const before = inode();
+    expect(await records.recordMonitorAnswer('build-box', NOW + 1, runs)).toEqual({ recorded: false, other: OTHER });
+    // Without the rule, every removal that the record names counts as running.
+    expect(await records.recordMonitorAnswer('build-box', NOW + 1)).toEqual({ recorded: false, other: OTHER });
+    expect(inode()).toBe(before);
+    // The end of that removal keeps the mark, and no answer.
+    await records.endRemoval('build-box', OTHER);
+    expect(await records.monitorAnswered('build-box')).toBe(false);
+    expect(await records.recordMonitorAnswer('build-box', NOW + 2, runs)).toEqual({ recorded: true });
+    expect(await records.record('build-box')).toEqual({ host: 'build-box', removedAt: NOW, monitorAnsweredAt: NOW + 2 });
+    // The entry of a removal whose window ended keeps no answer away.
+    await records.startRemoval('', OTHER, NOW, runs);
+    expect(await records.recordMonitorAnswer('', NOW + 3, ended)).toEqual({ recorded: true });
+    expect(await records.record('')).toEqual({ host: '', removedAt: NOW, removing: OTHER, monitorAnsweredAt: NOW + 3 });
   });
 
   it('an entry that is not valid counts as none; a valid one alone is kept', async () => {

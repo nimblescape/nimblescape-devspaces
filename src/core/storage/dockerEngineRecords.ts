@@ -94,9 +94,23 @@ export class DockerEngineRecords {
     return (await this.read()).some((record) => record.host === host && record.monitorAnsweredAt !== undefined);
   }
 
-  /** Records that the user answered the question about the Monitor of the engine `host` at `now`. */
-  async recordMonitorAnswer(host: string, now: number): Promise<void> {
-    await this.change(host, (record) => ({ ...record, monitorAnsweredAt: now }));
+  /**
+   * Records that the user answered the question about the Monitor of the engine `host` at `now`. Nothing is written
+   * while the record names a removal for which `runs` is true (another window removes Devspaces from the engine now: its
+   * mark forgot the answer, and the next flow of the user there asks again); `other` is that removal then. Without
+   * `runs`, every removal that the record names counts as running.
+   */
+  async recordMonitorAnswer(host: string, now: number, runs: (removal: EngineRemoval) => boolean = () => true): Promise<{ recorded: boolean; other?: EngineRemoval }> {
+    let outcome: { recorded: boolean; other?: EngineRemoval } = { recorded: false };
+    await this.change(host, (record) => {
+      if (record.removing !== undefined && runs(record.removing)) {
+        outcome = { recorded: false, other: record.removing };
+        return undefined;
+      }
+      outcome = { recorded: true };
+      return { ...record, monitorAnsweredAt: now };
+    });
+    return outcome;
   }
 
   /** True while the engine `host` has the removal mark. */

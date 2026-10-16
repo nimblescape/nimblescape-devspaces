@@ -3109,7 +3109,7 @@ export class Controller implements vscode.Disposable {
     const target = await this.operationTarget();
     if (target.kind === 'unsupported' || (devspace !== undefined && !isOnDockerHost(devspace, target.host))) return true;
     if (!(await this.clearRemovalMark(operation, target.host))) return false;
-    await this.deps.monitorQuestion?.askIfNeeded(target.host);
+    await this.deps.monitorQuestion?.askIfNeeded(target.host, () => this.markBlocker());
     return !(await this.refusedWhileOtherWindowRemoves(operation, target.host));
   }
 
