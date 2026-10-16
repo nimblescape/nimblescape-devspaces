@@ -11,6 +11,7 @@ import { errorMessage } from '../core/errors';
 import type { Credentials, GitHubAuth, Logger } from '../core/ports';
 import { GITHUB_PACKAGES_REGISTRY } from '../core/imageCheck/credentials';
 import type { GitHubAccount } from '../core/types';
+import { GITHUB_ENTERPRISE_SECTION, githubEnterpriseConfigured } from './settings';
 
 export const GITHUB_PROVIDER_ID = 'github';
 /** `repo` lists and clones private repositories; `read:org` reads the organization memberships. */
@@ -19,6 +20,8 @@ export const GITHUB_SCOPES: readonly string[] = ['repo', 'read:org'];
 export const PACKAGES_SCOPES: readonly string[] = ['repo', 'read:org', 'read:packages'];
 /** Context key for the welcome view and the menus (package.json). */
 export const SIGNED_IN_CONTEXT_KEY = 'devspaces.signedIn';
+/** Context key for the welcome view (package.json): the settings of VS Code name a GitHub Enterprise instance. */
+export const GITHUB_ENTERPRISE_CONTEXT_KEY = 'devspaces.githubEnterprise';
 
 // User-visible text that messages.ts lacks; to be moved there.
 /** Shown by VS Code when a new session is requested because GitHub rejected the stored one. */
@@ -233,4 +236,33 @@ export function ghcrRejectionReporter(auth: Pick<VsCodeGitHubAuth, 'reportReject
 
 function scopeKey(scopes: readonly string[]): string {
   return [...scopes].sort().join(' ');
+}
+
+/**
+ * Sets the context key `devspaces.githubEnterprise` from the settings of VS Code (githubEnterpriseConfigured). While
+ * you are not signed in, the welcome view then says that Devspaces cannot use an account of GitHub Enterprise.
+ */
+export function updateGitHubEnterpriseContextKey(logger: Logger): void {
+  vscode.commands.executeCommand('setContext', GITHUB_ENTERPRISE_CONTEXT_KEY, githubEnterpriseConfigured()).then(undefined, (error: unknown) => {
+    logger.warn(`Could not set the context key ${GITHUB_ENTERPRISE_CONTEXT_KEY}: ${errorMessage(error)}`);
+  });
+}
+
+/**
+ * Keeps the context key `devspaces.githubEnterprise` up to date: sets it now, and again when a setting of the section
+ * `github-enterprise` changes, or when VS Code trusts the workspace (a value of the workspace counts only then).
+ */
+export function watchGitHubEnterpriseSettings(logger: Logger): vscode.Disposable {
+  updateGitHubEnterpriseContextKey(logger);
+  const subscriptions = [
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(GITHUB_ENTERPRISE_SECTION)) updateGitHubEnterpriseContextKey(logger);
+    }),
+    vscode.workspace.onDidGrantWorkspaceTrust(() => updateGitHubEnterpriseContextKey(logger)),
+  ];
+  return {
+    dispose: () => {
+      for (const subscription of subscriptions.splice(0)) subscription.dispose();
+    },
+  };
 }

@@ -7,7 +7,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
 import { silentLogger } from '../core/ports';
-import { GITHUB_SCOPES, PACKAGES_SCOPES, SIGNED_IN_CONTEXT_KEY, VsCodeGitHubAuth, ghcrRejectionReporter } from './auth';
+import {
+  GITHUB_ENTERPRISE_CONTEXT_KEY,
+  GITHUB_SCOPES,
+  PACKAGES_SCOPES,
+  SIGNED_IN_CONTEXT_KEY,
+  VsCodeGitHubAuth,
+  ghcrRejectionReporter,
+  updateGitHubEnterpriseContextKey,
+  watchGitHubEnterpriseSettings,
+} from './auth';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
 
 const session = (token: string) => ({ id: token, accessToken: token, account: { id: '1', label: 'octocat' }, scopes: [] });
@@ -222,5 +231,49 @@ describe('VsCodeGitHubAuth', () => {
     report('docker.io', { username: 'user', password: 'dckr_pat' });
     report('ghcr.io.example.com', { username: 'user', password: 'other' });
     expect(reportRejectedToken.mock.calls).toEqual([['gho_1'], ['gho_2']]);
+  });
+});
+
+// The note of the welcome view on GitHub Enterprise (package.json viewsWelcome, controller.test.ts).
+describe('the context key devspaces.githubEnterprise', () => {
+  beforeEach(() => resetFakeVscode());
+  const values = () =>
+    fakeVscode.commands.executeCommand.mock.calls.filter((call) => call[0] === 'setContext' && call[1] === GITHUB_ENTERPRISE_CONTEXT_KEY).map((call) => call[2]);
+
+  it('follows the settings github-enterprise: at once, at each change of them, and when VS Code trusts the workspace', () => {
+    expect(GITHUB_ENTERPRISE_CONTEXT_KEY).toBe('devspaces.githubEnterprise');
+    let places: { globalValue?: string[]; workspaceValue?: string[] } = {};
+    fakeVscode.workspace.getConfiguration.mockImplementation((section: string) => ({
+      get: (key: string) => (section !== 'github-enterprise' ? undefined : key === 'uris' ? (places.workspaceValue ?? places.globalValue ?? []) : ''),
+      inspect: (key: string) => (section === 'github-enterprise' && key === 'uris' ? { key, defaultValue: [], ...places } : undefined),
+    }));
+    const watcher = watchGitHubEnterpriseSettings(silentLogger);
+    expect(values()).toEqual([false]);
+    places = { globalValue: ['https://octo.ghe.com'] };
+    // Another setting changes nothing.
+    fakeVscode.fireConfigurationChange('devspaces.owners');
+    expect(values()).toEqual([false]);
+    fakeVscode.fireConfigurationChange('github-enterprise.uris');
+    expect(values()).toEqual([false, true]);
+    // A list of the workspace counts only once VS Code trusts the workspace.
+    places = { workspaceValue: ['https://octo.ghe.com'] };
+    fakeVscode.workspace.isTrusted = false;
+    fakeVscode.fireConfigurationChange('github-enterprise.uris');
+    expect(values()).toEqual([false, true, false]);
+    fakeVscode.grantWorkspaceTrust();
+    expect(values()).toEqual([false, true, false, true]);
+    watcher.dispose();
+    places = {};
+    fakeVscode.fireConfigurationChange('github-enterprise.uri');
+    expect(values()).toEqual([false, true, false, true]);
+  });
+
+  it('logs a context key that VS Code could not set', async () => {
+    fakeVscode.workspace.getConfiguration.mockReturnValue({ get: () => undefined, inspect: () => undefined });
+    fakeVscode.commands.executeCommand.mockRejectedValue(new Error('refused'));
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
+    updateGitHubEnterpriseContextKey(logger);
+    await flush();
+    expect(logger.warn).toHaveBeenCalledWith('Could not set the context key devspaces.githubEnterprise: refused');
   });
 });

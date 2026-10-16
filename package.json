@@ -167,6 +167,11 @@
       },
       {
         "view": "devspaces.repositories",
+        "contents": "Your VS Code is set up for GitHub Enterprise Server or GHE.com. Devspaces cannot use an account there. Sign in with an account on github.com.",
+        "when": "!devspaces.signedIn && devspaces.githubEnterprise"
+      },
+      {
+        "view": "devspaces.repositories",
         "contents": "Loading your repositories…",
         "when": "devspaces.signedIn && !devspaces.loaded && !devspaces.dockerSetupRequired"
       },

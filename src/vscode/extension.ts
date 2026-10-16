@@ -59,7 +59,7 @@ import { HELPER_DOCKER_SOCKET, VSCODE_STORE_VOLUME } from '../core/names';
 import { RemoteDockerState } from '../core/storage/remoteDockerState';
 import { SessionFiles } from '../core/storage/sessionFiles';
 import type { ExtensionSettings } from '../core/types';
-import { VsCodeGitHubAuth, ghcrRejectionReporter } from './auth';
+import { VsCodeGitHubAuth, ghcrRejectionReporter, watchGitHubEnterpriseSettings } from './auth';
 import { ConnectionAdapter } from './connectionAdapter';
 import { Controller } from './controller';
 import { DisconnectRequests } from './disconnectRequests';
@@ -838,6 +838,8 @@ async function activateExtension(
   // The icons of Select Organizations… and Show Only Devspaces in the view title bar.
   updateOwnersContextKey(settings.owners, logger);
   updateDevspacesOnlyContextKey(settings.showOnlyDevspaces === true, logger);
+  // The note of the welcome view when the settings of VS Code name a GitHub Enterprise instance.
+  context.subscriptions.push(watchGitHubEnterpriseSettings(logger));
   // The Docker host of the view title (every later read of the context updates it too).
   background(targets.resolve(), 'read the Docker host');
   // The stored list at once, then the background refresh.

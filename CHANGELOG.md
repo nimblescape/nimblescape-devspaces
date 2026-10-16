@@ -65,7 +65,7 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Marketplace page and support:** the README no longer compares Devspaces with GitHub Codespaces, and the keyword codespaces is gone. The README and the new file ThirdPartyNotices.txt in the package credit the Codicons of Microsoft (CC BY 4.0), which the icons of Devspaces use. The new SUPPORT.md says how to report a problem, and the Q&A link of the Marketplace page now opens the GitHub issues. The hint of the test field in Edit Repository Groups… now shows the example of the user guide.
 
-**Sign-in:** before the sign-in, the view now says that the scope repo can read and change your repositories, also the private ones, that read:org reads your organization memberships, and that Devspaces works only with accounts on github.com. Before, nothing said that Devspaces works only with github.com.
+**Sign-in:** before the sign-in, the view now says that the scope repo can read and change your repositories, also the private ones, that read:org reads your organization memberships, and that Devspaces works only with accounts on github.com. When the settings of VS Code name a GitHub Enterprise instance, the view also says that Devspaces cannot use it. Before, nothing said that Devspaces works only with github.com.
 
 ## 0.5.0
 

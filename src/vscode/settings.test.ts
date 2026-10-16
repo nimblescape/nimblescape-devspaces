@@ -14,6 +14,7 @@ import { parseCacheSchedule } from '../core/remoteMonitor/cacheSettings';
 import {
   DEFAULT_SETTINGS,
   devContainersDefaultExtensionsValue,
+  githubEnterpriseConfigured,
   MAX_REFRESH_INTERVAL_MINUTES,
   normalizeSettings,
   readListOpenMode,
@@ -501,5 +502,65 @@ describe('settings', () => {
     // The warning was closed without its button: the Settings editor stays closed.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fakeVscode.commands.executeCommand).not.toHaveBeenCalled();
+  });
+
+  // The settings of the built-in extension GitHub Authentication of VS Code, read as it reads them: the list
+  // github-enterprise.uris when it has a value (of the workspace or folder only in a trusted workspace), else
+  // github-enterprise.uri.
+  describe('githubEnterpriseConfigured', () => {
+    type Places = { globalValue?: unknown; workspaceValue?: unknown; workspaceFolderValue?: unknown };
+    /** `get` gives the value with the default of VS Code for a setting without one ([] and ''), `inspect` each place. */
+    function configure(uris: Places, uri?: unknown): void {
+      const value = uris.workspaceFolderValue ?? uris.workspaceValue ?? uris.globalValue ?? [];
+      fakeVscode.workspace.getConfiguration.mockReturnValue({
+        get: (key: string) => (key === 'uris' ? value : key === 'uri' ? (uri ?? '') : undefined),
+        inspect: (key: string) => (key === 'uris' ? { key: 'github-enterprise.uris', defaultValue: [], ...uris } : undefined),
+      });
+    }
+
+    it('is false when nothing is set, and reads the section github-enterprise', () => {
+      configure({});
+      expect(githubEnterpriseConfigured()).toBe(false);
+      expect(fakeVscode.workspace.getConfiguration).toHaveBeenCalledWith('github-enterprise');
+    });
+
+    it('reads the list github-enterprise.uris when it has a value, also an empty one', () => {
+      configure({ globalValue: ['https://octo.ghe.com'] });
+      expect(githubEnterpriseConfigured()).toBe(true);
+      configure({ globalValue: ['https://octo.ghe.com'] }, 'https://ghe.example.com');
+      expect(githubEnterpriseConfigured()).toBe(true);
+      // An empty list wins over the old setting.
+      configure({ globalValue: [] }, 'https://ghe.example.com');
+      expect(githubEnterpriseConfigured()).toBe(false);
+    });
+
+    it('reads the old setting github-enterprise.uri when the list has no value', () => {
+      configure({}, 'https://ghe.example.com');
+      expect(githubEnterpriseConfigured()).toBe(true);
+      configure({}, '');
+      expect(githubEnterpriseConfigured()).toBe(false);
+    });
+
+    it('counts a list of the workspace or folder only in a trusted workspace', () => {
+      fakeVscode.workspace.isTrusted = false;
+      configure({ workspaceValue: ['https://octo.ghe.com'] });
+      expect(githubEnterpriseConfigured()).toBe(false);
+      configure({ workspaceFolderValue: ['https://octo.ghe.com'] });
+      expect(githubEnterpriseConfigured()).toBe(false);
+      fakeVscode.workspace.isTrusted = true;
+      configure({ workspaceValue: ['https://octo.ghe.com'] });
+      expect(githubEnterpriseConfigured()).toBe(true);
+      configure({ workspaceFolderValue: ['https://octo.ghe.com'] });
+      expect(githubEnterpriseConfigured()).toBe(true);
+    });
+
+    it('needs a text that is not empty, in a list', () => {
+      for (const uris of [['', '  '], [3, null], 'https://octo.ghe.com']) {
+        configure({ globalValue: uris });
+        expect(githubEnterpriseConfigured(), JSON.stringify(uris)).toBe(false);
+      }
+      configure({}, '  ');
+      expect(githubEnterpriseConfigured()).toBe(false);
+    });
   });
 });
