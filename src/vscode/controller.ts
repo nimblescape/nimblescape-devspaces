@@ -7,7 +7,7 @@
 // and the Connection Adapter.
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { isBlockingBusyMark, statusNamesDevspace } from '../core/busy';
+import { isBlockingBusyMark, statusNamesDevspace, type WindowMark } from '../core/busy';
 import { attachDiagnostics } from '../core/docker/attachDiagnostics';
 import { LOCAL_DOCKER_TARGET, describeDockerHost, dockerHostOf, devspacesOfHost, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
 import { dockerEndpointUnsupported, ensureRemoteContext } from '../core/docker/remoteDocker';
@@ -24,7 +24,7 @@ import { availableDevspaces, isAvailableTo } from '../core/ownership';
 import { isoTime, systemClock, type Clock, type ProgressReporter } from '../core/ports';
 import type { DevspaceOperations } from '../core/pipeline/devspaceOperations';
 import { PipelineTexts, WINDOW_STATE_FLOW_TIMEOUT_MS, type OpenResult } from '../core/pipeline/operationBase';
-import type { DockerEngineRecords } from '../core/storage/dockerEngineRecords';
+import type { DockerEngineRecord, DockerEngineRecords, EngineRemoval } from '../core/storage/dockerEngineRecords';
 import type { DevspaceRegistry } from '../core/storage/registry';
 import type { SessionFiles } from '../core/storage/sessionFiles';
 import type {
@@ -177,9 +177,10 @@ export interface ControllerDeps {
   monitorQuestion?: Pick<MonitorQuestion, 'askIfNeeded'>;
   /**
    * docker-engines.json: the removal mark of an engine ("Remove Devspaces from This Docker Engine…"), which a Start, a
-   * Rebuild and "Update All Images Now" of the user clear on their engine (beforeUserFlow).
+   * Rebuild and "Update All Images Now" of the user clear on their engine (beforeUserFlow), and the entry of a removal
+   * that runs in a window, which refuses those flows in the other windows while it runs.
    */
-  engineRecords?: Pick<DockerEngineRecords, 'removed' | 'setRemoved'>;
+  engineRecords?: Pick<DockerEngineRecords, 'removed' | 'setRemoved' | 'record' | 'removing' | 'startRemoval' | 'endRemoval' | 'clearRemoved'>;
   /** "Remove Devspaces from This Docker Engine…" (removeFromDockerEngine). Without it, the command does nothing. */
   engineRemoval?: EngineRemovalDeps;
   /** The VS Code setting `workbench.list.openMode` (double-click on a row, rowActivation.ts). Default: `readListOpenMode`. */
@@ -1060,11 +1061,10 @@ export class Controller implements vscode.Disposable {
     const update = this.deps.updateImagesNow;
     if (!update) return;
     await this.ready;
-    if (this.refusedWhileRemoving('Update All Images Now')) return;
+    // The question about the Monitor of the engine first, which the request makes sure of.
+    if (!(await this.beforeUserFlow('Update All Images Now'))) return;
     const target = await this.operationTarget();
     const engine = describeDockerHost(target.host);
-    // The question about the Monitor of the engine first, which the request makes sure of.
-    await this.beforeUserFlow();
     await runWithProgress({ title: ControllerTexts.requestingImageUpdate(engine), task: (_progress, signal) => update(target, signal) });
     this.logger.info(`The Monitor on ${engine} took the request of "Update All Images Now".`);
     this.inform(ControllerTexts.imagesUpdatingNow(engine));
@@ -1076,9 +1076,11 @@ export class Controller implements vscode.Disposable {
    * of Devspaces (engineRemoval.ts, with the Docker CLI of the extension once the worker of this window ended); and,
    * after a second confirmation, first the devspaces of the signed-in account there (each as Delete does, in the
    * worker, with all its volumes). Devspaces of other accounts and of other computers stay. Refused while a window of
-   * this computer is connected to a devspace there, or an operation runs; Docker is never started for it. The engine
-   * gets the removal mark before anything is removed (docker-engines.json): until a Start, a Rebuild or "Update All
-   * Images Now" of the user there (beforeUserFlow), this computer does no Docker work there by itself.
+   * this computer is connected to a devspace there, or an operation runs, also when one of them began while it asked,
+   * and while another window removes Devspaces from the engine; Docker is never started for it. The engine gets the
+   * removal mark before anything is removed (docker-engines.json), with the entry of this removal, which keeps the flows
+   * of the user in other windows from clearing the mark while it runs: until a Start, a Rebuild or "Update All Images
+   * Now" of the user there (beforeUserFlow), this computer does no Docker work there by itself.
    */
   async removeFromDockerEngine(): Promise<void> {
     const removal = this.deps.engineRemoval;
@@ -1093,21 +1095,10 @@ export class Controller implements vscode.Disposable {
     // Never an endpoint that is neither local nor SSH (every operation refuses it).
     if (target.kind === 'unsupported') throw dockerEndpointUnsupported(target.endpoint || target.host);
     const engine = describeDockerHost(target.host);
+    if (await this.refusedWhileOtherWindowRemoves('Remove Devspaces', target.host)) return;
     const known = await this.deps.registry.list();
     const here = known.filter((devspace) => isOnDockerHost(devspace, target.host));
-    // A window that uses a devspace there would start the Monitor again with its next heartbeat.
-    const connected = await this.connectedDevspaces(here);
-    if (connected.length > 0) {
-      this.logger.info(`Devspaces is not removed from ${engine}: windows are connected to ${connected.join(', ')}.`);
-      this.warn(ControllerTexts.removeCloseWindowsFirst(engine, listSome(connected)));
-      return;
-    }
-    const running = await this.runningOperation(here);
-    if (running !== undefined) {
-      this.logger.info(`Devspaces is not removed from ${engine}: ${running.operation} of ${running.repository} is still running.`);
-      this.warn(ControllerTexts.removeWhileOperation(running.operation, running.repository));
-      return;
-    }
+    if (await this.removalRefusedByUse(engine, here)) return;
     // From here on, also while it looks for what Devspaces has there and asks, a second run and the operations of the
     // window are refused (refusedWhileRemoving).
     this.removingFrom = engine;
@@ -1172,23 +1163,55 @@ export class Controller implements vscode.Disposable {
       if (choice === undefined) return;
       deleteOwn = choice === ControllerTexts.deleteDevspacesToo;
     }
-    this.logger.info(`Removing Devspaces from ${engine}${own.length > 0 ? (deleteOwn ? ', with the devspaces of the signed-in account there' : '; the devspaces stay') : ''}.`);
-    const marked = await this.markRemoved(target.host);
-    // Without the mark, the background work of this computer can set Devspaces up there again: the message says so.
+    const start = await this.startRemoval(target.host);
+    if (start.kind === 'other') {
+      this.refuseForOtherRemoval('Remove Devspaces', target.host, start.other);
+      return;
+    }
+    // Until the checks below passed, nothing was removed: a stop brings back the mark from before.
+    let stopped = true;
+    try {
+      // A window that connected to a devspace there, or an operation that began, while the questions were open (also on
+      // a devspace that was created meanwhile): the removal stops before it removes anything, as at its start.
+      const hereNow = (await this.deps.registry.list()).filter((devspace) => isOnDockerHost(devspace, target.host));
+      if (await this.removalRefusedByUse(engine, hereNow)) return;
+      stopped = false;
+      if (start.kind === 'started') this.logger.info(`This computer does no Docker work on ${engine} by itself until a Start, a Rebuild or "Update All Images Now" there.`);
+      this.logger.info(`Removing Devspaces from ${engine}${own.length > 0 ? (deleteOwn ? ', with the devspaces of the signed-in account there' : '; the devspaces stay') : ''}.`);
+      await this.removeConfirmed(removal, target, {
+        own: deleteOwn ? own : [],
+        devspacesStay: (!deleteOwn && own.length > 0) || others.length > 0 || inventory.unknownDevspaces.length > 0,
+        // Without the mark, the background work of this computer can set Devspaces up there again: the message says so.
+        marked: start.kind !== 'notRecorded',
+      });
+    } finally {
+      if (start.kind === 'started') await this.endRemoval(target.host, start.removal, stopped ? start.before : undefined);
+    }
+  }
+
+  /**
+   * The removal after the confirmations and the checks: the devspaces `own`, then what Devspaces keeps on the engine
+   * (removeFromEngine), then the last message. `devspacesStay`: devspaces stay on the engine besides those that could
+   * not be deleted, so the store of the VS Code Server stays while they use it. `marked`: the removal mark was written;
+   * when it was not, the last message says so.
+   */
+  private async removeConfirmed(removal: EngineRemovalDeps, target: DockerTarget, options: { own: readonly Devspace[]; devspacesStay: boolean; marked: boolean }): Promise<void> {
+    const engine = describeDockerHost(target.host);
+    const { marked } = options;
     const unmarked = (message: string): string => (marked ? message : `${message} ${ControllerTexts.removalNotRecorded(engine)}`);
     let removed: { result: RemovalResult; failedDevspaces: number };
     try {
       removed = await runWithProgress({
         title: ControllerTexts.removing(engine),
         cancellable: true,
-        task: (progress, signal) => this.removeFromEngine(removal, target, deleteOwn ? own : [], progress, signal),
+        task: (progress, signal) => this.removeFromEngine(removal, target, options.own, progress, signal),
       });
     } finally {
       if (!this.disposed) this.background(this.deps.sidebar.refreshStates(), 'update the sidebar');
     }
     const { result, failedDevspaces } = removed;
     // The store of the VS Code Server stays while devspaces that stay on the engine use it.
-    const devspacesStay = (!deleteOwn && own.length > 0) || others.length > 0 || inventory.unknownDevspaces.length > 0 || failedDevspaces > 0;
+    const devspacesStay = options.devspacesStay || failedDevspaces > 0;
     const keptStore = (item: RemovalResult['items'][number]): boolean => devspacesStay && item.kind === 'volume' && item.name === VSCODE_STORE_VOLUME && item.outcome === 'inUse';
     const left = result.items.filter((item) => (item.outcome === 'inUse' || item.outcome === 'failed') && !keptStore(item)).length + failedDevspaces;
     if (result.ended !== undefined) {
@@ -1234,8 +1257,15 @@ export class Controller implements vscode.Disposable {
       }
       const devspaceTarget = this.devspaceTarget(devspace);
       const name = this.shownName(devspaceTarget);
-      progress.detail(ControllerTexts.deleting(name));
       try {
+        // A window that connected to it after the checks keeps it: its container would be deleted under that window.
+        // When the other windows cannot be read, it is not deleted either.
+        if (this.isAttachedHere(devspace) || (await this.connectedInOtherWindow(devspace.id))) {
+          failedDevspaces++;
+          this.logger.warn(`The devspace of ${name} was not deleted: a window is connected to it. Delete it later with "Devspaces: Delete Devspace".`);
+          continue;
+        }
+        progress.detail(ControllerTexts.deleting(name));
         // The gate of the devspace, as the Delete command; not cancellable (deleteWithProgress).
         const outcome = await this.gate.run(this.operationKey(devspaceTarget), 'Delete', () =>
           this.deps.service.deleteInWorker(devspace.id, { progress, additionalVolumesToRemove: devspace.additionalVolumes ?? [] }),
@@ -1306,8 +1336,97 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * Sets the removal mark of the engine `host`. A failure is logged, and the removal goes on; false then, so that its
-   * last message says so.
+   * Whether the removal from `engine` must not run now (told, and logged): a window of this computer is connected to a
+   * devspace of `here` (connectedDevspaces), or an operation runs (runningOperation). Throws UserFacingError when the
+   * window status files cannot be read (otherWindowsUnknown).
+   */
+  private async removalRefusedByUse(engine: string, here: readonly Devspace[]): Promise<boolean> {
+    // A window that uses a devspace there would start the Monitor again with its next heartbeat.
+    const connected = await this.connectedDevspaces(here);
+    if (connected.length > 0) {
+      this.logger.info(`Devspaces is not removed from ${engine}: windows are connected to ${connected.join(', ')}.`);
+      this.warn(ControllerTexts.removeCloseWindowsFirst(engine, listSome(connected)));
+      return true;
+    }
+    const running = await this.runningOperation(here);
+    if (running !== undefined) {
+      this.logger.info(`Devspaces is not removed from ${engine}: ${running.operation} of ${running.repository} is still running.`);
+      this.warn(ControllerTexts.removeWhileOperation(running.operation, running.repository));
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Sets the removal mark of the engine `host` with the entry of this removal (DockerEngineRecords.startRemoval).
+   * `started`: with the entry, and the record from before, which the end of a removal that stopped early brings back;
+   * `other`: another window removes Devspaces from the engine, so nothing was written; `notRecorded`: the file could
+   * not be written (logged), and the removal goes on, as its last message says; `untracked`: no records here.
+   */
+  private async startRemoval(
+    host: string,
+  ): Promise<{ kind: 'started'; removal: EngineRemoval; before: DockerEngineRecord } | { kind: 'other'; other: EngineRemoval } | { kind: 'notRecorded' | 'untracked' }> {
+    const records = this.deps.engineRecords;
+    if (records === undefined) return { kind: 'untracked' };
+    const owner = this.owner();
+    const removal: EngineRemoval = { windowId: owner.windowId, pid: owner.pid, since: isoTime(this.clock) };
+    try {
+      const start = await records.startRemoval(host, removal, this.clock.now(), await this.markBlocker());
+      return start.started ? { kind: 'started', removal, before: start.before } : { kind: 'other', other: start.other };
+    } catch (error) {
+      this.logger.warn(`The removal from ${describeDockerHost(host)} could not be recorded, so this computer may set Devspaces up there again by itself: ${errorMessage(error)}`);
+      return { kind: 'notRecorded' };
+    }
+  }
+
+  /**
+   * The end of the removal `removal` on the engine `host`: its entry goes, and the mark stays; with `before`, the
+   * record from before comes back (the removal stopped before it removed anything). A failure is logged.
+   */
+  private async endRemoval(host: string, removal: EngineRemoval, before?: DockerEngineRecord): Promise<void> {
+    try {
+      await this.deps.engineRecords?.endRemoval(host, removal, before);
+    } catch (error) {
+      this.logger.warn(`The end of the removal from ${describeDockerHost(host)} could not be recorded: ${errorMessage(error)}`);
+    }
+  }
+
+  /**
+   * The removal that another live window runs on the engine `host` (its entry in docker-engines.json, with the
+   * liveness rule of the busy marks: markBlocker); undefined when none runs, also when the file cannot be read (logged).
+   */
+  private async otherWindowRemoval(host: string): Promise<EngineRemoval | undefined> {
+    const records = this.deps.engineRecords;
+    if (records === undefined) return undefined;
+    let removal: EngineRemoval | undefined;
+    try {
+      removal = await records.removing(host);
+    } catch (error) {
+      this.logger.warn(`The records of the Docker engines could not be read: ${errorMessage(error)}`);
+      return undefined;
+    }
+    if (removal === undefined) return undefined;
+    return (await this.markBlocker())(removal) ? removal : undefined;
+  }
+
+  /** While another window removes Devspaces from the engine `host`, `operation` is not started (logged and told). */
+  private async refusedWhileOtherWindowRemoves(operation: string, host: string): Promise<boolean> {
+    const removal = await this.otherWindowRemoval(host);
+    if (removal === undefined) return false;
+    this.refuseForOtherRemoval(operation, host, removal);
+    return true;
+  }
+
+  /** `operation` did not start: the window of `removal` removes Devspaces from the engine `host` (logged and told). */
+  private refuseForOtherRemoval(operation: string, host: string, removal: EngineRemoval): void {
+    const engine = describeDockerHost(host);
+    this.logger.info(`${operation} did not run: Devspaces is being removed from ${engine} in another window (process ${removal.pid}).`);
+    this.inform(ControllerTexts.removalRunningElsewhere(engine));
+  }
+
+  /**
+   * Sets the removal mark of the engine `host` when there was nothing to remove. A failure is logged; false then, so
+   * that the message says so.
    */
   private async markRemoved(host: string): Promise<boolean> {
     const records = this.deps.engineRecords;
@@ -1579,8 +1698,8 @@ export class Controller implements vscode.Disposable {
     let started: boolean;
     try {
       // A Start of the user asks about the Monitor of the engine before its open makes sure of it; the reopen at
-      // startup asks nothing.
-      if (options.automatic !== true) await this.beforeUserFlow(devspace);
+      // startup asks nothing. Refused while Devspaces is being removed from the engine (told).
+      if (options.automatic !== true && !(await this.beforeUserFlow('Start', devspace))) return;
       started = await this.operation(
         key,
         'Start',
@@ -1856,7 +1975,7 @@ export class Controller implements vscode.Disposable {
     const repository = this.shownName(target);
     // The question about the Monitor of the engine comes first, also before a hand-off: the window that runs the
     // Rebuild then asks nothing.
-    await this.beforeUserFlow(devspace);
+    if (!(await this.beforeUserFlow('Rebuild', devspace))) return;
     if (this.isAttachedHere(devspace)) {
       await this.handOff(target, devspace, { operation: 'rebuild', ...request }, 'rebuild');
       return;
@@ -1965,9 +2084,10 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * The test "a live mark of another window" (`isBlockingBusyMark`), with the window status files read once.
+   * The test "a live mark of another window" (`isBlockingBusyMark`), with the window status files read once: for a busy
+   * mark, and for the entry of a removal of Devspaces from an engine (EngineRemoval).
    */
-  private async markBlocker(): Promise<(mark: BusyMark) => boolean> {
+  private async markBlocker(): Promise<(mark: WindowMark) => boolean> {
     const owner = this.owner();
     let windowStatuses: WindowStatus[] | undefined;
     try {
@@ -2962,35 +3082,47 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * Before a Start, a Rebuild or "Update All Images Now" that the user started on the engine of the operation: the
-   * question about the Monitor of that engine (MonitorQuestion, once per engine), so the Monitor that the flow makes
-   * sure of follows the answer. Not for a target that is neither local nor SSH (every operation refuses it), nor for a
-   * `devspace` of another Docker host (its open is refused). Never throws.
+   * Before a Start, a Rebuild or "Update All Images Now" (`operation`) that the user started on the engine of the
+   * operation: the removal mark of the engine goes (clearRemovalMark), and the question about the Monitor of that engine
+   * comes (MonitorQuestion, once per engine), so the Monitor that the flow makes sure of follows the answer. False, after
+   * a message, when the flow must not run: while this window removes Devspaces from an engine (refusedWhileRemoving),
+   * or another window removes it from the engine of the flow, also when that removal began while the question was open;
+   * the mark stays then.
+   * Nothing for a target that is neither local nor SSH (every operation refuses it), nor for a `devspace` of another
+   * Docker host (its open is refused). Never throws.
    */
-  private async beforeUserFlow(devspace?: Devspace): Promise<void> {
-    // While Devspaces is being removed from an engine, the operation is refused (operation); the mark stays.
-    if (this.removingFrom !== undefined) return;
+  private async beforeUserFlow(operation: string, devspace?: Devspace): Promise<boolean> {
+    if (this.refusedWhileRemoving(operation)) return false;
     const target = await this.operationTarget();
-    if (target.kind === 'unsupported' || (devspace !== undefined && !isOnDockerHost(devspace, target.host))) return;
-    await this.clearRemovalMark(target.host);
+    if (target.kind === 'unsupported' || (devspace !== undefined && !isOnDockerHost(devspace, target.host))) return true;
+    if (!(await this.clearRemovalMark(operation, target.host))) return false;
     await this.deps.monitorQuestion?.askIfNeeded(target.host);
+    return !(await this.refusedWhileOtherWindowRemoves(operation, target.host));
   }
 
   /**
-   * A flow of the user on the engine `host` after "Remove Devspaces from This Docker Engine…" there: the removal mark
-   * goes, so the background work of this computer runs there again (and the question about its Monitor comes again:
-   * the mark forgot the answer). Never throws.
+   * A flow of the user (`operation`) on the engine `host` after "Remove Devspaces from This Docker Engine…" there: the
+   * removal mark goes, so the background work of this computer runs there again (and the question about its Monitor
+   * comes again: the mark forgot the answer). False, after a message, while another window removes Devspaces from the
+   * engine: checked again under the lock of the file, so that the mark of a removal that begins now stays. True
+   * otherwise, also when the file cannot be read or written (logged). Never throws.
    */
-  private async clearRemovalMark(host: string): Promise<void> {
+  private async clearRemovalMark(operation: string, host: string): Promise<boolean> {
     const records = this.deps.engineRecords;
-    if (records === undefined) return;
+    if (records === undefined) return true;
     try {
-      if (!(await records.removed(host))) return;
-      await records.setRemoved(host, undefined);
-      this.logger.info(`Devspaces is set up on ${describeDockerHost(host)} again: the removal mark is cleared.`);
+      const record = await records.record(host);
+      if (record?.removedAt === undefined && record?.removing === undefined) return true;
+      const cleared = await records.clearRemoved(host, await this.markBlocker());
+      if (cleared.other !== undefined) {
+        this.refuseForOtherRemoval(operation, host, cleared.other);
+        return false;
+      }
+      if (cleared.cleared) this.logger.info(`Devspaces is set up on ${describeDockerHost(host)} again: the removal mark is cleared.`);
     } catch (error) {
       this.logger.warn(`The removal mark of ${describeDockerHost(host)} could not be cleared: ${errorMessage(error)}`);
     }
+    return true;
   }
 
   /** The Docker host of the operation ('' = the local Docker). */
