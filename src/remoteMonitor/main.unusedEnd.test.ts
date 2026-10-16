@@ -335,6 +335,41 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(monitor.out().split(failed)).toHaveLength(2);
   });
 
+  // A use ends the wait for the next try, so the end that is found 30 days later starts afresh. Mutation: without the
+  // reset, the old wait for the next try holds back the first look, and the failure of that end is not logged.
+  it('a use after a failed end starts afresh: the next end is found at once, and its failure is logged again', async () => {
+    writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
+    let failures = 2;
+    let usedAt: number | undefined;
+    let foundAgainAt: number | undefined;
+    // The clock of the host: 30 days on from 20 minutes after the use (the days between pass without ticks).
+    const now = (mono: number): number => T0 + mono + (usedAt !== undefined && mono >= usedAt + 20 * MINUTE ? UNUSED_END_MS : 0);
+    const found = 'No window used Devspaces on this Docker engine for 30 days. The Monitor looks again in 1 hour; then it ends itself.';
+    const monitor = startRun({
+      now,
+      updateRestartPolicy: async (policy) => {
+        if (policy === 'no' && failures-- > 0) throw new EngineError('the daemon is busy', 500);
+      },
+      onTick: async (mono) => {
+        // A heartbeat of a window ten minutes after the failed end.
+        if (usedAt === undefined && mono >= UNUSED_END_RECHECK_MS + 10 * MINUTE) {
+          usedAt = mono;
+          await recordUse(stateDir, PERMANENT_ENV, now(mono));
+        }
+        // The tick after the check that found the time without use again.
+        if (foundAgainAt === undefined && monitor.out().split(found).length === 3) foundAgainAt = mono;
+      },
+    });
+    expect(await monitor.result).toBe(0);
+    expect(monitor.out()).toContain('A window used Devspaces on this Docker engine again; the Monitor does not end itself.');
+    // The first check after the 30 days found them, not the next try an hour after the failure.
+    expect(foundAgainAt).toBe(usedAt! + 20 * MINUTE + REMOTE_TICK_MS);
+    const failed = 'The Monitor could not end itself (its restart policy could not be changed: the daemon is busy). It tries again in 1 hour.';
+    expect(monitor.out().split(failed)).toHaveLength(3);
+    expect(monitor.events.filter((event) => event === 'policy own no')).toHaveLength(3);
+    expect(monitor.events.at(-1)).toBe('exit');
+  }, 20_000);
+
   it('does not end without the nonce of its create, or when the list does not name one container', async () => {
     writeLastUse({ at: T0 - UNUSED_END_MS });
     const ticks = Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS);

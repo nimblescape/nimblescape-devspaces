@@ -685,7 +685,9 @@ export async function recordStart(stateDir: string, env: NodeJS.ProcessEnv, now:
  * it exited after the exit with 0 that follows, also after a restart of the engine; the next open of a window creates
  * it again (its ensure replaces a monitor whose policy is not that of its mode). A use that comes before the exit
  * (`usedAgain`) sets the policy back, and the monitor goes on. A failure is logged once, and tried again after
- * UNUSED_END_RECHECK_MS: without the change of the policy the monitor does not exit (Docker would start it again).
+ * UNUSED_END_RECHECK_MS: without the change of the policy the monitor does not exit (Docker would start it again). A
+ * use ends that wait as it ends the wait for the second look; a later end then starts afresh, and its failure is
+ * logged again.
  */
 export class UnusedEnd {
   /** The time of the last use that the last read found (undefined: none read yet). */
@@ -694,8 +696,9 @@ export class UnusedEnd {
   private foundAt: number | undefined;
   /** The monotonic time of the check that found the clock behind the stored time (undefined: not behind). */
   private behindAt: number | undefined;
-  /** The monotonic time of the next try after a failed end. */
+  /** The monotonic time of the next try after a failed end (only while the time without use is found). */
   private retryAt: number | undefined;
+  /** A failed end was logged (once per end that was found). */
   private failureLogged = false;
   /** Its restart policy is `no`: the monitor exits at the next chance (not during a background run). */
   ending = false;
@@ -735,7 +738,6 @@ export class UnusedEnd {
       await this.endWaitIfUsed();
       return false;
     }
-    if (this.retryAt !== undefined && mono < this.retryAt) return false;
     // A clock behind the stored time is a use now until the second look.
     if (this.behindAt !== undefined && mono - this.behindAt < this.recheckMs) return false;
     const before = now();
@@ -748,7 +750,7 @@ export class UnusedEnd {
     if (stored === undefined || (time < stored.at && this.behindAt !== undefined)) {
       // No valid file, or the clock is still behind the stored time at the second look: a use now, written.
       this.lastUseAt = time;
-      this.foundAt = undefined;
+      this.useFound();
       this.behindAt = undefined;
       await writeLastUse(stateDir, time, createIdOf(env) ?? stored?.createId).catch(() => undefined);
       return false;
@@ -757,14 +759,14 @@ export class UnusedEnd {
       // The clock went back (or the stored time was written by a clock that was ahead): a use now, in memory only, so
       // that a clock that is set right again within the hour finds the stored time of the last use.
       this.lastUseAt = time;
-      this.foundAt = undefined;
+      this.useFound();
       this.behindAt = mono;
       return false;
     }
     this.behindAt = undefined;
     this.lastUseAt = stored.at;
     if (time - stored.at < unusedMs) {
-      this.foundAt = undefined;
+      this.useFound();
       return false;
     }
     if (this.foundAt === undefined) {
@@ -802,7 +804,7 @@ export class UnusedEnd {
       return false;
     }
     this.ending = false;
-    this.foundAt = undefined;
+    this.useFound();
     this.lastUseAt = stored.at;
     this.deps.log('A window used Devspaces on this Docker engine while the Monitor was ending; the Monitor goes on. Its restart policy is "unless-stopped" again.');
     return true;
@@ -813,8 +815,15 @@ export class UnusedEnd {
     const stored = await readLastUse(this.deps.stateDir);
     if (stored === undefined || this.lastUseAt === undefined || stored.at <= this.lastUseAt) return;
     this.lastUseAt = stored.at;
-    this.foundAt = undefined;
+    this.useFound();
     this.deps.log('A window used Devspaces on this Docker engine again; the Monitor does not end itself.');
+  }
+
+  /** A use ends the wait for the end, also the wait for the next try: a later end is found afresh, and logged again. */
+  private useFound(): void {
+    this.foundAt = undefined;
+    this.retryAt = undefined;
+    this.failureLogged = false;
   }
 
   /** Sets the restart policy of its own container to `no`; throws with the reason when it cannot. */
