@@ -419,7 +419,7 @@ export class Controller implements vscode.Disposable {
       switchDevspaceInNewWindow: () => this.switchDevspace('newWindow'),
       switchDevspaceInCurrentWindow: () => this.switchDevspace('currentWindow'),
       refresh: () => this.refresh(),
-      updateImagesNow: () => this.updateImagesNow(),
+      updateImagesNow: () => this.updateImagesNowCommand(),
       removeFromDockerEngine: () => this.removeFromDockerEngine(),
       search: () => this.search(),
       showLog: async () => this.logger.show(),
@@ -1127,7 +1127,7 @@ export class Controller implements vscode.Disposable {
    * "Update All Images Now": the Monitor of the Docker engine of this operation (the sidebar's) is made sure
    * and asked for its background run at once (the images in use, the VS Code server and the extensions), with a
    * progress until it took the request; then a message. The run itself is not waited for (it can take long); the
-   * monitor never runs two at once. A failure is shown by the command (registerCommands). A target that is not
+   * monitor never runs two at once. The command shows a failure (updateImagesNowCommand). A target that is not
    * supported (an endpoint that is neither local nor SSH, a context that cannot be read, or Podman) is refused with its
    * message, before the question about the Monitor (beforeUserFlow) and before any progress. Before all of this, the
    * flow is refused while this window removes Devspaces from an engine (refusedWhileRemoving), as Start is.
@@ -1167,6 +1167,19 @@ export class Controller implements vscode.Disposable {
     });
     this.logger.info(`The Monitor on ${engine} took the request of "Update All Images Now".`);
     this.inform(ControllerTexts.imagesUpdatingNow(engine));
+  }
+
+  /**
+   * The command "Update All Images Now": a failure is shown with Try again where the error offers it (errors.ts), as for
+   * Start. Try again runs the command again, as one operation on the Docker host that is current then. A cancellation
+   * shows nothing.
+   */
+  private async updateImagesNowCommand(): Promise<void> {
+    try {
+      await this.updateImagesNow();
+    } catch (error) {
+      this.showError(error, () => this.withDockerTarget(() => this.updateImagesNowCommand()));
+    }
   }
 
   /**

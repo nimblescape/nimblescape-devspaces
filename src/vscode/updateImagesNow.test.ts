@@ -16,9 +16,10 @@ import { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import { dockerTargetOf, type DockerTarget } from '../core/docker/dockerHost';
 import { ensureDockerRunning } from '../core/docker/dockerStart';
 import { UNREADABLE_DOCKER_TARGET, podmanDockerTarget } from '../core/docker/dockerTargets';
+import { UserFacingError } from '../core/errors';
 import { startDockerFor, type RemoteReachabilityDeps } from '../core/docker/remoteDocker';
 import { OP_MONITOR_RUN_NOW } from '../core/helperChannel/protocol';
-import { Messages, Steps } from '../core/messages';
+import { Actions, Messages, Steps } from '../core/messages';
 import { MONITOR_ENSURE_FLOW_TIMEOUT_MS, MONITOR_RUN_NOW_FLOW_TIMEOUT_MS, type DockerStarter } from '../core/pipeline/operationBase';
 import { abortError, silentLogger, type ProcessRunner, type RunResult } from '../core/ports';
 import { Commands } from './commands';
@@ -55,6 +56,19 @@ function controllerWith(
     ...(monitorQuestion !== undefined ? { monitorQuestion } : {}),
   } as unknown as ControllerDeps;
   return { controller: new Controller(deps), infos };
+}
+
+/** Registers the commands of `controller`, and returns the handler of the command `id`. */
+function registeredCommand(controller: Controller, id: string): (argument?: unknown) => Promise<void> {
+  const commands = new Map<string, (argument?: unknown) => Promise<void>>();
+  fakeVscode.commands.registerCommand.mockImplementation((command: string, handler: (argument?: unknown) => Promise<void>) => {
+    commands.set(command, handler);
+    return { dispose() {} };
+  });
+  controller.registerCommands();
+  const handler = commands.get(id);
+  if (handler === undefined) throw new Error(`The command ${id} is not registered.`);
+  return handler;
 }
 
 /** Records in `events` the step that each message of the progress names (progressMessage), or 'no step'. */
@@ -129,11 +143,6 @@ describe('the command Update All Images Now', () => {
     ['rejects, as ensureDockerRunning does', (signal: AbortSignal) => new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(abortError())))],
     ['ends anyway, for example because Docker is ready at that moment', (signal: AbortSignal) => new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()))],
   ])('can be cancelled while Docker starts, without a Monitor call or a message (the start %s)', async (_name, starting) => {
-    const commands = new Map<string, (argument?: unknown) => Promise<void>>();
-    fakeVscode.commands.registerCommand.mockImplementation((id: string, handler: (argument?: unknown) => Promise<void>) => {
-      commands.set(id, handler);
-      return { dispose() {} };
-    });
     // As VS Code: only a cancellable progress has a Cancel button.
     let cancel: () => void = () => undefined;
     fakeVscode.window.withProgress.mockImplementation(
@@ -154,8 +163,7 @@ describe('the command Update All Images Now', () => {
     });
     const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
     const { controller, infos } = controllerWith(LOCAL, update, startDocker);
-    controller.registerCommands();
-    const command = commands.get(Commands.updateImagesNow)?.();
+    const command = registeredCommand(controller, Commands.updateImagesNow)();
     await vi.waitFor(() => expect(startDocker).toHaveBeenCalledTimes(1));
     expect(fakeVscode.window.withProgress.mock.calls[0][0]).toMatchObject({ cancellable: true });
     cancel();
@@ -166,6 +174,22 @@ describe('the command Update All Images Now', () => {
     expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
     expect(infos).toContain('The operation was cancelled.');
     expect(infos.some((text) => text.includes('took the request'))).toBe(false);
+  });
+
+  it('shows a failure with Try again, which runs the command again', async () => {
+    // The first Docker start fails; after Try again, Docker starts and the Monitor is asked.
+    const startDocker = vi
+      .fn<DockerStarter>()
+      .mockRejectedValueOnce(new UserFacingError('dockerStartFailed', Messages.dockerStartFailed, 'Docker was not ready after 120 seconds.'))
+      .mockResolvedValue(undefined);
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    fakeVscode.window.showErrorMessage.mockResolvedValueOnce(Actions.tryAgain);
+    const { controller } = controllerWith(LOCAL, update, startDocker);
+    await registeredCommand(controller, Commands.updateImagesNow)();
+    expect(fakeVscode.window.showErrorMessage).toHaveBeenCalledWith(Messages.dockerStartFailed, Actions.showDetails, Actions.tryAgain);
+    await vi.waitFor(() => expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on the local Docker updates the images now.'));
+    expect(startDocker).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenCalledTimes(1);
   });
 
   // The Docker CLI with the Docker-compatible API of Podman (for example with
