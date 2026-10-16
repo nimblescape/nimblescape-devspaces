@@ -136,6 +136,15 @@ describe('otherWindowUsesDevspace', () => {
     expect(uses(undefined, undefined)).toBeUndefined();
   });
 
+  // A window on an engine with the removal mark that works without Devspaces on the devspace (plainDevspaceId) uses it:
+  // the release of another window must not let the Monitor stop it, and no open may replace its container.
+  it('finds a window that works without Devspaces on the devspace', () => {
+    const plain = window({ devspaceId: null, plainDevspaceId: ENV });
+    expect(uses([plain])).toEqual({ window: plain });
+    expect(uses([window({ devspaceId: null, plainDevspaceId: 'env-2' })])).toBeUndefined();
+    expect(uses([window({ devspaceId: null, plainDevspaceId: ENV, pid: DEAD })])).toBeUndefined();
+  });
+
   it('finds a fresh pending connection file of another window for the devspace', () => {
     expect(uses([], [pending()])).toEqual({ pending: pending() });
     expect(uses([], [pending({ createdAt: iso(NOW - PENDING_MAX_AGE_MS) })])).toBeDefined();
@@ -179,6 +188,11 @@ describe('a live window whose status file is late', () => {
     expect(otherWindowMayUseDevspace('env-1', 'window-a', input([status(75_000, { state: 'closing' })]))).toBeUndefined();
     expect(otherWindowMayUseDevspace('env-1', 'window-a', input([status(75_000, { devspaceId: 'env-2' })]))).toBeUndefined();
     expect(otherWindowMayUseDevspace('env-1', 'window-b', input([status(75_000)]))).toBeUndefined();
+  });
+
+  it('counts a late window that works without Devspaces on the devspace', () => {
+    expect(otherWindowMayUseDevspace('env-1', 'window-a', input([status(75_000, { devspaceId: null, plainDevspaceId: 'env-1' })]))?.windowId).toBe('window-b');
+    expect(otherWindowMayUseDevspace('env-1', 'window-a', input([status(75_000, { devspaceId: null, plainDevspaceId: 'env-2' })]))).toBeUndefined();
   });
 
   it('follows the waiting time, and counts any age during the sleep grace', () => {

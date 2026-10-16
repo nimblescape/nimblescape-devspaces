@@ -279,6 +279,13 @@ describe('otherWindowHoldsDevspace', () => {
     expect(otherWindowHoldsDevspace(devspace(), 'own', { ...input, windowStatuses: [status('other', 33, { devspaceId: ID_A })] })).toBe(false);
   });
 
+  // Mutation: a release rule that looks at devspaceId only lets the Monitor stop the devspace under that window.
+  it('a status file of another live window that works without Devspaces on the devspace (an engine with the removal mark)', () => {
+    const input = { now: NOW, isAlive: alive, windowStatuses: [status('own', 11), status('other', 22, { plainDevspaceId: ID_A })] };
+    expect(otherWindowHoldsDevspace(devspace(), 'own', input)).toBe(true);
+    expect(otherWindowHoldsDevspace(devspace(), 'own', { ...input, windowStatuses: [status('other', 33, { plainDevspaceId: ID_A })] })).toBe(false);
+  });
+
   it('a fresh pending connection file of another window (it opens the devspace)', () => {
     const pending = (windowId: string, at: number): PendingConnection => ({ devspaceId: ID_A, windowId, createdAt: iso(at) });
     const input = { now: NOW, isAlive: alive, windowStatuses: [], pendings: [pending('other', NOW - 10_000)] };

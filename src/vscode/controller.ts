@@ -7,7 +7,7 @@
 // and the Connection Adapter.
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { isBlockingBusyMark } from '../core/busy';
+import { isBlockingBusyMark, statusNamesDevspace } from '../core/busy';
 import { attachDiagnostics } from '../core/docker/attachDiagnostics';
 import { LOCAL_DOCKER_TARGET, describeDockerHost, dockerHostOf, devspacesOfHost, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
 import { dockerEndpointUnsupported, ensureRemoteContext } from '../core/docker/remoteDocker';
@@ -1547,6 +1547,11 @@ export class Controller implements vscode.Disposable {
           this.logger.info(`The container of ${repository} does not run. The window connects again.`);
         }
         reconnecting = true;
+      } else if (this.withoutDevspaces?.devspace.id === devspace.id) {
+        // This window works without Devspaces on the container of the devspace (an engine with the removal mark): the
+        // Start sets Devspaces up there again and connects this window, never a second one, as a Reconnect.
+        this.logger.info(`This window works without Devspaces on ${repository}. The Start sets Devspaces up there again and connects this window.`);
+        reconnecting = true;
       } else if ((otherWindow = await this.otherWindowOf(devspace.id))) {
         if ((await this.containerRuns(devspace, devspace.containerName)) === true) {
           // The pipeline must not replace the container under the other window (an update would disconnect it).
@@ -2640,9 +2645,13 @@ export class Controller implements vscode.Disposable {
     return this.isConnectedHere(devspace) || this.withoutDevspaces?.devspace.id === devspace.id;
   }
 
-  /** The status of another active window that is connected to the devspace, if any (see otherActiveWindowsKnown). */
+  /**
+   * The status of another active window that is attached to the devspace, if any (see otherActiveWindowsKnown):
+   * connected to it, or working without Devspaces on it (usesDevspace), so that a Start shows that window instead of
+   * opening a second one.
+   */
   private async otherWindowOf(devspaceId: string): Promise<WindowStatus | undefined> {
-    return (await this.otherActiveWindowsKnown()).find((window) => window.devspaceId === devspaceId);
+    return (await this.otherActiveWindowsKnown()).find((window) => usesDevspace(window, devspaceId));
   }
 
   /**
@@ -3185,8 +3194,6 @@ function uniqueNames(names: readonly string[]): string[] {
 
 /**
  * Whether the window of `status` is attached to the devspace `devspaceId`: connected to it, or working without
- * Devspaces on it on an engine with the removal mark (WindowStatus.plainDevspaceId).
+ * Devspaces on it on an engine with the removal mark (WindowStatus.plainDevspaceId, statusNamesDevspace).
  */
-function usesDevspace(status: WindowStatus, devspaceId: string): boolean {
-  return status.devspaceId === devspaceId || status.plainDevspaceId === devspaceId;
-}
+const usesDevspace = statusNamesDevspace;

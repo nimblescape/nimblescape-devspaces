@@ -2379,6 +2379,27 @@ describe('open: existing devspace', () => {
         expect((await entry())?.lifecycleIncomplete).toBeUndefined();
       });
 
+      // A window on an engine with the removal mark that works without Devspaces on the devspace (plainDevspaceId) is
+      // attached to its container. Mutation: the rule by devspaceId only stops it; without its process asked, one that
+      // ended still counts.
+      it('a window that works without Devspaces on the devspace counts as connected, while its process runs', async () => {
+        const plain = (): WindowStatus[] => [{ ...live()[0], devspaceId: null, plainDevspaceId: ENV_ID }];
+        h = recreate({ windowStatuses: async () => plain() });
+        h.alivePids.add(PID_B);
+        await seedDevspace(h, { container: 'stopped' });
+        h.helper.userCommandsError = gone();
+        const error = await rejection(h.service.open(TARGET, options()));
+        expect(error.detail).toContain('It was left running: another window is connected to it.');
+        expect(h.docker.log.filter((line) => line.startsWith('stop') || line.startsWith('rm'))).toEqual([]);
+
+        // Its process is gone (not PID, the process of the tests).
+        h = recreate({ windowStatuses: async () => [{ ...plain()[0], pid: 5151 }] });
+        await seedDevspace(h, { container: 'stopped' });
+        h.helper.userCommandsError = gone();
+        const ended = await rejection(h.service.open(TARGET, options()));
+        expect(ended.detail).toContain('It was stopped; the next open starts it again and runs its lifecycle commands.');
+      });
+
       it('a window status file of another window whose process is gone, or that is stale, does not count', async () => {
         h = recreate({
           // window-b: a process that is gone (not PID, the process of the tests); window-c: alive, but 61 s old.

@@ -192,7 +192,7 @@ describe('SessionCoordinator', () => {
   });
 
   // The status file names the Docker context of the window's authority.
-  it('writes the Docker context of the window into its status file, only for a window with a devspace', async () => {
+  it('writes the Docker context of the window into its status file, only for a window attached to a devspace', async () => {
     h.coordinator.dispose();
     h.coordinator = h.create({ windowDockerContext: () => 'devspaces-remote-5709ff28' });
     await h.coordinator.start(ID_A);
@@ -200,6 +200,12 @@ describe('SessionCoordinator', () => {
     h.coordinator.dispose();
     h.coordinator = h.create({ windowDockerContext: () => 'devspaces-remote-5709ff28' });
     await h.coordinator.start(null);
+    expect(readStatus(h)).not.toHaveProperty('dockerContext');
+    // Also for a window that works without Devspaces on a devspace of a remote engine: a Start in another window shows
+    // it by exactly its URI. Mutation: the context only for a window with a devspace fails it.
+    await h.coordinator.setPlainDevspace(ID_A);
+    expect(readStatus(h)).toMatchObject({ devspaceId: null, plainDevspaceId: ID_A, dockerContext: 'devspaces-remote-5709ff28' });
+    await h.coordinator.setPlainDevspace(null);
     expect(readStatus(h)).not.toHaveProperty('dockerContext');
   });
 
