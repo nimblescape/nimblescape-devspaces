@@ -674,7 +674,7 @@
           "type": "string",
           "scope": "application",
           "default": "",
-          "markdownDescription": "An image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that a devspace can start from instead of the Dev Container configuration of the repository: each listed repository gets a `default` row with its own devspace. Empty: no default image.\n\n[Default image in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#default-image)"
+          "markdownDescription": "An image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that a devspace can start from. A repository with a Dev Container configuration gets a `default` row, its own devspace; one without is listed too and starts from the image. Empty: no default image; only repositories with a configuration are listed.\n\n[Default image in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#default-image)"
         },
         "devspaces.startWithDefaultImage": {
           "type": "boolean",
