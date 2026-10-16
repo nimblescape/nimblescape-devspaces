@@ -12,19 +12,9 @@ import { withoutLinks } from './notifications';
 /** Command that opens the output channel (package.json). */
 export const SHOW_LOG_COMMAND = 'devspaces.showLog';
 
-/**
- * The link "Show details" of a progress notification opens the output channel and closes the notification (the
- * operation goes on; the status bar shows it). Its argument is the ID of the operation.
- */
-export const SHOW_PROGRESS_DETAILS_COMMAND = 'devspaces.showProgressDetails';
-
-// A progress notification cannot have buttons besides Cancel, but its message renders links, also command links.
+// A progress notification cannot have buttons besides Cancel, but its message renders links, also command links. A
+// click on a link runs its command and keeps the notification open, with its Cancel button.
 const SHOW_DETAILS_LINK = `[${Actions.showDetails}](command:${SHOW_LOG_COMMAND})`;
-
-/** The link "Show details" of the notification of operation `id`: opens the output channel and closes the notification. */
-function showDetailsLink(id: number): string {
-  return `[${Actions.showDetails}](command:${SHOW_PROGRESS_DETAILS_COMMAND}?${encodeURIComponent(JSON.stringify([id]))})`;
-}
 
 export interface ProgressRun<T> {
   /** For example `Messages.opening(repository)`. */
@@ -54,12 +44,7 @@ export const onDidChangeBusy: vscode.Event<BusyChange> = busyEmitter.event;
 interface RunningOperation {
   title: string;
   repository?: string;
-  /** The ID in the link "Show details" of its notification (hideProgressNotification). */
-  id: number;
-  /** Closes its notification; the operation goes on. */
-  hide?: () => void;
 }
-let nextOperationId = 1;
 const running: RunningOperation[] = [];
 
 /** The newest running operation (its title and repository), or `undefined`. */
@@ -79,38 +64,24 @@ function busyChange(): BusyChange {
   return repository === undefined ? { busy: true, title: newest.title } : { busy: true, title: newest.title, repository };
 }
 
-/**
- * Text of the notification: the title, the current step and its detail, then the link "Show details" (with the ID of
- * the operation: it also closes the notification, showDetailsLink; without: it only opens the output channel).
- */
-export function progressMessage(title: string, step: ProgressStep | undefined, detail: string | undefined, id?: number): string {
+/** Text of the notification: the title, the current step and its detail, then the link "Show details". */
+export function progressMessage(title: string, step: ProgressStep | undefined, detail: string | undefined): string {
   // The title and the detail carry names of the repository and texts of the worker: plain text (withoutLinks), so that
   // the link "Show details" is the only link.
   const parts = [withoutLinks(title)];
   if (step) parts.push(`${Steps[step]}.`);
   if (detail) parts.push(withoutLinks(detail));
-  parts.push(id === undefined ? SHOW_DETAILS_LINK : showDetailsLink(id));
+  parts.push(SHOW_DETAILS_LINK);
   return parts.join(' ');
 }
 
 /**
- * Closes the progress notification of the running operation `id` (the argument of the link "Show details"). The
- * operation goes on and settles; the status bar shows it while it runs. Its Cancel button goes with the notification.
- * An unknown or ended operation is ignored.
- */
-export function hideProgressNotification(id: unknown): void {
-  const operation = running.find((candidate) => candidate.id === id);
-  operation?.hide?.();
-}
-
-/**
  * Runs `task` with one progress notification. The message shows the current step (`Steps[step]`) and its detail,
- * followed by the link "Show details" (command `devspaces.showProgressDetails` with the ID of the operation: it
- * opens the output channel and closes the notification, while the task goes on). Cancel aborts the signal. The promise
- * settles with the result of the task.
+ * followed by the link "Show details" (command `devspaces.showLog`: it opens the output channel, and the notification
+ * stays open with its Cancel button). Cancel aborts the signal. The promise settles with the result of the task.
  */
 export function runWithProgress<T>(run: ProgressRun<T>): Promise<T> {
-  const operation: RunningOperation = { title: run.title, repository: run.repository, id: nextOperationId++ };
+  const operation: RunningOperation = { title: run.title, repository: run.repository };
   running.push(operation);
   busyEmitter.fire(busyChange());
 
@@ -127,7 +98,7 @@ export function runWithProgress<T>(run: ProgressRun<T>): Promise<T> {
           let step: ProgressStep | undefined;
           let detail: string | undefined;
           const show = () => {
-            if (!finished) progress.report({ message: progressMessage(run.title, step, detail, operation.id) });
+            if (!finished) progress.report({ message: progressMessage(run.title, step, detail) });
           };
           const reporter: ProgressReporter = {
             step(next) {
@@ -140,20 +111,14 @@ export function runWithProgress<T>(run: ProgressRun<T>): Promise<T> {
               show();
             },
           };
-          // "Show details" closes the notification (the callback returns), the task goes on.
-          let hide: () => void = () => undefined;
-          const hidden = new Promise<void>((resolveHidden) => {
-            hide = resolveHidden;
-          });
-          // The callback returns; its `finally` stops the reports to the closed notification.
-          operation.hide = () => hide();
           show();
           started = true;
           try {
-            // Also a task that throws before it returns its promise (the rejection is passed on).
+            // Also a task that throws before it returns its promise (the rejection is passed on). The notification
+            // stays until the task settles; then the `finally` stops the reports to the closed notification.
             const task = Promise.resolve().then(() => run.task(reporter, controller.signal));
             task.then(resolve, reject);
-            await Promise.race([task.then(() => undefined, () => undefined), hidden]);
+            await task.then(() => undefined, () => undefined);
           } finally {
             finished = true;
             cancellation.dispose();
