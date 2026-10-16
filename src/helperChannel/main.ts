@@ -8,7 +8,18 @@
 // the standard input comes as text (the loader set its encoding and paused it). Only Node.js built-ins and small
 // modules of src/core. The worker starts no `docker` process: its operations act on the engine through the port over
 // the Engine API.
+//
+// The same file is the program of three more uses, each with its own entry:
+// - the batch helper: startBatchHelper (BATCH_ENTRY), which the worker starts with its own script (batch.ts);
+// - the Monitor: startMonitor (REMOTE_MONITOR_ENTRY, src/remoteMonitor/main.ts), which the worker gives the Monitor
+//   container as its script; there `node /opt/devspace/monitor.js <subcommand>` runs the file as the main module, and
+//   the end of src/remoteMonitor/main.ts runs the subcommand;
+// - the thread of the host access analysis: configurationAnalysisRunner.ts starts this file in a thread with
+//   ANALYSIS_THREAD_DATA, and the end of this file answers the job of that thread.
+// Loading the file starts nothing else: no module of src/helperChannel or src/remoteMonitor does I/O when it is loaded
+// (entries.test.ts).
 import * as fs from 'fs';
+import { isAnalysisThread, startAnalysisThread } from '../core/helper/configurationAnalysisWorker';
 import { CHANNEL_CLEANUP_TIMEOUT_MS, CHANNEL_KILL_GRACE_MS, CHANNEL_SILENCE_EXIT_MS } from '../core/helperChannel/protocol';
 
 /**
@@ -19,6 +30,9 @@ export const CHANNEL_OUTPUT_HIGH_WATER = 1024 * 1024;
 import { batchHelperOperations, prepareBatchHelper, runQuietProcess, spawnStepProcess } from './batchHelper';
 import { OPERATIONS } from './operations';
 import { ChannelServer, type OperationHandler } from './server';
+
+/** The entry of the Monitor (REMOTE_MONITOR_ENTRY) in this file. */
+export { startMonitor } from '../remoteMonitor/main';
 
 /**
  * The shorter times of the Docker tests: DEVSPACE_CHANNEL_SILENCE_MS (500..60000 ms) for the silence; the idle time is
@@ -91,3 +105,6 @@ function serve(initial: string, operations: Readonly<Record<string, OperationHan
   process.stdin.on('error', () => server.inputEnded());
   process.stdin.resume();
 }
+
+// A thread of the host access analysis (started from this file, see above) answers its job; nothing else starts it.
+if (isAnalysisThread()) startAnalysisThread();

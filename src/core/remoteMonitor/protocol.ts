@@ -4,7 +4,7 @@
 
 // The protocol between the computers and the Monitor of a Docker engine (one on every engine): the names of its
 // container, volume, and label, the heartbeat records in its volume, the subcommands of its script
-// (src/remoteMonitor/main.ts, in the worker's bundle as `devspace:monitor-script`), and the strict checks of everything
+// (src/remoteMonitor/main.ts, part of the worker's bundle dist/helperChannel.js), and the strict checks of everything
 // that script reads.
 // Pure functions without I/O; the script and the extension use the same checks. No `vscode`.
 import { createHash } from 'crypto';

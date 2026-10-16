@@ -3,10 +3,8 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 import * as fs from 'fs';
-import { fileURLToPath } from 'url';
 import * as esbuild from 'esbuild';
-import { buildDefines } from './scripts/buildDefines.mjs';
-import { workerBundleOptions } from './scripts/workerScripts.mjs';
+import { sharedBundleOptions, workerBundleOptions } from './scripts/bundleOptions.mjs';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -34,19 +32,12 @@ const watchReporter = {
 };
 
 const shared = {
-  bundle: true,
-  platform: 'node',
-  format: 'cjs',
-  target: 'node24',
-  sourcemap: !production,
-  minify: production,
+  // The options of every bundle (scripts/bundleOptions.mjs), which the tests that bundle the worker use too.
+  ...sharedBundleOptions({ production }),
   // In watch mode the reporter above writes all output; esbuild's own "[watch] build finished" lines per bundle would
   // end the problem matcher's build too early.
   logLevel: watch ? 'silent' : 'info',
   plugins: watch ? [watchReporter] : [],
-  // Compile-time constants (src/types/globals.d.ts). Every bundle gets them, so that code of src/core that a bundle
-  // imports never contains an undefined global.
-  define: buildDefines(),
 };
 
 const outfiles = [
@@ -74,14 +65,12 @@ const contexts = await Promise.all([
     entryPoints: ['src/vscode/groupsPreviewWorker.ts'],
     outfile: outfiles[1],
   }),
-  // The script of the helper channel on a remote Docker host. The extension sends it over SSH as the first input line
-  // of the pipe loader of the channel container (src/core/loader/pipeLoader.ts), so it is always minified (less data
-  // over SSH) and has no source map. It holds the script of the Monitor (the module `devspace:monitor-script`,
-  // scripts/workerScripts.mjs), which it gives the monitor container it creates, and the thread of the host access
-  // analysis (the module `devspace:analysis-script`), which it starts from that text.
+  // The program of the worker, the batch helpers, the Monitor and the analysis threads (scripts/bundleOptions.mjs). The
+  // extension sends it over SSH as the first input line of the pipe loader of the channel container
+  // (src/core/loader/pipeLoader.ts), so it is always minified (less data over SSH) and has no source map.
   // Its options (workerBundleOptions) are the ones that src/workerBundle.test.ts builds.
   esbuild.context({
-    ...workerBundleOptions(fileURLToPath(new URL('.', import.meta.url)), shared),
+    ...workerBundleOptions(shared),
     outfile: outfiles[2],
   }),
 ]);

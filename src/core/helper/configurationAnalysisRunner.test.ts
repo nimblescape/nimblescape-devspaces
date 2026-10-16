@@ -2,10 +2,9 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The host access analysis in the real bundle of its thread (as the worker's bundle carries it, the module
-// `devspace:analysis-script` of scripts/workerScripts.mjs), with its limits of time and memory, and the refusal of
-// every failure (fail closed).
-import { buildSync } from 'esbuild';
+// The host access analysis in a bundle of its thread (configurationAnalysisRunner.testkit.ts: the start of the worker's
+// bundle, without the rest of the worker), started from its file after the check of its hash, with its limits of time
+// and memory, and the refusal of every failure (fail closed), also of a file that was changed or removed.
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -23,7 +22,8 @@ import {
   type AnalysisResult,
 } from './configurationAnalysis';
 import { inProcessAnalyzer } from './configurationAnalysis.testkit';
-import { ANALYSIS_LIMITS, WorkerConfigurationAnalyzer, analysisSlots, type AnalysisLimits } from './configurationAnalysisRunner';
+import { ANALYSIS_LIMITS, WorkerConfigurationAnalyzer, analysisSlots, type AnalysisLimits, type AnalysisScript } from './configurationAnalysisRunner';
+import { analysisBundle, scriptFile } from './configurationAnalysisRunner.testkit';
 import type { ComposeAccessInput } from '../policy';
 
 const ROOT = path.join(__dirname, '..', '..', '..');
@@ -37,26 +37,12 @@ const REPO = '/workspaces/api';
 const REFUSED = { hostAccess: [], unsupported: [ANALYSIS_FAILED_ITEM] };
 
 let outDir: string;
-let bundle: string;
-/** The text of the bundle, as the worker carries it (the analyzer takes the text, not a path). */
-let bundleCode: string;
+/** The bundle of the thread in its file, and its hash. */
+let bundle: AnalysisScript;
 
 beforeAll(() => {
   outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
-  bundle = path.join(outDir, 'configurationAnalysisWorker.js');
-  // The bundle options of the worker's plugin (workerScriptsPlugin of scripts/workerScripts.mjs), but not minified and
-  // written to a file.
-  buildSync({
-    entryPoints: [path.join(__dirname, 'configurationAnalysisWorker.ts')],
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    target: 'node24',
-    outfile: bundle,
-    logLevel: 'silent',
-    define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify('0.0.0'), __DEVSPACES_VERSION__: JSON.stringify('0.0.0') },
-  });
-  bundleCode = fs.readFileSync(bundle, 'utf8');
+  bundle = analysisBundle(outDir);
 });
 
 afterAll(() => {
@@ -70,7 +56,7 @@ function warnings(): { warn: (message: string) => void; lines: string[] } {
 }
 
 function analyzer(limits: Partial<AnalysisLimits> = {}, logger = warnings()): WorkerConfigurationAnalyzer {
-  return new WorkerConfigurationAnalyzer({ code: bundleCode }, logger, { ...ANALYSIS_LIMITS, ...limits });
+  return new WorkerConfigurationAnalyzer(bundle, logger, { ...ANALYSIS_LIMITS, ...limits });
 }
 
 function composeInput(model: ComposeModel, extra: Partial<ComposeAccessInput> = {}): ComposeAccessInput {
@@ -241,7 +227,7 @@ describe('WorkerConfigurationAnalyzer', () => {
       garbage: 'require("worker_threads").parentPort.on("message", () => require("worker_threads").parentPort.postMessage({ ok: true, result: { report: { hostAccess: [1] } } }));',
       allow: 'require("worker_threads").parentPort.on("message", () => require("worker_threads").parentPort.postMessage({ ok: true, result: {} }));',
     };
-    // The scripts as their texts, and one that cannot load its module as the worker that does not start.
+    // The scripts in their files, and one that cannot load its module as the worker that does not start.
     const codes = ['require("./missing-module-of-the-test");', ...Object.values(scripts)];
     // None of them is a limit of the configuration: an internal error, with its own item (still refused: never
     // allowed).
@@ -252,7 +238,7 @@ describe('WorkerConfigurationAnalyzer', () => {
     const reasons: string[] = [];
     for (const code of codes) {
       const logger = warnings();
-      const result = await new WorkerConfigurationAnalyzer({ code }, logger, { ...ANALYSIS_LIMITS, timeoutMs: 5000 }).analyze(job);
+      const result = await new WorkerConfigurationAnalyzer(scriptFile(outDir, code), logger, { ...ANALYSIS_LIMITS, timeoutMs: 5000 }).analyze(job);
       internal(result);
       reasons.push(result.failure!.reason);
       expect(logger.lines, code).toHaveLength(1);
@@ -272,7 +258,7 @@ describe('WorkerConfigurationAnalyzer', () => {
 
   it('refuses a job whose texts are larger than the budget before it is passed to a worker', async () => {
     const logger = warnings();
-    const worker = new WorkerConfigurationAnalyzer({ code: bundleCode }, logger, ANALYSIS_LIMITS, 1000);
+    const worker = new WorkerConfigurationAnalyzer(bundle, logger, ANALYSIS_LIMITS, 1000);
     const job: AnalysisJob = singleJob(`FROM alpine\n# ${'a'.repeat(2000)}\n`);
     const result = await worker.analyze(job);
     // A size limit (deterministic), not `limit` (time or memory of the worker).
@@ -282,16 +268,15 @@ describe('WorkerConfigurationAnalyzer', () => {
     const many: AnalysisJob = { kind: 'hostAccess', checksOn: true, input: { config: { runArgs: Array.from({ length: 200 }, () => '') }, ownVolume: OWN } };
     expect((await worker.analyze(many)).failure?.kind).toBe('size');
     // Within the budget: the worker runs it.
-    expect((await new WorkerConfigurationAnalyzer({ code: bundleCode }, logger).analyze(job)).failure).toBeUndefined();
+    expect((await new WorkerConfigurationAnalyzer(bundle, logger).analyze(job)).failure).toBeUndefined();
   });
 
   it('tells a worker that did not start in time apart from one that took too long', async () => {
-    // The script as its text.
-    const code = 'require("worker_threads").parentPort.on("message", () => { const t = Date.now(); while (Date.now() - t < 2000); });';
+    const script = scriptFile(outDir, 'require("worker_threads").parentPort.on("message", () => { const t = Date.now(); while (Date.now() - t < 2000); });');
     const job: AnalysisJob = { kind: 'hostAccess', checksOn: true, input: { config: {}, ownVolume: OWN } };
-    const result = await new WorkerConfigurationAnalyzer({ code }, warnings(), { ...ANALYSIS_LIMITS, timeoutMs: 300 }).analyze(job);
+    const result = await new WorkerConfigurationAnalyzer(script, warnings(), { ...ANALYSIS_LIMITS, timeoutMs: 300 }).analyze(job);
     expect(result.failure).toEqual({ kind: 'limit', reason: 'it took longer than 300 ms' });
-    const early = await new WorkerConfigurationAnalyzer({ code }, warnings(), { ...ANALYSIS_LIMITS, timeoutMs: 1 }).analyze(job);
+    const early = await new WorkerConfigurationAnalyzer(script, warnings(), { ...ANALYSIS_LIMITS, timeoutMs: 1 }).analyze(job);
     expect(early.failure).toEqual({ kind: 'internal', reason: 'the worker did not start within 1 ms' });
   });
 
@@ -315,35 +300,63 @@ describe('WorkerConfigurationAnalyzer', () => {
     expect((await analyzer().analyze(other)).failure?.kind).toBe('internal');
   });
 
-  // The text is the only way: its result is the one of the analysis in this thread.
-  it('runs from the text of its script (the worker carries it), with its limits', async () => {
-    const code = bundleCode;
+  // The file is the only way: its result is the one of the analysis in this thread.
+  it('runs from the file of its script, with its limits', async () => {
     const variables = helperCliVariables('acme/api');
     const job: AnalysisJob = {
       kind: 'hostAccess',
       checksOn: true,
       input: { ownVolume: OWN, variables, metadata: [{ mounts: ['source=${localEnv:HOME}/.ssh,target=/root/.ssh,type=bind'] }] },
     };
-    const fromText = await new WorkerConfigurationAnalyzer({ code }, warnings()).analyze(job);
-    expect(fromText.failure).toBeUndefined();
-    expect(fromText.report).toEqual(runAnalysisJob(job).report);
-    expect(fromText.report.hostAccess).toEqual(['bind mount /root/.ssh']);
-    // The time limit holds for a script from text too.
-    const slow = 'require("worker_threads").parentPort.on("message", () => { const t = Date.now(); while (Date.now() - t < 2000); });';
-    const result = await new WorkerConfigurationAnalyzer({ code: slow }, warnings(), { ...ANALYSIS_LIMITS, timeoutMs: 300 }).analyze(job);
+    const fromFile = await new WorkerConfigurationAnalyzer(bundle, warnings()).analyze(job);
+    expect(fromFile.failure).toBeUndefined();
+    expect(fromFile.report).toEqual(runAnalysisJob(job).report);
+    expect(fromFile.report.hostAccess).toEqual(['bind mount /root/.ssh']);
+    // The time limit holds for any script.
+    const slow = scriptFile(outDir, 'require("worker_threads").parentPort.on("message", () => { const t = Date.now(); while (Date.now() - t < 2000); });');
+    const result = await new WorkerConfigurationAnalyzer(slow, warnings(), { ...ANALYSIS_LIMITS, timeoutMs: 300 }).analyze(job);
     expect(result.failure).toEqual({ kind: 'limit', reason: 'it took longer than 300 ms' });
     // So does the memory limit.
-    const greedy = 'require("worker_threads").parentPort.on("message", () => { const a = []; for (;;) a.push(new Array(1e5).fill(1)); });';
-    const memory = await new WorkerConfigurationAnalyzer({ code: greedy }, warnings(), { ...ANALYSIS_LIMITS, timeoutMs: 20_000, maxOldGenerationSizeMb: 32 }).analyze(job);
+    const greedy = scriptFile(outDir, 'require("worker_threads").parentPort.on("message", () => { const a = []; for (;;) a.push(new Array(1e5).fill(1)); });');
+    const memory = await new WorkerConfigurationAnalyzer(greedy, warnings(), { ...ANALYSIS_LIMITS, timeoutMs: 20_000, maxOldGenerationSizeMb: 32 }).analyze(job);
     expect(memory.failure?.kind).toBe('limit');
     expect(memory.report).toEqual(REFUSED);
-    // A text that does not compile is an internal failure, refused.
-    const broken = await new WorkerConfigurationAnalyzer({ code: 'this is not JavaScript' }, warnings()).analyze(job);
+    // A file that does not compile is an internal failure, refused.
+    const broken = await new WorkerConfigurationAnalyzer(scriptFile(outDir, 'this is not JavaScript'), warnings()).analyze(job);
     expect(broken.failure?.kind).toBe('internal');
     expect(broken.report).toEqual({ hostAccess: [], unsupported: [analysisInternalItem(broken.failure!.reason)] });
   });
 
-  // The extension does not run the analysis (the worker does, from the script in its bundle), so the analysis has no
+  // The file of the hash runs, or nothing: each start reads the file again and checks its hash.
+  it('refuses a job when the file of its script was changed or removed, and runs nothing of it', async () => {
+    const job: AnalysisJob = { kind: 'hostAccess', checksOn: true, input: { config: { runArgs: ['--privileged'] }, ownVolume: OWN } };
+    const script = analysisBundle(outDir);
+    const original = fs.readFileSync(script.file);
+    const logger = warnings();
+    const worker = new WorkerConfigurationAnalyzer(script, logger);
+    expect(await worker.analyze(job)).toEqual(runAnalysisJob(job));
+    // A changed file never runs: its added line would write the marker.
+    const marker = path.join(outDir, 'the-changed-script-ran');
+    fs.appendFileSync(script.file, `\nrequire("fs").writeFileSync(${JSON.stringify(marker)}, "");\n`);
+    const changed = await worker.analyze(job);
+    expect(changed).toEqual(analysisFailure(job, { kind: 'internal', reason: 'the script of the thread does not match its hash' }));
+    expect(changed.report).toEqual({ hostAccess: [], unsupported: [analysisInternalItem('the script of the thread does not match its hash')] });
+    // A missing file.
+    fs.rmSync(script.file);
+    const missing = await worker.analyze(job);
+    expect(missing.failure).toEqual({ kind: 'internal', reason: expect.stringMatching(/^the script of the thread cannot be read: ENOENT/) });
+    expect(missing.report.unsupported).toEqual([analysisInternalItem(missing.failure!.reason)]);
+    expect(logger.lines).toEqual([
+      'The host access analysis of the configuration failed (the script of the thread does not match its hash); the configuration is refused.',
+      expect.stringMatching(/^The host access analysis of the configuration failed \(the script of the thread cannot be read: ENOENT.*\); the configuration is refused\.$/),
+    ]);
+    // The file as it was runs again.
+    fs.writeFileSync(script.file, original);
+    expect(await worker.analyze(job)).toEqual(runAnalysisJob(job));
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  // The extension does not run the analysis (the worker does, in a thread of its own bundle), so the analysis has no
   // bundle of its own in the extension.
   it('is no bundle of the extension: neither built by esbuild.mjs nor packaged', () => {
     expect(fs.readFileSync(path.join(ROOT, 'esbuild.mjs'), 'utf8')).not.toContain("entryPoints: ['src/core/helper/configurationAnalysisWorker.ts']");

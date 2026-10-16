@@ -12,8 +12,7 @@ import type { DevspaceStates, StateDevspace } from '../../src/core/pipeline/refr
 import * as fs from 'fs';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
-import { buildDefines } from '../../scripts/buildDefines.mjs';
-import { workerScriptsPlugin } from '../../scripts/workerScripts.mjs';
+import { sharedBundleOptions, workerBundleOptions } from '../../scripts/bundleOptions.mjs';
 // The Docker CLI of the extension (BootstrapDocker).
 import type { BootstrapDocker } from '../../src/core/docker/bootstrapDocker';
 import type { DockerTarget } from '../../src/core/docker/dockerHost';
@@ -39,16 +38,9 @@ let bundled: Promise<string> | undefined;
 export function workerScript(): Promise<string> {
   bundled ??= esbuild
     .build({
-      // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
-      define: buildDefines(),
-      // The script of the Monitor in the worker, as esbuild.mjs bundles it.
-      plugins: [workerScriptsPlugin(path.resolve(__dirname, '../..'), buildDefines())],
-      entryPoints: [path.resolve(__dirname, '../../src/helperChannel/main.ts')],
-      bundle: true,
-      platform: 'node',
-      format: 'cjs',
-      target: 'node24',
-      minify: true,
+      // The worker's bundle as a production build of esbuild.mjs builds it: also the program of the Monitor and of
+      // the analysis thread.
+      ...workerBundleOptions(sharedBundleOptions({ production: true })),
       write: false,
       logLevel: 'silent',
     })

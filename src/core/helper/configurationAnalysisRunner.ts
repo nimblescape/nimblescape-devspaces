@@ -3,16 +3,19 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // Runs each job of the host access analysis (configurationAnalysis.ts) in a worker thread of its own
-// (configurationAnalysisWorker.ts; the worker carries its script in its own bundle, `devspace:analysis-script`) with
-// limits of memory (`resourceLimits`) and a time limit. When the time runs out, the thread is stopped (Worker.terminate
+// (configurationAnalysisWorker.ts) with limits of memory (`resourceLimits`) and a time limit. The thread starts from a
+// file, never from text: the worker gives its own bundle (dist/helperChannel.js, as the pipe loader stored it), and each
+// start first checks the SHA-256 hash of that file. When the time runs out, the thread is stopped (Worker.terminate
 // stops even a running loop); a thread that runs out of memory, crashes, exits, or answers with anything but a result
-// is stopped too. Each such failure refuses the configuration as not supported (analysisFailure): fail closed, never
-// allowed. The limits of the parser (the sizes and budgets of dockerfile.ts) stay the first line; this is the bound on
-// everything they miss. No `vscode` import.
+// is stopped too. Each such failure, and a file that cannot be read or does not have its hash, refuses the configuration
+// as not supported (analysisFailure): fail closed, never allowed. The limits of the parser (the sizes and budgets of
+// dockerfile.ts) stay the first line; this is the bound on everything they miss. No `vscode` import.
 //
 // V8 ignores `resourceLimits` when the process runs with `--max-old-space-size` (for example in NODE_OPTIONS): the flag
 // applies to every isolate of the process. So the runner also watches the heap of the worker itself
 // (Worker.getHeapStatistics) and stops the worker beyond the same limit.
+import { createHash } from 'crypto';
+import * as fs from 'fs';
 import { Worker } from 'worker_threads';
 import type { Logger } from '../ports';
 import { MAX_ANALYSIS_JOB_CHARACTERS } from './analysisLimits';
@@ -27,7 +30,7 @@ import {
   type AnalysisResult,
   type ConfigurationAnalyzer,
 } from './configurationAnalysis';
-import type { AnalysisWorkerMessage } from './configurationAnalysisWorker';
+import { ANALYSIS_THREAD_DATA, type AnalysisWorkerMessage } from './configurationAnalysisWorker';
 
 /** The limits of one job: its time, and the memory of its worker (Node's `resourceLimits` of a Worker). */
 export interface AnalysisLimits {
@@ -35,6 +38,15 @@ export interface AnalysisLimits {
   maxOldGenerationSizeMb: number;
   maxYoungGenerationSizeMb: number;
   stackSizeMb: number;
+}
+
+/**
+ * The file that a thread of the analysis starts from, and its SHA-256 hash (hex, as bundleHash of the pipe loader). The
+ * file must start the analysis in a thread with ANALYSIS_THREAD_DATA (configurationAnalysisWorker.ts).
+ */
+export interface AnalysisScript {
+  file: string;
+  hash: string;
 }
 
 /** The interval of the watch of the memory of a worker. */
@@ -55,11 +67,11 @@ export const ANALYSIS_LIMITS: Readonly<AnalysisLimits> = {
  */
 export class WorkerConfigurationAnalyzer implements ConfigurationAnalyzer {
   /**
-   * `script`: the text of the script of the thread, which the worker carries in its own bundle
-   * (`devspace:analysis-script`) and starts with `eval`.
+   * `script`: the file of the thread and its hash. The worker gives its own file (src/helperChannel/ownScript.ts). Each
+   * start reads the file first; a file that cannot be read or does not have the hash refuses the job (`internal`).
    */
   constructor(
-    private readonly script: { code: string },
+    private readonly script: Readonly<AnalysisScript>,
     private readonly logger?: Pick<Logger, 'warn'>,
     private readonly limits: Readonly<AnalysisLimits> = ANALYSIS_LIMITS,
     private readonly maxJobCharacters: number = MAX_ANALYSIS_JOB_CHARACTERS,
@@ -100,10 +112,16 @@ export class WorkerConfigurationAnalyzer implements ConfigurationAnalyzer {
         () => (online ? fail(`it took longer than ${this.limits.timeoutMs} ms`, 'limit') : fail(`the worker did not start within ${this.limits.timeoutMs} ms`)),
         this.limits.timeoutMs,
       );
+      // Only the file of the hash runs: the check reads it again before each start.
+      const mismatch = this.checkScript();
+      if (mismatch !== undefined) {
+        fail(mismatch);
+        return;
+      }
       try {
-        // The text of the script, which `eval` runs.
-        worker = new Worker(this.script.code, {
-          eval: true,
+        // The file itself, never its text; ANALYSIS_THREAD_DATA starts the analysis in it.
+        worker = new Worker(this.script.file, {
+          workerData: ANALYSIS_THREAD_DATA,
           resourceLimits: {
             maxOldGenerationSizeMb: this.limits.maxOldGenerationSizeMb,
             maxYoungGenerationSizeMb: this.limits.maxYoungGenerationSizeMb,
@@ -147,6 +165,17 @@ export class WorkerConfigurationAnalyzer implements ConfigurationAnalyzer {
         fail(`the job could not be passed: ${String(error)}`);
       }
     });
+  }
+
+  /** Undefined when the file of the script has its hash; otherwise the reason of the refusal. */
+  private checkScript(): string | undefined {
+    let content: Buffer;
+    try {
+      content = fs.readFileSync(this.script.file);
+    } catch (error) {
+      return `the script of the thread cannot be read: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    return createHash('sha256').update(content).digest('hex') === this.script.hash ? undefined : 'the script of the thread does not match its hash';
   }
 
   /**

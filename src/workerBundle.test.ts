@@ -2,34 +2,32 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The worker's bundle (dist/helperChannel.js) holds no code of the helper image of the extension. The worker runs from
-// its own image, so its WorkspaceHelper builds, checks, maintains and records no helper image; HelperImages and what it
-// runs (helperImage.ts) are the extension's. Checked on the modules that esbuild bundles into dist/helperChannel.js
-// (its metafile), built with the options of esbuild.mjs (workerBundleOptions of scripts/workerScripts.mjs), and on the
-// inputs of the scripts that the bundle carries as text (the Monitor and the thread of the host access
-// analysis), whose own builds never reach that metafile.
+// The worker's bundle (dist/helperChannel.js), built with the options of esbuild.mjs (workerBundleOptions of
+// scripts/bundleOptions.mjs), checked on the modules that esbuild bundles into it (its metafile) and on its text. It is
+// the one program of the worker, the batch helpers, the Monitor and the threads of the host access analysis, and it
+// carries no code as text. It holds no code of the helper image of the extension: the worker runs from its own image,
+// so its WorkspaceHelper builds, checks, maintains and records no helper image; HelperImages and what it runs
+// (helperImage.ts) are the extension's.
 import * as fs from 'fs';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { WORKER_SCRIPT_ENTRIES, workerBundleOptions } from '../scripts/workerScripts.mjs';
+import { sharedBundleOptions, workerBundleOptions } from '../scripts/bundleOptions.mjs';
 
 const ROOT = path.resolve(__dirname, '..');
 
 /** The modules of the helper image of the extension: HelperImages, its build, check, cleanup and record, its prebuild. */
 const HELPER_IMAGE_MODULES = ['src/core/helper/helperImages.ts', 'src/core/helper/helperImage.ts', 'src/core/helper/helperPrebuild.ts'];
+/** The entries of the uses of the bundle: the worker and the batch helper, the Monitor, the analysis thread. */
+const ENTRY_MODULES = ['src/helperChannel/main.ts', 'src/remoteMonitor/main.ts', 'src/core/helper/configurationAnalysisWorker.ts'];
 
 let inputs: string[] = [];
-/** The inputs of each script of the worker (WORKER_SCRIPT_ENTRIES), from its own build. */
-const scriptInputs = new Map<string, string[]>();
+let text = '';
 
 beforeAll(async () => {
-  const define = { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) };
-  // What esbuild.mjs gives every bundle (`shared`) as far as it decides which modules are bundled; the rest of the
-  // worker's options are workerBundleOptions'.
-  const shared = { bundle: true, platform: 'node' as const, format: 'cjs' as const, target: 'node24', define, plugins: [] };
+  // The options of a production build of esbuild.mjs.
   const result = await esbuild.build({
-    ...workerBundleOptions(ROOT, shared, (script, files) => scriptInputs.set(script, files)),
+    ...workerBundleOptions(sharedBundleOptions({ production: true })),
     absWorkingDir: ROOT,
     outfile: 'dist/helperChannel.js',
     write: false,
@@ -37,9 +35,23 @@ beforeAll(async () => {
     logLevel: 'silent',
   });
   inputs = Object.keys(result.metafile.inputs);
+  text = result.outputFiles[0].text;
 }, 60_000);
 
-describe("the worker's bundle: no code of the helper image of the extension", () => {
+describe("the worker's bundle", () => {
+  it('holds the worker, the Monitor and the thread of the host access analysis as its own modules', () => {
+    for (const module of ENTRY_MODULES) expect(inputs).toContain(module);
+  });
+
+  // Before, a plugin built the Monitor and the analysis thread apart and put each into the bundle as a string
+  // (the modules `devspace:monitor-script` and `devspace:analysis-script`), and the analysis thread ran that string.
+  it('carries no code as text: no module of a plugin, no script as a string', () => {
+    expect(inputs.filter((input) => input.includes(':'))).toEqual([]);
+    expect(text).not.toContain('devspace:monitor-script');
+    expect(text).not.toContain('devspace:analysis-script');
+    expect(text).not.toMatch(/\beval:\s*(?:true|!0)/);
+  });
+
   it('holds the pipeline and the workspace helper (the check below is not empty by accident)', () => {
     expect(inputs).toContain('src/core/worker/workerServices.ts');
     expect(inputs).toContain('src/core/helper/workspaceHelper.ts');
@@ -49,22 +61,8 @@ describe("the worker's bundle: no code of the helper image of the extension", ()
     expect(inputs.filter((input) => HELPER_IMAGE_MODULES.includes(input))).toEqual([]);
   });
 
-  // The scripts are separate builds of the plugin; an import of HelperImages in the script of the Monitor would
-  // put the code into dist/helperChannel.js while the check above passes.
-  it('holds no module of the helper image of the extension in the scripts that it carries', () => {
-    expect([...scriptInputs.keys()].sort()).toEqual(Object.keys(WORKER_SCRIPT_ENTRIES).sort());
-    expect(scriptInputs.get('devspace:monitor-script')).toContain('src/remoteMonitor/main.ts');
-    expect(scriptInputs.get('devspace:analysis-script')).toContain('src/core/helper/configurationAnalysisWorker.ts');
-    for (const [script, files] of scriptInputs) {
-      expect(
-        files.filter((input) => HELPER_IMAGE_MODULES.includes(input)),
-        script,
-      ).toEqual([]);
-    }
-  });
-
   // A renamed or moved module would make the checks above pass without checking it.
   it('names modules that exist', () => {
-    for (const module of HELPER_IMAGE_MODULES) expect(fs.existsSync(path.join(ROOT, module)), module).toBe(true);
+    for (const module of [...HELPER_IMAGE_MODULES, ...ENTRY_MODULES]) expect(fs.existsSync(path.join(ROOT, module)), module).toBe(true);
   });
 });

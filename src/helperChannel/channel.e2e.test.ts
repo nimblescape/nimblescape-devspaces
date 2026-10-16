@@ -15,8 +15,7 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
-import { buildDefines } from '../../scripts/buildDefines.mjs';
-import { workerScriptsPlugin } from '../../scripts/workerScripts.mjs';
+import { sharedBundleOptions, workerBundleOptions } from '../../scripts/bundleOptions.mjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HelperChannel } from '../core/helperChannel/helperChannel';
 import { CHANNEL_ENTRY, OP_PROBE, OP_SWEEP, SWEEP_FILTERS, encodeMessage, parseProbeParams, parseProbeValue, parseServerMessage, parseSweepParams } from '../core/helperChannel/protocol';
@@ -130,17 +129,9 @@ describeUnix('the helper channel script in a Node.js process', () => {
     engine = fakeEngine(socketPath);
     await engine.listen();
     const result = await esbuild.build({
-      // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
-      define: buildDefines(),
-      // The script of the Monitor in the worker, as esbuild.mjs bundles it, and the Engine API on the socket of
-      // the fake engine.
-      plugins: [workerScriptsPlugin(path.resolve(__dirname, '..', '..'), buildDefines()), engineSocketPlugin(socketPath)],
-      entryPoints: [path.resolve(__dirname, 'main.ts')],
-      bundle: true,
-      platform: 'node',
-      format: 'cjs',
-      target: 'node24',
-      minify: true,
+      // The worker as a production build of esbuild.mjs bundles it, with the Engine API on the socket of the fake
+      // engine.
+      ...workerBundleOptions({ ...sharedBundleOptions({ production: true }), plugins: [engineSocketPlugin(socketPath)] }),
       write: false,
       logLevel: 'silent',
     });

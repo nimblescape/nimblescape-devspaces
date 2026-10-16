@@ -45,7 +45,6 @@ import { dockerEngine } from './engineClient';
 import { cancelledIfAborted, checkedOperation, contextLogger, deleteCheckOperation, deleteOperation, listConfigurationsOperation, ownHelperOfEngine, reconcileOperation, heartbeatOperation, monitorEnsureOperation, monitorRunNowOperation, openOperation, ensureWorkerMonitor, operationFailure, prepareOperation, recordGitStateOperation, stopOperation, tokenRemoveOperation, windowStateOperation, type EngineOfOperation, type OwnHelperOf, type WorkerScriptSource } from './flowOperations';
 import * as os from 'os';
 import type { OperationHandler } from './server';
-import monitorScript from 'devspace:monitor-script';
 
 /**
  * `probe`: the version of the engine behind the socket of the worker, and the identity of that engine, which the
@@ -136,6 +135,9 @@ const OWN_HELPER_OF: OwnHelperOf = ownHelperOfEngine(ENGINE_OF, () => os.hostnam
  */
 const WORKER_SCRIPT: WorkerScriptSource = { read: () => BATCH.readScript(), stateDir: LOCK_STATE_DIR };
 
+/** The script of the Monitor: this worker's own script, whose entry startMonitor runs the Monitor (main.ts). */
+const MONITOR_SCRIPT = (): string => BATCH.readScript();
+
 export const OPERATIONS: Readonly<Record<string, OperationHandler>> = {
   // Over the port of the engine too.
   [OP_PROBE]: probeOperation(ENGINE_OF),
@@ -158,12 +160,12 @@ export const OPERATIONS: Readonly<Record<string, OperationHandler>> = {
   // The heartbeats of the Monitor, and the Git state of a release (the image settings come with the open).
   [OP_HEARTBEAT]: heartbeatOperation(ENGINE_OF),
   [OP_RECORD_GIT_STATE]: recordGitStateOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p)),
-  // The ensure of the Monitor container, with the script of the monitor in this bundle.
-  [OP_MONITOR_ENSURE]: monitorEnsureOperation(ENGINE_OF, OWN_HELPER_OF, () => monitorScript, WORKER_SCRIPT),
+  // The ensure of the Monitor container, with this worker's own script as the script of the Monitor.
+  [OP_MONITOR_ENSURE]: monitorEnsureOperation(ENGINE_OF, OWN_HELPER_OF, MONITOR_SCRIPT, WORKER_SCRIPT),
   // "Update All Images Now", the same ensure, then the request of the run.
-  [OP_MONITOR_RUN_NOW]: monitorRunNowOperation(ENGINE_OF, OWN_HELPER_OF, () => monitorScript, ensureWorkerMonitor, WORKER_SCRIPT),
+  [OP_MONITOR_RUN_NOW]: monitorRunNowOperation(ENGINE_OF, OWN_HELPER_OF, MONITOR_SCRIPT, ensureWorkerMonitor, WORKER_SCRIPT),
   // The open, by the worker's own pipeline, with the Monitor of this bundle.
-  [OP_OPEN]: openOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p), () => monitorScript, LOCK_DEPS, WORKER_SCRIPT),
+  [OP_OPEN]: openOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p), MONITOR_SCRIPT, LOCK_DEPS, WORKER_SCRIPT),
   // The headless prepare of the next devspace image (the Monitor triggers it).
   [OP_PREPARE]: prepareOperation(ENGINE_OF, OWN_HELPER_OF, (context, p) => workerBatchSession(BATCH, context, p)),
 };

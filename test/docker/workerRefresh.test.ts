@@ -6,10 +6,8 @@
 // runner, compared with what the Docker CLI reports. The devspaces: one running from the helper image with a Git
 // repository on a branch, one stopped with a volume without the labels (found by its name), one with nothing, and one
 // running whose branch is not asked for. No worker container is left over.
-import * as path from 'path';
 import * as esbuild from 'esbuild';
-import { buildDefines } from '../../scripts/buildDefines.mjs';
-import { workerScriptsPlugin } from '../../scripts/workerScripts.mjs';
+import { sharedBundleOptions, workerBundleOptions } from '../../scripts/bundleOptions.mjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BootstrapDocker } from '../../src/core/docker/bootstrapDocker';
 import { mapContainerState } from '../../src/core/docker/dockerObjects';
@@ -24,16 +22,9 @@ import { dockerTestContext, testHelperImage, testStateVolume, testVscodeVolume }
 
 async function bundleScript(): Promise<string> {
   const result = await esbuild.build({
-    // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
-    define: buildDefines(),
-    // The script of the Monitor in the worker, as esbuild.mjs bundles it.
-    plugins: [workerScriptsPlugin(path.resolve(__dirname, '../..'), buildDefines())],
-    entryPoints: [path.resolve(__dirname, '../../src/helperChannel/main.ts')],
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    target: 'node24',
-    minify: true,
+    // The worker's bundle as a production build of esbuild.mjs builds it: also the program of the Monitor and of
+    // the analysis thread.
+    ...workerBundleOptions(sharedBundleOptions({ production: true })),
     write: false,
     logLevel: 'silent',
   });

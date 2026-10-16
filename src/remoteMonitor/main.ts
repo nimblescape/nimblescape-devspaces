@@ -2,9 +2,9 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Entry point of the Monitor of a Docker engine (on every engine, local and remote). Bundled into the worker's
-// script as the module `devspace:monitor-script` (scripts/workerScripts.mjs), which the worker gives the monitor
-// container that it creates. The container devspaces-monitor (image: the worker's own helper image by its
+// Entry point of the Monitor of a Docker engine (on every engine, local and remote). Part of the worker's bundle
+// (dist/helperChannel.js, which exports startMonitor): the worker gives its own script to the monitor container that it
+// creates. The container devspaces-monitor (image: the worker's own helper image by its
 // monitor tag, of which the monitor runs only Node.js, `flock` (the lock of the records, and the devspace lock of an
 // automatic stop: stopLock.ts over src/core/helperChannel/lockFile.ts) and `timeout` (the run limit under the lock of
 // the records); the Docker socket of its engine at /var/run/docker.sock; the volume devspaces-monitor at /state)
@@ -48,6 +48,7 @@
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { isMainThread } from 'worker_threads';
 import { errorMessage } from '../core/errors';
 import { LABEL_COMPOSE_SERVICE, LABEL_DEVSPACE_ID, VSCODE_STORE_DIR } from '../core/names';
 import { isMissing, type EngineContainerSummary } from '../core/worker/dockerEngine';
@@ -1641,8 +1642,9 @@ export function startMonitor(_input = '', deps: EntryDeps = processEntryDeps()):
   void runEntry(['run'], deps);
 }
 
-// Only when this file is the entry module (`docker exec … node /opt/devspace/monitor.js <subcommand>`), not when the loader
-// or a test loads it.
-if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+// Only when the bundle is the entry module of the process (`docker exec … node /opt/devspace/monitor.js <subcommand>`),
+// not when the loader or a test loads it. A thread that starts from the bundle file (the host access analysis) has the
+// file as its entry module too, so the main thread is a condition.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module && isMainThread) {
   void runEntry(process.argv.slice(2));
 }

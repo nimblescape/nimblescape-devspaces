@@ -2,22 +2,33 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The log driver of the spec reaches the create of the monitor container, and the operation `monitorEnsure` of the
-// worker gets the script of this bundle.
+// The log driver of the spec reaches the create of the monitor container, and the operations of the worker that make
+// sure of the Monitor (`monitorEnsure`, `monitorRunNow`, `open`) give it the worker's own script: the same file runs the
+// Monitor (its entry startMonitor).
+import * as fs from 'fs';
+import * as path from 'path';
 import { describe, expect, it, vi } from 'vitest';
 import type { MonitorRunSpec } from '../core/worker/dockerEngine';
 import type { EngineApi, EngineRequest } from './engineApi';
 import { dockerEngine, type EngineHijack } from './engineClient';
-import stubScript from './monitorScript.stub';
 
-const captured = vi.hoisted(() => ({ script: undefined as (() => string) | undefined }));
+/** The script of the Monitor that each operation got. */
+const captured = vi.hoisted(() => ({ scripts: new Map<string, () => string>() }));
 vi.mock('./flowOperations', async (original) => {
   const actual = await original<typeof import('./flowOperations')>();
   return {
     ...actual,
     monitorEnsureOperation: (...args: Parameters<typeof actual.monitorEnsureOperation>) => {
-      captured.script = args[2];
+      captured.scripts.set('monitorEnsure', args[2]);
       return actual.monitorEnsureOperation(...args);
+    },
+    monitorRunNowOperation: (...args: Parameters<typeof actual.monitorRunNowOperation>) => {
+      captured.scripts.set('monitorRunNow', args[2]);
+      return actual.monitorRunNowOperation(...args);
+    },
+    openOperation: (...args: Parameters<typeof actual.openOperation>) => {
+      captured.scripts.set('open', args[3]);
+      return actual.openOperation(...args);
     },
   };
 });
@@ -49,8 +60,11 @@ describe('the monitor ensure: the log driver and the script of the bundle', () =
     expect(requests[0].json).toMatchObject({ HostConfig: { LogConfig: { Type: 'local', Config: { 'max-size': '1m', 'max-file': '2' } } } });
   });
 
-  it('the operation gets the script of the bundle', async () => {
+  it("the operations get the worker's own script", async () => {
     await import('./operations');
-    expect(captured.script?.()).toBe(stubScript);
+    // The file of ownScript.ts itself here (`__filename`; in the bundle: the bundle).
+    const own = fs.readFileSync(path.join(__dirname, 'ownScript.ts'), 'utf8');
+    expect([...captured.scripts.keys()].sort()).toEqual(['monitorEnsure', 'monitorRunNow', 'open']);
+    for (const [operation, script] of captured.scripts) expect(script(), operation).toBe(own);
   });
 });
