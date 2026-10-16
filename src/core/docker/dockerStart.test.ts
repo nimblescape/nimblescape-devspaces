@@ -51,11 +51,19 @@ function fakeTime() {
   };
 }
 
+/** `docker --version` and `docker version --format '{{json .Server}}'` of Docker. */
+const DOCKER_CLI_VERSION = ok('Docker version 29.8.0, build 3f2a5b1\n');
+const DOCKER_SERVER = ok(`${JSON.stringify({ Platform: { Name: 'Docker Engine - Community' }, Components: [{ Name: 'Engine', Version: '29.8.0' }, { Name: 'containerd', Version: '2.1.4' }], Version: '29.8.0' })}\n`);
+
 interface Script {
   /** Results of `docker info`, in order; the last one repeats. */
   info: RunResult[];
   desktop?: (call: Call) => RunResult | Promise<RunResult>;
   open?: (call: Call) => RunResult | Promise<RunResult>;
+  /** `docker --version`. Default: the Docker CLI. */
+  cliVersion?: RunResult;
+  /** `docker version --format '{{json .Server}}'`. Default: Docker Engine. */
+  serverVersion?: RunResult;
 }
 
 function setup(script: Script) {
@@ -68,6 +76,8 @@ function setup(script: Script) {
       return result;
     }
     if (call.args[0] === 'desktop') return script.desktop ? script.desktop(call) : ok();
+    if (call.args[0] === '--version') return script.cliVersion ?? DOCKER_CLI_VERSION;
+    if (call.args[0] === 'version') return script.serverVersion ?? DOCKER_SERVER;
     throw new Error(`Unexpected call: ${call.file} ${call.args.join(' ')}`);
   });
   const docker = new BootstrapDocker(runner, DOCKER, { PATH: '/usr/bin' }, silentLogger, 'darwin');
@@ -87,7 +97,8 @@ function setup(script: Script) {
   const infoCalls = () => runner.calls.filter((call) => call.args[0] === 'info');
   const desktopCalls = () => runner.calls.filter((call) => call.args[0] === 'desktop');
   const openCalls = () => runner.calls.filter((call) => call.file === '/usr/bin/open');
-  return { runner, docker, time, onStarting, run, infoCalls, desktopCalls, openCalls };
+  const versionCalls = () => runner.calls.filter((call) => call.args[0] === '--version' || call.args[0] === 'version');
+  return { runner, docker, time, onStarting, run, infoCalls, desktopCalls, openCalls, versionCalls };
 }
 
 async function rejection(promise: Promise<unknown>): Promise<unknown> {
@@ -106,6 +117,49 @@ describe('ensureDockerRunning', () => {
     expect(s.onStarting).not.toHaveBeenCalled();
     expect(s.desktopCalls()).toHaveLength(0);
     expect(s.infoCalls()[0].options.timeoutMs).toBe(20_000);
+  });
+
+  // Podman is not supported; Docker is not started for it.
+  describe('Podman', () => {
+    // The package podman-docker: `docker` runs podman, whose `info` has no ServerVersion.
+    const PODMAN_INFO = fail(
+      'Emulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.\nError: template: info:1:7: executing "info" at <.ServerVersion>: can\'t evaluate field ServerVersion in type *define.Info\n',
+      125,
+    );
+
+    it('refuses the docker command of podman-docker with a message, and starts nothing', async () => {
+      const s = setup({ info: [PODMAN_INFO], cliVersion: ok('podman version 5.2.2\n') });
+      const error = await rejection(s.run({ platform: 'linux' }));
+      expect(error).toBeInstanceOf(UserFacingError);
+      expect(error).toMatchObject({ code: 'dockerEndpointUnsupported', message: Messages.podmanNotSupported, detail: 'docker --version: podman version 5.2.2' });
+      expect(s.onStarting).not.toHaveBeenCalled();
+      expect(s.desktopCalls()).toHaveLength(0);
+      expect(s.infoCalls()).toHaveLength(1);
+    });
+
+    it('refuses the Docker-compatible API of Podman behind the Docker CLI', async () => {
+      const podmanServer = ok(`${JSON.stringify({ Platform: { Name: 'linux/amd64/fedora-40' }, Components: [{ Name: 'Podman Engine', Version: '5.2.2' }], Version: '5.2.2' })}\n`);
+      const s = setup({ info: [ok('"5.2.2"\n')], serverVersion: podmanServer });
+      const error = await rejection(s.run({ platform: 'darwin' }));
+      expect(error).toMatchObject({ code: 'dockerEndpointUnsupported', message: Messages.podmanNotSupported, detail: 'docker version: the engine is Podman Engine 5.2.2.' });
+      expect(s.runner.calls.find((call) => call.args[0] === 'version')?.args).toEqual(['version', '--format', '{{json .Server}}']);
+    });
+
+    it('asks the CLI once per path, the engine at each check, and takes a check that fails for Docker', async () => {
+      const s = setup({ info: [READY] });
+      await s.run({ platform: 'darwin' });
+      await s.run({ platform: 'darwin' });
+      expect(s.versionCalls().map((call) => call.args[0])).toEqual(['--version', 'version', 'version']);
+      // Docker that does not run is started as before; only the CLI is asked (the engine does not answer).
+      const stopped = setup({ info: [NOT_READY, READY] });
+      await stopped.run({ platform: 'darwin' });
+      expect(stopped.versionCalls().map((call) => call.args[0])).toEqual(['--version']);
+      expect(stopped.desktopCalls()).toHaveLength(1);
+      // A version call that fails counts as Docker.
+      const failing = setup({ info: [READY], cliVersion: fail('unknown flag: --version'), serverVersion: fail('error during connect') });
+      await failing.run({ platform: 'darwin' });
+      expect(failing.onStarting).not.toHaveBeenCalled();
+    });
   });
 
   it('throws dockerNotInstalled without a CLI', async () => {

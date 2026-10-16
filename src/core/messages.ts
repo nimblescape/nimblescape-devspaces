@@ -21,6 +21,12 @@ export const Messages = {
   dockerNotInstalled: 'Docker Desktop is not installed.',
   dockerStartFailed: 'Docker could not be started.',
   dockerEngineNotRunning: 'Docker is not running. Start the Docker service with this command: sudo systemctl enable --now docker',
+  /**
+   * The docker command of this computer is Podman (for example the package podman-docker), or the engine that it
+   * reaches is the Docker-compatible API of Podman (ensureDockerRunning). Docker is not started.
+   */
+  podmanNotSupported:
+    'The docker command on this computer uses Podman. Devspaces does not support Podman. It needs Docker: Docker Desktop, or Docker Engine on Linux. Nothing was done.',
   buildFailed: 'The devspace could not be prepared.',
   registryUnreachable:
     'No connection to the image registry. The update check was skipped. The devspace uses the local image.',

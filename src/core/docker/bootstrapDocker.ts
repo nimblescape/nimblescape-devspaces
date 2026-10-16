@@ -3,14 +3,14 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The Docker CLI of the extension (no bypass of the worker, by construction), only for the bootstrap: whether the CLI
-// is installed and the engine answers (`docker info`), the helper image (its check and build, and its maintenance, the
-// rebuild and the cleanup, in the extension's preparation of the worker for an operation `open` and in the background
-// prebuild), the start of the worker (`docker run -i`), the Docker contexts, the test of a new remote host, and the
-// attach diagnostics (what the Dev Containers extension sees through the local CLI). Every other Docker action runs in
-// the worker, except "Remove Devspaces from This Docker Engine…", which ends the worker and removes what Devspaces
-// keeps on the engine with `run` of this CLI (engineRemoval.ts; it adds no member here). A call that does not only read
-// is logged with its command (directCommandName), never its arguments. Output is read as JSON, never as a table. No
-// `vscode`.
+// is installed and the engine answers (`docker info`), whether either is Podman, the helper image (its check and build,
+// and its maintenance, the rebuild and the cleanup, in the extension's preparation of the worker for an operation
+// `open` and in the background prebuild), the start of the worker (`docker run -i`), the Docker contexts, the test of a
+// new remote host, and the attach diagnostics (what the Dev Containers extension sees through the local CLI). Every
+// other Docker action runs in the worker, except "Remove Devspaces from This Docker Engine…", which ends the worker and
+// removes what Devspaces keeps on the engine with `run` of this CLI (engineRemoval.ts; it adds no member here). A call
+// that does not only read is logged with its command (directCommandName), never its arguments. Output is read as JSON
+// (`docker --version` as its one line), never as a table. No `vscode`.
 import * as crypto from 'crypto';
 import { CommandError, errorMessage, UserFacingError } from '../errors';
 import { Messages } from '../messages';
@@ -29,6 +29,14 @@ export interface DaemonStatus {
   /** Server version when running; otherwise the error of `docker info`, for the log. */
   detail: string;
 }
+
+/**
+ * `docker --version` of the Podman CLI: "podman version 5.2.2". The package podman-docker installs a script `docker`
+ * that runs podman, so its `docker --version` prints this too. The Docker CLI prints "Docker version 27.1.1, build …".
+ */
+const PODMAN_CLI_VERSION = /^\s*podman version\b/i;
+/** The name of the engine in `docker version` when the Docker CLI talks to the Docker-compatible API of Podman. */
+const PODMAN_ENGINE_COMPONENT = /\bpodman\b/i;
 
 /**
  * A missing Docker CLI is looked up again at most this often (with `findDocker`), so that Docker Desktop installed or
@@ -168,6 +176,8 @@ export class BootstrapDocker {
   private readonly onCliLost: BootstrapDockerOptions['onCliLost'];
   private readonly sshDropRetryDelayMs: number;
   private lookedUpAt: number | undefined;
+  /** The answer of `docker --version` for the CLI at `path` (podmanInUse): the detail of the Podman CLI, or none. */
+  private cliVersion: { path: string; podman: string | undefined } | undefined;
 
   /**
    * @param dockerPath Full path of the Docker CLI (see `findDockerCli`), or `undefined` if Docker is not installed.
@@ -379,6 +389,54 @@ export class BootstrapDocker {
   /** `docker info` exit code 0 (time limit 20 s). False without a CLI. Rejects only with an AbortError. */
   async isRunning(signal?: AbortSignal): Promise<boolean> {
     return (await this.daemonStatus(signal)).running;
+  }
+
+  /**
+   * Podman instead of Docker, which Devspaces does not support: the detail for the log, or undefined for Docker.
+   * - The CLI is Podman: `docker --version` prints "podman version …" (PODMAN_CLI_VERSION). It needs no engine; the
+   *   answer is kept for the path of the CLI.
+   * - With `engineAnswers` (the engine answered `docker info`): the engine is Podman. `docker version` names the
+   *   component "Podman Engine" (the Docker-compatible API of Podman behind the Docker CLI). Within an operation, this
+   *   is the engine of the operation.
+   * A call that fails counts as Docker. Rejects only with an AbortError.
+   */
+  // Assumption: these outputs identify Podman 3 to 5 and its package podman-docker (not checked with a real Podman).
+  async podmanInUse(engineAnswers: boolean, signal?: AbortSignal): Promise<string | undefined> {
+    const cli = await this.podmanCli(signal);
+    if (cli !== undefined || !engineAnswers) return cli;
+    const result = await this.podmanCheckCall(['version', '--format', '{{json .Server}}'], signal);
+    if (result === undefined || result.exitCode !== 0) return undefined;
+    const server = parseJsonOutput(result.stdout);
+    const components = isRecord(server) && Array.isArray(server.Components) ? (server.Components as unknown[]) : [];
+    for (const component of components) {
+      if (isRecord(component) && typeof component.Name === 'string' && PODMAN_ENGINE_COMPONENT.test(component.Name)) {
+        return `docker version: the engine is ${component.Name}${typeof component.Version === 'string' ? ` ${component.Version}` : ''}.`;
+      }
+    }
+    return undefined;
+  }
+
+  private async podmanCli(signal: AbortSignal | undefined): Promise<string | undefined> {
+    const path = this.path;
+    if (path === undefined) return undefined;
+    if (this.cliVersion?.path === path) return this.cliVersion.podman;
+    const result = await this.podmanCheckCall(['--version'], signal);
+    // Not kept when the call failed: it is asked again next time.
+    if (result === undefined || result.exitCode !== 0) return undefined;
+    const podman = PODMAN_CLI_VERSION.test(result.stdout) ? `docker --version: ${result.stdout.trim()}` : undefined;
+    this.cliVersion = { path, podman };
+    return podman;
+  }
+
+  /** A call of podmanInUse: undefined when it could not run (logged). Rejects only with an AbortError. */
+  private async podmanCheckCall(args: readonly string[], signal: AbortSignal | undefined): Promise<RunResult | undefined> {
+    try {
+      return await this.run(args, { signal, timeoutMs: DOCKER_QUERY_TIMEOUT_MS });
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      this.logger.warn(`docker ${args[0]} could not run, so Docker is assumed: ${errorMessage(error)}`);
+      return undefined;
+    }
   }
 
   /** True if the image exists locally. Throws CommandError for other errors (for example an invalid reference). */
