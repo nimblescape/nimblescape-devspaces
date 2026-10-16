@@ -114,7 +114,8 @@
       "devspaces": [
         {
           "id": "devspaces.repositories",
-          "name": "Devspaces"
+          "name": "Devspaces",
+          "icon": "resources/icon.svg"
         }
       ]
     },
