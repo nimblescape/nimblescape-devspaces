@@ -52,6 +52,8 @@ export const ControllerTexts = {
   removeListFailed: (engine: string) => `Devspaces could not list what it has on ${engine}. Nothing was removed. Details are in the log.`,
   removeCloseWindowsFirst: (engine: string, repositories: string) =>
     `Close the windows of your devspaces on ${engine} first: ${repositories}. Nothing was removed.`,
+  /** A window is opening a devspace there (its pending connection file), and no window is connected to it yet. */
+  removeWhileOpening: (engine: string, repositories: string) => `A devspace is being opened on ${engine}: ${repositories}. Try again after that. Nothing was removed.`,
   /** `operation`: the operation that runs, for example Rebuild. */
   removeWhileOperation: (operation: string, repository: string) =>
     `${operation} of ${repository} is still running. Try again after it ends. Nothing was removed.`,
@@ -124,11 +126,11 @@ export const ControllerTexts = {
   otherWindowsUnknown:
     'It could not be checked whether another window uses this devspace: the window status files could not be read. Nothing was changed; see the Devspaces output.',
   /**
-   * The pending connection files could not be read, so it is not known whether a window opens the devspace; the removal
-   * from its engine does not delete it, or does not start.
+   * The pending connection files could not be read, so it is not known whether a window opens a devspace: the removal
+   * from an engine does not start, or does not delete that devspace.
    */
   connectingWindowsUnknown:
-    'It could not be checked whether a window is opening this devspace: the pending connection files could not be read. Nothing was changed; see the Devspaces output.',
+    'It could not be checked whether a window is opening a devspace: the pending connection files could not be read. Nothing was changed; see the Devspaces output.',
   /** A pending operation (a Stop, Rebuild or Delete handed over by a window) could not be read. */
   pendingOperationsUnreadable: (cause: string) =>
     `A pending operation could not be read and was not run (${cause}). Run it again if it is still needed; see the Devspaces output.`,
