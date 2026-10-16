@@ -4169,6 +4169,26 @@ describe('refreshStates', () => {
     expect(await h.operations.refreshStates(new Set([ENV_ID]))).toEqual({ runtime: undefined, branches: new Map() });
     expect(workerRefresh).not.toHaveBeenCalled();
   });
+
+  // Before the first Start, a visible sidebar asks Docker nothing and starts no worker.
+  it('asks neither Docker nor the worker when the current Docker host has no devspace', async () => {
+    const workerRefresh = vi.fn(async (): Promise<DevspaceStates> => ({ runtime: new Map(), branches: new Map() }));
+    const dockerRunning = vi.fn(async () => true);
+    h = recreate({ workerRefresh, dockerRunning });
+    // No devspace at all.
+    expect(await h.operations.refreshStates(new Set())).toEqual({ runtime: new Map(), branches: new Map() });
+    // A devspace on another Docker host only.
+    await seedDevspace(h, { extra: { dockerHost: 'build-box' } });
+    expect(await h.operations.refreshStates(new Set([ENV_ID]))).toEqual({ runtime: new Map(), branches: new Map() });
+    expect(await h.operations.inspectStates()).toEqual(new Map());
+    expect(dockerRunning).not.toHaveBeenCalled();
+    expect(workerRefresh).not.toHaveBeenCalled();
+    // A devspace on the current host: Docker and the worker are asked.
+    await seedDevspace(h, { id: OTHER_ID, repository: 'acme/web', container: null, volume: false });
+    await h.operations.refreshStates(new Set());
+    expect(dockerRunning).toHaveBeenCalledTimes(1);
+    expect(workerRefresh).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('reconcileFromVolumes', () => {

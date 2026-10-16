@@ -17,6 +17,8 @@ const ROOT = path.join(__dirname, '..', '..');
 const HEADING = 'What Devspaces does on your computer';
 const SECURITY_LINK = 'https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/security.md#what-devspaces-does-on-your-computer';
 const read = (file: string) => fs.readFileSync(path.join(ROOT, file), 'utf8');
+// What a start of VS Code does before the first devspace, and that a registry is asked without a login first.
+const FIRST_USE_AND_LOGINS = ['Before your first devspace, Devspaces only reads the current Docker context when VS Code starts.', 'first without a login'];
 
 /** The text of the section `## <heading>` up to the next `## ` heading. */
 function section(markdown: string, heading: string): string {
@@ -32,7 +34,7 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
     expect(readme.match(/^## .*$/m)?.[0]).toBe(`## ${HEADING}`);
     const text = section(readme, HEADING);
     for (const scope of PACKAGES_SCOPES) expect(text).toContain(`\`${scope}\``);
-    const behaviors = ['Docker CLI', 'Dev Containers CLI', '`ssh`', 'docker-credential-', 'install', 'devspaces-monitor', 'VS Code Server', 'extensions'];
+    const behaviors = ['Docker CLI', 'Dev Containers CLI', '`ssh`', 'docker-credential-', 'install', 'devspaces-monitor', 'VS Code Server', 'extensions', ...FIRST_USE_AND_LOGINS];
     for (const words of behaviors) {
       expect(text).toContain(words);
     }
@@ -42,7 +44,7 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
   it('has the section in docs/security.md, as the target of the link', () => {
     const text = section(read('docs/security.md'), HEADING);
     for (const scope of PACKAGES_SCOPES) expect(text).toContain(`\`${scope}\``);
-    for (const words of ['`ssh`', 'docker-credential-', '#registry-access']) expect(text).toContain(words);
+    for (const words of ['`ssh`', 'docker-credential-', '#registry-access', ...FIRST_USE_AND_LOGINS]) expect(text).toContain(words);
     expect(text).toContain('guide.md#installing-docker');
   });
 

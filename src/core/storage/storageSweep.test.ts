@@ -109,6 +109,8 @@ describe('sweepStorage', () => {
     write(path.join(paths.root, '.x.json.1234.ABCDEF01.tmp'), '{}', old);
     write(path.join(paths.root, 'x.json.1234.0123abcd.tmp'), '{}', old);
     write(path.join(paths.root, 'registry.json'), '{}', old);
+    // The marker of the first use (firstUse.ts) is kept, whatever its age.
+    write(paths.usedMarker, '', old);
     // Names that only resemble a temporary file (a suffix, a pid that is not a number, nine or seven hex digits) are
     // kept, so the pattern stays anchored and exact.
     const nearMisses = ['.x.json.1234.0123abcd.tmp.keep', '.x.json.12a.0123abcd.tmp', '.x.json.1234.0123abcd0.tmp', '.x.json.1234.0123abc.tmp'];
@@ -124,6 +126,7 @@ describe('sweepStorage', () => {
     expect(names(paths.root)).toContain('.x.json.1234.ABCDEF01.tmp');
     expect(names(paths.root)).toContain('x.json.1234.0123abcd.tmp');
     expect(names(paths.root)).toContain('registry.json');
+    expect(names(paths.root)).toContain('used');
     for (const name of nearMisses) expect(names(paths.root)).toContain(name);
     expect(names(paths.root)).not.toContain('.x.json.1234.0123abcd.tmp');
     expect(names(path.join(root, 'other'))).toEqual(['.x.json.1234.0123abcd.tmp']);

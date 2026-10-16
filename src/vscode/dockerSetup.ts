@@ -98,6 +98,11 @@ export interface DockerSetupDeps {
   onDidChangeInstalled: () => void;
   /** True when a remote Docker host is configured: a missing local CLI then needs no setup (see `dockerSetupRequired`). */
   remoteDockerHostConfigured: () => boolean;
+  /**
+   * True while the sidebar view is visible. Windows: `wsl --status` runs only while the view shows the Docker setup
+   * (see `onViewShown`), and after an installation started.
+   */
+  viewVisible: () => boolean;
   /** For tests. Default: `readInstallPlanInput` (this computer). */
   planInput?: () => Promise<InstallPlanInput>;
   /** For tests. Default: the folder Downloads of the home folder. */
@@ -217,7 +222,10 @@ export class DockerSetup implements vscode.Disposable {
   private missingTimer: NodeJS.Timeout | undefined;
   private watchTimer: NodeJS.Timeout | undefined;
   private watchStartedAt = 0;
-  private checkingWsl = false;
+  /** The `wsl --status` that runs (one at a time). */
+  private wslCheck: Promise<void> | undefined;
+  /** True once a `wsl --status` ended. */
+  private wslChecked = false;
   private disposed = false;
 
   constructor(private readonly deps: DockerSetupDeps) {
@@ -237,10 +245,21 @@ export class DockerSetup implements vscode.Disposable {
     return dockerSetupRequired(this.dockerMissing, this.deps.remoteDockerHostConfigured());
   }
 
-  /** Sets the context keys; while the CLI is missing, it is looked up again every 10 seconds. No `docker info`. */
+  /**
+   * Sets the context keys; while the CLI is missing, it is looked up again every 10 seconds. No `docker info`. Windows:
+   * `wsl --status` only while the view is visible and shows the Docker setup.
+   */
   initialize(): void {
     this.checkCli();
-    if (this.dockerMissing) this.checkWslInBackground();
+    this.checkWslWhileShown();
+  }
+
+  /**
+   * The sidebar view became visible. Windows: while it shows the Docker setup and WSL is not known to be ready,
+   * `wsl --status` runs, so that the step Install WSL 2 shows the state of WSL.
+   */
+  onViewShown(): void {
+    this.checkWslWhileShown();
   }
 
   /**
@@ -345,6 +364,8 @@ export class DockerSetup implements vscode.Disposable {
   /** Command devspaces.dockerSetup.installWsl (sidebar button "Install WSL 2", Windows): `wsl --install` in the terminal. */
   async installWsl(): Promise<void> {
     if (this.refuseInRemoteWindow()) return;
+    // The button shows until a check finds WSL ready, so a click before the first check ended waits for one.
+    if (!this.wslChecked) await this.checkWsl();
     if (this.state.wslReady) {
       this.inform(DockerSetupUiTexts.wslAlreadyInstalled);
       return;
@@ -515,7 +536,8 @@ export class DockerSetup implements vscode.Disposable {
 
   private watchInstall(): void {
     this.lookUp(() => this.deps.docker.lookUpCliNow());
-    if (!this.state.wslReady) this.checkWslInBackground();
+    // Follows the installation that the user started, also while the view is hidden.
+    if (!this.state.wslReady) void this.checkWsl();
     if (this.watchTimer && !keepWatchingInstall(this.state, this.watchStartedAt, this.clock.now())) {
       if (!this.state.cliFound) this.deps.logger.info('Docker was not found within 30 minutes after the installation started.');
       this.stopInstallWatch();
@@ -527,12 +549,19 @@ export class DockerSetup implements vscode.Disposable {
     this.watchTimer = undefined;
   }
 
-  /** Windows: `wsl --status` (exit code 0: WSL is installed). One check at a time; never throws. */
-  private checkWslInBackground(): void {
-    if (this.deps.platform !== 'win32' || this.checkingWsl || this.disposed) return;
-    this.checkingWsl = true;
+  /** `wsl --status` while the view is visible and shows the Docker setup, and WSL is not known to be ready. */
+  private checkWslWhileShown(): void {
+    if (this.setupRequired && !this.state.wslReady && this.deps.viewVisible()) void this.checkWsl();
+  }
+
+  /**
+   * Windows: `wsl --status` (exit code 0: WSL is installed). One check at a time: a call while one runs gets that one.
+   * Resolves when it ended; a `wsl` that cannot run counts as not ready.
+   */
+  private checkWsl(): Promise<void> {
+    if (this.deps.platform !== 'win32' || this.disposed) return Promise.resolve();
     // Assumption: `wsl --status` ends with exit code 0 only when WSL is installed and set up.
-    this.deps.runner
+    this.wslCheck ??= this.deps.runner
       .run('wsl.exe', ['--status'], { timeoutMs: WSL_STATUS_TIMEOUT_MS })
       .then(
         (result) => this.apply({ kind: 'wsl', ready: result.exitCode === 0 }),
@@ -542,8 +571,10 @@ export class DockerSetup implements vscode.Disposable {
         },
       )
       .finally(() => {
-        this.checkingWsl = false;
+        this.wslChecked = true;
+        this.wslCheck = undefined;
       });
+    return this.wslCheck;
   }
 
   private lookUp(find: () => boolean): boolean {
@@ -579,8 +610,9 @@ export class DockerSetup implements vscode.Disposable {
         this.offerStart();
       }
       // Windows: a CLI found at activation skipped `wsl --status`; the setup now shows the step Install WSL 2, so it
-      // needs the state of WSL. Returns at once on other platforms or while a check runs.
-      if (!this.state.cliFound) this.checkWslInBackground();
+      // needs the state of WSL, now while the view is visible, else when it is shown (onViewShown). Returns at once on
+      // other platforms.
+      if (!this.state.cliFound) this.checkWslWhileShown();
     }
     this.updateMissingTimer();
   }

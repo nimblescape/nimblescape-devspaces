@@ -72,7 +72,8 @@ describe("the worker's image check, probes", () => {
 
   /**
    * A registry (HTTPS, registry.test) with a Bearer token service that rejects every login (401) and gives an anonymous
-   * token; with that token, the digest of each manifest. A proxy that tunnels every CONNECT to it.
+   * token; with that token, the digest of each manifest, except those of the private repository `team/private`, which
+   * refuses it (401). A proxy that tunnels every CONNECT to it.
    */
   async function registryBehindProxy(): Promise<{ registry: string; proxyPort: number; connects: string[]; tokenLogins: string[] }> {
     const tokenLogins: string[] = [];
@@ -88,7 +89,7 @@ describe("the worker's image check, probes", () => {
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ token: 'anonymous' }));
         return;
       }
-      if (req.headers.authorization !== 'Bearer anonymous') {
+      if (req.headers.authorization !== 'Bearer anonymous' || url.pathname.startsWith('/v2/team/private/')) {
         res.writeHead(401, { 'www-authenticate': `Bearer realm="https://${registry}/token",service="registry.test"` }).end();
         return;
       }
@@ -125,7 +126,7 @@ describe("the worker's image check, probes", () => {
     return { events, host, logger };
   }
 
-  it('goes through the proxy of the daemon, asks the login of the registry and forgets the registry secret, logs a rejected login', async () => {
+  it('goes through the proxy of the daemon, asks the login of the registry only after a refusal and forgets the registry secret, logs a rejected login', async () => {
     const { registry, proxyPort, connects, tokenLogins } = await registryBehindProxy();
     const { events, host, logger } = recording();
     let proxies = 0;
@@ -135,11 +136,23 @@ describe("the worker's image check, probes", () => {
       forgetSecret: (name) => void events.push(`forget ${name}`),
       logger,
     });
-    const outcome = await checker.check({ images: [`${registry}/team/app:1`], features: [] }, { timeoutMs: 4000 });
-    expect(outcome).toMatchObject({ status: 'checked', images: { [`${registry}/team/app:1`]: DIGEST } });
+    // A public image: the anonymous token is enough, no login is asked.
+    const open = await checker.check({ images: [`${registry}/team/app:1`], features: [] }, { timeoutMs: 4000 });
+    expect(open).toMatchObject({ status: 'checked', images: { [`${registry}/team/app:1`]: DIGEST } });
     expect(proxies).toBe(1);
     expect(connects.length).toBeGreaterThan(0);
     expect(new Set(connects)).toEqual(new Set([registry]));
+    expect(tokenLogins).toEqual([]);
+    expect(events).toEqual([]);
+    // A private image refuses the anonymous token: the login is asked, and forgotten after its use.
+    const closed = await checker.check({ images: [`${registry}/team/app:1`, `${registry}/team/private:1`], features: [] }, { timeoutMs: 4000 });
+    expect(closed).toEqual({
+      status: 'checked',
+      images: { [`${registry}/team/app:1`]: DIGEST },
+      features: {},
+      authRequired: [registry],
+      failed: [`${registry}/team/private:1`],
+    });
     expect(tokenLogins).toEqual([`Basic ${Buffer.from('octo:pw-1234').toString('base64')}`]);
     expect(events.slice(0, 2)).toEqual([`ask ${registry}`, `forget ${SECRET_REGISTRY}`]);
     expect(events).toContain(`warn The registry ${registry} rejected the login of this computer.`);
@@ -161,8 +174,8 @@ describe("the worker's image check, probes", () => {
         throw new Error('no lock in this test');
       },
     });
-    const outcome = await all.imageChecker.check({ images: [`${registry}/team/app:1`], features: [] }, { timeoutMs: 4000 });
-    expect(outcome).toMatchObject({ status: 'checked', images: { [`${registry}/team/app:1`]: DIGEST } });
+    const outcome = await all.imageChecker.check({ images: [`${registry}/team/app:1`, `${registry}/team/private:1`], features: [] }, { timeoutMs: 4000 });
+    expect(outcome).toMatchObject({ status: 'checked', images: { [`${registry}/team/app:1`]: DIGEST }, authRequired: [registry] });
     expect(new Set(connects)).toEqual(new Set([registry]));
     expect(events.slice(0, 2)).toEqual([`ask ${registry}`, `forget ${SECRET_REGISTRY}`]);
   });

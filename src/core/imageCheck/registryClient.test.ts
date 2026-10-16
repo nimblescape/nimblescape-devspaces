@@ -195,19 +195,100 @@ describe('RegistryClient', () => {
     expect(await client.getDigest(ref('ghcr.io/o/p'))).toEqual({ kind: 'authRequired', registry: 'ghcr.io' });
   });
 
-  it('retries the token request without credentials when the credentials are rejected', async () => {
-    const transport = fakeTransport((request) => {
-      if (request.url.startsWith('https://ghcr.io/token')) {
-        return request.headers?.Authorization ? { status: 401 } : { status: 200, body: JSON.stringify({ token: 'anon' }) };
-      }
-      if (request.headers?.Authorization === 'Bearer anon') return { headers: { 'docker-content-digest': DIGEST } };
-      return { status: 401, headers: { 'www-authenticate': bearerChallenge('https://ghcr.io/token', 'ghcr.io', 'repository:o/r:pull') } };
-    });
-    const client = new RegistryClient(transport, credentialsOf({ username: 'old', password: 'expired' }));
-    expect(await client.getDigest(ref('ghcr.io/o/r'))).toEqual({ kind: 'digest', digest: DIGEST });
+  it('reads no login for a public image: the anonymous token is enough (Docker Hub, ghcr.io)', async () => {
+    for (const [image, realm, service, scope] of [
+      ['ubuntu:24.04', 'https://auth.docker.io/token', 'registry.docker.io', 'repository:library/ubuntu:pull'],
+      ['ghcr.io/o/r:1', 'https://ghcr.io/token', 'ghcr.io', 'repository:o/r:pull'],
+    ] as const) {
+      const transport = fakeTransport((request) => {
+        if (request.url.startsWith(realm)) return request.headers?.Authorization ? { status: 401 } : { status: 200, body: JSON.stringify({ token: 'anon' }) };
+        if (request.headers?.Authorization === 'Bearer anon') return { headers: { 'docker-content-digest': DIGEST } };
+        return { status: 401, headers: { 'www-authenticate': bearerChallenge(realm, service, scope) } };
+      });
+      const credentials = credentialsOf({ username: 'octo', password: 'stored' });
+      const onCredentialsRejected = vi.fn();
+      const client = new RegistryClient(transport, credentials, undefined, { onCredentialsRejected });
+      expect(await client.getDigest(ref(image), new AbortController().signal), image).toEqual({ kind: 'digest', digest: DIGEST });
+      expect(credentials, image).not.toHaveBeenCalled();
+      expect(onCredentialsRejected, image).not.toHaveBeenCalled();
+      expect(transport.requests.map((request) => request.headers?.Authorization), image).toEqual([undefined, undefined, 'Bearer anon']);
+    }
   });
 
-  it('reports credentials that the token service rejects with 401, not with 403 (the sign-in fix)', async () => {
+  it('reads the login when the token service denies the anonymous token, or the registry refuses the request with it', async () => {
+    for (const [refused, status, sent] of [
+      ['token', 401, [undefined, undefined, 'login', 'Bearer private']],
+      ['token', 403, [undefined, undefined, 'login', 'Bearer private']],
+      ['request', 401, [undefined, undefined, 'Bearer anon', 'login', 'Bearer private']],
+      ['request', 403, [undefined, undefined, 'Bearer anon', 'login', 'Bearer private']],
+    ] as const) {
+      const transport = fakeTransport((request) => {
+        if (request.url.startsWith('https://registry.example.com/token')) {
+          if (request.headers?.Authorization === basicHeader('u', 'p')) return { status: 200, body: JSON.stringify({ token: 'private' }) };
+          return refused === 'token' ? { status } : { status: 200, body: JSON.stringify({ token: 'anon' }) };
+        }
+        if (request.headers?.Authorization === 'Bearer private') return { headers: { 'docker-content-digest': DIGEST } };
+        if (request.headers?.Authorization === 'Bearer anon') return { status };
+        return {
+          status: 401,
+          headers: { 'www-authenticate': bearerChallenge('https://registry.example.com/token', 'registry.example.com', 'repository:team/app:pull') },
+        };
+      });
+      const credentials = credentialsOf({ username: 'u', password: 'p' });
+      const onCredentialsRejected = vi.fn();
+      const client = new RegistryClient(transport, credentials, undefined, { onCredentialsRejected });
+      const what = `${refused} ${status}`;
+      expect(await client.getDigest(ref('registry.example.com/team/app:1')), what).toEqual({ kind: 'digest', digest: DIGEST });
+      expect(credentials, what).toHaveBeenCalledTimes(1);
+      // A denied anonymous token is no rejected login.
+      expect(onCredentialsRejected, what).not.toHaveBeenCalled();
+      const login = basicHeader('u', 'p');
+      expect(
+        transport.requests.map((request) => (request.headers?.Authorization === login ? 'login' : request.headers?.Authorization)),
+        what,
+      ).toEqual(sent);
+    }
+  });
+
+  it('asks again with the login after a 404 to the anonymous request, only when there is a login', async () => {
+    // A registry that hides a private repository behind a 404 (for example Artifactory).
+    const hiding = (tagWithLogin: 'found' | 'missing') =>
+      fakeTransport((request) => {
+        if (request.url.startsWith('https://artifacts.example.com/token')) {
+          return { status: 200, body: JSON.stringify({ token: request.headers?.Authorization === basicHeader('u', 'p') ? 'private' : 'anon' }) };
+        }
+        if (request.headers?.Authorization === 'Bearer private') return tagWithLogin === 'found' ? { headers: { 'docker-content-digest': DIGEST } } : { status: 404 };
+        if (request.headers?.Authorization === 'Bearer anon') return { status: 404 };
+        return {
+          status: 401,
+          headers: { 'www-authenticate': bearerChallenge('https://artifacts.example.com/token', 'artifacts.example.com', 'repository:team/app:pull') },
+        };
+      });
+    const found = hiding('found');
+    expect(await new RegistryClient(found, credentialsOf({ username: 'u', password: 'p' })).getDigest(ref('artifacts.example.com/team/app:1'))).toEqual({
+      kind: 'digest',
+      digest: DIGEST,
+    });
+    expect(found.requests.map((request) => request.headers?.Authorization)).toEqual([undefined, undefined, 'Bearer anon', basicHeader('u', 'p'), 'Bearer private']);
+    // Once only: a tag that is missing also with the login is not found.
+    const missing = hiding('missing');
+    expect(await new RegistryClient(missing, credentialsOf({ username: 'u', password: 'p' })).getDigest(ref('artifacts.example.com/team/app:1'))).toEqual({
+      kind: 'notFound',
+      registry: 'artifacts.example.com',
+    });
+    expect(missing.requests).toHaveLength(5);
+    // Without a login, the 404 to the anonymous request counts, with no further token request.
+    const withoutLogin = hiding('found');
+    const provider = vi.fn(noCredentials);
+    expect(await new RegistryClient(withoutLogin, provider).getDigest(ref('artifacts.example.com/team/app:1'))).toEqual({
+      kind: 'notFound',
+      registry: 'artifacts.example.com',
+    });
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(withoutLogin.requests.map((request) => request.headers?.Authorization)).toEqual([undefined, undefined, 'Bearer anon']);
+  });
+
+  it('reports a login that the token service rejects with 401, not with 403 (the sign-in fix), and keeps the answer without it', async () => {
     for (const [status, reported] of [
       [401, [['ghcr.io', { username: 'octo', password: 'gho_rejected' }]]],
       [403, []],
@@ -216,13 +297,17 @@ describe('RegistryClient', () => {
         if (request.url.startsWith('https://ghcr.io/token')) {
           return request.headers?.Authorization ? { status } : { status: 200, body: JSON.stringify({ token: 'anon' }) };
         }
-        if (request.headers?.Authorization === 'Bearer anon') return { headers: { 'docker-content-digest': DIGEST } };
-        return { status: 401, headers: { 'www-authenticate': bearerChallenge('https://ghcr.io/token', 'ghcr.io', 'repository:o/r:pull') } };
+        return { status: 401, headers: { 'www-authenticate': bearerChallenge('https://ghcr.io/token', 'ghcr.io', 'repository:o/private:pull') } };
       });
       const onCredentialsRejected = vi.fn();
-      const client = new RegistryClient(transport, credentialsOf({ username: 'octo', password: 'gho_rejected' }), undefined, { onCredentialsRejected });
-      expect(await client.getDigest(ref('ghcr.io/o/r'))).toEqual({ kind: 'digest', digest: DIGEST });
+      const warnings: string[] = [];
+      const logger = { info() {}, warn: (message: string) => warnings.push(message), error() {}, output() {} };
+      const client = new RegistryClient(transport, credentialsOf({ username: 'octo', password: 'gho_rejected' }), logger, { onCredentialsRejected });
+      expect(await client.getDigest(ref('ghcr.io/o/private'))).toEqual({ kind: 'authRequired', registry: 'ghcr.io' });
       expect(onCredentialsRejected.mock.calls).toEqual(reported);
+      expect(warnings).toEqual(['The stored credentials for ghcr.io were rejected.']);
+      // The anonymous token first, then the token for the login; the request went with the anonymous token only.
+      expect(transport.requests.map((request) => request.headers?.Authorization?.split(' ')[0])).toEqual([undefined, undefined, 'Bearer', 'Basic']);
     }
   });
 
@@ -287,9 +372,14 @@ describe('RegistryClient', () => {
       kind: 'authRequired',
       registry: 'registry.example.com',
     });
+    // The registry refused the Basic login, not a token service: nothing is reported.
+    const onCredentialsRejected = vi.fn();
     expect(
-      await new RegistryClient(transport, credentialsOf({ username: 'u', password: 'wrong' })).getDigest(ref('registry.example.com/a')),
+      await new RegistryClient(transport, credentialsOf({ username: 'u', password: 'wrong' }), undefined, { onCredentialsRejected }).getDigest(
+        ref('registry.example.com/a'),
+      ),
     ).toEqual({ kind: 'authRequired', registry: 'registry.example.com' });
+    expect(onCredentialsRejected).not.toHaveBeenCalled();
   });
 
   it('maps status codes', async () => {
@@ -369,7 +459,7 @@ describe('RegistryClient', () => {
     expect(lookupSignal?.aborted).toBe(true);
   });
 
-  it('asks without credentials when the credentials lookup takes too long (for example a keychain prompt)', async () => {
+  it('keeps the answer without credentials when the credentials lookup takes too long (for example a keychain prompt)', async () => {
     let lookupSignal: AbortSignal | undefined;
     const credentials: CredentialsProvider = (_registry, signal) => {
       lookupSignal = signal;
@@ -377,21 +467,22 @@ describe('RegistryClient', () => {
     };
     const transport = fakeTransport((request) => {
       if (request.url.startsWith('https://ghcr.io/token')) {
-        return request.headers?.Authorization ? { status: 403 } : { status: 200, body: JSON.stringify({ token: 'anon' }) };
+        return request.headers?.Authorization ? { status: 200, body: JSON.stringify({ token: 'private' }) } : { status: 200, body: JSON.stringify({ token: 'anon' }) };
       }
-      if (request.headers?.Authorization === 'Bearer anon') return { headers: { 'docker-content-digest': DIGEST } };
-      return { status: 401, headers: { 'www-authenticate': bearerChallenge('https://ghcr.io/token', 'ghcr.io', 'repository:o/r:pull') } };
+      if (request.headers?.Authorization === 'Bearer private') return { headers: { 'docker-content-digest': DIGEST } };
+      return { status: 401, headers: { 'www-authenticate': bearerChallenge('https://ghcr.io/token', 'ghcr.io', 'repository:o/private:pull') } };
     });
     const warnings: string[] = [];
     const logger = { info() {}, warn: (message: string) => warnings.push(message), error() {}, output() {} };
     const client = new RegistryClient(transport, credentials, logger, { credentialsTimeoutMs: 20 });
     const controller = new AbortController();
-    expect(await client.getDigest(ref('ghcr.io/o/r'), controller.signal)).toEqual({ kind: 'digest', digest: DIGEST });
+    // The registry refused the anonymous token: `authRequired`, a checked outcome, not `unreachable`.
+    expect(await client.getDigest(ref('ghcr.io/o/private'), controller.signal)).toEqual({ kind: 'authRequired', registry: 'ghcr.io' });
     expect(controller.signal.aborted).toBe(false);
-    // The helper process is ended, and the token request is sent without credentials.
+    // The helper process is ended, and no request carries a login.
     expect(lookupSignal?.aborted).toBe(true);
-    expect(transport.requests.find((request) => request.url.startsWith('https://ghcr.io/token'))?.headers?.Authorization).toBeUndefined();
-    expect(warnings.some((message) => message.includes('not available in time'))).toBe(true);
+    expect(transport.requests.map((request) => request.headers?.Authorization)).toEqual([undefined, undefined, 'Bearer anon']);
+    expect(warnings).toEqual(['Registry credentials for ghcr.io were not available in time. Going on without credentials.']);
   });
 
   it('reports authRequired, not unreachable, when the credentials lookup for a Basic challenge takes too long', async () => {

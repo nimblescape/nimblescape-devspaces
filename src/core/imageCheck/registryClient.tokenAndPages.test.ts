@@ -54,14 +54,18 @@ describe('the token of a token service', () => {
   }
 
   it('refuses it for a digest of the worker too, also one got with credentials', async () => {
-    const { transport, requests } = tokenRegistry('bad\nvalue');
+    // The token service denies the anonymous token, so the token that it hands out is the one for the login.
+    const { transport, requests } = recording((request) => {
+      if (request.url.startsWith('https://ghcr.io/token')) return request.headers?.Authorization ? json({ token: 'bad\nvalue' }) : { status: 401, headers: {}, body: '' };
+      return { status: 401, headers: { 'www-authenticate': CHALLENGE }, body: '' };
+    });
     const client = new RegistryClient(transport, async () => ({ username: 'u', password: 'p' }));
     expect(await client.getDigest({ original: 'ghcr.io/team/app:1', registry: 'ghcr.io', repository: 'team/app', tag: '1' })).toEqual({
       kind: 'error',
       registry: 'ghcr.io',
       error: 'The token service returned an invalid token.',
     });
-    expect(requests.some((request) => request.headers?.Authorization?.startsWith('Bearer'))).toBe(false);
+    expect(requests.map((request) => request.headers?.Authorization?.split(' ')[0])).toEqual([undefined, undefined, 'Basic']);
   });
 
   it('accepts a visible ASCII token and reads its answer within the body limit of a tag list', async () => {

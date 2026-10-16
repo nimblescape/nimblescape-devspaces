@@ -6,7 +6,7 @@
 // (RegistryClient.listTags): the challenge and the token, all pages of the RFC 5988 Link on the same registry only, at
 // most MAX_TAG_PAGES pages of MAX_TAG_LIST_BYTES each, and the redirect rules of the client (HTTPS only; no credential
 // to another host than the registry and its token service).
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { HttpRequest, HttpResponse, HttpTransport } from '../http';
 import { silentLogger, type Logger } from '../ports';
 import { MAX_TAG_LIST_BYTES, MAX_TAG_PAGES, RegistryClient } from './registryClient';
@@ -44,6 +44,29 @@ describe('RegistryClient.listTags', () => {
     ]);
     // Each page within the body limit of a tag list.
     expect(requests.filter((request) => request.url.includes('/v2/')).map((request) => request.maxBodyBytes)).toEqual([MAX_TAG_LIST_BYTES, MAX_TAG_LIST_BYTES, MAX_TAG_LIST_BYTES]);
+  });
+
+  it('reads the login only for a private repository, after the anonymous token was refused, and keeps its token for the further pages', async () => {
+    const login = `Basic ${Buffer.from('u:p').toString('base64')}`;
+    const registry = (repository: 'public' | 'private') =>
+      recording((request) => {
+        if (request.url.startsWith('https://ghcr.io/token')) return json({ token: request.headers?.Authorization === login ? 'private' : 'anon' });
+        const authorization = request.headers?.Authorization;
+        if (authorization !== 'Bearer private' && (repository === 'private' || authorization !== 'Bearer anon')) {
+          return { status: 401, headers: { 'www-authenticate': CHALLENGE }, body: '' };
+        }
+        if (request.url.endsWith('/tags/list')) return json({ tags: ['1'] }, { link: '</v2/team/app/tags/list?last=1>; rel="next"' });
+        return json({ tags: ['2'] });
+      });
+    const provider = vi.fn(async () => ({ username: 'u', password: 'p' }));
+    const open = registry('public');
+    expect(await new RegistryClient(open.transport, provider).listTags('ghcr.io', 'team/app')).toEqual({ kind: 'tags', tags: ['1', '2'] });
+    expect(provider).not.toHaveBeenCalled();
+    expect(open.requests.map((request) => request.headers?.Authorization)).toEqual([undefined, undefined, 'Bearer anon', 'Bearer anon']);
+    const closed = registry('private');
+    expect(await new RegistryClient(closed.transport, provider).listTags('ghcr.io', 'team/app')).toEqual({ kind: 'tags', tags: ['1', '2'] });
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(closed.requests.map((request) => request.headers?.Authorization)).toEqual([undefined, undefined, 'Bearer anon', login, 'Bearer private', 'Bearer private']);
   });
 
   it('follows a next page only on the same registry, and at most MAX_TAG_PAGES pages', async () => {

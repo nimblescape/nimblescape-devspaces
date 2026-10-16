@@ -65,6 +65,11 @@ export class StoragePaths {
   readonly computerId: string;
   /** The remembered check results of the configurations, `<devspace-id>.json` (configChecks.ts). */
   readonly configChecksDir: string;
+  /**
+   * The marker of the first use (firstUse.ts): an empty file, written at the activation while registry.json exists, so
+   * that a later loss of registry.json still counts as a use of Devspaces.
+   */
+  readonly usedMarker: string;
 
   constructor(readonly root: string) {
     this.registry = path.join(root, 'registry.json');
@@ -78,6 +83,7 @@ export class StoragePaths {
     this.remoteDocker = path.join(root, 'remote-docker.json');
     this.computerId = path.join(root, 'computer.id');
     this.configChecksDir = path.join(root, 'checks');
+    this.usedMarker = path.join(root, 'used');
   }
 
   /**

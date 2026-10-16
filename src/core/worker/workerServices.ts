@@ -275,8 +275,9 @@ export function hostRegistryCredentials(logins: ReturnType<typeof registryLogins
 
 /**
  * The image update check of the worker (ImageChecker over a RegistryClient): HTTPS through the proxy of the daemon of
- * its engine (proxiedHttpsTransport), the logins by hostRegistryCredentials. A login that a registry rejects is logged;
- * the check goes on without it (RegistryClient).
+ * its engine (proxiedHttpsTransport), the logins by hostRegistryCredentials. A login is asked only when the registry
+ * refused the request without one, so a public image needs none (RegistryClient). A login that a registry rejects is
+ * logged; the answer without it counts.
  */
 export function workerImageChecker(deps: Pick<WorkerServicesDeps, 'host' | 'engine' | 'forgetSecret' | 'logger'>, logins = registryLogins(deps.host, () => deps.forgetSecret(SECRET_REGISTRY), deps.logger)): ImageChecker {
   const transport = proxiedHttpsTransport(() => deps.engine.proxy());

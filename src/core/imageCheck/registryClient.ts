@@ -28,7 +28,8 @@ export const MANIFEST_ACCEPT = MANIFEST_MEDIA_TYPES.join(', ');
 const USER_AGENT = 'nimblescape-devspaces';
 /**
  * Default time limit for one credentials lookup (credential helper, GitHub session). It is shorter than the time limit
- * of the check (5 seconds), so that the registry can still be asked without credentials within the check.
+ * of the check (5 seconds): when a lookup takes too long, the check still ends in time with the answer that the
+ * registry gave without credentials (`authRequired` for a private image), not with `unreachable`.
  */
 export const CREDENTIALS_TIMEOUT_MS = 2500;
 const MAX_REDIRECTS = 5;
@@ -148,7 +149,8 @@ type RepositoryRef = Pick<ImageReference, 'registry' | 'repository'>;
 /** Thrown for a failed connection or a request without an answer in time. */
 class TransportFailure extends Error {}
 
-type AuthResult = { kind: 'ok'; authorization: string } | { kind: 'result'; result: RegistryFailure };
+/** The answer to the request that was sent again with an authorization, or why there is none to use. */
+type AuthResult = { kind: 'ok'; authorization: string; response: HttpResponse } | { kind: 'result'; result: RegistryFailure };
 type TokenResult = { kind: 'token'; token: string } | { kind: 'denied'; status: number } | { kind: 'result'; result: RegistryFailure };
 
 /** Client for the manifest digest of a tag (HEAD request). Talks HTTPS only. */
@@ -175,12 +177,12 @@ export class RegistryClient {
 
   /**
    * Current digest of the tag: `HEAD https://<registry>/v2/<repository>/manifests/<tag>` with the manifest types of
-   * `MANIFEST_ACCEPT`. First without credentials; on 401 it follows the `WWW-Authenticate` challenge (Bearer: token
-   * request, with Basic credentials if the provider has some; Basic: retry with Basic credentials). A 401 of another
-   * host that the registry redirected to gives `authRequired` without credentials. The digest comes
-   * from `Docker-Content-Digest`. If this header is missing, it reads the manifest with GET and computes its sha256,
-   * except on Docker Hub, where a GET counts as a pull. A reference with a digest is returned without a request.
-   * Never throws: an aborted signal gives `unreachable`.
+   * `MANIFEST_ACCEPT`. First without credentials; on 401 it follows the `WWW-Authenticate` challenge (Bearer: an
+   * anonymous token first, the login of the provider only after a refusal, see `authenticate`; Basic: retry with the
+   * login of the provider). A 401 of another host that the registry redirected to gives `authRequired` without
+   * credentials. The digest comes from `Docker-Content-Digest`. If this header is missing, it reads the manifest with
+   * GET and computes its sha256, except on Docker Hub, where a GET counts as a pull. A reference with a digest is
+   * returned without a request. Never throws: an aborted signal gives `unreachable`.
    */
   async getDigest(reference: ImageReference, signal?: AbortSignal): Promise<DigestResult> {
     if (reference.digest) return { kind: 'digest', digest: reference.digest };
@@ -193,9 +195,9 @@ export class RegistryClient {
 
   /**
    * The tags of `repository` at `registry`: `GET https://<registry>/v2/<repository>/tags/list`, first without
-   * credentials; on 401 it follows the `WWW-Authenticate` challenge as getDigest does (with the credentials of the
-   * provider, if it has some; a 401 of another host that the registry redirected to gives `authRequired`), and keeps
-   * that authorization for the further pages. All pages (the RFC 5988 `Link` with `rel="next"`, only on the same
+   * credentials; on 401 it follows the `WWW-Authenticate` challenge as getDigest does (the login of the provider only
+   * after a refusal; a 401 of another host that the registry redirected to gives `authRequired`), and keeps that
+   * authorization for the further pages. All pages (the RFC 5988 `Link` with `rel="next"`, only on the same
    * registry; at most MAX_TAG_PAGES, each at most MAX_TAG_LIST_BYTES). Never throws: an aborted signal gives
    * `unreachable`.
    */
@@ -210,7 +212,7 @@ export class RegistryClient {
   private async tagPages(reference: RepositoryRef, signal: AbortSignal | undefined): Promise<TagListResult> {
     const registry = reference.registry;
     const base = `https://${registry}`;
-    const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': USER_AGENT };
+    let headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': USER_AGENT };
     // The origin as the URL parser writes it (host in lower case, without the default port 443), so that a registry
     // written as `Host:443` or in upper case pages on.
     const origin = new URL(base).origin;
@@ -228,10 +230,10 @@ export class RegistryClient {
           );
           return { kind: 'authRequired', registry };
         }
-        const auth = await this.authenticate(reference, response, signal);
+        const auth = await this.authenticate(reference, response, (authorization) => this.send(authorized(request, authorization), signal), signal);
         if (auth.kind === 'result') return auth.result;
-        headers.Authorization = auth.authorization;
-        response = await this.send({ ...request, headers }, signal);
+        headers = { ...headers, Authorization: auth.authorization };
+        response = auth.response;
       }
       if (response.status !== 200) return statusResult(registry, response.status);
       let body: unknown;
@@ -257,9 +259,10 @@ export class RegistryClient {
 
   private async resolve(reference: ImageReference, signal: AbortSignal | undefined): Promise<DigestResult> {
     const url = `https://${reference.registry}/v2/${reference.repository}/manifests/${reference.tag}`;
-    const headers: Record<string, string> = { Accept: MANIFEST_ACCEPT, 'User-Agent': USER_AGENT };
+    let headers: Record<string, string> = { Accept: MANIFEST_ACCEPT, 'User-Agent': USER_AGENT };
+    const request: HttpRequest = { method: 'HEAD', url, headers };
 
-    const first = await this.sendTracked({ method: 'HEAD', url, headers }, signal);
+    const first = await this.sendTracked(request, signal);
     let response = first.response;
     if (response.status === 401) {
       if (first.url.host !== new URL(url).host) {
@@ -271,10 +274,10 @@ export class RegistryClient {
         );
         return { kind: 'authRequired', registry: reference.registry };
       }
-      const auth = await this.authenticate(reference, response, signal);
+      const auth = await this.authenticate(reference, response, (authorization) => this.send(authorized(request, authorization), signal), signal);
       if (auth.kind === 'result') return auth.result;
-      headers.Authorization = auth.authorization;
-      response = await this.send({ method: 'HEAD', url, headers }, signal);
+      headers = { ...headers, Authorization: auth.authorization };
+      response = auth.response;
     }
     return this.interpret(reference, url, headers, response, signal);
   }
@@ -291,7 +294,8 @@ export class RegistryClient {
     const headUnsupported = response.status === 405;
     if (!headUnsupported && (response.status < 200 || response.status >= 300)) {
       // Assumption: a registry answers 401/403 for a private image without access. A registry that answers 404 instead
-      // gives `notFound`, and the reference then counts as unchanged.
+      // is asked again with the login, when the provider has one (authenticate); a 404 that stays gives `notFound`, and
+      // the reference then counts as unchanged.
       return statusResult(registry, response.status);
     }
 
@@ -314,26 +318,41 @@ export class RegistryClient {
     return { kind: 'digest', digest: `sha256:${crypto.createHash('sha256').update(get.body, 'utf8').digest('hex')}` };
   }
 
+  /**
+   * Answers the sign-in request of the registry (`response`, HTTP 401) for one request, which `send` sends again with
+   * an authorization. Bearer: the request goes again with an anonymous token first, so a public image needs no login,
+   * and no login is read for it. The login of the provider is read only when the token service denies the anonymous
+   * token, or the registry refuses the request with it (HTTP 401 or 403). After an HTTP 404 the request goes again with
+   * the login only when the provider has one, because a registry can hide a private repository behind a 404. Basic: the
+   * login of the provider at once, because the first 401 is already the refusal.
+   */
   private async authenticate(
     reference: RepositoryRef,
     response: HttpResponse,
+    send: (authorization: string) => Promise<HttpResponse>,
     signal: AbortSignal | undefined,
   ): Promise<AuthResult> {
     const registry = reference.registry;
     const challenges = parseWwwAuthenticate(response.headers['www-authenticate'] ?? '');
     const bearer = challenges.find((challenge) => challenge.scheme === 'bearer');
-    if (bearer) return this.bearer(reference, bearer, signal);
+    if (bearer) return this.bearer(reference, bearer, send, signal);
 
     if (challenges.some((challenge) => challenge.scheme === 'basic')) {
       // The manifest URL is always HTTPS, so Basic credentials are sent over TLS only.
       const credentials = await this.credentialsFor(reference, signal);
       if (!credentials) return { kind: 'result', result: { kind: 'authRequired', registry } };
-      return { kind: 'ok', authorization: `Basic ${basic(credentials)}` };
+      const authorization = `Basic ${basic(credentials)}`;
+      return { kind: 'ok', authorization, response: await send(authorization) };
     }
     return { kind: 'result', result: { kind: 'authRequired', registry } };
   }
 
-  private async bearer(reference: RepositoryRef, challenge: AuthChallenge, signal: AbortSignal | undefined): Promise<AuthResult> {
+  private async bearer(
+    reference: RepositoryRef,
+    challenge: AuthChallenge,
+    send: (authorization: string) => Promise<HttpResponse>,
+    signal: AbortSignal | undefined,
+  ): Promise<AuthResult> {
     const registry = reference.registry;
     let realm: URL;
     try {
@@ -354,19 +373,31 @@ export class RegistryClient {
     const scopes = (challenge.params.scope ?? `repository:${reference.repository}:pull`).split(' ').filter((scope) => scope !== '');
     for (const scope of scopes) tokenUrl.searchParams.append('scope', scope);
 
-    const credentials = await this.credentialsFor(reference, signal);
-    if (credentials) {
-      const withCredentials = await this.requestToken(registry, tokenUrl, credentials, signal);
-      if (withCredentials.kind === 'token') return { kind: 'ok', authorization: `Bearer ${withCredentials.token}` };
-      if (withCredentials.kind === 'result') return withCredentials;
-      if (withCredentials.status === 401) this.reportRejected(registry, credentials);
-      // Rejected credentials (for example an expired password): a public image still works anonymously.
-      this.logger.warn(`The stored credentials for ${registryDisplayName(registry)} were rejected. Trying without credentials.`);
+    // Anonymous first: the token without a login, and the request with it.
+    const anonymousToken = await this.requestToken(registry, tokenUrl, undefined, signal);
+    if (anonymousToken.kind === 'result') return anonymousToken;
+    // The answer without a login: the one to the request with the anonymous token, `authRequired` when the token
+    // service denied that token.
+    let withoutLogin: AuthResult = { kind: 'result', result: { kind: 'authRequired', registry } };
+    if (anonymousToken.kind === 'token') {
+      const authorization = `Bearer ${anonymousToken.token}`;
+      const response = await send(authorization);
+      withoutLogin = { kind: 'ok', authorization, response };
+      if (response.status !== 401 && response.status !== 403 && response.status !== 404) return withoutLogin;
     }
-    const anonymous = await this.requestToken(registry, tokenUrl, undefined, signal);
-    if (anonymous.kind === 'token') return { kind: 'ok', authorization: `Bearer ${anonymous.token}` };
-    if (anonymous.kind === 'result') return anonymous;
-    return { kind: 'result', result: { kind: 'authRequired', registry } };
+    // A refusal, or a 404, which can hide a private repository: the login of the provider, if it has one.
+    const credentials = await this.credentialsFor(reference, signal);
+    if (!credentials) return withoutLogin;
+    const loginToken = await this.requestToken(registry, tokenUrl, credentials, signal);
+    if (loginToken.kind === 'token') {
+      const authorization = `Bearer ${loginToken.token}`;
+      return { kind: 'ok', authorization, response: await send(authorization) };
+    }
+    if (loginToken.kind === 'result') return loginToken;
+    if (loginToken.status === 401) this.reportRejected(registry, credentials);
+    // Rejected credentials (for example an expired password): the answer without them counts.
+    this.logger.warn(`The stored credentials for ${registryDisplayName(registry)} were rejected.`);
+    return withoutLogin;
   }
 
   private reportRejected(registry: string, credentials: Credentials): void {
@@ -414,7 +445,7 @@ export class RegistryClient {
    * Credentials of the provider for the registry of `reference`, once per registry and signal (the provider hears the
    * repository of the first reference). The lookup has its own time limit: a credential helper that waits for a prompt
    * (keychain, GPG) or a slow GitHub session must not make a reachable registry count as unreachable. After the limit,
-   * the registry is asked without credentials.
+   * the client goes on without credentials.
    */
   private credentialsFor(reference: RepositoryRef, signal: AbortSignal | undefined): Promise<Credentials | undefined> {
     const { registry, repository } = reference;
@@ -430,7 +461,7 @@ export class RegistryClient {
         if (signal?.aborted) throw abortError();
         const name = registryDisplayName(registry);
         if (isAbortError(error)) {
-          this.logger.warn(`Registry credentials for ${name} were not available in time. Trying without credentials.`);
+          this.logger.warn(`Registry credentials for ${name} were not available in time. Going on without credentials.`);
         } else {
           this.logger.warn(`Registry credentials for ${name} could not be read: ${errorMessage(error)}`);
         }
@@ -500,6 +531,11 @@ function statusResult(registry: string, status: number): RegistryFailure {
 function validDigest(value: string | undefined): string | undefined {
   const digest = value?.split(',')[0].trim().toLowerCase();
   return digest && DIGEST.test(digest) ? digest : undefined;
+}
+
+/** `request` with `authorization` in a copy of its headers. */
+function authorized(request: HttpRequest, authorization: string): HttpRequest {
+  return { ...request, headers: { ...request.headers, Authorization: authorization } };
 }
 
 function basic(credentials: Credentials): string {

@@ -53,6 +53,8 @@ interface SetupOptions {
   download?: (options: DownloadOptions) => Promise<void>;
   startDocker?: DockerSetupDeps['startDocker'];
   remoteDockerHost?: boolean;
+  /** Whether the sidebar view is visible; visible when not given. */
+  viewVisible?: () => boolean;
 }
 
 function setup(installed: boolean, options: SetupOptions = {}) {
@@ -78,6 +80,7 @@ function setup(installed: boolean, options: SetupOptions = {}) {
     env: {},
     onDidChangeInstalled: changed,
     remoteDockerHostConfigured: () => options.remoteDockerHost ?? false,
+    viewVisible: options.viewVisible ?? (() => true),
     planInput: async () => ({ platform, arch: 'arm64', has: (tool: SetupTool) => tools.includes(tool), userName: 'octo', ...options.input }),
     downloadFolder: path.join(os.tmpdir(), 'devspaces-downloads-test'),
     download,
@@ -237,6 +240,7 @@ describe('DockerSetup: context keys and CLI checks', () => {
       env: {},
       onDidChangeInstalled: changed,
       remoteDockerHostConfigured: () => false,
+      viewVisible: () => true,
     });
     dockerSetup.initialize();
     expect(dockerSetup.setupRequired).toBe(false);
@@ -280,6 +284,7 @@ describe('DockerSetup: context keys and CLI checks', () => {
       env: {},
       onDidChangeInstalled: changed,
       remoteDockerHostConfigured: () => false,
+      viewVisible: () => true,
       clock: { now: () => now },
     });
     dockerSetup.initialize();
@@ -711,7 +716,7 @@ describe('DockerSetup: Start Docker (after an installation, and the action Start
 describe('DockerSetup: WSL 2 (sidebar button Install WSL 2, Windows)', () => {
   const status = (exitCode: number): RunResult => ({ exitCode, stdout: '', stderr: '', timedOut: false });
 
-  it('checks wsl --status at activation while Docker is missing', async () => {
+  it('checks wsl --status at activation while Docker is missing and the view is visible', async () => {
     const { dockerSetup, runner } = setup(false, { platform: 'win32', wsl: () => status(0) });
     dockerSetup.initialize();
     await flush();
@@ -720,16 +725,76 @@ describe('DockerSetup: WSL 2 (sidebar button Install WSL 2, Windows)', () => {
     dockerSetup.dispose();
   });
 
-  it('does not run wsl on other platforms or when Docker is installed', async () => {
+  it('checks wsl --status only when the hidden view is shown, again while WSL is not ready', async () => {
+    let visible = false;
+    let exitCode = 1;
+    const { dockerSetup, runner } = setup(false, { platform: 'win32', wsl: () => status(exitCode), viewVisible: () => visible });
+    dockerSetup.initialize();
+    await flush();
+    expect(runner.run).not.toHaveBeenCalled();
+    visible = true;
+    dockerSetup.onViewShown();
+    await flush();
+    expect(runner.run).toHaveBeenCalledTimes(1);
+    expect(contextCalls()).toContainEqual([DockerContextKeys.wslReady, false]);
+    // Not ready: shown again, checked again.
+    exitCode = 0;
+    dockerSetup.onViewShown();
+    await flush();
+    expect(runner.run).toHaveBeenCalledTimes(2);
+    expect(contextCalls()).toContainEqual([DockerContextKeys.wslReady, true]);
+    // Ready: no further check.
+    dockerSetup.onViewShown();
+    await flush();
+    expect(runner.run).toHaveBeenCalledTimes(2);
+    dockerSetup.dispose();
+  });
+
+  it('does not run wsl on other platforms, when Docker is installed, or with a remote Docker host, also when the view is shown', async () => {
     const mac = setup(false, { platform: 'darwin' });
     mac.dockerSetup.initialize();
+    mac.dockerSetup.onViewShown();
     const installed = setup(true, { platform: 'win32' });
     installed.dockerSetup.initialize();
+    installed.dockerSetup.onViewShown();
+    const remote = setup(false, { platform: 'win32', remoteDockerHost: true });
+    remote.dockerSetup.initialize();
+    remote.dockerSetup.onViewShown();
     await flush();
     expect(mac.runner.run).not.toHaveBeenCalled();
     expect(installed.runner.run).not.toHaveBeenCalled();
+    expect(remote.runner.run).not.toHaveBeenCalled();
     mac.dockerSetup.dispose();
     installed.dockerSetup.dispose();
+    remote.dockerSetup.dispose();
+  });
+
+  it('Install WSL 2 waits for a first check: it runs one when none ran, or waits for the one that runs', async () => {
+    // No check yet (the view was hidden): the click checks first, and WSL is ready.
+    const hidden = setup(false, { platform: 'win32', wsl: () => status(0), viewVisible: () => false });
+    hidden.dockerSetup.initialize();
+    await flush();
+    expect(hidden.runner.run).not.toHaveBeenCalled();
+    confirmWith(DockerSetupTexts.install);
+    await hidden.dockerSetup.installWsl();
+    expect(hidden.runner.run).toHaveBeenCalledTimes(1);
+    expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
+    expect(fakeVscode.terminals).toEqual([]);
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(DockerSetupUiTexts.wslAlreadyInstalled);
+    hidden.dockerSetup.dispose();
+    // A click while the check of the activation runs waits for that check (one check at a time).
+    let answer: (result: RunResult) => void = () => {};
+    const running = setup(false, { platform: 'win32', wsl: () => new Promise<RunResult>((resolve) => (answer = resolve)) });
+    running.dockerSetup.initialize();
+    const click = running.dockerSetup.installWsl();
+    await flush();
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledTimes(1);
+    answer(status(0));
+    await click;
+    expect(running.runner.run).toHaveBeenCalledTimes(1);
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledTimes(2);
+    expect(fakeVscode.terminals).toEqual([]);
+    running.dockerSetup.dispose();
   });
 
   it('runs no wsl --install when WSL 2 is installed already', async () => {
@@ -758,6 +823,7 @@ describe('DockerSetup: WSL 2 (sidebar button Install WSL 2, Windows)', () => {
       findDocker: () => found,
       onCliLost: () => dockerSetup?.reportCliLost(),
     });
+    let visible = true;
     dockerSetup = new DockerSetup({
       docker,
       runner,
@@ -767,6 +833,7 @@ describe('DockerSetup: WSL 2 (sidebar button Install WSL 2, Windows)', () => {
       env: {},
       onDidChangeInstalled: vi.fn(),
       remoteDockerHostConfigured: () => false,
+      viewVisible: () => visible,
     });
     dockerSetup.initialize();
     await flush();
@@ -787,6 +854,22 @@ describe('DockerSetup: WSL 2 (sidebar button Install WSL 2, Windows)', () => {
     dockerSetup.dispose();
   });
 
+  it('a CLI lost while the view is hidden: wsl --status when the view is shown', async () => {
+    let visible = false;
+    const { dockerSetup, runner } = setup(true, { platform: 'win32', wsl: () => status(0), viewVisible: () => visible });
+    dockerSetup.initialize();
+    dockerSetup.reportCliLost();
+    await flush();
+    expect(dockerSetup.setupRequired).toBe(true);
+    expect(runner.run).not.toHaveBeenCalled();
+    visible = true;
+    dockerSetup.onViewShown();
+    await flush();
+    expect(runner.run).toHaveBeenCalledWith('wsl.exe', ['--status'], { timeoutMs: 15_000 });
+    expect(contextCalls()).toContainEqual([DockerContextKeys.wslReady, true]);
+    dockerSetup.dispose();
+  });
+
   it('runs wsl --install in the terminal after the confirmation, then checks again', async () => {
     let exitCode = 1;
     const { dockerSetup, runner } = setup(false, { platform: 'win32', wsl: () => status(exitCode) });
@@ -795,10 +878,12 @@ describe('DockerSetup: WSL 2 (sidebar button Install WSL 2, Windows)', () => {
     expect(modalCalls()[0][0]).toBe(DockerSetupTexts.confirmWsl);
     expect(modalCalls()[0][1].detail).toBe(`${DockerSetupTexts.confirmCommands}\n\nwsl --install\n\n${DockerSetupTexts.wslRestart}`);
     expect(fakeVscode.terminals[0].lines).toEqual(['wsl --install']);
+    // The first check, before the confirmation (no check ran before the click).
+    expect(runner.run).toHaveBeenCalledTimes(1);
     exitCode = 0;
     vi.advanceTimersByTime(5_000);
     await flush();
-    expect(runner.run).toHaveBeenCalledTimes(1);
+    expect(runner.run).toHaveBeenCalledTimes(2);
     expect(contextCalls()).toContainEqual([DockerContextKeys.wslReady, true]);
     dockerSetup.dispose();
   });
