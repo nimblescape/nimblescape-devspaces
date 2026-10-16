@@ -153,7 +153,13 @@ describe('the Markdown pages', () => {
     expect(problems(read(file))).toEqual([]);
   });
 
-  it('docs/guide.md has no raw tag, so that GitHub shows each placeholder such as `<host>`', () => {
-    expect(problems(read('docs/guide.md'), { links: false })).toEqual([]);
+  const docs = fs.readdirSync(path.join(ROOT, 'docs')).filter((file) => file.endsWith('.md'));
+
+  it('finds the pages of docs/', () => {
+    expect(docs).toEqual(expect.arrayContaining(['architecture.md', 'guide.md', 'security.md']));
+  });
+
+  it.each(docs)('docs/%s has no raw tag, so that GitHub shows each placeholder such as `<host>`', (file) => {
+    expect(problems(read(`docs/${file}`), { links: false })).toEqual([]);
   });
 });
