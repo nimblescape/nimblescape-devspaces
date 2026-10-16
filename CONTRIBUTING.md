@@ -27,7 +27,7 @@ the extension. The [README](README.md) describes the use in short, the
 | `.github/workflows/vscode-versions.yml` | Runs the VS Code jobs of `ci.yml` once per week (Mondays at 04:23 UTC) and on a manual start, on VS Code Insiders and on the version of `engines.vscode` in `package.json`, the lowest version that the extension supports. A change of the workflow runs it on its pull request. The VS Code CLI installs the newest release of Dev Containers that supports the VS Code version, and the tests print both versions. Each attach job keeps the Insiders build that is the newest at its start. GitHub documents that it sends the notice of a failed scheduled run to the person who last changed the `cron` line, and that it turns off the schedule of a public repository after 60 days without activity in the repository; the tab "Actions" turns it on again. |
 | `.github/workflows/marketplace-identity.yml` | Prints the Marketplace member ID of the publishing identity, to check the setup of the repository. |
 | `.github/dependabot.yml` | Proposes weekly updates of the development tools and of the pinned actions. |
-| `.vscodeignore` | Lists the files of the package: the bundles in `dist/`, `resources/`, `package.json`, `README.md`, `CHANGELOG.md` and `LICENSE`. |
+| `.vscodeignore` | Lists the files of the package: the bundles in `dist/`, `resources/`, `package.json`, `README.md`, `CHANGELOG.md`, `LICENSE` and `ThirdPartyNotices.txt`. |
 
 ## Development
 
@@ -71,7 +71,7 @@ and the locked versions of the tools, the build gives the same files.
 - `main` selects the bundle `dist/extension.js`.
 - `contributes` declares the view, the commands, the menus, the settings and the icons.
 - `capabilities.untrustedWorkspaces` lets the extension run in a folder that VS Code does not trust (Restricted Mode). Its list `restrictedConfigurations` names every setting without the scope `application` or `machine`, so that VS Code ignores the values of the workspace or folder for it there. A new setting of that kind also goes into this list (a unit test in `src/vscode/settings.test.ts` checks it) and into the folder settings of `untrustedConfiguration` in `.vscode-test.mjs`.
-- The icon of the Marketplace is `resources/icon.png`, the sidebar icon `resources/icon.svg` on a blue tile, because the Marketplace takes no SVG icon. The description, categories, keywords and the banner color complete the Marketplace page.
+- The icon of the Marketplace is `resources/icon.png`, the sidebar icon `resources/icon.svg` on a blue tile, because the Marketplace takes no SVG icon. Both show the codicon `open-in-window` of Microsoft, and `scripts/build-icon-font.py` builds the icon font `resources/icons/devspace-icons.woff` from codicon shapes. The Codicons are under CC BY 4.0: a new or changed codicon needs its entry in `ThirdPartyNotices.txt`. The description, categories, keywords and the banner color complete the Marketplace page.
 
 `README.md` is the page of the Marketplace and `CHANGELOG.md` its tab
 "Changelog". vsce does not rewrite relative links

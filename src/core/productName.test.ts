@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FOLDERS = ['.github', '.vscode', 'docs', 'resources', 'scripts', 'src', 'test'];
-const FILES = ['README.md', 'package.json', '.vscodeignore', 'esbuild.mjs'];
+const FILES = ['README.md', 'package.json', '.vscodeignore', 'esbuild.mjs', 'ThirdPartyNotices.txt'];
 const TEXT = /\.(ts|js|mjs|json|md|py|sh|ya?ml|html|css|svg|txt)$|Dockerfile$/;
 
 // "Dev Space", "Dev Spaces", "dev-space", "dev_space"; "devenv", "dev-env", "Dev Environments".
