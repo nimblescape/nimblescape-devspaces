@@ -435,10 +435,12 @@ export class Controller implements vscode.Disposable {
       chooseDockerHost: async () => this.deps.remoteDocker?.chooseDockerHost(),
       askAgainDockerHost: async () => this.deps.remoteDocker?.askAgain(),
       rowActivated: (argument) => this.rowActivated(argument),
+      rowEnter: () => this.rowEnter(),
     };
     // Each command is one operation on the Docker host that is current when it starts; the two commands that change the
-    // host read it themselves. A click on a row is no operation: only the Start of a double-click is one.
-    const ownTarget = new Set<CommandName>(['useRemoteDockerHost', 'useLocalDocker', 'chooseDockerHost', 'askAgainDockerHost', 'rowActivated']);
+    // host read it themselves. A click or Enter on a row is no operation: only the Start of a double-click or of Enter
+    // is one.
+    const ownTarget = new Set<CommandName>(['useRemoteDockerHost', 'useLocalDocker', 'chooseDockerHost', 'askAgainDockerHost', 'rowActivated', 'rowEnter']);
     const run = async (name: CommandName, argument: unknown): Promise<void> => {
       try {
         if (ownTarget.has(name)) await handlers[name](argument);
@@ -840,9 +842,9 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * The command of a repository row: VS Code runs it on a click, Enter, or Space in the row. A double-click runs Start
-   * with the row, the same as its Start button (rowActivation.ts); a single click only selects the row. Nothing happens
-   * where the row shows no Start: this window is connected to the devspace, or it is updating.
+   * The command of a repository row: VS Code runs it on a click, Enter, or Space in the row. A double-click or Enter
+   * (rowEnter) runs Start with the row, the same as its Start button (rowActivation.ts); a single click only selects the
+   * row. Nothing happens where the row shows no Start: this window is connected to the devspace, or it is updating.
    */
   async rowActivated(argument: unknown): Promise<void> {
     const row = activatedRow(argument);
@@ -853,6 +855,16 @@ export class Controller implements vscode.Disposable {
     // The row may be older than the connection of this window; a lost connection shows Start (Reconnect).
     if (parsed.devspaceId !== undefined && this.current?.devspace.id === parsed.devspaceId && !this.current.lost) return;
     await this.withDockerTarget(() => this.start(parsed));
+  }
+
+  /**
+   * Enter on a row without children in the view (the keybinding of package.json). `list.select` of VS Code selects the
+   * focused row and runs its command, as Enter does without this keybinding; marked as Enter, the command of a
+   * repository row runs Start at once (rowActivated).
+   */
+  async rowEnter(): Promise<void> {
+    this.rowActivations.enter();
+    await vscode.commands.executeCommand('list.select');
   }
 
   /** Stop: the container stops at once; a connected window closes its connection first. */

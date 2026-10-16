@@ -651,11 +651,11 @@ describe('Controller commands', () => {
     };
     const declared = manifest.contributes.commands.map((command) => command.command).sort();
     expect([...h.commands.keys()].sort()).toEqual(declared);
-    // 36 commands, among them hidden ones: Show Docker Setup (the action Install Docker… of an error: it looks for the
-    // CLI, then shows the view), the command of a repository row (a double-click runs Start), and the choice of the
-    // Docker host (the command of the first row of the view). The last one added: "Remove Devspaces from This Docker
-    // Engine…".
-    expect(declared).toHaveLength(36);
+    // 37 commands, among them hidden ones: Show Docker Setup (the action Install Docker… of an error: it looks for the
+    // CLI, then shows the view), the command of a repository row (a double-click runs Start), Enter on a row (Enter
+    // runs Start), and the choice of the Docker host (the command of the first row of the view). The last one added:
+    // "Remove Devspaces from This Docker Engine…".
+    expect(declared).toHaveLength(37);
     expect(declared).toContain(Commands.removeFromDockerEngine);
   });
 
@@ -6628,17 +6628,50 @@ describe('Double-click on a repository row', () => {
     await run('rowActivated', argument);
   }
 
-  it('is hidden in the Command Palette', () => {
+  it('is hidden in the Command Palette, as the command of Enter', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { commands: Array<{ command: string }>; menus: Record<string, Array<{ command?: string; when?: string }>> };
     };
-    expect(manifest.contributes.commands.some((entry) => entry.command === Commands.rowActivated)).toBe(true);
-    const entries = manifest.contributes.menus.commandPalette.filter((item) => item.command === Commands.rowActivated);
-    expect(entries.map((item) => item.when)).toEqual(['false']);
-    // Only the row itself runs it: no menu offers it.
-    for (const [menu, items] of Object.entries(manifest.contributes.menus)) {
-      if (menu !== 'commandPalette') expect(items.some((item) => item.command === Commands.rowActivated)).toBe(false);
+    for (const command of [Commands.rowActivated, Commands.rowEnter]) {
+      expect(manifest.contributes.commands.some((entry) => entry.command === command)).toBe(true);
+      const entries = manifest.contributes.menus.commandPalette.filter((item) => item.command === command);
+      expect(entries.map((item) => item.when)).toEqual(['false']);
+      // Only the row itself (or its key) runs it: no menu offers it.
+      for (const [menu, items] of Object.entries(manifest.contributes.menus)) {
+        if (menu !== 'commandPalette') expect(items.some((item) => item.command === command)).toBe(false);
+      }
     }
+  });
+
+  it('binds Enter in the view, on a row without children, to devspaces.rowEnter (package.json)', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      contributes: { keybindings: Array<Record<string, string>> };
+    };
+    // An owner, a group or a repository with child rows keeps Enter of VS Code: it opens or closes the node.
+    expect(manifest.contributes.keybindings.filter((binding) => binding.command === Commands.rowEnter)).toEqual([
+      {
+        command: Commands.rowEnter,
+        key: 'enter',
+        when: 'focusedView == devspaces.repositories && listFocus && !inputFocus && !treeElementCanExpand && !treeElementCanCollapse',
+      },
+    ]);
+  });
+
+  it('runs Start on Enter: devspaces.rowEnter runs list.select, and the activation of the row that follows starts it', async () => {
+    const start = vi.spyOn(h.controller, 'start').mockResolvedValue(undefined);
+    const argument = viewRow('acme/api', undefined);
+    // VS Code selects the focused row and runs its command.
+    fakeVscode.commands.executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'list.select') await click(argument, 10);
+    });
+    h.clock.now = () => NOW;
+    await run('rowEnter');
+    expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('list.select');
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith({ kind: 'row', repository: 'acme/api', info: undefined, devspaceId: undefined });
+    // A click after it only selects the row again.
+    await click(argument, 200);
+    expect(start).toHaveBeenCalledTimes(1);
   });
 
   it('only selects the row on a single click', async () => {

@@ -66,6 +66,25 @@ describe('DevspaceStatusBar', () => {
     expect(item.text).toBe('$(devspaces-monitor-connected) acme-university/api · dev');
   });
 
+  it('gives a screen reader the state and the action, not the name of the icon', () => {
+    const { bar, item } = create();
+    expect(item.accessibilityInformation).toEqual({ label: 'Devspaces: this window has no devspace. Select to open a devspace in this window.' });
+    bar.showConnected('acme-university/api', 'main');
+    expect(item.accessibilityInformation).toEqual({ label: 'Devspaces: connected to acme-university/api, branch main. Select to switch the devspace.' });
+    bar.showStateUnknown(true);
+    expect(item.accessibilityInformation?.label).toBe(
+      'Devspaces: connected to acme-university/api, branch main. The state of its container could not be read; details are in the log. Select to switch the devspace.',
+    );
+    bar.showStateUnknown(false);
+    bar.showConnected('acme-university/api', undefined);
+    expect(item.accessibilityInformation?.label).toBe('Devspaces: connected to acme-university/api. Select to switch the devspace.');
+    bar.showBusy('acme-university/web');
+    expect(item.accessibilityInformation?.label).toBe('Devspaces: updating acme-university/web. Select to show the details.');
+    bar.clearBusy();
+    bar.showConnectionLost('acme-university/api', 'env-1');
+    expect(item.accessibilityInformation?.label).toBe('Devspaces: the connection to acme-university/api was lost. Select to reconnect.');
+  });
+
   it('offers Reconnect when the connection is lost; a click runs Start for the devspace', () => {
     const { bar, item } = create();
     bar.showConnectionLost('acme-university/api', 'env-1');

@@ -76,6 +76,7 @@ export interface FakeStatusBarItem {
   name?: string;
   text: string;
   tooltip?: string;
+  accessibilityInformation?: { label: string; role?: string };
   command?: unknown;
   backgroundColor?: ThemeColor;
   visible: boolean;

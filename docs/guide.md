@@ -46,7 +46,7 @@ All computers that use one Docker engine need the same version: an older version
 
 1. Select the **Devspaces** icon in the activity bar. If Docker is not installed, the view shows the steps to set it up (see [Installing Docker](#installing-docker)).
 2. Select **Sign in with GitHub**. The list shows your repositories that have a Dev Container configuration, grouped by owner (with a [default image](#default-image), also the repositories without one). The first load can take a moment with many repositories; the view shows the repositories as they arrive, and later updates read only the repositories that changed.
-3. Select **Start** on a repository, or double-click it. A repository with several sources (several configurations, or a configuration and a [default image](#default-image)) has one child row per source; **Start** is on the child rows then. The first start creates the devspace: it clones the repository, builds the image, and creates the container, which can take several minutes. Your first devspace also builds the helper image of Devspaces. Later starts take seconds.
+3. Select **Start** on a repository, double-click it, or select it and press `Enter`. A repository with several sources (several configurations, or a configuration and a [default image](#default-image)) has one child row per source; **Start** is on the child rows then. The first start creates the devspace: it clones the repository, builds the image, and creates the container, which can take several minutes. Your first devspace also builds the helper image of Devspaces. Later starts take seconds.
 4. The window connects to the container. You work in the repository folder under `/workspaces/<name>`.
 
 The first start of a repository that belongs neither to you nor to one of your organizations asks for a confirmation, because it runs code from that repository.
@@ -97,7 +97,7 @@ More markers in a row:
 
 | Action | Effect |
 |---|---|
-| **Start** (or a double-click) | Starts the devspace and connects the current window. Creates the devspace on the first start, from the source of the row. If another window is connected to it, that window comes to the front: a devspace is never open in two windows. |
+| **Start** (or a double-click, or `Enter`) | Starts the devspace and connects the current window. Creates the devspace on the first start, from the source of the row. If another window is connected to it, that window comes to the front: a devspace is never open in two windows. |
 | **Start in New Window** | The same, but a new window connects, and the current window keeps its devspace. With the setting `devspaces.openInNewWindow` on, the menu offers **Start in Current Window** instead. |
 | **Stop** | Stops the container at once. Your files stay. If a window is connected, the connection closes first. The Monitor on the Docker engine is told first, so the devspace stops even when you quit VS Code right after the click. A notification shows the progress until `owner/name stopped.` |
 | **Delete** | Removes the containers, the images, and the volume with the repository, after you confirm it. The confirmation shows uncommitted changes, unpushed commits, and stashes as far as Devspaces recorded them, and offers **Open devspace**. Additional volumes of the configuration, for example of a database, are removed only when you tick them. |

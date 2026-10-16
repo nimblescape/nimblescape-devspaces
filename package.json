@@ -369,6 +369,11 @@
         "category": "Devspaces"
       },
       {
+        "command": "devspaces.rowEnter",
+        "title": "Start on Enter",
+        "category": "Devspaces"
+      },
+      {
         "command": "devspaces.updateImagesNow",
         "title": "Update All Images Now",
         "category": "Devspaces"
@@ -446,6 +451,10 @@
         },
         {
           "command": "devspaces.rowActivated",
+          "when": "false"
+        },
+        {
+          "command": "devspaces.rowEnter",
           "when": "false"
         },
         {
@@ -639,6 +648,11 @@
       {
         "command": "devspaces.switchDevspace",
         "mac": "cmd+alt+e"
+      },
+      {
+        "command": "devspaces.rowEnter",
+        "key": "enter",
+        "when": "focusedView == devspaces.repositories && listFocus && !inputFocus && !treeElementCanExpand && !treeElementCanCollapse"
       }
     ],
     "configuration": {
