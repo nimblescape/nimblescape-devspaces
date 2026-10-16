@@ -1,6 +1,6 @@
 # nimblescape Devspaces
 
-Open your GitHub repositories in dev containers with one click, much like GitHub Codespaces, but on your own Docker.
+Open your GitHub repositories in dev containers with one click, on your own Docker.
 
 Devspaces lists the GitHub repositories that you can access and that contain a Dev Container configuration. **Start** opens a repository in its own dev container, a **devspace**, and connects the VS Code window to it. The containers run on the Docker of your computer, or on Docker on another computer that you reach over SSH.
 

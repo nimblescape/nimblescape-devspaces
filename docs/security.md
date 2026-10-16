@@ -124,7 +124,7 @@ Devspaces signs in with the GitHub authentication of VS Code, with the scopes `r
 
 ## Git inside the container
 
-Git and the GitHub CLI in a devspace use only its own configuration and the token of the account that owns it, as in a codespace. Nothing of your computer is used: no copied `~/.gitconfig`, no forwarded credential helper, no forwarded Docker credentials, and no SSH agent for Git.
+Git and the GitHub CLI in a devspace use only its own configuration and the token of the account that owns it. Nothing of your computer is used: no copied `~/.gitconfig`, no forwarded credential helper, no forwarded Docker credentials, and no SSH agent for Git.
 
 - The folder `/workspaces/.devspace+` in the volume holds `gitconfig` (the identity of the owner account from its GitHub profile, and a credential helper that answers only for `https://github.com` from the token file), `credentials.gitconfig` (your credential helpers for other Git servers), `docker/`, and `gh/config.yml`. It holds no secret.
 - Devspaces sets only documented variables of Git, Docker, and the GitHub CLI in `containerEnv` and `remoteEnv`: `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_COUNT` with `GIT_CONFIG_KEY_n` and `GIT_CONFIG_VALUE_n` (they remove every other credential helper and add the helper of the container), `DOCKER_CONFIG`, `GIT_SSH_COMMAND=ssh -o IdentityAgent=none`, and `GH_CONFIG_DIR=/run/devspace/gh`.
