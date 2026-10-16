@@ -44,9 +44,12 @@ vi.mock('../core/storage/firstUse', async (importOriginal) => {
   };
 });
 
+import { ATTACHED_CONTAINER } from '../core/devContainers';
 import { DockerContextKeys } from '../core/docker/dockerSetup';
 import { Messages } from '../core/messages';
 import { Commands } from './commands';
+import { encodeAuthority, REMOTE_SCHEME } from './connection/authority';
+import { CLOSE_REMOTE_COMMAND } from './connectionAdapter';
 import { Controller } from './controller';
 import { DockerSetup } from './dockerSetup';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
@@ -232,9 +235,10 @@ describe('no message at activation when Docker is missing', () => {
 describe('nothing before the first use of Devspaces', () => {
   /**
    * A Docker CLI (a script) whose `docker context inspect` names the local Docker and whose `docker info` fails as
-   * without a running engine, so nothing goes further than `docker info` (no image, build, or worker).
+   * without a running engine, so nothing goes further than `docker info` (no image, build, or worker). With `running`,
+   * `docker info` names an engine, and every other call fails.
    */
-  function fakeDockerCli(folder: string): string {
+  function fakeDockerCli(folder: string, running = false): string {
     const file = path.join(folder, 'docker');
     fs.writeFileSync(
       file,
@@ -242,6 +246,7 @@ describe('nothing before the first use of Devspaces', () => {
         '#!/bin/sh',
         'case "$1" in',
         `  context) echo '{"Name":"default","Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock"}}}' ;;`,
+        ...(running ? [`  info) echo '"27.3.1"' ;;`] : []),
         '  *) echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2; exit 1 ;;',
         'esac',
         '',
@@ -251,11 +256,18 @@ describe('nothing before the first use of Devspaces', () => {
     return file;
   }
 
-  /** Activates the extension with the sidebar visible, as a window of a local folder; `prepare` fills the storage first. */
-  async function activateWithDocker(prepare: (storage: string) => void, check: (storage: string, docker: string, log: () => string) => Promise<void>): Promise<void> {
+  /**
+   * Activates the extension with the sidebar visible, as a window without a folder, or with `containerName` as the
+   * window of that container (role A); `prepare` fills the storage first. `running`: the Docker engine answers.
+   */
+  async function activateWithDocker(
+    prepare: (storage: string) => void,
+    check: (storage: string, docker: string, log: () => string) => Promise<void>,
+    options: { containerName?: string; running?: boolean } = {},
+  ): Promise<void> {
     vi.useRealTimers();
     const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-first-use-test-'));
-    const docker = fakeDockerCli(fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-first-use-cli-')));
+    const docker = fakeDockerCli(fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-first-use-cli-')), options.running);
     // The Dockerfile of the helper image, as in the installed extension.
     const dockerfile = path.join(storage, 'extension', 'resources', 'helper', 'Dockerfile');
     fs.mkdirSync(path.dirname(dockerfile), { recursive: true });
@@ -269,8 +281,12 @@ describe('nothing before the first use of Devspaces', () => {
     window.onDidChangeWindowState = vi.fn(() => ({ dispose() {} }));
     const workspace = fakeVscode.workspace as unknown as Record<string, unknown>;
     workspace.onDidChangeConfiguration = vi.fn(() => ({ dispose() {} }));
-    workspace.workspaceFolders = undefined;
+    workspace.workspaceFolders =
+      options.containerName === undefined
+        ? undefined
+        : [{ uri: { scheme: REMOTE_SCHEME, authority: encodeAuthority(options.containerName), path: '/workspaces/api' }, name: 'api', index: 0 }];
     workspace.workspaceFile = undefined;
+    fakeVscode.env.remoteName = options.containerName === undefined ? undefined : ATTACHED_CONTAINER;
     fakeVscode.workspace.getConfiguration.mockImplementation(() => ({ get: () => undefined, inspect: () => undefined, update: async () => {} }));
     const context = {
       subscriptions: [] as Array<{ dispose(): unknown }>,
@@ -292,6 +308,8 @@ describe('nothing before the first use of Devspaces', () => {
         }
       }
       foundDockerCli.mockReturnValue(undefined);
+      workspace.workspaceFolders = undefined;
+      fakeVscode.env.remoteName = undefined;
       fs.rmSync(storage, { recursive: true, force: true });
       fs.rmSync(path.dirname(docker), { recursive: true, force: true });
     }
@@ -346,6 +364,35 @@ describe('nothing before the first use of Devspaces', () => {
         // No `docker info`: no preparation of the helper image and no reconcile of the registry.
         expect(spawned.filter(([command, sub]) => !(command === docker && sub === 'context'))).toEqual([]);
       },
+    );
+  }, 20_000);
+
+  it('the window of a devspace kept on an engine with the mark sends no heartbeat, runs no open, and closes its connection', async () => {
+    const kept = {
+      id: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d',
+      repository: 'acme/api',
+      volumeName: 'devspaces-acme-api-3f2a9c1e',
+      containerName: 'devspaces-acme-api-3f2a9c1e',
+      remoteWorkspaceFolder: '/workspaces/api',
+      owner: { id: '1001', login: 'octo' },
+    };
+    await activateWithDocker(
+      (storage) => {
+        fs.writeFileSync(path.join(storage, 'registry.json'), JSON.stringify({ version: 1, devspaces: [kept] }));
+        fs.writeFileSync(path.join(storage, 'docker-engines.json'), '{"engines":[{"host":"","removedAt":1760000000000}]}');
+      },
+      async (_storage, docker, log) => {
+        await waitFor(() => fakeVscode.commands.executeCommand.mock.calls.some(([command]) => command === CLOSE_REMOTE_COMMAND), 'the close of the connection');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        expect(log()).toContain('This window does not connect to acme/api: Devspaces was removed from the local Docker. A Start there sets it up again.');
+        expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(
+          'Devspaces was removed from the local Docker, so this window does not connect to acme/api. Start acme/api again to set up Devspaces there.',
+        );
+        // Only `docker info`, before the sidebar reads the states, which starts no worker there. No heartbeat (whose
+        // repair would start the Monitor), no worker, no open pipeline.
+        expect(spawned.filter(([command, sub]) => !(command === docker && (sub === 'context' || sub === 'info')))).toEqual([]);
+      },
+      { containerName: kept.containerName, running: true },
     );
   }, 20_000);
 });

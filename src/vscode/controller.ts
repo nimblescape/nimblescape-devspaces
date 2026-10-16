@@ -515,6 +515,20 @@ export class Controller implements vscode.Disposable {
     await this.withDockerTarget(() => this.openAttachedDevspace(devspace, containerName, pending));
   }
 
+  /**
+   * Role A on an engine with the removal mark ("Remove Devspaces from This Docker Engine…"): VS Code restored this
+   * window of a devspace that the user kept there, or Open Recent opened it. The window does not use the devspace: its
+   * open and its heartbeats would set Devspaces up there again (extension.ts starts the session of this window without
+   * it). It closes its remote connection with a message; a Start there sets Devspaces up again.
+   */
+  async leaveRemovedEngine(devspace: Devspace): Promise<void> {
+    this.attaching = true;
+    const repository = this.shownName(this.devspaceTarget(devspace));
+    const engine = describeDockerHost(dockerHostOf(devspace));
+    this.logger.info(`This window does not connect to ${repository}: Devspaces was removed from ${engine}. A Start there sets it up again.`);
+    await this.leaveDevspace(ControllerTexts.windowOnRemovedEngine(repository, engine));
+  }
+
   private async openAttachedDevspace(
     devspace: Devspace,
     containerName: string,
@@ -682,6 +696,12 @@ export class Controller implements vscode.Disposable {
     }
     const devspace = devspaces.find((candidate) => candidate.id === decision.devspaceId);
     if (!devspace) return;
+    // After "Remove Devspaces from This Docker Engine…" there, the reopen would set Devspaces up again by itself (its open
+    // creates the Monitor). A Start of the user there clears the mark.
+    if (await this.hasRemovalMark(dockerHost)) {
+      this.logger.info(`The last devspace is not opened: Devspaces was removed from ${describeDockerHost(dockerHost)}. A Start there sets it up again.`);
+      return;
+    }
     this.logger.info(`Opening the last used devspace ${devspace.repository}.`);
     // The progress notification "Opening owner/name…" has Cancel: the user can stay in the empty window. The user did
     // not start it, so it asks nothing about the Monitor of the engine.
@@ -1214,6 +1234,18 @@ export class Controller implements vscode.Disposable {
       this.logger.info(`This computer does no Docker work on ${describeDockerHost(host)} by itself until a Start, a Rebuild or "Update All Images Now" there.`);
     } catch (error) {
       this.logger.warn(`The removal from ${describeDockerHost(host)} could not be recorded, so this computer may set Devspaces up there again by itself: ${errorMessage(error)}`);
+    }
+  }
+
+  /** Whether the engine `host` has the removal mark (docker-engines.json); false when it cannot be read (logged). */
+  private async hasRemovalMark(host: string): Promise<boolean> {
+    const records = this.deps.engineRecords;
+    if (records === undefined) return false;
+    try {
+      return await records.removed(host);
+    } catch (error) {
+      this.logger.warn(`The records of the Docker engines could not be read: ${errorMessage(error)}`);
+      return false;
     }
   }
 

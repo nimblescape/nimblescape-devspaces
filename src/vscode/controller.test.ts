@@ -3045,6 +3045,44 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(await h.engineRecords.removed('build-box')).toBe(false);
   });
 
+  it('the reopen at startup opens no kept devspace on an engine with the mark, and says why in the log', async () => {
+    await h.registry.add(devspace());
+    await h.engineRecords.setRemoved('', NOW - 1000);
+    h.sessionFiles.writeReopenSync({ devspaceId: ENV_ID, closedAt: iso(NOW - 60_000) });
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    await h.controller.runEmptyWindowTasks();
+    expect(h.logger.info).toHaveBeenCalledWith('The last devspace is not opened: Devspaces was removed from the local Docker. A Start there sets it up again.');
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    expect(h.connection.open).not.toHaveBeenCalled();
+    // The reopen is not a Start of the user: the mark stays.
+    expect(await h.engineRecords.removed('')).toBe(true);
+
+    // Without the mark, the same window opens it.
+    await h.engineRecords.setRemoved('', undefined);
+    await h.controller.runEmptyWindowTasks();
+    await settle(() => h.service.openDevspaceInWorker.mock.calls.length === 1, 'the reopen');
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.anything());
+  });
+
+  it('a window of a kept devspace on an engine with the mark closes its connection, says why, and opens nothing', async () => {
+    const env = devspace();
+    await h.registry.add(env);
+    await h.controller.leaveRemovedEngine(env);
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close');
+    expect(warningMessages()).toEqual([
+      'Devspaces was removed from the local Docker, so this window does not connect to acme/api. Start acme/api again to set up Devspaces there.',
+    ]);
+    expect(h.logger.info).toHaveBeenCalledWith('This window does not connect to acme/api: Devspaces was removed from the local Docker. A Start there sets it up again.');
+    expect(h.coordinator.setDevspace).toHaveBeenCalledWith(null);
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    expect(h.connection.open).not.toHaveBeenCalled();
+    // Nor does the window take the devspace after a restore of the registry.
+    h.connection.currentContainerName.mockReturnValue(CONTAINER);
+    h.docker.findContainer.mockResolvedValue(containerInfo(String(CONTAINER_VERSION)));
+    await h.controller.reconcileIfRegistryLost({ passive: true, adopt: true });
+    expect(h.coordinator.setDevspace).not.toHaveBeenCalledWith(ENV_ID);
+  });
+
   it('is a command of package.json, in the Command Palette and in the "…" menu of the view', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { commands: Array<{ command: string; title: string; category: string }>; menus: Record<string, Array<{ command: string; when?: string; group?: string }>> };
