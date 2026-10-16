@@ -876,13 +876,14 @@ describe('Sidebar progressive display', () => {
       await h.sidebar.refreshDiscovery();
       await h.sidebar.render();
       expect(rows().map((row) => row.repository)).toEqual(['acme/api']);
-      // The time of the message: rounded up to the next full minute.
-      const at = new Date(Math.ceil((resetAt + RATE_LIMIT_MARGIN_MS) / 60_000) * 60_000);
-      const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+      // The time of the message and of the refresh: rounded up to the next full minute.
+      const at = Math.ceil((resetAt + RATE_LIMIT_MARGIN_MS) / 60_000) * 60_000;
+      const date = new Date(at);
+      const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
       const warnings = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call[0]);
       expect(warnings()).toEqual([Messages.gitHubRateLimited(time, true)]);
       // One refresh at that time, not before.
-      await vi.advanceTimersByTimeAsync(resetAt + RATE_LIMIT_MARGIN_MS - NOW - 1);
+      await vi.advanceTimersByTimeAsync(at - NOW - 1);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(1);
       await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(2));
@@ -917,8 +918,8 @@ describe('Sidebar progressive display', () => {
       await h.sidebar.render();
       expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
       expect(rows().map((row) => row.repository)).toEqual(shown);
-      // The refresh at that time: GitHub refuses it at once too.
-      await vi.advanceTimersByTimeAsync(resetAt + RATE_LIMIT_MARGIN_MS - NOW);
+      // The refresh at that time (the next full minute): GitHub refuses it at once too.
+      await vi.advanceTimersByTimeAsync(Math.ceil((resetAt + RATE_LIMIT_MARGIN_MS) / 60_000) * 60_000 - NOW);
       await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(3));
       await h.sidebar.refreshDiscovery();
       await h.sidebar.render();
@@ -936,8 +937,9 @@ describe('Sidebar progressive display', () => {
       const date = new Date(time);
       return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     };
-    /** The time that a message names for a limit until `limitResetAt`: rounded up to the next full minute. */
-    const shownTime = (limitResetAt: number) => clock(Math.ceil((limitResetAt + RATE_LIMIT_MARGIN_MS) / 60_000) * 60_000);
+    /** The time of the refresh for a limit until `limitResetAt`, which the message names: the next full minute. */
+    const plannedAt = (limitResetAt: number) => Math.ceil((limitResetAt + RATE_LIMIT_MARGIN_MS) / 60_000) * 60_000;
+    const shownTime = (limitResetAt: number) => clock(plannedAt(limitResetAt));
     const warnings = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call[0]);
     const resetAt = NOW + 30 * 60_000;
 
@@ -963,7 +965,7 @@ describe('Sidebar progressive display', () => {
       // A Refresh of the user still waits for GitHub when that time comes.
       const other = h.sidebar.refreshDiscovery({ again: true, byUser: true });
       await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(2));
-      await vi.advanceTimersByTimeAsync(resetAt + RATE_LIMIT_MARGIN_MS - NOW);
+      await vi.advanceTimersByTimeAsync(plannedAt(resetAt) - NOW);
       fail(limitedUntil(resetAt));
       await other;
       // The refresh of that time runs after it, and GitHub refuses it too.
@@ -997,7 +999,7 @@ describe('Sidebar progressive display', () => {
       expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
       expect(warnings()).toEqual([Messages.gitHubRateLimited(shownTime(resetAt), true), Messages.gitHubRateLimited(shownTime(later), true)]);
       // No refresh before the later time, then the one refresh.
-      await vi.advanceTimersByTimeAsync(later + RATE_LIMIT_MARGIN_MS - NOW - 1);
+      await vi.advanceTimersByTimeAsync(plannedAt(later) - NOW - 1);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
       await vi.advanceTimersByTimeAsync(1);
       await vi.waitFor(() => expect(warnings()).toHaveLength(3));
@@ -1052,6 +1054,27 @@ describe('Sidebar progressive display', () => {
       expect(warnings()).toEqual([Messages.gitHubRateLimited(clock(NOW + 30 * 60_000), true), Messages.gitHubRateLimited(clock(NOW + 31 * 60_000), true)]);
     });
 
+    it('plans the refresh at the minute that the message names, and names that minute once', async () => {
+      // GitHub names 12:30:00 and then 12:30:30 (UTC): with RATE_LIMIT_MARGIN_MS, both times are before 12:31.
+      let fail: (error: unknown) => void = () => undefined;
+      h.discovery.refresh
+        .mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)))
+        .mockRejectedValue(limitedUntil(resetAt + 30_000));
+      await h.sidebar.initialize();
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
+      fail(limitedUntil(resetAt));
+      await h.sidebar.refreshDiscovery();
+      await h.sidebar.refreshDiscovery({ again: true });
+      const minute = NOW + 31 * 60_000;
+      expect(warnings()).toEqual([Messages.gitHubRateLimited(clock(minute), true)]);
+      expect(h.logger.warn).toHaveBeenCalledWith(expect.stringContaining(`The list is loaded again at ${new Date(minute).toISOString()}.`));
+      // The refresh at 12:31:00, not before.
+      await vi.advanceTimersByTimeAsync(minute - NOW - 1);
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(3));
+    });
+
     it('shows nothing and plans nothing for a refusal that comes after the view was closed', async () => {
       let fail: (error: unknown) => void = () => undefined;
       h.discovery.refresh.mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)));
@@ -1099,7 +1122,7 @@ describe('Sidebar progressive display', () => {
       limited = false;
       let load: (value: DiscoveryData) => void = () => undefined;
       h.discovery.refresh.mockImplementationOnce(() => new Promise<DiscoveryData>((resolve) => (load = resolve)));
-      await vi.advanceTimersByTimeAsync(RATE_LIMIT_MARGIN_MS);
+      await vi.advanceTimersByTimeAsync(plannedAt(reset) - NOW - 50 * 60_000);
       await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(3));
       // A refresh without `again` joins the planned one while it runs, so the test waits for its end. After the list is
       // shown, it still reads the registry (real files), and a refresh every 5 minutes would join it during that time.
