@@ -37,7 +37,7 @@ import { silentLogger } from '../core/ports';
 import type { Devspace, DevspaceSource, ExtensionSettings, GitHubAccount, GitSummary, RepositoryInfo, WindowStatus } from '../core/types';
 import { SIGNED_IN_CONTEXT_KEY } from './auth';
 import { Commands } from './commands';
-import { CONNECTED_CONTEXT_KEY, Controller, type ControllerDeps } from './controller';
+import { CONNECTED_CONTEXT_KEY, Controller, HELPER_BUILDS_STOP_WAIT_MS, type ControllerDeps } from './controller';
 import { placeholderRepositoryInfo } from './targets';
 import { ControllerTexts } from './controllerTexts';
 import { DisconnectRequests } from './disconnectRequests';
@@ -281,6 +281,8 @@ function createHarness(
     engineRemoval?: ControllerDeps['engineRemoval'];
     /** "Update All Images Now". Default: none (the command does nothing). */
     updateImagesNow?: ControllerDeps['updateImagesNow'];
+    /** The longest wait of a removal for the background builds of the helper image (default 60 s). */
+    helperBuildsStopWaitMs?: number;
   } = {},
 ): Harness {
   const monitorQuestion = { askIfNeeded: vi.fn(async (_host: string, _removalRuns?: () => Promise<(removal: EngineRemoval) => boolean>): Promise<string> => 'notNeeded') };
@@ -466,6 +468,7 @@ function createHarness(
       handOffCheckMs: options.handOffCheckMs ?? 60_000,
       leaveCheckMs: options.leaveCheckMs ?? 60_000,
       tokenRemoveWaitMs: options.tokenRemoveWaitMs ?? 60_000,
+      helperBuildsStopWaitMs: options.helperBuildsStopWaitMs ?? 60_000,
       reopenCheckDelayMs: 0,
       disconnectAnswerMs: options.disconnectAnswerMs ?? 60_000,
       busyPollMs: 5,
@@ -3132,6 +3135,54 @@ describe('Remove Devspaces from This Docker Engine…', () => {
       expect(h.logger.warn.mock.calls.map((call) => String(call[0])), `${count}`).toContain(note);
       expect(await h.engineRecords.removed('build-box')).toBe(true);
     }
+  });
+
+  // A background build that does not end after its stop (a Docker call that hangs) never holds the removal. Mutations:
+  // without the limit, the removal waits for that build (the test times out); without Cancel, it waits for the limit.
+  it('waits for the background builds of the helper image at most HELPER_BUILDS_STOP_WAIT_MS, and not after Cancel', async () => {
+    expect(HELPER_BUILDS_STOP_WAIT_MS).toBe(30_000);
+    const hangs = (fake: ReturnType<typeof removalFake>) =>
+      fake.deps.stopHelperBuilds.mockImplementation(async (target: DockerTarget) => {
+        fake.order.push(`stop the helper builds on ${target.host}`);
+        await new Promise<void>(() => {});
+      });
+    const limited = removalFake();
+    onBuildBox(limited, BUILD_BOX, { helperBuildsStopWaitMs: 20 });
+    hangs(limited);
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove);
+    await run('removeFromDockerEngine');
+    expect(h.logger.warn).toHaveBeenCalledWith(
+      'A background build of the helper image on build-box did not end after it was stopped. The removal goes on; that build may make the image again, and a new run of the command removes it.',
+    );
+    expect(changing(limited)).toEqual([
+      'stop the helper builds on build-box',
+      'close the worker on build-box',
+      'docker rm -f m1',
+      'docker rm -f w1',
+      'docker image rm devspaces-monitor:0123456789ab',
+      'docker image rm devspaces-worker:0123456789ab',
+      'docker volume rm devspaces-monitor',
+      'docker volume rm devspaces-worker-cache',
+      'docker volume rm devspaces-vscode',
+    ]);
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenLastCalledWith(ControllerTexts.removedFromEngine('build-box'));
+
+    // Cancel while it waits (the limit is 60 seconds here): the removal ends, and the log names the commands.
+    const cancelled = removalFake();
+    onBuildBox(cancelled);
+    const progress = cancellableProgress();
+    hangs(cancelled);
+    const stopping = cancelled.deps.stopHelperBuilds.getMockImplementation()!;
+    cancelled.deps.stopHelperBuilds.mockImplementation(async (target: DockerTarget) => {
+      setTimeout(() => progress.cancel(), 10);
+      return stopping(target);
+    });
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove);
+    await run('removeFromDockerEngine');
+    expect(changing(cancelled)).toEqual(['stop the helper builds on build-box']);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenLastCalledWith(ControllerTexts.removalEnded('build-box'), Actions.showDetails);
+    expect(h.logger.warn).toHaveBeenCalledWith(removalEndedNote('cancelled', 'devspaces-build-box'));
+    expect(h.logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('did not end after it was stopped'));
   });
 
   // Mutation: removingFrom set only around the removal itself fails it.
