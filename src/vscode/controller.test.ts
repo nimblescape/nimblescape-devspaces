@@ -6003,6 +6003,14 @@ describe('the Docker host of the current Docker context', () => {
     expect(operations).toEqual([]);
   });
 
+  // The link Show details of a running operation runs Show Log: it must not wait for a read of the Docker context
+  // (up to 15 s while the Docker CLI does not answer).
+  it('opens the log without an operation, so it reads no Docker context', async () => {
+    await run('showLog');
+    expect(h.logger.show).toHaveBeenCalledTimes(1);
+    expect(operations).toEqual([]);
+  });
+
   // The choice of the Docker host is the command of the first row of the view, so the view's title bar has no icon of
   // the Docker host.
   it('runs the choice of the Docker host without an operation, and shows no icon of the Docker host in the title bar', async () => {
