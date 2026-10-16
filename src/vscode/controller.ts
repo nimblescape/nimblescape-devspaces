@@ -367,10 +367,10 @@ export class Controller implements vscode.Disposable {
   /** Tells a double-click on a repository row from a single click (rowActivated). */
   private readonly rowActivations: RowActivationTracker;
   /**
-   * The engine (describeDockerHost) that "Remove Devspaces from This Docker Engine…" removes Devspaces from now: no
-   * other operation of this window starts meanwhile.
+   * The engine that "Remove Devspaces from This Docker Engine…" removes Devspaces from now (its Docker host, and its name:
+   * describeDockerHost): no other operation of this window starts meanwhile, and no restore from the volumes there.
    */
-  private removingFrom: string | undefined;
+  private removingFrom: { host: string; engine: string } | undefined;
 
   constructor(private readonly deps: ControllerDeps) {
     this.clock = deps.clock ?? systemClock;
@@ -788,13 +788,14 @@ export class Controller implements vscode.Disposable {
    * host; `passive` (the default, a call in the background): it is made ready as for the refresh. `adopt`, for a window
    * whose container the registry did not know at activation (no open pipeline runs for it): it takes its devspace
    * also when the registry was restored already (by an earlier restore of this window whose answer came too late, or by
-   * another window).
+   * another window). Not while Devspaces is being removed from the engine (restoreRefusedWhileRemoving); `user`, a
+   * Refresh of the user, is told then.
    */
-  async reconcileIfRegistryLost(options: { passive: boolean; adopt?: boolean } = { passive: true }): Promise<void> {
+  async reconcileIfRegistryLost(options: { passive: boolean; adopt?: boolean; user?: boolean } = { passive: true }): Promise<void> {
     await this.withDockerTarget(() => this.reconcileIfRegistryLostNow(options));
   }
 
-  private async reconcileIfRegistryLostNow(options: { passive: boolean; adopt?: boolean }): Promise<void> {
+  private async reconcileIfRegistryLostNow(options: { passive: boolean; adopt?: boolean; user?: boolean }): Promise<void> {
     const { docker, service } = this.deps;
     // Also when registry.json exists but its content is lost (not valid, or invalid entries), not only when it is missing.
     if (!(await this.deps.registryNeedsRestore())) {
@@ -804,10 +805,31 @@ export class Controller implements vscode.Disposable {
     // reconcileInWorker checks the Docker target first (never an endpoint that is neither local nor SSH), then whether
     // Docker runs; no `docker info` here before that check. By the worker of the Docker host.
     if (!docker.isInstalled()) return;
+    if (await this.restoreRefusedWhileRemoving((await this.operationTarget()).host, options.user === true)) return;
     const added = await service.reconcileInWorker({ passive: options.passive });
     if (added === 0 && options.adopt !== true) return;
     await this.adoptWindowDevspace();
     if (added > 0) await this.deps.sidebar.render();
+  }
+
+  /**
+   * Whether the restore from the volumes of the engine `host` must not run now: this window (removingFrom) or another
+   * live window (otherWindowRemoval) removes Devspaces from that engine, and the worker of the restore would build the
+   * helper image and create the shared volumes there again while they are removed. Logged; `tell` (a Refresh of the
+   * user) shows the message of a refused operation too. After the removal, a Refresh restores there again.
+   */
+  private async restoreRefusedWhileRemoving(host: string, tell: boolean): Promise<boolean> {
+    const engine = describeDockerHost(host);
+    if (this.removingFrom?.host === host) {
+      this.logger.info(`The devspaces are not restored from the volumes on ${engine}: Devspaces is being removed from there.`);
+      if (tell) this.inform(ControllerTexts.removalRunning(engine));
+      return true;
+    }
+    const other = await this.otherWindowRemoval(host);
+    if (other === undefined) return false;
+    this.logger.info(`The devspaces are not restored from the volumes on ${engine}: Devspaces is being removed from there in another window (process ${other.pid}).`);
+    if (tell) this.inform(ControllerTexts.removalRunningElsewhere(engine));
+    return true;
   }
 
   // -------------------------------------------------------------------------------------------------------------------
@@ -1064,8 +1086,9 @@ export class Controller implements vscode.Disposable {
   async refresh(): Promise<void> {
     if (await this.deps.auth.isSignedIn()) await this.deps.sidebar.refreshDiscovery({ again: true });
     else await this.signIn();
-    // The user asked for it, so the worker is made ready in full (as for an operation of the user).
-    await this.reconcileIfRegistryLost({ passive: false }).catch((error: unknown) =>
+    // The user asked for it, so the worker is made ready in full (as for an operation of the user). Not while Devspaces
+    // is being removed from the engine (told); the rest of Refresh runs.
+    await this.reconcileIfRegistryLost({ passive: false, user: true }).catch((error: unknown) =>
       this.logger.warn(`The devspaces could not be restored from the volumes: ${errorMessage(error)}`),
     );
     await this.deps.sidebar.refreshStates();
@@ -1121,7 +1144,7 @@ export class Controller implements vscode.Disposable {
     if (await this.removalRefusedByUse(engine, here)) return;
     // From here on, also while it looks for what Devspaces has there and asks, a second run and the operations of the
     // window are refused (refusedWhileRemoving).
-    this.removingFrom = engine;
+    this.removingFrom = { host: target.host, engine };
     try {
       await this.removeFromCheckedEngine(removal, target, known, here);
     } finally {
@@ -1524,7 +1547,7 @@ export class Controller implements vscode.Disposable {
 
   /** While "Remove Devspaces from This Docker Engine…" runs, `operation` is not started (logged and told). */
   private refusedWhileRemoving(operation: string): boolean {
-    const engine = this.removingFrom;
+    const engine = this.removingFrom?.engine;
     if (engine === undefined) return false;
     this.logger.info(`${operation} did not run: Devspaces is being removed from ${engine}.`);
     this.inform(ControllerTexts.removalRunning(engine));

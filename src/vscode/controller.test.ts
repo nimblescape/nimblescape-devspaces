@@ -3512,6 +3512,52 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(h.service.deleteCheckInWorker).toHaveBeenCalledTimes(1);
   });
 
+  // The restore from the volumes prepares the worker in full: it would build the helper image and create the volumes
+  // again while they are removed. Mutations: without the check of another window's entry, or of this window's own
+  // removal, Refresh restores during the removal.
+  it('a Refresh does not restore a lost registry while Devspaces is being removed from the engine, in another window or in this one', async () => {
+    onBuildBox(removalFake());
+    await otherWindowRemoves();
+    await run('refresh');
+    expect(h.service.reconcileInWorker).not.toHaveBeenCalled();
+    expect(infoMessages()).toEqual([ControllerTexts.removalRunningElsewhere('build-box')]);
+    expect(h.logger.info).toHaveBeenCalledWith(
+      `The devspaces are not restored from the volumes on build-box: Devspaces is being removed from there in another window (process ${OTHER_PID}).`,
+    );
+    // The rest of Refresh runs.
+    expect(h.sidebar.refreshDiscovery).toHaveBeenCalledWith({ again: true });
+    expect(h.sidebar.refreshStates).toHaveBeenCalled();
+    // A restore in the background is skipped too, and only logged.
+    await h.controller.reconcileIfRegistryLost({ passive: false });
+    expect(h.service.reconcileInWorker).not.toHaveBeenCalled();
+    expect(infoMessages()).toHaveLength(1);
+    // After that window ended, a Refresh restores there again, and the mark stays.
+    h.alive.delete(OTHER_PID);
+    await run('refresh');
+    expect(h.service.reconcileInWorker).toHaveBeenCalledWith({ passive: false });
+    expect(await h.engineRecords.removed('build-box')).toBe(true);
+
+    // This window removes Devspaces from the engine, and the user presses Refresh while the containers are removed.
+    const own = removalFake();
+    onBuildBox(own);
+    let refreshed: Promise<unknown> | undefined;
+    const removeContainer = own.deps.docker.run.getMockImplementation()!;
+    own.deps.docker.run.mockImplementation(async (args: readonly string[]) => {
+      if (args[0] === 'rm' && refreshed === undefined) {
+        refreshed = run('refresh');
+        await refreshed;
+      }
+      return removeContainer(args);
+    });
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove);
+    await run('removeFromDockerEngine');
+    expect(refreshed).toBeDefined();
+    expect(h.service.reconcileInWorker).not.toHaveBeenCalled();
+    expect(infoMessages()).toContain(ControllerTexts.removalRunning('build-box'));
+    expect(h.logger.info).toHaveBeenCalledWith('The devspaces are not restored from the volumes on build-box: Devspaces is being removed from there.');
+    expect(h.sidebar.refreshStates).toHaveBeenCalled();
+  });
+
   // The question about the Monitor can stay open for long. Mutation: without the check after it, the Start runs.
   it('a removal that another window begins while the question about the Monitor is open refuses the Start', async () => {
     const fake = removalFake();
