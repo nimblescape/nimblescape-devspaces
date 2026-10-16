@@ -6305,6 +6305,27 @@ describe('the Docker host of the current Docker context', () => {
     expect(h.connection.open).not.toHaveBeenCalled();
   });
 
+  // The empty window would not run the operation (the test above), so the connected window does not hand it off.
+  it('refuses Stop and Rebuild of the connected devspace while Docker is set to another host, and keeps the connection', async () => {
+    current = dockerTargetOf('ssh://build-box', 'devspaces-remote-11111111');
+    const env = remoteDevspace();
+    await h.registry.add(env);
+    await connectHere(env);
+    current = dockerTargetOf('unix:///var/run/docker.sock', 'default');
+    await run('stop', row('acme/api', env));
+    await run('rebuild', row('acme/api', env));
+    const message = Messages.otherDockerHost('acme/api', 'build-box', '');
+    expect(fakeVscode.window.showWarningMessage.mock.calls).toEqual([
+      [message, Actions.showDetails],
+      [message, Actions.showDetails],
+    ]);
+    expect(h.connection.closeRemoteConnection).not.toHaveBeenCalled();
+    expect(await h.sessionFiles.readOperations()).toEqual([]);
+    expect((await h.registry.get(REMOTE_ENV_ID))?.busy).toBeUndefined();
+    expect(h.service.stop).not.toHaveBeenCalled();
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+  });
+
   it('reads the Docker context again for the next operation (a switch while VS Code runs takes effect)', async () => {
     await h.registry.add(devspace());
     await run('stop', row('acme/api', devspace()));

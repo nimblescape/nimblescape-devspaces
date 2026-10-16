@@ -2188,6 +2188,12 @@ export class Controller implements vscode.Disposable {
     busy?: BusyOperation,
   ): Promise<void> {
     const { sessionFiles, coordinator, connection } = this.deps;
+    // The empty window runs the operation only on the Docker host of the devspace (runEmptyWindowTasksNow), and drops
+    // it there without a message. So the hand-off is refused here, as the pipeline refuses it (requireCurrentHost).
+    const currentHost = await this.currentDockerHost();
+    if (!isOnDockerHost(devspace, currentHost)) {
+      throw new UserFacingError('otherDockerHost', Messages.otherDockerHost(repository, dockerHostOf(devspace), currentHost));
+    }
     await this.prepareHandOff(repository, devspace, busy);
     this.logger.info(
       `${request.operation} of ${repository}: this window closes its remote connection, and the empty window continues.`,
