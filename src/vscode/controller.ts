@@ -98,6 +98,12 @@ const TOKEN_REMOVE_WAIT_MS = 30_000;
  * during their own activation; this pause lets them do so first.
  */
 const REOPEN_CHECK_DELAY_MS = 3_000;
+/**
+ * "Remove Devspaces from This Docker Engine…" waits at most this long for the end of the background builds of the
+ * helper image of this window on the engine after it stopped them (EngineRemovalDeps.stopHelperBuilds): a build that
+ * does not end then (a Docker call that hangs) never holds the removal.
+ */
+export const HELPER_BUILDS_STOP_WAIT_MS = 30_000;
 /** A Delete that waits for the operation of another window reads the registry this often. */
 const BUSY_POLL_MS = 1_000;
 /**
@@ -193,12 +199,13 @@ export interface ControllerDeps {
   isAlive?: (pid: number) => boolean;
   /**
    * For tests: HANDOFF_CHECK_MS, LEAVE_CHECK_MS, TOKEN_REMOVE_WAIT_MS, REOPEN_CHECK_DELAY_MS,
-   * DISCONNECT_REQUEST_MAX_AGE_MS, and BUSY_POLL_MS.
+   * DISCONNECT_REQUEST_MAX_AGE_MS, BUSY_POLL_MS, and HELPER_BUILDS_STOP_WAIT_MS.
    */
   timing?: {
     handOffCheckMs?: number;
     leaveCheckMs?: number;
     tokenRemoveWaitMs?: number;
+    helperBuildsStopWaitMs?: number;
     reopenCheckDelayMs?: number;
     disconnectAnswerMs?: number;
     busyPollMs?: number;
@@ -221,7 +228,8 @@ export interface EngineRemovalDeps {
   /**
    * Stops the background builds of the helper image of this window on the Docker host of `target` (the prebuild at the
    * start, HelperPrebuild, and the build of a missing image, MissingHelperBuild), and waits for their end, so that
-   * neither builds the image again after the removal. Never rejects.
+   * neither builds the image again after the removal. Never rejects. The removal waits for it at most
+   * HELPER_BUILDS_STOP_WAIT_MS, and not after Cancel.
    */
   stopHelperBuilds?(target: DockerTarget): Promise<void>;
   /** The ID of this computer (computer.id), which a permanent Monitor of this computer names as its owner. */
@@ -1297,7 +1305,7 @@ export class Controller implements vscode.Disposable {
     }
     if (signal.aborted) return cancelled();
     // A background build of the helper image in this window would make the image again after its removal.
-    await removal.stopHelperBuilds?.(target);
+    if (!(await this.helperBuildsStopped(removal, target, signal))) return cancelled();
     // The worker of this window holds the volumes of the engine; it ends before its container is removed.
     removal.closeWorker(target);
     const result = await removeEngineInfrastructure(removal.docker, {
@@ -1308,6 +1316,27 @@ export class Controller implements vscode.Disposable {
       signal,
     });
     return { result, failedDevspaces };
+  }
+
+  /**
+   * Stops the background builds of the helper image of this window on the engine of `target`, and waits for their end
+   * (EngineRemovalDeps.stopHelperBuilds) at most HELPER_BUILDS_STOP_WAIT_MS: after that, the log says that such a build
+   * may make the image again, and the removal goes on. False when Cancel (`signal`) ended the wait.
+   */
+  private async helperBuildsStopped(removal: EngineRemovalDeps, target: DockerTarget, signal: AbortSignal): Promise<boolean> {
+    const stopping = removal.stopHelperBuilds?.(target);
+    if (stopping === undefined) return true;
+    const waited = new AbortController();
+    const limit = this.delay(this.deps.timing?.helperBuildsStopWaitMs ?? HELPER_BUILDS_STOP_WAIT_MS, AbortSignal.any([waited.signal, signal])).then(() => false);
+    const ended = await Promise.race([stopping.then(() => true, () => true), limit]);
+    waited.abort();
+    if (signal.aborted) return false;
+    if (!ended) {
+      this.logger.warn(
+        `A background build of the helper image on ${describeDockerHost(target.host)} did not end after it was stopped. The removal goes on; that build may make the image again, and a new run of the command removes it.`,
+      );
+    }
+    return true;
   }
 
   /**
