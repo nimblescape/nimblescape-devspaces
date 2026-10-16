@@ -20,7 +20,7 @@ import { startDockerFor, type RemoteReachabilityDeps } from '../core/docker/remo
 import { OP_MONITOR_RUN_NOW } from '../core/helperChannel/protocol';
 import { Messages, Steps } from '../core/messages';
 import { MONITOR_ENSURE_FLOW_TIMEOUT_MS, MONITOR_RUN_NOW_FLOW_TIMEOUT_MS, type DockerStarter } from '../core/pipeline/operationBase';
-import { silentLogger, type ProcessRunner, type RunResult } from '../core/ports';
+import { abortError, silentLogger, type ProcessRunner, type RunResult } from '../core/ports';
 import { Commands } from './commands';
 import { Controller, type ControllerDeps } from './controller';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
@@ -106,6 +106,49 @@ describe('the command Update All Images Now', () => {
     expect(startDocker.mock.calls[0][0].signal).toBe(update.mock.calls[0][1]);
     expect(messages.some((message) => message.includes(`${Steps.startingDocker}.`))).toBe(true);
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on the local Docker updates the images now.');
+  });
+
+  it.each([
+    ['rejects, as ensureDockerRunning does', (signal: AbortSignal) => new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(abortError())))],
+    ['ends anyway, for example because Docker is ready at that moment', (signal: AbortSignal) => new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()))],
+  ])('can be cancelled while Docker starts, without a Monitor call or a message (the start %s)', async (_name, starting) => {
+    const commands = new Map<string, (argument?: unknown) => Promise<void>>();
+    fakeVscode.commands.registerCommand.mockImplementation((id: string, handler: (argument?: unknown) => Promise<void>) => {
+      commands.set(id, handler);
+      return { dispose() {} };
+    });
+    // As VS Code: only a cancellable progress has a Cancel button.
+    let cancel: () => void = () => undefined;
+    fakeVscode.window.withProgress.mockImplementation(
+      async (options: { cancellable?: boolean }, task: (progress: unknown, token: unknown) => Promise<unknown>) =>
+        task(
+          { report: () => {} },
+          {
+            onCancellationRequested: (listener: () => void) => {
+              if (options.cancellable) cancel = listener;
+              return { dispose: () => {} };
+            },
+          },
+        ),
+    );
+    const startDocker = vi.fn<DockerStarter>(async ({ onStarting, signal }) => {
+      onStarting();
+      if (signal) await starting(signal);
+    });
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    const { controller, infos } = controllerWith(LOCAL, update, startDocker);
+    controller.registerCommands();
+    const command = commands.get(Commands.updateImagesNow)?.();
+    await vi.waitFor(() => expect(startDocker).toHaveBeenCalledTimes(1));
+    expect(fakeVscode.window.withProgress.mock.calls[0][0]).toMatchObject({ cancellable: true });
+    cancel();
+    await command;
+    expect(update).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showErrorMessage).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
+    expect(infos).toContain('The operation was cancelled.');
+    expect(infos.some((text) => text.includes('took the request'))).toBe(false);
   });
 
   // The Docker CLI with the Docker-compatible API of Podman (for example with
