@@ -13,6 +13,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as tls from 'tls';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { setUserAgentVersion } from './http';
 import { bypassesProxy, proxiedHttpsTransport, proxyFor, tlsNameOf } from './proxyTransport';
 
 describe('bypassesProxy (NO_PROXY as Go reads it)', () => {
@@ -106,12 +107,17 @@ describe('proxiedHttpsTransport', () => {
     return { port: await listen(server), received };
   }
 
-  /** A proxy that answers CONNECT with `status` and, for 200, pipes the tunnel to 127.0.0.1:`targetPort`. */
-  async function proxy(status: number, targetPort: number): Promise<{ port: number; connects: string[] }> {
+  /**
+   * A proxy that answers CONNECT with `status` and, for 200, pipes the tunnel to 127.0.0.1:`targetPort`. `agents`: the
+   * User-Agent of each CONNECT.
+   */
+  async function proxy(status: number, targetPort: number): Promise<{ port: number; connects: string[]; agents: Array<string | undefined> }> {
     const connects: string[] = [];
+    const agents: Array<string | undefined> = [];
     const server = http.createServer();
     server.on('connect', (req: http.IncomingMessage, client: net.Socket) => {
       connects.push(req.url ?? '');
+      agents.push(req.headers['user-agent']);
       if (status !== 200) {
         client.end(`HTTP/1.1 ${status} No\r\n\r\n`);
         return;
@@ -124,21 +130,37 @@ describe('proxiedHttpsTransport', () => {
       upstream.on('error', () => client.destroy());
       client.on('error', () => upstream.destroy());
     });
-    return { port: await listen(server), connects };
+    return { port: await listen(server), connects, agents };
   }
 
   it('tunnels to the host and port of the URL and speaks TLS for the name of the host inside the tunnel', async () => {
     const target = await recorder();
-    const { port, connects } = await proxy(200, target.port);
+    const { port, connects, agents } = await proxy(200, target.port);
     const transport = proxiedHttpsTransport(async () => ({ httpsProxy: `http://127.0.0.1:${port}` }));
     const request = transport.request({ method: 'GET', url: 'https://registry.example.com:5000/v2/' });
     const first = await target.received;
     await expect(request).rejects.toThrow();
     expect(connects).toEqual(['registry.example.com:5000']);
+    // The CONNECT names Devspaces, without a version while the program has none.
+    expect(agents).toEqual(['nimblescape-devspaces']);
     // A TLS ClientHello (record type 22) with the name of the host (SNI); the path never goes in clear text.
     expect(first[0]).toBe(22);
     expect(first.includes(Buffer.from('registry.example.com'))).toBe(true);
     expect(first.includes(Buffer.from('/v2/'))).toBe(false);
+  });
+
+  it('the CONNECT sends the User-Agent with the version of the program', async () => {
+    const target = await recorder();
+    const { port, agents } = await proxy(200, target.port);
+    expect(setUserAgentVersion('1.20.3')).toBe(true);
+    try {
+      const request = proxiedHttpsTransport(async () => ({ httpsProxy: `http://127.0.0.1:${port}` })).stream('https://update.code.visualstudio.com/x');
+      await target.received;
+      await expect(request).rejects.toThrow();
+    } finally {
+      setUserAgentVersion(undefined);
+    }
+    expect(agents).toEqual(['nimblescape-devspaces/1.20.3']);
   });
 
   it('a refusal of the proxy is an error that names it; a sign-in it asks for is named too', async () => {

@@ -12,7 +12,7 @@ import * as https from 'https';
 import * as net from 'net';
 import type { Duplex } from 'stream';
 import * as tls from 'tls';
-import { httpsRequest, httpsStream, type HttpStreamTransport, type HttpTransport } from './http';
+import { httpsRequest, httpsStream, userAgent, type HttpStreamTransport, type HttpTransport } from './http';
 
 /** The proxy settings that the transport follows (the daemon's, EngineProxy). */
 export interface ProxySettings {
@@ -125,7 +125,10 @@ export function tlsNameOf(host: string): Pick<tls.ConnectionOptions, 'servername
   };
 }
 
-/** A tunnel to `host:port` through `proxy` (CONNECT); rejects when the proxy refuses or does not answer in time. */
+/**
+ * A tunnel to `host:port` through `proxy` (CONNECT, with the User-Agent of Devspaces); rejects when the proxy refuses or
+ * does not answer in time.
+ */
 function tunnel(proxy: URL, host: string, port: number, signal: AbortSignal | undefined): Promise<Duplex> {
   const limit = AbortSignal.timeout(PROXY_CONNECT_TIMEOUT_MS);
   const both = signal ? AbortSignal.any([signal, limit]) : limit;
@@ -137,7 +140,7 @@ function tunnel(proxy: URL, host: string, port: number, signal: AbortSignal | un
       port: proxy.port === '' ? (proxy.protocol === 'https:' ? 443 : 80) : Number(proxy.port),
       method: 'CONNECT',
       path: target,
-      headers: { host: target },
+      headers: { host: target, 'User-Agent': userAgent() },
       signal: both,
       agent: false,
       // The TLS of an `https://` proxy is checked for the name of the proxy (Node would take the name of the target
