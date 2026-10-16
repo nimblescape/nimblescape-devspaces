@@ -9,6 +9,7 @@ import {
   describeGraphQLErrors,
   GitHubApi,
   GitHubApiError,
+  GitHubRateLimitError,
   GitHubTimeoutError,
   GITHUB_GRAPHQL_URL,
 } from './githubApi';
@@ -153,6 +154,33 @@ describe('GitHubApi.graphql', () => {
     await expect(api.graphql('query', {}, TOKEN)).rejects.toBeInstanceOf(GitHubApiError);
     const arrayApi = new GitHubApi(respond([1, 2]));
     await expect(arrayApi.graphql('query', {}, TOKEN)).rejects.toBeInstanceOf(GitHubApiError);
+  });
+
+  // The GraphQL API answers its primary rate limit with HTTP 200 and an error of the type RATE_LIMITED; a secondary rate
+  // limit with HTTP 403 or 429. The headers name the time of the reset.
+  it('throws GitHubRateLimitError for a rate limit, with the time of its reset when GitHub names it', async () => {
+    const now = Date.parse('2026-10-16T12:00:00.000Z');
+    const answer = (status: number, headers: Record<string, string>, body: unknown) =>
+      new GitHubApi(new FakeTransport(async () => ({ status, headers, body: JSON.stringify(body) })), undefined, { clock: { now: () => now } })
+        .graphql('query', {}, TOKEN)
+        .catch((caught: unknown) => caught);
+    const reset = String(now / 1000 + 1800);
+    const primary = await answer(200, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': reset }, {
+      data: null,
+      errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded for user ID 1001.' }],
+    });
+    expect(primary).toBeInstanceOf(GitHubRateLimitError);
+    expect(primary).toMatchObject({ status: 200, resetAt: now + 1_800_000 });
+    expect((primary as Error).message).toContain('API rate limit exceeded for user ID 1001.');
+    const secondary = await answer(403, { 'retry-after': '60' }, { message: 'You have exceeded a secondary rate limit.' });
+    expect(secondary).toBeInstanceOf(GitHubRateLimitError);
+    expect(secondary).toMatchObject({ status: 403, resetAt: now + 60_000 });
+    // No time named: GitHub asks to wait at least a minute (the caller decides).
+    expect(await answer(429, {}, { message: 'Too many requests' })).toMatchObject({ name: 'GitHubRateLimitError', status: 429, resetAt: undefined });
+    // Another 403 is no rate limit.
+    const forbidden = await answer(403, {}, { message: 'Resource not accessible by integration' });
+    expect(forbidden).toBeInstanceOf(GitHubApiError);
+    expect(forbidden).not.toBeInstanceOf(GitHubRateLimitError);
   });
 
   it('passes a connection failure of the transport on', async () => {

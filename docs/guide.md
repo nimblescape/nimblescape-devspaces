@@ -329,6 +329,7 @@ The checks are a guard rail against mistakes and copied templates, not a sandbox
 - **The log.** **Devspaces: Show Log** opens the complete log of Devspaces, including the output of the clone, the build, and the lifecycle commands. A progress notification has **Show details** for the same log.
 - **The Monitor.** Its log shows each stop, each background run, and each prepare: `docker logs devspaces-monitor` on the engine, or from your computer `docker --context <context> logs devspaces-monitor`. Docker keeps at most 2 × 1 MB of it.
 - **A devspace stops too early or keeps running.** Check its row for `· kept`, and the settings `stopOnClose`, `stopAfterMinutes`, and `respectShutdownActionNone`. If the window warns that its heartbeats failed, the Monitor may stop the devspace after `stopAfterMinutes`.
+- **GitHub limits the requests.** When GitHub refuses the requests of your account for a while (its rate limit), the view keeps the repositories that it shows, and a message says at what time Devspaces loads the list again. It tries once at that time; after that, use **Refresh**.
 - **`State unknown`.** Devspaces could not read the engine. On a remote host, check that `ssh <host>` works without a question and that Docker runs there. After the images of an engine were removed, Devspaces prepares the engine again in the background; the status bar shows "Devspaces: preparing `<host>`…".
 
 ## Uninstall

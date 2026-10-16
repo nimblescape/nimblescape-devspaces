@@ -9,9 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
+import { GitHubRateLimitError } from '../core/discovery/githubApi';
 import { LOCAL_DOCKER_TARGET } from '../core/docker/dockerHost';
 import { operationDockerTarget, runWithDockerTarget } from '../core/docker/dockerTargets';
-import { Actions, StateTexts } from '../core/messages';
+import { Actions, Messages, StateTexts } from '../core/messages';
 import { StoragePaths } from '../core/storage/paths';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { SessionFiles } from '../core/storage/sessionFiles';
@@ -20,6 +21,7 @@ import { Commands } from './commands';
 import {
   LOADED_CONTEXT_KEY,
   LOAD_FAILED_CONTEXT_KEY,
+  RATE_LIMIT_MARGIN_MS,
   Sidebar,
   viewProgressLocation,
   type SidebarDeps,
@@ -855,6 +857,42 @@ describe('Sidebar progressive display', () => {
     expect(rows()).toEqual([]);
     expect(h.sidebar.repositoryInfo('octo/private-a')).toBeUndefined();
     expect(h.sidebar.repositoryInfo('acme/api')).toBeUndefined();
+  });
+
+  // A rate limit of GitHub stops the refresh: what the view shows stays, the message says when the list loads again,
+  // and one refresh runs at that time.
+  it('keeps the part of the first load on a rate limit, says when it loads again, and tries once at that time', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const resetAt = NOW + 30 * 60_000;
+      const limited = new GitHubRateLimitError('GitHub refused the request for its rate limit: API rate limit exceeded', 200, resetAt);
+      let fail: (error: unknown) => void = () => undefined;
+      h.discovery.refresh.mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)));
+      h.discovery.refresh.mockRejectedValueOnce(limited);
+      await h.sidebar.initialize();
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
+      h.sidebar.onPartialResult(part([info('acme/api')]));
+      fail(limited);
+      await h.sidebar.refreshDiscovery();
+      await h.sidebar.render();
+      expect(rows().map((row) => row.repository)).toEqual(['acme/api']);
+      const at = new Date(resetAt + RATE_LIMIT_MARGIN_MS);
+      const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+      const warnings = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call[0]);
+      expect(warnings()).toEqual([Messages.gitHubRateLimited(time, true)]);
+      // One refresh at that time, not before.
+      await vi.advanceTimersByTimeAsync(resetAt + RATE_LIMIT_MARGIN_MS - NOW - 1);
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(2));
+      // It meets the rate limit too: no further refresh of its own, and the message says from when Refresh works.
+      await vi.waitFor(() => expect(warnings()).toHaveLength(2));
+      expect(warnings()[1]).toBe(Messages.gitHubRateLimited(time, false));
+      await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ignores a part of another account, of another scope, and after the refresh', async () => {
