@@ -244,7 +244,7 @@ describe('settings', () => {
       cacheUpdateSchedule: 'the-background-run',
       stopMonitorWhenIdle: 'the-background-run',
       updateContainer: 'the-update-at-a-start',
-      repositoryGroups: 'settings',
+      repositoryGroups: 'repository-groups',
     };
     for (const [key, anchor] of Object.entries(sections)) {
       expect(properties[`${SETTINGS_SECTION}.${key}`].markdownDescription, key).toContain(`(${GUIDE}${anchor})`);

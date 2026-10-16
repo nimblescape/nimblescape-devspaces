@@ -816,7 +816,7 @@
               }
             ]
           },
-          "markdownDescription": "Regular expressions on the repository name, without the owner, that filter the repositories of each owner in the sidebar and group them in levels. **[Edit Repository Groups…](command:devspaces.editRepositoryGroups)** opens an editor with a preview.\n\n[Repository groups in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#settings)"
+          "markdownDescription": "Regular expressions on the repository name, without the owner, that filter the repositories of each owner in the sidebar and group them in levels. **[Edit Repository Groups…](command:devspaces.editRepositoryGroups)** opens an editor with a preview.\n\n[Repository groups in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#repository-groups)"
         }
       }
     }
