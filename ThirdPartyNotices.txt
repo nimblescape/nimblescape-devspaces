@@ -1,7 +1,8 @@
 nimblescape Devspaces: third-party notices
 
 This extension contains material from the project below. Its license applies to that material only.
-The rest of the extension is under the MIT License in the file LICENSE.
+The rest of the extension is under the MIT License in the file LICENSE
+(LICENSE.txt in the installed extension).
 
 Codicons (the icons of Visual Studio Code)
 https://github.com/microsoft/vscode-codicons
