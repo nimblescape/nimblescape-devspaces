@@ -725,7 +725,9 @@ describe('Controller commands', () => {
     const afterLinux =
       'Your repositories appear here once Docker is installed. Devspaces asks to start Docker Engine when needed.';
     const signIn =
-      'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n[Sign in with GitHub](command:devspaces.signIn)';
+      'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n' +
+      'Devspaces asks for the scopes repo (read and change your repositories, also the private ones) and read:org (read your organization memberships). It works only with accounts on github.com.\n' +
+      '[Sign in with GitHub](command:devspaces.signIn)';
     const installWsl =
       '1. Install WSL 2, which Docker Desktop needs. Windows asks for administrator permission; restart afterwards.\n[Install WSL 2](command:devspaces.dockerSetup.installWsl)';
     const wslInstalled = '1. ✓ WSL 2 is installed.';

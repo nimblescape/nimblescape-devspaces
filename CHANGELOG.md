@@ -65,6 +65,8 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Marketplace page and support:** the README no longer compares Devspaces with GitHub Codespaces, and the keyword codespaces is gone. The README and the new file ThirdPartyNotices.txt in the package credit the Codicons of Microsoft (CC BY 4.0), which the icons of Devspaces use. The new SUPPORT.md says how to report a problem, and the Q&A link of the Marketplace page now opens the GitHub issues. The hint of the test field in Edit Repository Groups… now shows the example of the user guide.
 
+**Sign-in:** before the sign-in, the view now says that the scope repo can read and change your repositories, also the private ones, that read:org reads your organization memberships, and that Devspaces works only with accounts on github.com. Before, nothing said that Devspaces works only with github.com.
+
 ## 0.5.0
 
 **Docker names, without migration:** the image of the worker is now `devspaces-worker:<hash>` (was `devspaces-helper:<hash>`), its cache volume devspaces-worker-cache (was devspaces-helper-cache), and its labels nimblescape.devspaces.worker, nimblescape.devspaces.worker-run and nimblescape.devspaces.worker-channel (were nimblescape.devspaces.helper...). The new image is built at the first use. After the update, remove the old devspaces-helper images and the devspaces-helper-cache volume on each Docker engine by hand; the steps are in the user guide, section [Update from version 0.4.0 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-040-or-older).

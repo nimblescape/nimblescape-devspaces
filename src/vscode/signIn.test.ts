@@ -17,7 +17,7 @@ import { StoragePaths } from '../core/storage/paths';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { SessionFiles } from '../core/storage/sessionFiles';
 import type { DiscoveryData, ExtensionSettings } from '../core/types';
-import { SIGNED_IN_CONTEXT_KEY, VsCodeGitHubAuth } from './auth';
+import { GITHUB_SCOPES, SIGNED_IN_CONTEXT_KEY, VsCodeGitHubAuth } from './auth';
 import { Controller, type ControllerDeps } from './controller';
 import { Sidebar, type SidebarDeps } from './sidebar';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
@@ -152,10 +152,30 @@ describe('Sign in with GitHub replaces a token that GitHub rejected', () => {
       contributes: { commands: Array<{ command: string; title: string }>; viewsWelcome: Array<{ contents: string; when: string }> };
     };
     expect(manifest.contributes.commands.find((command) => command.command === 'devspaces.signIn')?.title).toBe('Sign in with GitHub');
+    const text =
+      'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n' +
+      'Devspaces asks for the scopes repo (read and change your repositories, also the private ones) and read:org (read your organization memberships). It works only with accounts on github.com.';
+    // The tooltip of the sign-in row is the text of the welcome view without its button.
     expect(manifest.contributes.viewsWelcome.find((welcome) => welcome.when === '!devspaces.signedIn')?.contents).toBe(
-      'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n[Sign in with GitHub](command:devspaces.signIn)',
+      `${text}\n[Sign in with GitHub](command:devspaces.signIn)`,
     );
     expect(TreeTexts.signIn).toBe('Sign in with GitHub');
-    expect(TreeTexts.signInTooltip).toBe('Sign in with GitHub to see your repositories that have a Dev Container configuration.');
+    expect(TreeTexts.signInTooltip).toBe(text);
+  });
+
+  // Before the sign-in, the view says what each scope allows, in the words of the top of the README (the Marketplace
+  // page), and that only accounts on github.com work.
+  it('names each scope of the sign-in with what it allows, as the README does, and github.com', () => {
+    const readme = fs.readFileSync(path.join(__dirname, '..', '..', 'README.md'), 'utf8');
+    const allows: Record<string, string> = {
+      repo: 'read and change your repositories, also the private ones',
+      'read:org': 'read your organization memberships',
+    };
+    expect(Object.keys(allows)).toEqual([...GITHUB_SCOPES]);
+    for (const scope of GITHUB_SCOPES) {
+      expect(TreeTexts.signInTooltip).toContain(`${scope} (${allows[scope]})`);
+      expect(readme).toContain(`\`${scope}\` (${allows[scope]})`);
+    }
+    expect(TreeTexts.signInTooltip).toContain('It works only with accounts on github.com.');
   });
 });
