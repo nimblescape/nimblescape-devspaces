@@ -727,7 +727,7 @@ describe('Controller commands', () => {
       'Your repositories appear here once Docker is installed. Devspaces asks to start Docker Engine when needed.';
     const signIn =
       'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n' +
-      'Devspaces asks for the scopes repo (read and change your repositories, also the private ones) and read:org (read your organization memberships). It works only with accounts on github.com.\n' +
+      'Devspaces asks for the scopes repo (read and change the repositories that you can access, also the private ones) and read:org (read your organization memberships). It works only with accounts on github.com.\n' +
       '[Sign in with GitHub](command:devspaces.signIn)';
     const githubEnterprise =
       'Your VS Code is set up for GitHub Enterprise Server or GHE.com. Devspaces cannot use an account there. Sign in with an account on github.com.';
