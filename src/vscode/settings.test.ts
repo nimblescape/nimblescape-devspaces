@@ -93,34 +93,51 @@ describe('settings', () => {
     expect(settingTarget({ inspect: () => undefined }, 'unknown')).toBe(fakeVscode.ConfigurationTarget.Global);
   });
 
-  it('warns once per window session about each invalid defaultImage, with Open Settings', async () => {
+  // A check runs at the start and when its setting changes. Each invalid value that it finds is a line in the log; the
+  // warning shows once per window session for each invalid value, until the setting has a valid value again.
+  it('warns once per window session about each invalid defaultImage, with Open Settings, until the value is valid', async () => {
     let value: unknown = ' not an image ';
     fakeVscode.workspace.getConfiguration.mockReturnValue({ get: (key: string) => (key === 'defaultImage' ? value : undefined), inspect: () => undefined });
     fakeVscode.window.showWarningMessage.mockResolvedValue(Actions.openSettings);
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
     const warned = new Set<string>();
+    const change = (key: string) => ({ affectsConfiguration: (section: string) => section === `${SETTINGS_SECTION}.${key}` }) as never;
+    const shown = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call[0]);
+    const logged = () => logger.warn.mock.calls.map((call: unknown[]) => call[0]);
+    const invalid = Messages.defaultImageInvalid('not an image');
+    const other = Messages.defaultImageInvalid('Not An Image');
     warnInvalidDefaultImage(logger, warned);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(Messages.defaultImageInvalid('not an image'), Actions.openSettings);
-    expect(logger.warn).toHaveBeenCalledWith(Messages.defaultImageInvalid('not an image'));
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(invalid, Actions.openSettings);
+    expect(logged()).toEqual([invalid]);
     // The button opens the Settings editor at the setting.
     await vi.waitFor(() =>
       expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', '@id:devspaces.defaultImage'),
     );
-    warnInvalidDefaultImage(logger, warned);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
-    // A valid value, and an empty one: nothing to warn about. The same invalid value again: no second warning.
-    value = 'ghcr.io/acme/base:latest';
-    warnInvalidDefaultImage(logger, warned);
-    value = '';
-    warnInvalidDefaultImage(logger, warned);
-    value = 'not an image';
-    warnInvalidDefaultImage(logger, warned);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
-    // Another invalid value is a new warning.
+    // A change of another setting checks nothing.
+    warnInvalidDefaultImage(logger, warned, change('owners'));
+    expect(logged()).toEqual([invalid]);
+    // The same invalid value again: a line in the log, and no second warning.
+    warnInvalidDefaultImage(logger, warned, change('defaultImage'));
+    expect(shown()).toEqual([invalid]);
+    expect(logged()).toEqual([invalid, invalid]);
+    // Another invalid value is a new warning; the first value again is not.
     value = 'Not An Image';
-    warnInvalidDefaultImage(logger, warned);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(2);
+    warnInvalidDefaultImage(logger, warned, change('defaultImage'));
+    value = 'not an image';
+    warnInvalidDefaultImage(logger, warned, change('defaultImage'));
+    expect(shown()).toEqual([invalid, other]);
+    expect(logged()).toEqual([invalid, invalid, other, invalid]);
+    // A valid value, and an empty one: nothing to warn about, and the window forgets its warnings. The same invalid value
+    // entered again is a new warning.
+    value = 'ghcr.io/acme/base:latest';
+    warnInvalidDefaultImage(logger, warned, change('defaultImage'));
+    value = '';
+    warnInvalidDefaultImage(logger, warned, change('defaultImage'));
+    expect(logged()).toHaveLength(4);
+    value = 'not an image';
+    warnInvalidDefaultImage(logger, warned, change('defaultImage'));
+    expect(shown()).toEqual([invalid, other, invalid]);
+    expect(logged()).toHaveLength(5);
   });
 
   // There is no setting imageUpdates: a value that settings.json holds is not read (VS Code shows it as an unknown
@@ -389,22 +406,27 @@ describe('settings', () => {
     expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', '@id:devspaces.owners');
   });
 
-  it('warns once per window session about the invalid entries of hostAccessChecksOff, with Open Settings', async () => {
+  it('warns once per window session about the invalid entries of hostAccessChecksOff, with Open Settings, until they are valid', async () => {
     const inspect = vi.fn((): { globalValue: unknown[] } => ({ globalValue: ['acme/api', 'acme', 3] }));
     fakeVscode.workspace.getConfiguration.mockReturnValue({ get: () => undefined, inspect });
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
     const warned = new Set<string>();
+    const change = { affectsConfiguration: (section: string) => section === `${SETTINGS_SECTION}.hostAccessChecksOff` } as never;
+    const invalid = Messages.hostAccessChecksOffInvalid('acme, 3');
     warnInvalidHostAccessChecksOff(logger, warned);
     expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(Messages.hostAccessChecksOffInvalid('acme, 3'), Actions.openSettings);
-    expect(logger.warn).toHaveBeenCalledWith(Messages.hostAccessChecksOffInvalid('acme, 3'));
-    warnInvalidHostAccessChecksOff(logger, warned);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(invalid, Actions.openSettings);
+    expect(logger.warn).toHaveBeenCalledWith(invalid);
+    warnInvalidHostAccessChecksOff(logger, warned, change);
     expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    // Valid entries: the window forgets the warning, and the same invalid entries again are a new warning.
     inspect.mockReturnValue({ globalValue: ['acme/api'] });
-    warnInvalidHostAccessChecksOff(logger, warned);
+    warnInvalidHostAccessChecksOff(logger, warned, change);
     inspect.mockReturnValue({ globalValue: ['acme/api', 'acme', 3] });
-    warnInvalidHostAccessChecksOff(logger, warned);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
+    warnInvalidHostAccessChecksOff(logger, warned, change);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledTimes(3);
     // The warning was closed without its button: the Settings editor stays closed.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fakeVscode.commands.executeCommand).not.toHaveBeenCalled();
