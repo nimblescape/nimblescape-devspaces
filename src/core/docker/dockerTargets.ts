@@ -74,9 +74,9 @@ export interface ContextReader {
   isInstalled(): boolean;
   run(args: readonly string[], options?: RunOptions): Promise<RunResult>;
   /**
-   * Whether the docker command is Podman (BootstrapDocker.podmanCli: `docker --version`, kept for the path of the CLI):
-   * what showed it, or undefined for Docker. Asked only when the current context cannot be read. Without it, the CLI
-   * counts as Docker.
+   * Whether the docker command is Podman (BootstrapDocker.podmanCli: `docker --version`, kept until the file of the CLI
+   * changes, cliFileIdentity): what showed it, or undefined for Docker. Asked only when the current context cannot be
+   * read. Without it, the CLI counts as Docker.
    */
   podmanCli?(): Promise<string | undefined>;
 }
