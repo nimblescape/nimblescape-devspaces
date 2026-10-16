@@ -20,6 +20,7 @@ import {
   normalizeDefaultImage,
   readSettings,
   SETTINGS_SECTION,
+  settingTarget,
   warnInvalidDefaultImage,
   warnInvalidHostAccessChecksOff,
 } from './settings';
@@ -77,6 +78,18 @@ describe('settings', () => {
     expect(of(true)).toBe(true);
     expect(of('false')).toBe(true);
     expect(of(undefined)).toBe(true);
+  });
+
+  it('writes a setting of the view where its value applies: the workspace settings when they hold it, else the user settings', () => {
+    const configuration = (workspaceValue: unknown) =>
+      ({ inspect: () => ({ key: 'devspaces.owners', globalValue: ['acme'], workspaceValue }) }) as unknown as Parameters<typeof settingTarget>[0];
+    expect(settingTarget(configuration(undefined), 'owners')).toBe(fakeVscode.ConfigurationTarget.Global);
+    expect(settingTarget(configuration(['octo']), 'owners')).toBe(fakeVscode.ConfigurationTarget.Workspace);
+    // Also an empty list or false: a value that VS Code uses.
+    expect(settingTarget(configuration([]), 'owners')).toBe(fakeVscode.ConfigurationTarget.Workspace);
+    expect(settingTarget(configuration(false), 'showOnlyDevspaces')).toBe(fakeVscode.ConfigurationTarget.Workspace);
+    // A setting that VS Code does not know.
+    expect(settingTarget({ inspect: () => undefined }, 'unknown')).toBe(fakeVscode.ConfigurationTarget.Global);
   });
 
   it('warns once per window session about each invalid defaultImage, with Open Settings', async () => {

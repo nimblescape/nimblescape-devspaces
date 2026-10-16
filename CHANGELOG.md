@@ -41,6 +41,8 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Keyboard and screen readers:** `Enter` on a repository row in the sidebar now starts its devspace, as a double-click does. Before, `Enter` only selected the row. On an owner, a group or a repository with child rows, `Enter` still opens or closes it. The status bar item of Devspaces now tells a screen reader its state and what a selection does; before, a screen reader read the name of its icon.
 
+**Filter buttons and workspace settings:** Select Organizations…, Show Only Devspaces and Show All Repositories now change the settings devspaces.owners and devspaces.showOnlyDevspaces in the workspace settings when these have a value for the setting, and otherwise in your user settings. Before, they always changed your user settings, so in a workspace with its own value the button had no effect.
+
 ## 0.5.0
 
 **Docker names, without migration:** the image of the worker is now `devspaces-worker:<hash>` (was `devspaces-helper:<hash>`), its cache volume devspaces-worker-cache (was devspaces-helper-cache), and its labels nimblescape.devspaces.worker, nimblescape.devspaces.worker-run and nimblescape.devspaces.worker-channel (were nimblescape.devspaces.helper...). The new image is built at the first use. After the update, remove the old devspaces-helper images and the devspaces-helper-cache volume on each Docker engine by hand; the steps are in the user guide, section [Update from version 0.4.0 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-040-or-older).

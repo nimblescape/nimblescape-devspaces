@@ -13,7 +13,7 @@ import type { Logger } from '../core/ports';
 import type { DiscoveryData, ExtensionSettings, GitHubAccount } from '../core/types';
 import { showInformationMessage } from './notifications';
 import { ownerChoices, ownersFiltered, OwnerTexts, selectedOwners } from './ownerChoices';
-import { SETTINGS_SECTION } from './settings';
+import { SETTINGS_SECTION, settingTarget } from './settings';
 
 /** Context key of the view title bar (package.json): the setting `owners` limits the scan (icon `$(filter-filled)`). */
 export const OWNERS_FILTERED_CONTEXT_KEY = 'devspaces.ownersFiltered';
@@ -38,8 +38,8 @@ interface OwnerItem extends vscode.QuickPickItem {
 }
 
 /**
- * Asks for the owners to scan and writes them to the user setting `owners`. Not signed in: asks to sign in first.
- * Cancel changes nothing; an empty selection writes `[]` (all repositories).
+ * Asks for the owners to scan and writes them to the setting `owners`, where its value applies (settingTarget). Not
+ * signed in: asks to sign in first. Cancel changes nothing; an empty selection writes `[]` (all repositories).
  */
 export async function selectOwners(deps: OwnerSelectorDeps): Promise<void> {
   if (!(await deps.auth.isSignedIn())) {
@@ -69,9 +69,9 @@ export async function selectOwners(deps: OwnerSelectorDeps): Promise<void> {
     matchOnDescription: true,
   });
   if (!picked) return;
-  await vscode.workspace
-    .getConfiguration(SETTINGS_SECTION)
-    .update('owners', selectedOwners(picked), vscode.ConfigurationTarget.Global);
+  // Where the value applies: the workspace or the user settings.
+  const configuration = vscode.workspace.getConfiguration(SETTINGS_SECTION);
+  await configuration.update('owners', selectedOwners(picked), settingTarget(configuration, 'owners'));
 }
 
 /** Sets the context key of the filter icon from the setting `owners`. */
