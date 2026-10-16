@@ -388,6 +388,7 @@ async function activateExtension(
     // An unknown zone of Node.js (`Etc/Unknown`) is UTC.
     timeZone: () => usableTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone),
     computerId,
+    logger,
   });
   // The heartbeats of this window to the Monitor container of the engine of each devspace it uses, through
   // this window's worker of that engine (its operation `heartbeat`; the worker is made ready first); a missing monitor
