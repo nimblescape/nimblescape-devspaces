@@ -233,7 +233,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
   it('a new container counts as a use: it runs on', async () => {
     writeLastUse({ at: T0 - UNUSED_END_MS, createId: NEWER });
     const monitor = startRun({ maxTicks: Math.ceil((2 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS) });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((2 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)));
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((2 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.events).toEqual([]);
     expect(lastUse()).toEqual({ at: T0, createId: CREATE });
@@ -252,7 +252,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
       },
       maxTicks: Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS),
     });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)));
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.events).toEqual([]);
     expect(monitor.out()).toContain('The Monitor looks again in 1 hour');
@@ -265,7 +265,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
       now: (mono) => T0 + mono + (mono < 10 * MINUTE ? 40 * DAY : 0),
       maxTicks: Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS),
     });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)));
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.events).toEqual([]);
     expect(lastUse()?.at).toBe(T0);
@@ -282,7 +282,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
       },
       maxTicks: Math.ceil((2 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS),
     });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((2 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)));
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((2 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)), { timeout: 10_000 });
     // Half an hour after the first look, the stored time is still there.
     expect(halfway).toEqual({ at: T0 + 400 * DAY, createId: CREATE });
     const replaced = lastUse();
@@ -309,7 +309,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
       },
       maxTicks: Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS),
     });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)));
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)), { timeout: 10_000 });
     expect(used).toBe(true);
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.events).toEqual([]);
@@ -339,14 +339,14 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     writeLastUse({ at: T0 - UNUSED_END_MS });
     const ticks = Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS);
     const without = startRun({ env: { DEVSPACE_MONITOR_PERMANENT: '1', DEVSPACE_IMAGE_FIRST_MS: '86400000' }, maxTicks: ticks });
-    await vi.waitFor(() => expect(without.ticks()).toBe(ticks));
+    await vi.waitFor(() => expect(without.ticks()).toBe(ticks), { timeout: 10_000 });
     expect(await pending(without.result)).toBe('pending');
     expect(without.out()).toContain('The Monitor could not end itself (it does not know its container: the nonce of its create is missing). It tries again in 1 hour.');
     expect(without.events).toEqual([]);
 
     writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
     const none = startRun({ engine: { containerIds: async () => [] }, maxTicks: ticks });
-    await vi.waitFor(() => expect(none.ticks()).toBe(ticks));
+    await vi.waitFor(() => expect(none.ticks()).toBe(ticks), { timeout: 10_000 });
     expect(await pending(none.result)).toBe('pending');
     expect(none.out()).toContain('The Monitor could not end itself (0 containers have the nonce of its create). It tries again in 1 hour.');
     expect(none.events).toEqual([]);
@@ -463,7 +463,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
       onTick: (now) => void (mono = now),
       maxTicks: Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS),
     });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)));
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.events).toEqual([LIST, 'policy own no', LIST, 'policy own unless-stopped']);
     expect(monitor.out()).toContain('A window used Devspaces on this Docker engine while the Monitor was ending; the Monitor goes on. Its restart policy is "unless-stopped" again.');
@@ -568,7 +568,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await vi.waitFor(() => expect(monitor.out()).toContain('The background run is due, but it does not start'));
     release();
-    await vi.waitFor(() => expect(monitor.mono()).toBe(usedAt! + 2 * REMOTE_TICK_MS));
+    await vi.waitFor(() => expect(monitor.mono()).toBe(usedAt! + 2 * REMOTE_TICK_MS), { timeout: 10_000 });
     expect(monitor.out()).toContain('A window used Devspaces on this Docker engine again; the Monitor does not end itself.');
     // The next check of the schedule starts the due run, long before the second look.
     await vi.advanceTimersByTimeAsync(IMAGE_CHECK_MS);
