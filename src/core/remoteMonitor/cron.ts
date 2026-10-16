@@ -76,6 +76,22 @@ export function parseCronSchedule(text: string | undefined): CronSchedule | unde
   return { minutes, hours, days, months, weekdays, anyDay: fields[2].startsWith('*'), anyWeekday: fields[4].startsWith('*') };
 }
 
+/**
+ * The shortest time in minutes between two times of the schedule on the wall clock: the two closest minutes of an hour,
+ * and the last minute of an hour and the first minute of the next hour when the schedule has two following hours.
+ * Infinity when two times are always more than an hour apart. Daylight saving time is left out, and the hours 23 and 0
+ * count as following hours also when no two following days match.
+ */
+export function shortestCronGapMinutes(schedule: CronSchedule): number {
+  const minutes = [...schedule.minutes].sort((a, b) => a - b);
+  let gap = Infinity;
+  for (let i = 1; i < minutes.length; i++) gap = Math.min(gap, minutes[i] - minutes[i - 1]);
+  if ([...schedule.hours].some((hour) => schedule.hours.has((hour + 1) % 24))) {
+    gap = Math.min(gap, 60 - minutes[minutes.length - 1] + minutes[0]);
+  }
+  return gap;
+}
+
 /** True for a time zone that this Node.js knows (an IANA name such as Europe/Vienna). */
 export function isTimeZone(value: string | undefined): value is string {
   if (!value || !/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+){0,2}$/.test(value)) return false;

@@ -78,7 +78,14 @@ import { PreviewWorkerRunner } from './groupsPreviewRunner';
 import { RemoteDockerCommands } from './remoteDockerCommands';
 import { RepositoryGroupsEditor } from './repositoryGroupsEditor';
 import { SessionCoordinator } from './sessionCoordinator';
-import { affectsSettings, devContainersDefaultExtensionsValue, readSettings, warnInvalidDefaultImage, warnInvalidHostAccessChecksOff } from './settings';
+import {
+  affectsSettings,
+  devContainersDefaultExtensionsValue,
+  readSettings,
+  warnInvalidCacheUpdateSchedule,
+  warnInvalidDefaultImage,
+  warnInvalidHostAccessChecksOff,
+} from './settings';
 import { Sidebar } from './sidebar';
 import { DevspaceStatusBar } from './statusBar';
 import { Throttle } from './tasks';
@@ -143,6 +150,9 @@ async function activateExtension(
   const defaultImageWarnings = new Set<string>();
   warnInvalidHostAccessChecksOff(logger, hostAccessWarnings);
   warnInvalidDefaultImage(logger, defaultImageWarnings);
+  // An invalid devspaces.cacheUpdateSchedule, in whose place the Monitor uses the default, gets one warning too (again
+  // only when it changes).
+  let invalidCacheUpdateSchedule = warnInvalidCacheUpdateSchedule(logger, '');
 
   const runner = new NodeProcessRunner();
   const dockerPath = findDockerCli(env, platform);
@@ -802,6 +812,7 @@ async function activateExtension(
       settings = readSettings();
       warnInvalidHostAccessChecksOff(logger, hostAccessWarnings, event);
       warnInvalidDefaultImage(logger, defaultImageWarnings, event);
+      invalidCacheUpdateSchedule = warnInvalidCacheUpdateSchedule(logger, invalidCacheUpdateSchedule);
       updateOwnersContextKey(settings.owners, logger);
       updateDevspacesOnlyContextKey(settings.showOnlyDevspaces === true, logger);
       // Another scan scope loads the list again at once.

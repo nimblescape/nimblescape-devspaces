@@ -9,7 +9,7 @@ import { HOST_ACCESS_CHECKS_OFF_SETTING, parseHostAccessChecksOff } from '../cor
 import { Actions, Messages } from '../core/messages';
 import type { Logger } from '../core/ports';
 import type { ExtensionSettings } from '../core/types';
-import { DEFAULT_CACHE_UPDATE_SCHEDULE, normalizeCacheSchedule } from '../core/remoteMonitor/cacheSettings';
+import { DEFAULT_CACHE_UPDATE_SCHEDULE, normalizeCacheSchedule, parseCacheSchedule } from '../core/remoteMonitor/cacheSettings';
 import { parseImageReference } from '../core/remoteMonitor/protocol';
 import { Commands } from './commands';
 import { showWarningMessage } from './notifications';
@@ -184,6 +184,32 @@ export function warnInvalidDefaultImage(logger: Logger, warned: Set<string>, cha
 }
 
 /**
+ * The value of devspaces.cacheUpdateSchedule that the Monitor does not take (parseCacheSchedule), for one warning; `''`
+ * when the setting is empty or valid. The settings editor takes any five fields (the pattern in package.json), also
+ * `0 25 * * *`. The setting has the scope `application`: only the user value.
+ */
+export function invalidCacheUpdateScheduleValue(): string {
+  const value = vscode.workspace.getConfiguration(SETTINGS_SECTION).get<unknown>('cacheUpdateSchedule');
+  const text = typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : '';
+  return text !== '' && parseCacheSchedule(value) === undefined ? text : '';
+}
+
+/**
+ * One warning (a message and a log line) that names the invalid value of devspaces.cacheUpdateSchedule, in whose place
+ * the Monitor uses the default. `warned`: the value of the last warning (`''` for none); the same value is not named
+ * again. Returns the value of this call, for the next one.
+ */
+export function warnInvalidCacheUpdateSchedule(logger: Logger, warned: string): string {
+  const invalid = invalidCacheUpdateScheduleValue();
+  if (invalid === '' || invalid === warned) return invalid;
+  logger.warn(Messages.cacheUpdateScheduleInvalid(invalid));
+  Promise.resolve(showWarningMessage(Messages.cacheUpdateScheduleInvalid(invalid))).catch((error: unknown) =>
+    logger.warn(`The warning about the setting cacheUpdateSchedule could not be shown: ${errorMessage(error)}`),
+  );
+  return invalid;
+}
+
+/**
  * The setting `defaultImage` as the extension uses it: the trimmed image reference when it is one (parseImageReference,
  * as the Monitor and the worker check references), else `undefined` (an empty or invalid value: no default image).
  */
@@ -265,7 +291,7 @@ export function normalizeSettings(get: (key: keyof ExtensionSettings) => unknown
       MAX_STOP_AFTER_MINUTES,
     ),
     // A cron expression of five fields, or an interval of at least 5 whole minutes; anything else: the default, daily
-    // at 06:07 (normalizeCacheSchedule).
+    // at 06:07 (normalizeCacheSchedule; warnInvalidCacheUpdateSchedule names it).
     cacheUpdateSchedule: normalizeCacheSchedule(get('cacheUpdateSchedule')),
     // The Monitor of an engine runs permanently once the user answered the question about it there, unless this is
     // true (monitorQuestion.ts writes it).

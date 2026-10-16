@@ -4,7 +4,7 @@
 
 // The cron schedules of the Monitor's background run (the cron form of the setting cacheUpdateSchedule).
 import { describe, expect, it } from 'vitest';
-import { isTimeZone, nextCronTime, parseCronSchedule, usableTimeZone, type CronSchedule } from './cron';
+import { isTimeZone, nextCronTime, parseCronSchedule, shortestCronGapMinutes, usableTimeZone, type CronSchedule } from './cron';
 
 // A sample schedule: daily at 06:07.
 const DEFAULT_IMAGE_SCHEDULE = '7 6 * * *';
@@ -49,6 +49,22 @@ describe('the cron schedule of the image updates', () => {
     ]) {
       expect(parseCronSchedule(text), String(text)).toBeUndefined();
     }
+  });
+
+  // For the shortest interval of the setting cacheUpdateSchedule (cacheSettings.ts).
+  it('names the shortest time between two times: within an hour, and across the full hour of two following hours', () => {
+    const gap = (text: string) => shortestCronGapMinutes(parseCronSchedule(text)!);
+    expect(gap('* * * * *')).toBe(1);
+    expect(gap('*/5 * * * *')).toBe(5);
+    expect(gap('10,20,22 6 * * *')).toBe(2);
+    // 06:58, then 07:00.
+    expect(gap('0,58 6,7 * * *')).toBe(2);
+    // 23:58, then 00:00.
+    expect(gap('0,58 0,23 * * *')).toBe(2);
+    expect(gap('0,58 6,8 * * *')).toBe(58);
+    expect(gap('7 * * * *')).toBe(60);
+    expect(gap(DEFAULT_IMAGE_SCHEDULE)).toBe(Infinity);
+    expect(gap('7 6,18 * * *')).toBe(Infinity);
   });
 
   // The daily time of the default schedule, 06:07 in Europe/Vienna.
