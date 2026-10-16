@@ -170,10 +170,11 @@ async function activateExtension(
   const remoteState = new RemoteDockerState(paths.remoteDocker);
   // What this computer remembers about each Docker engine (docker-engines.json): the answer to the question about its
   // Monitor (MonitorQuestion), and the removal mark of "Remove Devspaces from This Docker Engine…".
-  const engineRecords = new DockerEngineRecords(paths.dockerEngines);
+  const engineRecords = new DockerEngineRecords(paths.dockerEngines, { logger });
   // After "Remove Devspaces from This Docker Engine…", this computer does no Docker work on that engine by itself (no
   // worker for a passive read, no background build of the helper image, no background work at the start) until a
-  // Start, a Rebuild or "Update All Images Now" of the user there clears the mark. A file that cannot be read has no mark.
+  // Start, a Rebuild or "Update All Images Now" of the user there clears the mark. A file that cannot be read, also after
+  // the retries of a transient error, has no mark here (logged).
   const engineRemoved = async (target: Pick<DockerTarget, 'host'>): Promise<boolean> => {
     try {
       return await engineRecords.removed(target.host);
