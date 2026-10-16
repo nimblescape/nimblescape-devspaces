@@ -43,6 +43,8 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Filter buttons and workspace settings:** Select Organizations…, Show Only Devspaces and Show All Repositories now change the settings devspaces.owners and devspaces.showOnlyDevspaces in the workspace settings when these have a value for the setting, and otherwise in your user settings. Before, they always changed your user settings, so in a workspace with its own value the button had no effect.
 
+**Descriptions of the settings:** in the Settings editor, the descriptions of devspaces.defaultImage, devspaces.cacheUpdateSchedule, devspaces.stopMonitorWhenIdle, devspaces.updateContainer and devspaces.repositoryGroups are now one or two sentences, with a link to the section of the user guide that says more. Before, some of them had up to 1,000 characters. The two values of devspaces.updateContainer, notify and ask, now have their own descriptions.
+
 ## 0.5.0
 
 **Docker names, without migration:** the image of the worker is now `devspaces-worker:<hash>` (was `devspaces-helper:<hash>`), its cache volume devspaces-worker-cache (was devspaces-helper-cache), and its labels nimblescape.devspaces.worker, nimblescape.devspaces.worker-run and nimblescape.devspaces.worker-channel (were nimblescape.devspaces.helper...). The new image is built at the first use. After the update, remove the old devspaces-helper images and the devspaces-helper-cache volume on each Docker engine by hand; the steps are in the user guide, section [Update from version 0.4.0 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-040-or-older).

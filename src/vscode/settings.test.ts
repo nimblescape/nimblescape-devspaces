@@ -196,6 +196,43 @@ describe('settings', () => {
     expect(properties[`${SETTINGS_SECTION}.updateRunningContainer`]).toBeUndefined();
   });
 
+  // The Settings editor shows each description in full: a short text, and for more a link to the section of the user
+  // guide. Each value of an enum has its own description.
+  it('keeps the descriptions of the settings short, with links to sections of the user guide that exist (package.json)', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      contributes: { configuration: { properties: Record<string, { markdownDescription?: string; description?: string; enum?: unknown[]; enumDescriptions?: string[] }> } };
+    };
+    const properties = manifest.contributes.configuration.properties;
+    const guide = fs.readFileSync(path.join(__dirname, '..', '..', 'docs', 'guide.md'), 'utf8');
+    // The anchors of the headings, as GitHub makes them.
+    const anchors = guide
+      .split('\n')
+      .filter((line) => /^#{1,6} /.test(line))
+      .map((line) => line.replace(/^#+ /, '').trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s/g, '-'));
+    const GUIDE = 'https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#';
+    for (const [key, property] of Object.entries(properties)) {
+      const text = property.markdownDescription ?? property.description ?? '';
+      expect(text.length, key).toBeLessThan(450);
+      for (const [, anchor] of text.matchAll(/\(https:\/\/github\.com\/nimblescape\/nimblescape-devspaces\/blob\/main\/docs\/guide\.md#([\w-]+)\)/g)) {
+        expect(anchors, `${key}: #${anchor}`).toContain(anchor);
+      }
+      if (property.enum) expect(property.enumDescriptions, key).toHaveLength(property.enum.length);
+    }
+    // stopMonitorWhenIdle: the question about the Monitor of each engine is in the section of the background run.
+    const sections = {
+      defaultImage: 'default-image',
+      cacheUpdateSchedule: 'the-background-run',
+      stopMonitorWhenIdle: 'the-background-run',
+      updateContainer: 'the-update-at-a-start',
+      repositoryGroups: 'settings',
+    };
+    for (const [key, anchor] of Object.entries(sections)) {
+      expect(properties[`${SETTINGS_SECTION}.${key}`].markdownDescription, key).toContain(`(${GUIDE}${anchor})`);
+    }
+    // The editor of the repository groups stays one click away.
+    expect(properties[`${SETTINGS_SECTION}.repositoryGroups`].markdownDescription).toContain('(command:devspaces.editRepositoryGroups)');
+  });
+
   // stopMonitorWhenIdle, a boolean, false by default.
   it('reads stopMonitorWhenIdle: a boolean; anything else is false', () => {
     const read = (value: unknown) => normalizeSettings((key) => (key === 'stopMonitorWhenIdle' ? value : undefined)).stopMonitorWhenIdle;

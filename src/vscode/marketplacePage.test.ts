@@ -121,18 +121,22 @@ describe('the texts of the Monitor question and of the removal in the docs', () 
   });
 
   // The mode of a running Monitor changes only at the next ensure on its engine (a start of a devspace, or Update All
-  // Images Now); the answer Keep Running writes the value that the setting has while the question comes.
-  it('the setting and the guide say when a changed answer reaches a running Monitor', () => {
+  // Images Now); the answer Keep Running writes the value that the setting has while the question comes. The setting
+  // has a short description (settings.test.ts): it names the question and links to the section of the guide that says
+  // the rest.
+  it('the guide says when a changed answer reaches a running Monitor, and the setting links to that section', () => {
     const { contributes } = JSON.parse(read('package.json')) as { contributes: { configuration: { properties: Record<string, { markdownDescription?: string }> } } };
     const setting = contributes.configuration.properties['devspaces.stopMonitorWhenIdle'];
     const guide = read('docs/guide.md');
     const changed = 'A change applies on each engine at the next start of a devspace or **Update All Images Now** there.';
-    for (const text of [setting?.markdownDescription ?? '', guide]) {
-      expect(text).toContain(changed);
-      expect(text).toContain(`removes it at once`);
-    }
     expect(setting?.markdownDescription).toContain('the first Start or Rebuild on an engine, or **Update All Images Now** there, asks');
-    expect(setting?.markdownDescription).toContain('The answer **Keep Running** keeps this setting off (the question only comes while it is off)');
+    expect(setting?.markdownDescription).toContain('(https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#the-background-run)');
+    const start = guide.indexOf('\n### The background run\n');
+    expect(start, 'the section "The background run"').toBeGreaterThan(0);
+    const backgroundRun = guide.slice(start, guide.indexOf('\n### ', start + 1));
+    for (const words of [changed, 'removes it at once', 'It does not ask while `devspaces.stopMonitorWhenIdle` is on.']) expect(backgroundRun).toContain(words);
+    // The row of the setting in the guide: the answer Keep Running keeps the setting off.
+    expect(guide).toContain('the answer **Keep Running** keeps it off');
     // A Stop sends a heartbeat: it is a use of the engine.
     expect(guide).toContain('no devspace was started, stopped or deleted there');
     // Both places in the guide, and the change log.
