@@ -150,3 +150,14 @@ describe('the texts of the Monitor question and of the removal in the docs', () 
     expect(text.indexOf(helpers)).toBeLessThan(devspaces);
   });
 });
+
+describe('the Marketplace page and the files of the package', () => {
+  it('compares Devspaces with no other product: no keyword codespaces, and no text names GitHub Codespaces', () => {
+    const manifest = JSON.parse(read('package.json')) as { displayName: string; description: string; keywords: string[] };
+    expect(manifest.keywords).not.toContain('codespaces');
+    for (const text of [manifest.displayName, manifest.description, ...manifest.keywords]) expect(text).not.toMatch(/codespace/i);
+    for (const file of ['README.md', 'docs/guide.md', 'docs/security.md', 'docs/architecture.md']) {
+      expect(read(file), file).not.toMatch(/codespace/i);
+    }
+  });
+});
