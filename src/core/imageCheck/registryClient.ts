@@ -8,7 +8,7 @@
 // redirect handling as the worker's image check.
 import * as crypto from 'crypto';
 import { errorMessage } from '../errors';
-import { USER_AGENT, type HttpRequest, type HttpResponse, type HttpTransport } from '../http';
+import { userAgent, type HttpRequest, type HttpResponse, type HttpTransport } from '../http';
 import { abortError, isAbortError, silentLogger, type Credentials, type Logger } from '../ports';
 import { isDockerHub, registryDisplayName, type ImageReference } from './reference';
 
@@ -211,7 +211,7 @@ export class RegistryClient {
   private async tagPages(reference: RepositoryRef, signal: AbortSignal | undefined): Promise<TagListResult> {
     const registry = reference.registry;
     const base = `https://${registry}`;
-    let headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': USER_AGENT };
+    let headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': userAgent() };
     // The origin as the URL parser writes it (host in lower case, without the default port 443), so that a registry
     // written as `Host:443` or in upper case pages on.
     const origin = new URL(base).origin;
@@ -258,7 +258,7 @@ export class RegistryClient {
 
   private async resolve(reference: ImageReference, signal: AbortSignal | undefined): Promise<DigestResult> {
     const url = `https://${reference.registry}/v2/${reference.repository}/manifests/${reference.tag}`;
-    let headers: Record<string, string> = { Accept: MANIFEST_ACCEPT, 'User-Agent': USER_AGENT };
+    let headers: Record<string, string> = { Accept: MANIFEST_ACCEPT, 'User-Agent': userAgent() };
     const request: HttpRequest = { method: 'HEAD', url, headers };
 
     const first = await this.sendTracked(request, signal);
@@ -413,7 +413,7 @@ export class RegistryClient {
     credentials: Credentials | undefined,
     signal: AbortSignal | undefined,
   ): Promise<TokenResult> {
-    const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': USER_AGENT };
+    const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': userAgent() };
     if (credentials) headers.Authorization = `Basic ${basic(credentials)}`;
     // The token answer has the body limit of a tag list (not the transport's 16 MiB).
     const response = await this.send({ method: 'GET', url: url.toString(), headers, maxBodyBytes: MAX_TAG_LIST_BYTES }, signal);

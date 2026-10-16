@@ -41,7 +41,7 @@ export function analysisBundle(dir: string): AnalysisScript {
     target: 'node24',
     outfile: file,
     logLevel: 'silent',
-    define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify('0.0.0'), __DEVSPACES_VERSION__: JSON.stringify('0.0.0') },
+    define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify('0.0.0') },
   });
   return { file, hash: fileHash(file) };
 }

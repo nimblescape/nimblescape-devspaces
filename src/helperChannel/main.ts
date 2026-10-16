@@ -20,6 +20,7 @@
 // (entries.test.ts).
 import * as fs from 'fs';
 import { isAnalysisThread, startAnalysisThread } from '../core/helper/configurationAnalysisWorker';
+import { VERSION_ENV, setUserAgentVersion } from '../core/http';
 import { CHANNEL_CLEANUP_TIMEOUT_MS, CHANNEL_KILL_GRACE_MS, CHANNEL_SILENCE_EXIT_MS } from '../core/helperChannel/protocol';
 
 /**
@@ -61,8 +62,14 @@ export function fatalHandler(server: Pick<ChannelServer, 'shutdown'>, exit: (cod
   };
 }
 
-/** Runs the channel on the standard input and output of this process. `initial`: input that the loader read already. */
+/**
+ * Runs the channel on the standard input and output of this process. `initial`: input that the loader read already.
+ * The version of Devspaces comes from the program that started the worker (VERSION_ENV: the extension, channelRunArgs;
+ * the Monitor for its prepares): the header User-Agent of its HTTPS requests, and the version of the Monitor that it
+ * creates. Without a version x.y.z, the header has none (the worker has no log of its own to say so).
+ */
 export function startChannel(initial: string): void {
+  setUserAgentVersion(process.env[VERSION_ENV]);
   serve(initial, OPERATIONS);
 }
 

@@ -19,7 +19,8 @@
 //   the devspace ID over the helper channel, as the extension does. The worker reads its own image, socket and store
 //   from the monitor's container, which mounts what a worker mounts (the socket, this volume at the same path, the
 //   shared VS Code server store). No token, no credential, no secret, no setting: the operation takes none, its
-//   environment holds only PATH, and its requests to a computer (none) are refused.
+//   environment holds only PATH and the version of Devspaces (VERSION_ENV, the Monitor's own, for the header
+//   User-Agent), and its requests to a computer (none) are refused.
 // - One line of the log per devspace: prepared, skipped and why, failed, or stopped after the time limit, with the
 //   duration; the worker's own log lines and the build output stay out of the monitor's log.
 // - Then the prepared images (`<resource>:prepared` with the label of a prepare) of devspaces that have no volume on
@@ -30,6 +31,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { errorMessage } from '../core/errors';
+import { VERSION_ENV, userAgentVersion } from '../core/http';
 import { HelperChannel } from '../core/helperChannel/helperChannel';
 import { CHANNEL_ENTRY, OP_PREPARE, parsePrepareValue, type PrepareValue } from '../core/helperChannel/protocol';
 import { loaderCommand } from '../core/loader/pipeLoader';
@@ -50,7 +52,10 @@ export const PREPARE_ENGINE_TIMEOUT_MS = 60_000;
  * pipelineRules.ts), so this only ends a worker that does not answer.
  */
 export const PREPARE_OPERATION_TIMEOUT_MS = 35 * 60_000;
-/** The environment of the worker process: PATH only (no token, no credential, no variable of a computer). */
+/**
+ * The PATH of the worker process. Its environment holds only PATH and the version of Devspaces (no token, no credential,
+ * no variable of a computer).
+ */
 export const PREPARE_WORKER_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
 /** A devspace of the engine as this part knows it: its ID and repository (from the labels of its workspace volume). */
@@ -260,7 +265,8 @@ export interface ChildWorkerDeps {
  * The worker of the prepares as a child process of the monitor in its own container: `node -e <pipe loader>` with a
  * private folder of its own for the script (so a worker never reads a script that another start or a store changes),
  * the hash of the script and CHANNEL_ENTRY; the script goes over its input as the first line (HelperChannel.open), never
- * on the command line; its environment holds only PATH. Its operations get no secret, its requests are refused (none
+ * on the command line; its environment holds only PATH and the version of Devspaces that the Monitor got (VERSION_ENV),
+ * for the header User-Agent of its HTTPS requests. Its operations get no secret, its requests are refused (none
  * are made), and its output and log stay out of the monitor's log. Its folder is removed when it ends.
  */
 export function childPrepareWorker(deps: ChildWorkerDeps): PrepareWorker {
@@ -270,7 +276,9 @@ export function childPrepareWorker(deps: ChildWorkerDeps): PrepareWorker {
       const folder = await fs.promises.mkdtemp(path.join(deps.tempRoot ?? os.tmpdir(), 'devspaces-prepare-'));
       const remove = () => fs.promises.rm(folder, { recursive: true, force: true }).catch(() => undefined);
       const [, ...args] = loaderCommand({ path: path.join(folder, 'channel.js'), hash: deps.hash, entry: CHANNEL_ENTRY });
-      const child = start(deps.node ?? process.execPath, args, { env: { PATH: PREPARE_WORKER_PATH }, cwd: folder });
+      const version = userAgentVersion();
+      const env = { PATH: PREPARE_WORKER_PATH, ...(version === undefined ? {} : { [VERSION_ENV]: version }) };
+      const child = start(deps.node ?? process.execPath, args, { env, cwd: folder });
       let channel: HelperChannel;
       try {
         channel = await HelperChannel.open(child, deps.script, { logger: QUIET, name: 'the worker of the prepares', ...(deps.openTimeoutMs !== undefined ? { openTimeoutMs: deps.openTimeoutMs } : {}) });

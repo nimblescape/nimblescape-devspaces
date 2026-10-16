@@ -70,6 +70,7 @@ docker run --rm -i --pull never --name <worker name>
   --mount type=bind,source=<engine socket>,target=/var/run/docker.sock
   --mount type=volume,source=devspaces-monitor,target=/state
   --mount type=volume,source=devspaces-vscode,target=/vscode,volume-nocopy
+  --env DEVSPACES_VERSION=<version>
   devspaces-worker:<tag> node -e <pipe loader> /opt/devspace/channel.js <sha256> startChannel
 ```
 
@@ -81,7 +82,7 @@ The extension and the worker talk over the standard input and output of that `do
 - **Lifetime**: the extension opens a worker at the first operation on an engine and closes it after 10 minutes without one. It pings every 15 seconds. The worker ends by itself when its input ends, after 60 seconds of silence, or after 15 minutes without an operation; `--rm` removes it.
 - **Engine access**: every Docker action of the worker goes through one port, `DockerEngine` (`src/core/worker/dockerEngine.ts`), over the Docker Engine API on the socket (`src/helperChannel/engineApi.ts`, `engineClient.ts`). The worker starts no `docker` process of its own. Every command that it runs in a container is a named entry of one registry (`CONTAINER_SCRIPTS` in `src/core/worker/containerScripts.ts`), run through `exec` with positional arguments, secrets only on standard input, and its output masked.
 - **The pipeline**: the logic of the flows (`DevspaceService` in `src/core/pipeline/`, the host access policy in `src/core/policy/`, the image check in `src/core/imageCheck/`) runs only in the worker. A test checks that the extension's bundle contains none of it.
-- **Network**: the worker has outbound network on the default bridge, and no published port. Its HTTPS goes through the proxy of the Docker daemon.
+- **Network**: the worker has outbound network on the default bridge, and no published port. Its HTTPS goes through the proxy of the Docker daemon, with the header `User-Agent: nimblescape-devspaces/<version>`. The extension gives the worker its version in the variable `DEVSPACES_VERSION`, and the worker gives the same variable to the Monitor that it creates. No bundle holds the version, so a new version without a change of the code builds the same files.
 
 ### The helper image
 

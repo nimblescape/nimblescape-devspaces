@@ -4,10 +4,8 @@
 
 // Probes of RegistryClient.listTags: the limits (20 pages, 4 MiB), each page asks for JSON with the client's
 // User-Agent, and a page that the registry redirects keeps its body limit.
-import * as fs from 'fs';
-import * as path from 'path';
 import { describe, expect, it } from 'vitest';
-import type { HttpRequest, HttpResponse, HttpTransport } from '../http';
+import { setUserAgentVersion, type HttpRequest, type HttpResponse, type HttpTransport } from '../http';
 import { MAX_TAG_LIST_BYTES, MAX_TAG_PAGES, RegistryClient } from './registryClient';
 
 function recording(answer: (request: HttpRequest) => HttpResponse) {
@@ -29,11 +27,12 @@ describe('RegistryClient.listTags, probes', () => {
 
   it('asks for JSON with the User-Agent of the client', async () => {
     const { transport, requests } = recording(() => ({ status: 200, headers: {}, body: '{"tags":["1"]}' }));
-    expect(await new RegistryClient(transport, async () => undefined).listTags('ghcr.io', 'team/app')).toEqual({ kind: 'tags', tags: ['1'] });
+    // The name and the version that the program set at its start.
+    setUserAgentVersion('1.20.3');
+    const listed = await new RegistryClient(transport, async () => undefined).listTags('ghcr.io', 'team/app').finally(() => setUserAgentVersion(undefined));
+    expect(listed).toEqual({ kind: 'tags', tags: ['1'] });
     expect(requests[0].headers?.Accept).toBe('application/json');
-    // The name and the version of package.json.
-    const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'package.json'), 'utf8')) as { version: string };
-    expect(requests[0].headers?.['User-Agent']).toBe(`nimblescape-devspaces/${version}`);
+    expect(requests[0].headers?.['User-Agent']).toBe('nimblescape-devspaces/1.20.3');
   });
 
   it('a redirected page keeps the body limit of a tag list', async () => {

@@ -9,8 +9,9 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import { CHANNEL_ENTRY, OP_PREPARE, type PrepareValue } from '../core/helperChannel/protocol';
+import { setUserAgentVersion } from '../core/http';
 import { PIPE_LOADER, bundleHash } from '../core/loader/pipeLoader';
 import { LABEL_CONFIG_PATH, LABEL_DEFAULT_IMAGE, LABEL_DEVSPACE_ID, LABEL_PREPARED, LABEL_REPOSITORY, LABEL_VOLUME, preparedImageName, resourceName } from '../core/names';
 import { PREPARE_LIMIT_MS } from '../core/pipeline/pipelineRules';
@@ -341,6 +342,16 @@ describe('the worker of the prepares', () => {
     expect(JSON.stringify({ args: args.filter((arg) => arg !== PIPE_LOADER), options })).not.toMatch(/token|gh[opsu]_|REMOTE_CONTAINERS|SSH_AUTH_SOCK|BROWSER|VSCODE_|DOCKER_HOST/i);
     await session.close();
     expect(fs.existsSync(folder)).toBe(false);
+  });
+
+  it('gives the worker the version of Devspaces that the Monitor got, for the header User-Agent', async () => {
+    const hash = storeWorkerScript(stateDir, 'x');
+    const { start, started } = inProcessStart(async () => ({ outcome: 'prepared', detail: '', seconds: 1 }));
+    setUserAgentVersion('1.20.3');
+    onTestFinished(() => void setUserAgentVersion(undefined));
+    const session = await childPrepareWorker({ script: 'x', hash, start, tempRoot }).open();
+    await session.close();
+    expect(started.map(({ options }) => options.env)).toEqual([{ PATH: PREPARE_WORKER_PATH, DEVSPACES_VERSION: '1.20.3' }]);
   });
 
   it('refuses an invalid value of the worker', async () => {

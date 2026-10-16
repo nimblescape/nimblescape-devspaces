@@ -92,7 +92,7 @@ import { CLOCK_RESET_MS, parseCacheRunState, runRetryDelay, runRetryDue, type Ca
 import { DEFAULT_CACHE_UPDATE_SCHEDULE, cacheRunDue, parseCacheSchedule, type CacheSchedule as ParsedCacheSchedule } from '../core/remoteMonitor/cacheSettings';
 import { MONITOR_CREATE_ID_ENV, MONITOR_PERMANENT_ENV, MONITOR_VSCODE_STORE_ENV } from '../core/remoteMonitor/remoteSessionMonitor';
 import { REGISTRY_ANSWERS_FILE, registryAnswersText } from '../core/remoteMonitor/registryAnswers';
-import type { HttpTransport } from '../core/http';
+import { VERSION_ENV, takeUserAgentVersion, type HttpTransport } from '../core/http';
 import { proxiedHttpsTransport } from '../core/proxyTransport';
 import { storeLock, storeTryLock, unpackServer } from '../core/worker/vscodeServerStore';
 import {
@@ -1472,6 +1472,10 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
       const idleExitMs = idleExitFromEnv(deps.env);
       // Pipe loading: the extension waits for this line (REMOTE_MONITOR_READY_TEXT) after `docker run`.
       log(`${REMOTE_MONITOR_READY_TEXT} (Node.js ${process.version}, a check every ${tickMs / 1000} s).`);
+      // The version of Devspaces of the worker that created this monitor (RemoteSessionMonitor.runSpec), for the header
+      // User-Agent of its HTTPS requests and of those of its prepares; said once when it has none.
+      const noVersion = takeUserAgentVersion(deps.env[VERSION_ENV], `The version of Devspaces (${VERSION_ENV})`);
+      if (noVersion !== undefined) log(noVersion);
       // The temporary files that killed writes of the volume left behind. Only here, at the start of `run`: a leftover
       // younger than STATE_TEMPORARY_MAX_AGE_MS at a start stays until the next start.
       const leftovers = await removeStaleStateTemporaryFiles(deps.stateDir ?? REMOTE_MONITOR_STATE_DIR, now());

@@ -12,6 +12,7 @@
 // container resumes from it without input. Neither the script line nor any other input is logged.
 import { randomUUID } from 'crypto';
 import { errorMessage } from '../errors';
+import { VERSION_ENV, userAgentVersion } from '../http';
 import { LOADER_EXIT_CODE, MAX_BUNDLE_LINE_LENGTH, bundleHash, encodeBundle, loaderCommand } from '../loader/pipeLoader';
 import { abortError, isAbortError, sleep, type Logger } from '../ports';
 import { VSCODE_STORE_DIR } from '../names';
@@ -571,6 +572,11 @@ export class RemoteSessionMonitor {
     if (permanent) env[MONITOR_PERMANENT_ENV] = '1';
     const store = this.options.vscodeStoreVolume;
     if (store !== undefined) env[MONITOR_VSCODE_STORE_ENV] = store;
+    // The version of Devspaces that this program got at its start (the worker: from the extension), for the header
+    // User-Agent of the Monitor and of the workers of its prepares. Not part of the label: a new version without a
+    // change of the script keeps the Monitor, which then names the version that created it.
+    const version = userAgentVersion();
+    if (version !== undefined) env[VERSION_ENV] = version;
     return {
       name: this.containerName,
       image: helperImage,

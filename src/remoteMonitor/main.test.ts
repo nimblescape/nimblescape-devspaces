@@ -8,6 +8,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LABEL_COMPOSE_SERVICE, LABEL_DEVSPACE_ID } from '../core/names';
+import { setUserAgentVersion, userAgent } from '../core/http';
 import { abortError } from '../core/ports';
 import { LAST_USE_FILE, REMOTE_MONITOR_ENTRY, REMOTE_MONITOR_READY_TEXT, RECORDS_LOCK_BUSY_EXIT, forgetIfUnchangedCommand, heartbeatFileName } from '../core/remoteMonitor/protocol';
 import { EngineError, type EngineContainerSummary } from '../core/worker/dockerEngine';
@@ -1198,6 +1199,56 @@ describe('monitor.js run: the lock files of the volume', () => {
     expect(out).toContain(`${A} is busy with an operation; it is not stopped now and is checked again at the next tick.`);
     // No stop of the engine.
     expect(stops).toEqual([]);
+  });
+});
+
+// `run` takes the version of Devspaces of its container (DEVSPACES_VERSION, from the worker that created it) for the
+// header User-Agent of its HTTPS requests; without a version x.y.z, the header has no version, and the log says so once.
+describe('monitor.js run: the version of Devspaces', () => {
+  afterEach(() => {
+    setUserAgentVersion(undefined);
+  });
+
+  /** The log of `run` with `env` up to its first wait between two ticks. */
+  async function started(env: NodeJS.ProcessEnv): Promise<string> {
+    let out = '';
+    let waits = 0;
+    void main(['run'], {
+      env,
+      stateDir,
+      engine: { ...unusedEngine(), containerSummaries: async () => [] },
+      vscodeBackground: () => undefined,
+      sleep: async () => {
+        waits += 1;
+        await new Promise(() => {});
+      },
+      out: (text) => (out += text),
+    });
+    await vi.waitFor(() => expect(waits).toBe(1));
+    return out;
+  }
+
+  it('names the version of DEVSPACES_VERSION in the header User-Agent', async () => {
+    const out = await started({ DEVSPACES_VERSION: '1.20.3' });
+    expect(userAgent()).toBe('nimblescape-devspaces/1.20.3');
+    expect(out).not.toContain('User-Agent');
+  });
+
+  it('without a version x.y.z: no version in the header, and one line of the log', async () => {
+    const cases: Array<[NodeJS.ProcessEnv, string]> = [
+      [{}, 'is missing'],
+      [{ DEVSPACES_VERSION: '1.20' }, 'is not a version x.y.z ("1.20")'],
+    ];
+    for (const [env, found] of cases) {
+      setUserAgentVersion('9.9.9');
+      const out = await started(env);
+      expect(userAgent()).toBe('nimblescape-devspaces');
+      // The lines without their time.
+      const lines = out.split('\n').map((line) => line.replace(/^\S+ /, ''));
+      expect(lines.filter((line) => line.includes('User-Agent'))).toEqual([
+        `The version of Devspaces (DEVSPACES_VERSION) ${found}, so the HTTPS requests send the User-Agent nimblescape-devspaces without a version.`,
+      ]);
+    }
   });
 });
 

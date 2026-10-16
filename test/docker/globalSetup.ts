@@ -12,7 +12,6 @@ import * as os from 'os';
 import * as path from 'path';
 import type { TestProject } from 'vitest/node';
 import { devcontainerCliVersion } from '../../scripts/cliVersion.mjs';
-import { devspacesVersion } from '../../scripts/buildDefines.mjs';
 import { findDockerCli } from '../../src/core/docker/dockerCli';
 import { extractBaseImages } from '../../src/core/imageCheck/dockerfile';
 import { HELPER_CACHE_VOLUME } from '../../src/core/names';
@@ -44,7 +43,7 @@ function contextEndpoint(dockerPath: string): string | undefined {
 
 export default async function setup(project: TestProject): Promise<() => void> {
   // Vitest sets the compile-time constants of vitest.docker.config.mts only in the test workers, not here.
-  Object.assign(globalThis, { __DEVCONTAINER_CLI_VERSION__: devcontainerCliVersion(), __DEVSPACES_VERSION__: devspacesVersion() });
+  Object.assign(globalThis, { __DEVCONTAINER_CLI_VERSION__: devcontainerCliVersion() });
   const { helperImageTag } = await import('../../src/core/helper/helperImage');
   const dockerPath = findDockerCli(process.env, process.platform);
   if (!dockerPath) throw new Error('The Docker tests need the Docker CLI, and it was not found.');

@@ -129,6 +129,8 @@ describe('no message at activation when Docker is missing', () => {
       globalStorageUri: { fsPath: storage },
       extensionUri: { fsPath: ROOT },
       extensionMode: 1,
+      // As VS Code gives it: the manifest, whose version the header User-Agent names.
+      extension: { packageJSON: manifest() },
       asAbsolutePath: (relative: string) => path.join(storage, 'extension', relative),
     };
     try {
@@ -143,6 +145,10 @@ describe('no message at activation when Docker is missing', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(foundDockerCli).toHaveBeenCalled();
+      // The HTTPS requests name the version of the manifest, which the activation took (src/core/http.ts).
+      const { userAgent } = await import('../core/http');
+      const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { version: string };
+      expect(userAgent()).toBe(`nimblescape-devspaces/${version}`);
       // The sidebar shows the Docker setup (welcome view) instead of the repositories.
       expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('setContext', DockerContextKeys.setupRequired, true);
       expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
@@ -201,6 +207,8 @@ describe('no message at activation when Docker is missing', () => {
       globalStorageUri: { fsPath: storage },
       extensionUri: { fsPath: ROOT },
       extensionMode: 1,
+      // As VS Code gives it: the manifest, whose version the header User-Agent names.
+      extension: { packageJSON: manifest() },
       asAbsolutePath: (relative: string) => path.join(storage, 'extension', relative),
     };
     try {
@@ -307,6 +315,8 @@ describe('nothing before the first use of Devspaces', () => {
       globalStorageUri: { fsPath: storage },
       extensionUri: { fsPath: ROOT },
       extensionMode: 1,
+      // As VS Code gives it: the manifest, whose version the header User-Agent names.
+      extension: { packageJSON: manifest() },
       asAbsolutePath: (relative: string) => path.join(storage, 'extension', relative),
     };
     try {

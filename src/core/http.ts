@@ -36,17 +36,69 @@ export interface HttpTransport {
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
+/** The name of the product in the header User-Agent of the HTTPS requests of Devspaces. */
+export const USER_AGENT_PRODUCT = 'nimblescape-devspaces';
+
 /**
- * The header User-Agent of the HTTPS requests of Devspaces: the name of the extension and its version, which the build
- * takes from package.json (__DEVSPACES_VERSION__). httpsRequest and httpsStream send it; the clients of GitHub
- * (githubApi.ts) and of the registries (registryClient.ts) and the download of Docker Desktop (dockerDownload.ts) name
- * it too.
+ * The environment variable that carries the version of Devspaces to its programs in containers: the extension starts
+ * the worker with it (channelRunArgs), the worker creates the Monitor with it (RemoteSessionMonitor.runSpec), and the
+ * Monitor starts the workers of its prepares with it (prepares.ts). No bundle holds the version, so a new version
+ * without a change of the code builds the same files.
  */
-export const USER_AGENT = `nimblescape-devspaces/${__DEVSPACES_VERSION__}`;
+export const VERSION_ENV = 'DEVSPACES_VERSION';
+
+/** A version x.y.z of numbers without leading zeros, the form of `version` in package.json. */
+const EXACT_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+/** True for a version x.y.z of numbers without leading zeros (for example 0.6.0). */
+export function isDevspacesVersion(value: unknown): value is string {
+  return typeof value === 'string' && EXACT_VERSION.test(value);
+}
+
+/** The version of this program for the header User-Agent (setUserAgentVersion); none until it is set. */
+let version: string | undefined;
+
+/**
+ * Sets the version that the header User-Agent names. Each program sets it once at its start: the extension takes the
+ * version of its manifest (activate); the worker, the Monitor and the workers of its prepares take the value of
+ * VERSION_ENV. A value that is not a version x.y.z leaves the header without a version. Returns whether the value was a
+ * version.
+ */
+export function setUserAgentVersion(value: unknown): boolean {
+  version = isDevspacesVersion(value) ? value : undefined;
+  return version !== undefined;
+}
+
+/**
+ * The version that setUserAgentVersion took, if any: the value of VERSION_ENV for the programs that this one starts.
+ */
+export function userAgentVersion(): string | undefined {
+  return version;
+}
+
+/**
+ * setUserAgentVersion at the start of a program that has a log; returns the line for that log when `value` is not a
+ * version x.y.z, and undefined when it is one. `source` names where the value comes from.
+ */
+export function takeUserAgentVersion(value: unknown, source: string): string | undefined {
+  if (setUserAgentVersion(value)) return undefined;
+  const found = value === undefined ? 'is missing' : `is not a version x.y.z (${JSON.stringify(value)})`;
+  return `${source} ${found}, so the HTTPS requests send the User-Agent ${USER_AGENT_PRODUCT} without a version.`;
+}
+
+/**
+ * The header User-Agent of the HTTPS requests of Devspaces: `nimblescape-devspaces/<version>`, or
+ * `nimblescape-devspaces` when this program has no version (setUserAgentVersion). httpsRequest and httpsStream send
+ * it; the clients of GitHub (githubApi.ts) and of the registries (registryClient.ts) and the download of Docker Desktop
+ * (dockerDownload.ts) send it too.
+ */
+export function userAgent(): string {
+  return version === undefined ? USER_AGENT_PRODUCT : `${USER_AGENT_PRODUCT}/${version}`;
+}
 
 /**
  * One request with the Node.js `https` module; `options` adds to the request (the connection through a proxy). It sends
- * USER_AGENT unless the request has a User-Agent of its own. The body is read up to MAX_BODY_BYTES (or the lower
+ * the userAgent() unless the request has a User-Agent of its own. The body is read up to MAX_BODY_BYTES (or the lower
  * `request.maxBodyBytes`).
  */
 export function httpsRequest(request: HttpRequest, signal: AbortSignal | undefined, options: https.RequestOptions = {}): Promise<HttpResponse> {
@@ -54,7 +106,7 @@ export function httpsRequest(request: HttpRequest, signal: AbortSignal | undefin
   return new Promise((resolve, reject) => {
     const req = https.request(
       request.url,
-      { ...options, method: request.method, headers: { 'User-Agent': USER_AGENT, ...request.headers }, signal },
+      { ...options, method: request.method, headers: { 'User-Agent': userAgent(), ...request.headers }, signal },
       (res) => {
         const chunks: Buffer[] = [];
         let size = 0;
@@ -112,12 +164,12 @@ function responseHeaders(res: { headers: Record<string, string | string[] | unde
 }
 
 /**
- * One GET with the Node.js `https` module whose body is streamed (HttpStreamTransport), with USER_AGENT; `options` as in
- * httpsRequest (the connection through a proxy).
+ * One GET with the Node.js `https` module whose body is streamed (HttpStreamTransport), with the userAgent(); `options`
+ * as in httpsRequest (the connection through a proxy).
  */
 export function httpsStream(url: string, signal: AbortSignal | undefined, options: https.RequestOptions = {}): Promise<HttpStreamResponse> {
   return new Promise((resolve, reject) => {
-    const req = https.request(url, { ...options, method: 'GET', headers: { 'User-Agent': USER_AGENT }, signal }, (res) => {
+    const req = https.request(url, { ...options, method: 'GET', headers: { 'User-Agent': userAgent() }, signal }, (res) => {
       resolve({ status: res.statusCode ?? 0, headers: responseHeaders(res), body: res });
     });
     req.on('error', reject);
