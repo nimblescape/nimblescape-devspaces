@@ -33,6 +33,17 @@ function section(markdown: string, heading: string): string {
   return markdown.slice(start, end < 0 ? undefined : end);
 }
 
+/** The placeholders such as <engine> outside code in `markdown`: Markdown takes them for HTML tags and hides them. */
+function rawPlaceholders(markdown: string): string[] {
+  let fenced = false;
+  const found: string[] = [];
+  for (const line of markdown.split('\n')) {
+    if (line.trimStart().startsWith('```')) fenced = !fenced;
+    else if (!fenced) found.push(...(line.replace(/(`+)[^`]*?\1/g, '').match(/<[A-Za-z][^<>]*>/g) ?? []));
+  }
+  return found;
+}
+
 describe('the behaviors of Devspaces at the top of the Marketplace page', () => {
   it('opens the README with the section, which names every scope and links docs/security.md', () => {
     const readme = read('README.md');
@@ -82,5 +93,42 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
     for (const words of ['Docker', 'Dev Containers CLI', 'install Docker', 'background container']) {
       expect(description).toContain(words);
     }
+  });
+});
+
+describe('the texts of the Monitor question and of the removal in the docs', () => {
+  it('show placeholders such as <engine> as code, so that Markdown does not hide them', () => {
+    const guide = read('docs/guide.md');
+    const question = guide.slice(guide.indexOf('The first time that you start a devspace on a Docker engine'), guide.indexOf('A monitor that keeps running ends itself'));
+    expect(question).toContain('running on `<engine>`?');
+    const uninstall = section(guide, 'Uninstall');
+    expect(uninstall).toContain('"Remove Devspaces from `<engine>`?"');
+    for (const text of [question, uninstall]) expect(rawPlaceholders(text)).toEqual([]);
+    const release = section(read('CHANGELOG.md'), '0.6.0');
+    for (const start of ['**Background container, asked once per engine:**', `**${REMOVE_COMMAND}:**`]) {
+      const paragraph = release.slice(release.indexOf(start)).split('\n\n')[0];
+      expect(paragraph, start).toContain(start);
+      expect(rawPlaceholders(paragraph), start).toEqual([]);
+    }
+    // The check finds a raw placeholder.
+    expect(rawPlaceholders('on <engine>? `<host>`\n```sh\ndocker --context <name>\n```')).toEqual(['<engine>']);
+  });
+
+  it('the change log says that a Monitor of an older version keeps running on an engine that this version never opens', () => {
+    const paragraph = section(read('CHANGELOG.md'), '0.6.0').split('\n\n').find((text) => text.startsWith('**Background container, asked once per engine:**'));
+    expect(paragraph).toContain('ends when idle, from the first time that this version opens a devspace there.');
+    expect(paragraph).toContain(`A Monitor of an older version on an engine that you do not open again keeps running; Devspaces: ${REMOVE_COMMAND} removes it.`);
+  });
+
+  it('the guide says what the command removes, and removes the Monitor and the helper containers by hand first', () => {
+    const text = section(read('docs/guide.md'), 'Uninstall');
+    expect(text).toContain('It removes: the container `devspaces-monitor`, the helper containers, the helper images');
+    expect(text).not.toContain('names what it removes');
+    // Removed first, the Monitor starts no work, and no helper container uses a volume, while the devspaces are deleted.
+    const [monitor, helpers] = uninstallCommands();
+    const devspaces = text.indexOf('docker rm -f $(docker ps -aq --filter label=nimblescape.devspaces.id)');
+    expect(text.indexOf(monitor)).toBeGreaterThan(0);
+    expect(text.indexOf(monitor)).toBeLessThan(devspaces);
+    expect(text.indexOf(helpers)).toBeLessThan(devspaces);
   });
 });

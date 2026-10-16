@@ -84,6 +84,15 @@ describe('the question about the Monitor of an engine', () => {
     expect(modals()[1][0]).toBe('Keep the Devspaces background container running on the local Docker?');
   });
 
+  it('the detail says that only Stop When Idle applies to all engines, and names the build of the next image', () => {
+    const detail = ControllerTexts.monitorQuestionDetail;
+    // Keep Running records this engine only: the next engine asks again (see the test above).
+    expect(detail).toContain('Keep Running applies to this Docker engine only. If you choose Stop When Idle, this applies to all Docker engines.');
+    expect(detail).not.toContain('Your answer applies to all Docker engines');
+    // The prepares of the background run.
+    expect(detail).toContain('it also builds the next image of that devspace');
+  });
+
   it('"Stop When Idle" turns the setting on (for every engine); then no engine is asked', async () => {
     fakeVscode.window.showInformationMessage.mockResolvedValueOnce(ControllerTexts.stopMonitorWhenIdle);
     await expect(question().askIfNeeded('')).resolves.toBe('stopWhenIdle');
