@@ -60,11 +60,24 @@ describe('the monitor settings of extension.ts', () => {
     }
   });
 
-  it('an answer that cannot be read counts as none, and the open goes on', async () => {
-    for (const answered of [async () => Promise.reject(new Error('EACCES: permission denied')), () => { throw new Error('EIO'); }]) {
-      const settings = monitorSettingsOf({ ...deps({}), answered: answered as MonitorSettingsDeps['answered'] });
+  // The ensure then replaces a permanent Monitor of this computer with one that stops when idle; the log says why.
+  it('an answer that cannot be read counts as none, with a warning, and the open goes on', async () => {
+    for (const [answered, cause] of [
+      [async () => Promise.reject(new Error('EACCES: permission denied')), 'EACCES: permission denied'],
+      [() => { throw new Error('EIO'); }, 'EIO'],
+    ] as const) {
+      const warnings: string[] = [];
+      const settings = monitorSettingsOf({ ...deps({}), answered: answered as MonitorSettingsDeps['answered'], logger: { warn: (message) => warnings.push(message) } });
       expect(await settings.forOpen('')).toEqual({ schedule: '7 6 * * *', timeZone: 'Europe/Vienna', permanent: false, computer: COMPUTER });
+      expect(await settings.forTarget({ kind: 'remote', host: 'build-box' })).toMatchObject({ permanent: false });
+      expect(warnings).toEqual([
+        `The answer about the Monitor on the local Docker could not be read, so the Monitor there stops when no devspace runs: ${cause}`,
+        `The answer about the Monitor on build-box could not be read, so the Monitor there stops when no devspace runs: ${cause}`,
+      ]);
     }
+    // Without a logger nothing is logged, and nothing fails.
+    const quiet = monitorSettingsOf({ ...deps({}), answered: async () => Promise.reject(new Error('EIO')) });
+    expect((await quiet.forOpen('')).permanent).toBe(false);
   });
 
   it('a computer ID that cannot be read is left out, and the open goes on', async () => {
@@ -85,8 +98,9 @@ describe('the monitor settings of extension.ts', () => {
     expect(source).not.toContain('read:packages');
     expect(source).toContain('monitorCalls.monitorEnsure(target, await monitorSettings.forTarget(target), signal)');
     expect(source).toContain('monitorCalls.monitorRunNow(target, await monitorSettings.forTarget(target), signal)');
-    // The answers of the engines come from their records.
+    // The answers of the engines come from their records; one that cannot be read is logged.
     expect(source).toContain('answered: (host) => engineRecords.monitorAnswered(host),');
+    expect(source).toMatch(/const monitorSettings = monitorSettingsOf\(\{[^}]*\n\s*logger,\n\s*\}\);/);
     expect(source).not.toContain('imageUpdateSchedule ??');
   });
 });
