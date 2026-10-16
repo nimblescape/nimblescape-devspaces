@@ -37,6 +37,7 @@ import { monitorSettingsOf } from './monitorSettings';
 import { REMOTE_MONITOR_VOLUME } from '../core/remoteMonitor/protocol';
 import { DevspaceOperations } from '../core/pipeline/devspaceOperations';
 import { windowLifecycleMemory } from '../core/pipeline/lifecycleMemory';
+import type { DockerStarter } from '../core/pipeline/operationBase';
 import { NodeProcessRunner } from '../core/process';
 import { nodeSshConfigFiles, parseSshConfig } from '../core/sshConfig';
 import { ClosingWork } from '../core/session/closingWork';
@@ -533,6 +534,15 @@ async function activateExtension(
     }),
     logger,
   );
+  // The step "Docker start" of an operation (and of "Update All Images Now"): the local Docker is started when needed; a
+  // remote host is only checked (never a Docker Desktop start).
+  const startDocker: DockerStarter = async ({ onStarting, signal }) =>
+    startDockerFor(
+      await targets.current(),
+      () => ensureDockerRunning(docker, runner, logger, { platform, env, onStarting, signal }),
+      remoteDeps(),
+      signal,
+    );
   // The operations of this window, each a flow in the worker of the Docker target; the pipeline runs there
   // (DevspaceService), never here.
   const service = new DevspaceOperations({
@@ -582,14 +592,7 @@ async function activateExtension(
     // The user's default extensions of the Dev Containers extension (the user settings only), which an open with a VS
     // Code server carries for the shared extension cache (read at each open).
     defaultExtensionsOfWindow: () => defaultExtensionEntries(devContainersDefaultExtensionsValue(), (message) => logger.info(message)),
-    // The local Docker is started when needed; a remote host is only checked (never a Docker Desktop start).
-    startDocker: async ({ onStarting, signal }) =>
-      startDockerFor(
-        await targets.current(),
-        () => ensureDockerRunning(docker, runner, logger, { platform, env, onStarting, signal }),
-        remoteDeps(),
-        signal,
-      ),
+    startDocker,
   });
 
   const tree = new RepositoriesTreeProvider(logger);
@@ -714,6 +717,8 @@ async function activateExtension(
     // "Update All Images Now", through this window's worker of the engine, with the monitor settings of this computer
     // for that engine (as the repair of a heartbeat).
     updateImagesNow: async (target, signal) => monitorCalls.monitorRunNow(target, await monitorSettings.forTarget(target), signal),
+    // Before it, the step "Docker start" of Start: Podman is refused, a local Docker that does not run is started.
+    startDocker,
     // The question about the Monitor of an engine, which a Start, a Rebuild and "Update All Images Now" of the user ask
     // there first (once per engine); its answer goes into the setting stopMonitorWhenIdle and the records of the engines.
     monitorQuestion: new MonitorQuestion({ records: engineRecords, settings: getSettings, logger, showLog: () => logger.show() }),
