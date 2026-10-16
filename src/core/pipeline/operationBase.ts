@@ -9,8 +9,8 @@
 // pipeline, so the extension's bundle holds none of it, and no window operation can bypass the worker. No `vscode`.
 import type { VscodeServerLink } from '../helperChannel/protocol';
 import { type BusyMarkView, type DevspaceBusyMarks } from './busyMarks';
-import { dockerHostOf, isOnDockerHost, type DockerTarget } from '../docker/dockerHost';
-import { dockerEndpointUnsupported } from '../docker/remoteDocker';
+import { dockerHostOf, isOnDockerHost, unsupportedTargetReason, type DockerTarget } from '../docker/dockerHost';
+import { dockerEndpointUnsupported, unsupportedTargetMessage } from '../docker/remoteDocker';
 import { BatchHelperUnavailableError, UserFacingError, errorMessage, isUserFacingError } from '../errors';
 import { type FlowRefusal } from '../helperChannel/protocol';
 import { Messages, Steps, type ProgressStep } from '../messages';
@@ -449,8 +449,8 @@ export abstract class OperationBase {
   protected async currentDockerHost(): Promise<string> {
     const target = await this.dockerTarget();
     if (target.kind === 'unsupported') {
-      this.logger.warn(`The Docker endpoint ${target.endpoint || target.host} is neither local nor SSH. Nothing is done.`);
-      throw dockerEndpointUnsupported(target.endpoint || target.host);
+      this.logger.warn(`${unsupportedTargetReason(target)} Nothing is done.`);
+      throw dockerEndpointUnsupported(target);
     }
     return target.host;
   }
@@ -462,11 +462,12 @@ export abstract class OperationBase {
   protected async readableDockerHost(): Promise<string | undefined> {
     const target = await this.dockerTarget();
     if (target.kind !== 'unsupported') return target.host;
-    const endpoint = target.endpoint || target.host;
+    // A context that could not be read has no endpoint; its message is shown once too.
+    const endpoint = target.endpoint;
     if (!this.refusedEndpoints.has(endpoint)) {
       this.refusedEndpoints.add(endpoint);
-      this.logger.warn(`The Docker endpoint ${endpoint} is neither local nor SSH. Its containers and volumes are not read.`);
-      this.deps.ui.warn(Messages.dockerEndpointUnsupported(endpoint));
+      this.logger.warn(`${unsupportedTargetReason(target)} Its containers and volumes are not read.`);
+      this.deps.ui.warn(unsupportedTargetMessage(target));
     }
     return undefined;
   }

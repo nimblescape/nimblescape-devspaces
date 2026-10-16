@@ -4,7 +4,7 @@
 
 // Sidebar view `devspaces.repositories`. The rows come from the pure model in treeModel.ts.
 import * as vscode from 'vscode';
-import { Actions } from '../core/messages';
+import { Actions, Messages } from '../core/messages';
 import type { Logger } from '../core/ports';
 import { Commands } from './commands';
 import {
@@ -36,7 +36,10 @@ export interface DockerHostRow {
 /** The Docker host of the first row: the local Docker, a remote host, or an endpoint that is not supported. */
 export interface ShownDockerHost {
   kind: 'local' | 'remote' | 'unsupported';
-  /** The remote host, or the endpoint that is not supported; empty for the local Docker. */
+  /**
+   * The remote host, or the endpoint that is not supported; empty for the local Docker, and for a current Docker context
+   * that could not be read (kind `unsupported`).
+   */
   host: string;
 }
 
@@ -48,13 +51,17 @@ export const DockerHostRowTexts = {
       ? 'Local Docker'
       : shown.kind === 'remote'
         ? `Remote Docker host: ${shown.host}`
-        : `Docker endpoint not supported: ${shown.host}`,
+        : shown.host === ''
+          ? Messages.dockerContextUnreadableLabel
+          : `Docker endpoint not supported: ${shown.host}`,
   tooltip: (shown: ShownDockerHost) =>
     shown.kind === 'local'
       ? 'Docker runs on this computer. Click to use a remote Docker host.'
       : shown.kind === 'remote'
         ? `Docker runs on ${shown.host} over SSH. Click to choose another host or the local Docker.`
-        : 'Docker is set to an endpoint that Devspaces does not support (only the local Docker and SSH hosts). Click to choose the Docker host.',
+        : shown.host === ''
+          ? Messages.dockerContextUnreadableTooltip
+          : 'Docker is set to an endpoint that Devspaces does not support (only the local Docker and SSH hosts). Click to choose the Docker host.',
 } as const;
 
 // The monitors of the rows, switched off, with the connection sign for a remote host and the warning sign for an

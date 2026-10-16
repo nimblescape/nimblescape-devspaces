@@ -9,6 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
 import { dockerTargetOf, LOCAL_DOCKER_TARGET } from '../core/docker/dockerHost';
+import { UNREADABLE_DOCKER_TARGET } from '../core/docker/dockerTargets';
+import { Messages } from '../core/messages';
 import { silentLogger } from '../core/ports';
 import { DockerHostIndicator, DockerHostTexts } from './dockerHostIndicator';
 import type { ShownDockerHost } from './treeView';
@@ -37,6 +39,17 @@ describe('DockerHostIndicator', () => {
     indicator.update(dockerTargetOf('tcp://192.0.2.10:2376', 'other'));
     expect(view.description).toBeUndefined();
     expect(view.title).toBe('tcp://192.0.2.10:2376 (not supported)');
+  });
+
+  // A current Docker context that cannot be read is not shown as an endpoint (it has none).
+  it('says that the current Docker context cannot be read, in the title and the first row', () => {
+    const view: { description?: string; title?: string } = {};
+    const rows: Array<ShownDockerHost | undefined> = [];
+    new DockerHostIndicator(view, silentLogger, (host) => rows.push(host)).update(UNREADABLE_DOCKER_TARGET);
+    expect(view.description).toBeUndefined();
+    expect(view.title).toBe(Messages.dockerContextUnreadableLabel);
+    expect(view.title).toBe('Docker context cannot be read');
+    expect(rows).toEqual([{ kind: 'unsupported', host: '' }]);
   });
 
   // Without a Docker CLI the target reads as the local Docker; the header then names no Docker host (not "Local Docker"

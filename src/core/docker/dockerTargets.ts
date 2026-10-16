@@ -8,9 +8,18 @@
 // read (BootstrapDocker.run), so a switch in the middle does not move half of it to another engine.
 import { AsyncLocalStorage } from 'async_hooks';
 import { errorMessage } from '../errors';
+import { Messages } from '../messages';
 import type { Logger, RunOptions, RunResult } from '../ports';
 import { envValue } from './dockerCli';
 import { LOCAL_DOCKER_TARGET, dockerTargetOf, parseContextInspect, type DockerTarget } from './dockerHost';
+
+/**
+ * The target when the current Docker context cannot be read and DOCKER_HOST is not set (isUnreadableDockerTarget).
+ * Without the name of a context, the Docker calls would go to the context that the Docker CLI finds, perhaps on
+ * another computer, while the operation would record the local Docker. So it counts as not supported: every
+ * operation refuses it with a message, and its host matches no devspace.
+ */
+export const UNREADABLE_DOCKER_TARGET: DockerTarget = { kind: 'unsupported', host: Messages.unreadableDockerContextHost, endpoint: '' };
 
 /**
  * The target of an operation while it runs. Timers and listeners that an operation creates keep its store after it
@@ -81,8 +90,8 @@ export class DockerTargets {
 
   /**
    * Reads the current target now: DOCKER_HOST of VS Code's environment if set, else the current Docker context (which
-   * DOCKER_CONTEXT may name). Without a Docker CLI, or when the context cannot be read, the local Docker (logged).
-   * Never throws.
+   * DOCKER_CONTEXT may name). Without a Docker CLI, the local Docker. When the context cannot be read,
+   * UNREADABLE_DOCKER_TARGET (logged), or DOCKER_HOST when it is set. Never throws.
    */
   async resolve(): Promise<DockerTarget> {
     const read = ++this.readsStarted;
@@ -158,14 +167,20 @@ export class DockerTargets {
       // With DOCKER_HOST set, the CLI inspects the context `default`, whose endpoint is DOCKER_HOST.
       const result = await this.docker.run(['context', 'inspect', '--format', '{{json .}}'], { timeoutMs: CONTEXT_INSPECT_TIMEOUT_MS });
       const parsed = result.exitCode === 0 ? parseContextInspect(result.stdout) : undefined;
-      if (!parsed) {
-        this.logger.warn(`The current Docker context could not be read. The local Docker is assumed: ${(result.stderr || result.stdout).trim()}`);
-        return dockerHost ? dockerTargetOf(dockerHost, undefined) : LOCAL_DOCKER_TARGET;
-      }
+      if (!parsed) return this.unreadable(dockerHost, (result.stderr || result.stdout).trim());
       return dockerTargetOf(dockerHost ? dockerHost : parsed.endpoint, dockerHost ? undefined : parsed.name);
     } catch (error) {
-      this.logger.warn(`The current Docker context could not be read. The local Docker is assumed: ${errorMessage(error)}`);
-      return dockerHost ? dockerTargetOf(dockerHost, undefined) : LOCAL_DOCKER_TARGET;
+      return this.unreadable(dockerHost, errorMessage(error));
     }
+  }
+
+  /** The target when the current context cannot be read: DOCKER_HOST decides when it is set, else nothing (logged). */
+  private unreadable(dockerHost: string | undefined, detail: string): DockerTarget {
+    if (dockerHost) {
+      this.logger.warn(`The current Docker context could not be read. DOCKER_HOST is used: ${detail}`);
+      return dockerTargetOf(dockerHost, undefined);
+    }
+    this.logger.warn(`The current Docker context could not be read. Devspaces does nothing with Docker until it can be read: ${detail}`);
+    return UNREADABLE_DOCKER_TARGET;
   }
 }

@@ -293,7 +293,7 @@ The extension contributes eight icons (`contributes.icons`) from the font `resou
 | `devspaces-monitor-running` | `\E005` | Switched-off monitor with a play sign | Running without a window |
 | `devspaces-monitor-updating` | `\E006` | Switched-off monitor with a clock | Updating · "Updating…" in the status bar |
 | `devspaces-monitor-no-container` | `\E007` | Switched-off monitor with a ring | No container |
-| `devspaces-monitor-warning` | `\E008` | Switched-off monitor with a warning sign | Files missing (warning colour) · an unsupported Docker endpoint |
+| `devspaces-monitor-warning` | `\E008` | Switched-off monitor with a warning sign | Files missing (warning colour) · an unsupported Docker endpoint or a Docker context that cannot be read |
 
 ## Code layout and build
 

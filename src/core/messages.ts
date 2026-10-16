@@ -370,6 +370,18 @@ export const Messages = {
   dockerEndpointUnsupported: (endpoint: string) =>
     `Docker is set to ${endpoint}. Devspaces uses Docker on another computer only over SSH. Choose "Devspaces: Use a Remote Docker Host…" or "Devspaces: Use the Local Docker".`,
   /**
+   * The current Docker context could not be read (`docker context inspect` failed, and DOCKER_HOST is not set): the
+   * Docker calls could reach another computer than the one that the devspaces record, so nothing is done.
+   */
+  dockerContextUnreadable:
+    'Devspaces cannot read the current Docker context, so it does not know which Docker to use. It does nothing with Docker until it can read the context. Run "docker context inspect" in a terminal to see the problem, or choose "Devspaces: Use the Local Docker" or "Devspaces: Use a Remote Docker Host…".',
+  /** The Docker host of a context that could not be read, in other texts ("Docker is set to …"). */
+  unreadableDockerContextHost: 'a Docker context that cannot be read',
+  /** The view's title and the first row of the sidebar while the current Docker context cannot be read. */
+  dockerContextUnreadableLabel: 'Docker context cannot be read',
+  /** The tooltip of that row. */
+  dockerContextUnreadableTooltip: 'Devspaces cannot read the current Docker context, so it does nothing with Docker. Click to choose the Docker host.',
+  /**
    * The window is not connected, because the container did not answer as running on the Docker host that the window
    * uses (checked right before the window connects).
    */

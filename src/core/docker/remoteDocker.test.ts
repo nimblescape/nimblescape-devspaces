@@ -12,6 +12,7 @@ import type { RunOptions, RunResult } from '../ports';
 import { RemoteDockerState } from '../storage/remoteDockerState';
 import { namePair } from '../namePairs';
 import { ownContextDescription, remoteContextNames } from './dockerHost';
+import { UNREADABLE_DOCKER_TARGET } from './dockerTargets';
 import {
   ENGINE_INFO_FORMAT,
   SSH_CHECK_CACHE_MS,
@@ -332,6 +333,17 @@ describe('startDockerFor (remote mode skips the Docker Desktop start)', () => {
         env: {},
       }),
     ).rejects.toMatchObject({ code: 'dockerEndpointUnsupported', message: Messages.dockerEndpointUnsupported('tcp://box:2376') });
+    expect(startLocal).not.toHaveBeenCalled();
+    expect(docker.calls).toEqual([]);
+  });
+
+  // Docker Desktop is not started for a Docker that is not known.
+  it('refuses a current context that could not be read, with its own message', async () => {
+    const startLocal = vi.fn(async () => {});
+    const docker = fakeDocker(() => info());
+    await expect(
+      startDockerFor(UNREADABLE_DOCKER_TARGET, startLocal, { docker, runner: { run: vi.fn() }, state, logger, sshPath: undefined, env: {} }),
+    ).rejects.toMatchObject({ code: 'dockerEndpointUnsupported', message: Messages.dockerContextUnreadable });
     expect(startLocal).not.toHaveBeenCalled();
     expect(docker.calls).toEqual([]);
   });

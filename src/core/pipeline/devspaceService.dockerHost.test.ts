@@ -6,9 +6,11 @@
 // the devspaces of the current host; the others are never cloned, restored, recreated, deleted, stopped, or given a
 // token.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DockerTargets } from '../docker/dockerTargets';
 import { UserFacingError } from '../errors';
 import { Messages } from '../messages';
 import { LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, resourceName } from '../names';
+import { silentLogger } from '../ports';
 import type { RepositoryTarget } from './operationBase';
 import { ACCOUNT, ENV_ID, OTHER_ID, REPO, createHarness, seedDevspace, type Harness } from './devspaceService.testkit';
 import { DEFAULT_CONFIG_PATH } from './recordRules';
@@ -213,5 +215,42 @@ describe('an endpoint that is neither local nor SSH is never reached', () => {
     // Never recorded as the host of a restored entry.
     expect((await u.registry.list()).filter((env) => env.repository === 'acme/lost')).toEqual([]);
     expect(shown()).toHaveLength(2);
+  });
+});
+
+// `docker context inspect` fails (a context that was removed, a configuration file that cannot be read, a time-out).
+// Without a context name, the Docker calls would go to the context that the Docker CLI finds, perhaps on another
+// computer, while the devspace would record the local Docker. So nothing is done, with a message that says why.
+describe('a current Docker context that cannot be read is never used', () => {
+  let u: Harness;
+
+  beforeEach(async () => {
+    const cli = {
+      isInstalled: () => true,
+      run: async () => ({ exitCode: 1, stdout: '', stderr: 'context "gone": context not found', timedOut: false }),
+    };
+    const targets = new DockerTargets(cli, {}, silentLogger, 'linux');
+    u = createHarness({ dockerTarget: () => targets.current() });
+    await seedDevspace(u, { container: 'running' });
+  });
+
+  afterEach(() => {
+    u.cleanup();
+  });
+
+  it('an operation is refused with the message before any Docker call, and the reads show it once', async () => {
+    for (const operation of [() => u.service.open(TARGET, { progress: u.progress }), () => u.operations.stop(ENV_ID)]) {
+      const error = await rejection(operation());
+      expect(error.code).toBe('dockerEndpointUnsupported');
+      expect(error.message).toBe(Messages.dockerContextUnreadable);
+    }
+    expect(await u.operations.inspectStates()).toEqual(new Map());
+    expect(await u.operations.inspectStates()).toEqual(new Map());
+    expect(u.ui.warnings.filter((warning) => warning === Messages.dockerContextUnreadable)).toHaveLength(1);
+    expect(u.dockerStarts).toBe(0);
+    expect(u.helper.calls).toEqual([]);
+    expect(u.docker.log).toEqual([]);
+    // The devspace keeps its host (the local Docker).
+    expect((await u.registry.get(ENV_ID))?.dockerHost).toBeUndefined();
   });
 });

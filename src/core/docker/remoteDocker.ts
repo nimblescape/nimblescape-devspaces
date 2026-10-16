@@ -33,12 +33,14 @@ import {
   isOwnContextDescription,
   ownContextDescription,
   isRootlessEngine,
+  isUnreadableDockerTarget,
   parseContextInspect,
   remoteContextNames,
   rootlessSocketPath,
   sshCommandArgs,
   sshEndpoint,
   sshTargetOf,
+  unsupportedTargetReason,
   type DockerHostProblem,
   type DockerTarget,
 } from './dockerHost';
@@ -267,9 +269,18 @@ export function dockerHostUnreachable(host: string, problem: DockerHostProblem, 
   return new UserFacingError('dockerHostUnreachable', Messages.dockerHostUnreachable(host, dockerHostReason(problem, host)), detail);
 }
 
-/** UserFacingError('dockerEndpointUnsupported') for an endpoint that is neither local nor SSH. */
-export function dockerEndpointUnsupported(endpoint: string): UserFacingError {
-  return new UserFacingError('dockerEndpointUnsupported', Messages.dockerEndpointUnsupported(endpoint), `Docker endpoint: ${endpoint}`);
+/**
+ * The message of a target that is not supported: an endpoint that is neither local nor SSH, or a current Docker
+ * context that could not be read (isUnreadableDockerTarget).
+ */
+export function unsupportedTargetMessage(target: Pick<DockerTarget, 'kind' | 'endpoint'>): string {
+  return isUnreadableDockerTarget(target) ? Messages.dockerContextUnreadable : Messages.dockerEndpointUnsupported(target.endpoint);
+}
+
+/** UserFacingError('dockerEndpointUnsupported') for a target that is not supported (unsupportedTargetMessage). */
+export function dockerEndpointUnsupported(target: Pick<DockerTarget, 'kind' | 'endpoint'>): UserFacingError {
+  const detail = isUnreadableDockerTarget(target) ? unsupportedTargetReason(target) : `Docker endpoint: ${target.endpoint}`;
+  return new UserFacingError('dockerEndpointUnsupported', unsupportedTargetMessage(target), detail);
 }
 
 export interface RemoteReachabilityDeps {
@@ -505,8 +516,8 @@ export async function startDockerFor(
     case 'local':
       return startLocal();
     case 'unsupported':
-      remote.logger.warn(`The Docker endpoint ${target.endpoint} is neither local nor SSH. Nothing is started.`);
-      throw dockerEndpointUnsupported(target.endpoint);
+      remote.logger.warn(`${unsupportedTargetReason(target)} Nothing is started.`);
+      throw dockerEndpointUnsupported(target);
     case 'remote':
       return ensureDockerHostReachable(target, remote, { signal });
   }

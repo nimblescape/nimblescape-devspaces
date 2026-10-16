@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { silentLogger, type ProcessRunner, type RunOptions, type RunResult } from '../ports';
 // The Docker CLI of the extension (BootstrapDocker).
 import { BootstrapDocker } from './bootstrapDocker';
-import { CONTEXT_INSPECT_TIMEOUT_MS, DockerTargets, operationDockerTarget, runWithDockerTarget } from './dockerTargets';
+import { dockerTargetOf, isOnDockerHost, isUnreadableDockerTarget } from './dockerHost';
+import { CONTEXT_INSPECT_TIMEOUT_MS, DockerTargets, UNREADABLE_DOCKER_TARGET, operationDockerTarget, runWithDockerTarget } from './dockerTargets';
 
 const DOCKER = '/usr/local/bin/docker';
 
@@ -72,13 +73,35 @@ describe('DockerTargets.resolve (remote mode detection from the current context)
     await expect(targets.resolve()).resolves.toMatchObject({ kind: 'unsupported', host: 'tcp://192.0.2.10:2376' });
   });
 
-  it('assumes the local Docker without a CLI, or when the context cannot be read', async () => {
+  it('assumes the local Docker without a CLI', async () => {
     const withoutCli = setup({ PATH: '/usr/bin' }, false);
     await expect(withoutCli.targets.resolve()).resolves.toEqual({ kind: 'local', host: '', endpoint: '' });
     expect(withoutCli.cli.calls).toEqual([]);
+  });
+
+  // The Docker calls of an operation without a context name go to the context that the CLI finds, perhaps a remote one,
+  // so a context that cannot be read is never taken as the local Docker.
+  it('refuses a current context that cannot be read: not supported, no endpoint, and the host of no devspace', async () => {
     const broken = setup();
     broken.cli.inspectFails = true;
-    await expect(broken.targets.resolve()).resolves.toEqual({ kind: 'local', host: '', endpoint: '' });
+    const target = await broken.targets.resolve();
+    expect(target).toEqual(UNREADABLE_DOCKER_TARGET);
+    expect(target.kind).toBe('unsupported');
+    expect(isUnreadableDockerTarget(target)).toBe(true);
+    expect(isOnDockerHost({}, target.host)).toBe(false);
+    expect(isOnDockerHost({ dockerHost: 'box' }, target.host)).toBe(false);
+    // An endpoint that is not supported is not taken for one that could not be read.
+    expect(isUnreadableDockerTarget(dockerTargetOf('tcp://192.0.2.10:2376', 'other'))).toBe(false);
+    // A call of the CLI that throws too.
+    const thrown = setup();
+    thrown.cli.run = async () => {
+      throw new Error('spawn docker EACCES');
+    };
+    await expect(thrown.targets.resolve()).resolves.toEqual(UNREADABLE_DOCKER_TARGET);
+    // With DOCKER_HOST set for VS Code, DOCKER_HOST decides the endpoint.
+    const withHost = setup({ PATH: '/usr/bin', DOCKER_HOST: 'ssh://me@other' });
+    withHost.cli.inspectFails = true;
+    await expect(withHost.targets.resolve()).resolves.toEqual({ kind: 'remote', host: 'me@other', endpoint: 'ssh://me@other' });
   });
 
   it('reads the context again for each operation, not once for ever', async () => {

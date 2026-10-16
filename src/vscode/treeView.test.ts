@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
+import { Messages } from '../core/messages';
 import { silentLogger } from '../core/ports';
 import type { Devspace, RepositoryInfo } from '../core/types';
 import { resetFakeVscode, type ThemeIcon, type TreeItem } from './testing/fakeVscode';
@@ -191,6 +192,13 @@ describe('RepositoriesTreeProvider', () => {
     expect(unsupportedItem.label).toBe('Docker endpoint not supported: tcp://192.0.2.10:2376');
     // The monitor with the warning sign.
     expect((unsupportedItem.iconPath as ThemeIcon).id).toBe('devspaces-monitor-warning');
+    // A current Docker context that cannot be read (no host).
+    provider.setDockerHost({ kind: 'unsupported', host: '' });
+    const unreadableItem = provider.getTreeItem(provider.getChildren()[0]) as unknown as TreeItem;
+    expect(unreadableItem.label).toBe(Messages.dockerContextUnreadableLabel);
+    expect(unreadableItem.tooltip).toBe(Messages.dockerContextUnreadableTooltip);
+    expect((unreadableItem.iconPath as ThemeIcon).id).toBe('devspaces-monitor-warning');
+    expect(unreadableItem.command).toMatchObject({ command: 'devspaces.chooseDockerHost' });
     provider.dispose();
   });
 

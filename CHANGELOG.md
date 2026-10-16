@@ -55,6 +55,8 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Rate limit of GitHub:** when GitHub refuses the requests of your account for a while (its rate limit), the view now keeps the repositories that it shows, also the part of a first load, and a message says at what time Devspaces loads the list again. Devspaces tries once at that time. Before, the update stopped with a line in the log only, the part of a first load disappeared, and the next try came with the next background update, by default an hour later.
 
+**Docker context that cannot be read:** when the command `docker context inspect` fails, Devspaces now does nothing with Docker and says so: every operation is refused with a message, and the sidebar shows "Docker context cannot be read". Before, Devspaces took the local Docker, while its Docker commands went to the context that the Docker CLI found, which could be another computer, and a new devspace there was recorded as one of the local Docker.
+
 ## 0.5.0
 
 **Docker names, without migration:** the image of the worker is now `devspaces-worker:<hash>` (was `devspaces-helper:<hash>`), its cache volume devspaces-worker-cache (was devspaces-helper-cache), and its labels nimblescape.devspaces.worker, nimblescape.devspaces.worker-run and nimblescape.devspaces.worker-channel (were nimblescape.devspaces.helper...). The new image is built at the first use. After the update, remove the old devspaces-helper images and the devspaces-helper-cache volume on each Docker engine by hand; the steps are in the user guide, section [Update from version 0.4.0 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-040-or-older).
