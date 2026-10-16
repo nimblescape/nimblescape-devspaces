@@ -987,23 +987,65 @@ describe('Sidebar progressive display', () => {
       await h.sidebar.refreshDiscovery();
       // GitHub names a later time: the planned refresh moves to it.
       await h.sidebar.refreshDiscovery({ again: true });
-      // GitHub names an earlier time: the planned refresh stays at the later time.
+      // GitHub names an earlier time: the planned refresh stays at the later time, which a message named already.
       await h.sidebar.refreshDiscovery({ again: true });
       expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
-      expect(warnings()).toEqual([
-        Messages.gitHubRateLimited(shownTime(resetAt), true),
-        Messages.gitHubRateLimited(shownTime(later), true),
-        Messages.gitHubRateLimited(shownTime(later), true),
-      ]);
+      expect(warnings()).toEqual([Messages.gitHubRateLimited(shownTime(resetAt), true), Messages.gitHubRateLimited(shownTime(later), true)]);
       // No refresh before the later time, then the one refresh.
       await vi.advanceTimersByTimeAsync(later + RATE_LIMIT_MARGIN_MS - NOW - 1);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
       await vi.advanceTimersByTimeAsync(1);
-      await vi.waitFor(() => expect(warnings()).toHaveLength(4));
+      await vi.waitFor(() => expect(warnings()).toHaveLength(3));
       expect(h.discovery.refresh).toHaveBeenCalledTimes(4);
-      expect(warnings()[3]).toBe(Messages.gitHubRateLimited(shownTime(later), false));
+      expect(warnings()[2]).toBe(Messages.gitHubRateLimited(shownTime(later), false));
       await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(4);
+    });
+
+    // refreshIntervalMinutes 5 and a time in 50 minutes: without this, 11 requests and 11 messages instead of 1.
+    it('asks GitHub nothing in the background while it waits, and shows a time once', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+      h.settings.refreshIntervalMinutes = 5;
+      const reset = NOW + 50 * 60_000;
+      let limited = true;
+      let fail: (error: unknown) => void = () => undefined;
+      h.discovery.refresh
+        .mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)))
+        .mockImplementation(async () => {
+          if (limited) throw limitedUntil(reset);
+          return data([info('acme/api')]);
+        });
+      const refusals = () => h.logger.warn.mock.calls.filter(([text]) => String(text).startsWith('GitHub refused the update')).length;
+      await h.sidebar.initialize();
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
+      fail(limitedUntil(reset));
+      await h.sidebar.refreshDiscovery();
+      // The refreshes every 5 minutes wait for the planned one.
+      await vi.advanceTimersByTimeAsync(20 * 60_000);
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(1);
+      // A Refresh that the user chooses still asks GitHub. Its refusal names no new time: only the log says it.
+      await h.sidebar.refreshDiscovery({ again: true });
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
+      expect(refusals()).toBe(2);
+      await vi.advanceTimersByTimeAsync(30 * 60_000);
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
+      expect(warnings()).toEqual([Messages.gitHubRateLimited(shownTime(reset), true)]);
+      // The planned refresh loads the list; after it, the refreshes every 5 minutes run again.
+      limited = false;
+      let load: (value: DiscoveryData) => void = () => undefined;
+      h.discovery.refresh.mockImplementationOnce(() => new Promise<DiscoveryData>((resolve) => (load = resolve)));
+      await vi.advanceTimersByTimeAsync(RATE_LIMIT_MARGIN_MS);
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(3));
+      // A refresh without `again` joins the planned one while it runs, so the test waits for its end. After the list is
+      // shown, it still reads the registry (real files), and a refresh every 5 minutes would join it during that time.
+      const planned = h.sidebar.refreshDiscovery();
+      load(data([info('acme/api')]));
+      await planned;
+      expect(h.sidebar.discoveryData).toBeDefined();
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(4);
+      expect(warnings()).toHaveLength(1);
     });
   });
 
