@@ -129,8 +129,8 @@ export class Sidebar implements vscode.Disposable {
   private progressiveAccountId: string | undefined;
   private partial: DiscoveryData | undefined;
   private timer: NodeJS.Timeout | undefined;
-  /** The one refresh after a rate limit of GitHub (onRateLimited); `undefined` while none waits. */
-  private rateLimitRetry: NodeJS.Timeout | undefined;
+  /** The one refresh after a rate limit of GitHub (onRateLimited): its timer and time; `undefined` while none waits. */
+  private rateLimitRetry: { timer: NodeJS.Timeout; at: number } | undefined;
   /** The next refresh is the one after a rate limit: it gets no second one. */
   private retryingAfterRateLimit = false;
   private signInOffered = false;
@@ -641,18 +641,28 @@ export class Sidebar implements vscode.Disposable {
   /**
    * GitHub refused the refresh for its rate limit: a message says when the list loads again, and one refresh runs at
    * that time. The refresh at that time gets no second one: after it, the message says from when Refresh works again,
-   * and the refresh of refreshIntervalMinutes goes on as before.
+   * and the refresh of refreshIntervalMinutes goes on as before. While that one refresh is planned, a refused refresh
+   * plans no other: while its timer waits, the message names its time; after the timer fired, while that refresh waits
+   * for this one to end, only the log says it, and the message comes from that refresh.
    */
   private onRateLimited(error: GitHubRateLimitError, afterRateLimit: boolean): void {
+    if (!afterRateLimit && this.retryingAfterRateLimit) {
+      this.deps.logger.warn('GitHub refused the update of the repository list for its rate limit. The refresh after the rate limit runs next.');
+      return;
+    }
     const now = this.clock.now();
-    const at = Math.max(error.resetAt ?? now + RATE_LIMIT_WAIT_MS, now) + RATE_LIMIT_MARGIN_MS;
+    let at = Math.max(error.resetAt ?? now + RATE_LIMIT_WAIT_MS, now) + RATE_LIMIT_MARGIN_MS;
     if (!afterRateLimit) {
-      this.clearRateLimitRetry();
-      this.rateLimitRetry = setTimeout(() => {
-        this.rateLimitRetry = undefined;
-        this.retryingAfterRateLimit = true;
-        void this.refreshDiscovery({ again: true });
-      }, at - now);
+      if (this.rateLimitRetry) {
+        at = this.rateLimitRetry.at;
+      } else {
+        const timer = setTimeout(() => {
+          this.rateLimitRetry = undefined;
+          this.retryingAfterRateLimit = true;
+          void this.refreshDiscovery({ again: true });
+        }, at - now);
+        this.rateLimitRetry = { timer, at };
+      }
     }
     const next = afterRateLimit ? 'Refresh can work again' : 'The list is loaded again';
     this.deps.logger.warn(`GitHub refused the update of the repository list for its rate limit. ${next} at ${new Date(at).toISOString()}.`);
@@ -662,7 +672,7 @@ export class Sidebar implements vscode.Disposable {
   }
 
   private clearRateLimitRetry(): void {
-    if (this.rateLimitRetry) clearTimeout(this.rateLimitRetry);
+    if (this.rateLimitRetry) clearTimeout(this.rateLimitRetry.timer);
     this.rateLimitRetry = undefined;
   }
 
