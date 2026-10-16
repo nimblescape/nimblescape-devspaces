@@ -1076,6 +1076,35 @@ describe('HelperImages.prebuildImage and HelperPrebuild (background prebuild)', 
     expect(logger.lines).toHaveLength(lines);
   });
 
+  // The removal must not remove the helper image while the prebuild still runs. Mutation: a stop that does not wait for
+  // the end of the prebuild returns while the prebuild still runs.
+  it('HelperPrebuild stop waits for a prebuild that ends a moment after its cancel', async () => {
+    let end: () => void = () => undefined;
+    const ended = new Promise<void>((resolve) => (end = resolve));
+    const helper = {
+      engineKey: vi.fn(async () => 'build-box'),
+      prebuildImage: vi.fn(
+        (options: { signal: AbortSignal }) =>
+          new Promise<HelperImageUse>((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => void ended.then(() => reject(abortError())), { once: true });
+          }),
+      ),
+      refreshDue: vi.fn(async () => false),
+    };
+    const task = prebuild(stateHelper(), { helper });
+    const box: DockerTarget = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'devspaces-build-box' };
+    const outcome = task.start(box);
+    await vi.waitFor(() => expect(helper.prebuildImage).toHaveBeenCalled());
+    let stopped = false;
+    const stop = task.stop({ host: 'build-box' }).then(() => (stopped = true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(helper.prebuildImage.mock.calls[0][0].signal.aborted).toBe(true);
+    expect(stopped).toBe(false);
+    end();
+    await stop;
+    expect(await outcome).toBe('cancelled');
+  });
+
   it('HelperPrebuild disposed while it reads helper.json asks Docker nothing', async () => {
     const helper = {
       // The prebuild reads the state file of the engine.

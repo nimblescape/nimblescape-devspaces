@@ -84,6 +84,30 @@ describe('MissingHelperBuild', () => {
     expect(await other).toBe('cancelled');
   });
 
+  // The removal must not remove the helper image while the build still runs. Mutation: a stop that does not wait for
+  // the end of the build returns while the build still runs.
+  it('stop waits for a build that ends a moment after its cancel', async () => {
+    const ended = deferred<void>();
+    const h = harness({
+      build: vi.fn(
+        (_target: DockerTarget, signal: AbortSignal) =>
+          new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => void ended.promise.then(() => reject(signal.reason)), { once: true })),
+      ),
+    });
+    const job = h.helper.request(REMOTE);
+    await vi.waitFor(() => expect(h.deps.build).toHaveBeenCalledTimes(1));
+    let stopped = false;
+    const stop = h.helper.stop({ host: 'devspace' }).then(() => (stopped = true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(buildSignal(h).aborted).toBe(true);
+    expect(stopped).toBe(false);
+    expect(h.helper.status('devspace')).toBe('building');
+    ended.resolve(undefined);
+    await stop;
+    expect(h.helper.status('devspace')).toBeUndefined();
+    expect(await job).toBe('cancelled');
+  });
+
   it('builds a missing helper image once, shows it in the status bar, then refreshes', async () => {
     const h = harness();
     const job = h.helper.request(REMOTE);

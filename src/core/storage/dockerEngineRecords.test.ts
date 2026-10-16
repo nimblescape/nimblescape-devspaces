@@ -103,6 +103,26 @@ describe('DockerEngineRecords: a file that cannot be read, or is not valid', () 
     expect(await records.monitorAnswered('')).toBe(true);
   });
 
+  // On Windows, a virus scanner can hold the file for a moment when the rename writes over it. Mutation: a write without
+  // the retries fails the change, and the mark is not written.
+  it('a write error of a moment (EPERM on the rename, Windows) is tried again: the change is written', async () => {
+    fs.writeFileSync(records.file, JSON.stringify(TWO_ENGINES));
+    const realRename = fs.promises.rename;
+    const renames: string[] = [];
+    vi.spyOn(fs.promises, 'rename').mockImplementation((async (from: fs.PathLike, to: fs.PathLike) => {
+      if (to === records.file) {
+        renames.push(String(to));
+        if (renames.length === 1) throw Object.assign(new Error(`EPERM: operation not permitted, rename '${String(from)}' -> '${String(to)}'`), { code: 'EPERM' });
+      }
+      return realRename.call(fs.promises, from, to);
+    }) as typeof fs.promises.rename);
+    await records.setRemoved('other', NOW + 1);
+    expect(renames).toHaveLength(2);
+    vi.restoreAllMocks();
+    expect(await records.read()).toEqual([...TWO_ENGINES.engines, { host: 'other', removedAt: NOW + 1 }]);
+    expect(fs.readdirSync(dir).sort()).toEqual(['docker-engines.json']);
+  });
+
   it('a read error that stays fails the change, and the file stays as it was; the plain reads fail too', async () => {
     const before = JSON.stringify(TWO_ENGINES);
     fs.writeFileSync(records.file, before);
