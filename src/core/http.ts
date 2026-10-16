@@ -37,15 +37,24 @@ export interface HttpTransport {
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 /**
- * One request with the Node.js `https` module; `options` adds to the request (the connection through a proxy). The body
- * is read up to MAX_BODY_BYTES (or the lower `request.maxBodyBytes`).
+ * The header User-Agent of the HTTPS requests of Devspaces: the name of the extension and its version, which the build
+ * takes from package.json (__DEVSPACES_VERSION__). httpsRequest and httpsStream send it; the clients of GitHub
+ * (githubApi.ts) and of the registries (registryClient.ts) and the download of Docker Desktop (dockerDownload.ts) name
+ * it too.
+ */
+export const USER_AGENT = `nimblescape-devspaces/${__DEVSPACES_VERSION__}`;
+
+/**
+ * One request with the Node.js `https` module; `options` adds to the request (the connection through a proxy). It sends
+ * USER_AGENT unless the request has a User-Agent of its own. The body is read up to MAX_BODY_BYTES (or the lower
+ * `request.maxBodyBytes`).
  */
 export function httpsRequest(request: HttpRequest, signal: AbortSignal | undefined, options: https.RequestOptions = {}): Promise<HttpResponse> {
   const maxBytes = Math.min(MAX_BODY_BYTES, request.maxBodyBytes ?? MAX_BODY_BYTES);
   return new Promise((resolve, reject) => {
     const req = https.request(
       request.url,
-      { ...options, method: request.method, headers: request.headers, signal },
+      { ...options, method: request.method, headers: { 'User-Agent': USER_AGENT, ...request.headers }, signal },
       (res) => {
         const chunks: Buffer[] = [];
         let size = 0;
@@ -103,12 +112,12 @@ function responseHeaders(res: { headers: Record<string, string | string[] | unde
 }
 
 /**
- * One GET with the Node.js `https` module whose body is streamed (HttpStreamTransport); `options` as in httpsRequest
- * (the connection through a proxy).
+ * One GET with the Node.js `https` module whose body is streamed (HttpStreamTransport), with USER_AGENT; `options` as in
+ * httpsRequest (the connection through a proxy).
  */
 export function httpsStream(url: string, signal: AbortSignal | undefined, options: https.RequestOptions = {}): Promise<HttpStreamResponse> {
   return new Promise((resolve, reject) => {
-    const req = https.request(url, { ...options, method: 'GET', signal }, (res) => {
+    const req = https.request(url, { ...options, method: 'GET', headers: { 'User-Agent': USER_AGENT }, signal }, (res) => {
       resolve({ status: res.statusCode ?? 0, headers: responseHeaders(res), body: res });
     });
     req.on('error', reject);

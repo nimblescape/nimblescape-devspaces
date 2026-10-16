@@ -9,6 +9,7 @@
 import * as crypto from 'crypto';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
+import { buildDefines } from '../../scripts/buildDefines.mjs';
 import { workerScriptsPlugin } from '../../scripts/workerScripts.mjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // The Docker CLI of the extension (BootstrapDocker).
@@ -51,9 +52,9 @@ import { holdLockInContainer } from './workerLocks';
 async function bundleScript(): Promise<string> {
   const result = await esbuild.build({
     // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
-    define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) },
+    define: buildDefines(),
     // The script of the Monitor in the worker, as esbuild.mjs bundles it.
-    plugins: [workerScriptsPlugin(path.resolve(__dirname, '../..'), { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) })],
+    plugins: [workerScriptsPlugin(path.resolve(__dirname, '../..'), buildDefines())],
     entryPoints: [path.resolve(__dirname, '../../src/helperChannel/main.ts')],
     bundle: true,
     platform: 'node',

@@ -2,6 +2,8 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { describe, it, expect, vi } from 'vitest';
 import type { HttpRequest, HttpResponse, HttpTransport } from '../http';
 import { abortError, isAbortError, type Logger } from '../ports';
@@ -15,6 +17,8 @@ import {
 } from './githubApi';
 
 const TOKEN = 'gho_secretTokenValue123';
+/** The version of package.json, which the User-Agent names. */
+const VERSION = (JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'package.json'), 'utf8')) as { version: string }).version;
 
 class FakeTransport implements HttpTransport {
   readonly requests: Array<{ request: HttpRequest; signal?: AbortSignal }> = [];
@@ -66,7 +70,7 @@ describe('GitHubApi.graphql', () => {
     expect(request.method).toBe('POST');
     expect(request.url).toBe(GITHUB_GRAPHQL_URL);
     expect(request.headers?.Authorization).toBe(`bearer ${TOKEN}`);
-    expect(request.headers?.['User-Agent']).toBe('nimblescape-devspaces');
+    expect(request.headers?.['User-Agent']).toBe(`nimblescape-devspaces/${VERSION}`);
     expect(request.headers?.['Content-Type']).toBe('application/json');
     expect(request.headers?.['Content-Length']).toBe(String(Buffer.byteLength(request.body ?? '', 'utf8')));
     expect(JSON.parse(request.body ?? '')).toEqual({ query: 'query { viewer { login } }', variables: { a: 1 } });

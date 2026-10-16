@@ -30,7 +30,7 @@ beforeAll(() => {
     target: 'node24',
     outfile: bundle,
     logLevel: 'silent',
-    define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify('0.0.0') },
+    define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify('0.0.0'), __DEVSPACES_VERSION__: JSON.stringify('0.0.0') },
   });
 });
 

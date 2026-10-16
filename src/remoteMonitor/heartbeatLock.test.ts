@@ -12,6 +12,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { buildDefines } from '../../scripts/buildDefines.mjs';
 import {
   HEARTBEAT_LOCK_PATH,
   RECORDS_LOCK_BUSY_EXIT,
@@ -50,8 +51,9 @@ beforeAll(async () => {
     format: 'cjs',
     target: 'node24',
     outfile: script,
-    // Not the entry module of main.ts: its own start (argv without the state folder) stays out.
-    define: { 'require.main': 'undefined' },
+    // Not the entry module of main.ts: its own start (argv without the state folder) stays out. The compile-time
+    // constants of esbuild.mjs.
+    define: { 'require.main': 'undefined', ...buildDefines() },
     logLevel: 'silent',
   });
 });

@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 import { configDefaults, defineConfig } from 'vitest/config';
-import { devcontainerCliVersion } from './scripts/cliVersion.mjs';
+import { buildDefines } from './scripts/buildDefines.mjs';
 
 const TEST_FILES = 'test/docker/**/*.test.ts';
 
@@ -42,7 +42,7 @@ const group = testGroup(process.env.DEVSPACE_TEST_GROUP, process.env.DEVSPACE_TE
 // Integration tests against the real Docker engine (npm run test:docker). `npm test` does not run them.
 export default defineConfig({
   // The same compile-time constants as in esbuild.mjs (src/types/globals.d.ts).
-  define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(devcontainerCliVersion()) },
+  define: buildDefines(),
   // The scripts in the bundle of the worker; the tests that import the worker's code get stubs (a worker that a test
   // bundles gets the real scripts, scripts/workerScripts.mjs).
   resolve: {

@@ -26,6 +26,7 @@ import * as crypto from 'crypto';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { buildDefines } from '../../scripts/buildDefines.mjs';
 // The Docker CLI of the extension (BootstrapDocker).
 import { BootstrapDocker } from '../../src/core/docker/bootstrapDocker';
 import { helperDockerSocket } from '../../src/core/helper/helperImages';
@@ -77,6 +78,8 @@ const RELEASE_STOP_WAIT_MS = TEST_RELEASE_LIMIT_MS + 60_000;
 async function bundleScript(): Promise<string> {
   const result = await esbuild.build({
     entryPoints: [path.resolve(__dirname, '../../src/remoteMonitor/main.ts')],
+    // The compile-time constants of esbuild.mjs.
+    define: buildDefines(),
     bundle: true,
     platform: 'node',
     format: 'cjs',

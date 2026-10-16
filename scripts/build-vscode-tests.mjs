@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import * as esbuild from 'esbuild';
-import { devcontainerCliVersion } from './cliVersion.mjs';
+import { buildDefines } from './buildDefines.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const source = path.join(root, 'test', 'vscode');
@@ -19,7 +19,7 @@ const outdir = path.join(root, 'out', 'test', 'vscode');
 const attach = path.join(source, 'attach');
 const untrusted = path.join(source, 'untrusted');
 // The compile-time constants of esbuild.mjs: the attach tests bundle modules of src/core.
-const define = { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(devcontainerCliVersion()) };
+const define = buildDefines();
 const tests = (folder) => fs.readdirSync(folder).filter((name) => name.endsWith('.test.ts')).map((name) => path.join(folder, name));
 
 fs.rmSync(outdir, { recursive: true, force: true });
