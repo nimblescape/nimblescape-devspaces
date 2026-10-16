@@ -226,6 +226,7 @@ interface Harness {
     writePending: ReturnType<typeof vi.fn<(id: string) => Promise<void>>>;
     otherActiveWindows: ReturnType<typeof vi.fn<() => Promise<WindowStatus[]>>>;
     setDevspace: ReturnType<typeof vi.fn>;
+    setPlainDevspace: ReturnType<typeof vi.fn>;
   };
   auth: {
     getToken: ReturnType<typeof vi.fn>;
@@ -381,6 +382,7 @@ function createHarness(
     writePending: vi.fn((id: string) => sessionFiles.writePending(id, WINDOW_ID)),
     otherActiveWindows: vi.fn(async () => []),
     setDevspace: vi.fn(async () => {}),
+    setPlainDevspace: vi.fn(async () => {}),
   };
   const auth = {
     getToken: vi.fn(async () => 'gho_token'),
@@ -2967,6 +2969,36 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(await h.engineRecords.removed('build-box')).toBe(false);
   });
 
+  // A window that works without Devspaces on a kept devspace is attached to its container, so "Delete Devspaces Too"
+  // would delete the devspace under it. Mutation: a check that sees only the connected devspaces fails it.
+  it('refuses while a window works without Devspaces on a devspace there: this window or another one', async () => {
+    const plain: WindowStatus = { windowId: OTHER_WINDOW_ID, pid: OTHER_PID, devspaceId: null, plainDevspaceId: ENV_ID, state: 'active', updatedAt: iso(NOW) };
+    const closeFirst = 'Close the windows of your devspaces on build-box first: acme/api. Nothing was removed.';
+    const here = removalFake();
+    onBuildBox(here);
+    await h.engineRecords.setRemoved('build-box', NOW - 1000);
+    const env = ownRemote();
+    await h.registry.add(env);
+    await h.controller.workWithoutDevspaces(env, CONTAINER);
+    // Its status file names the devspace apart from the devspace of the window (no heartbeat goes to it).
+    expect(h.coordinator.setPlainDevspace.mock.calls).toEqual([[ENV_ID]]);
+    expect(h.coordinator.setDevspace).not.toHaveBeenCalled();
+    await run('removeFromDockerEngine');
+    expect(warningMessages()).toEqual([closeFirst]);
+    expect(here.deps.engineAnswers).not.toHaveBeenCalled();
+    expect(here.order).toEqual([]);
+
+    const other = removalFake();
+    onBuildBox(other);
+    await h.registry.add(ownRemote());
+    h.coordinator.otherActiveWindows.mockResolvedValue([plain]);
+    await run('removeFromDockerEngine');
+    expect(warningMessages()).toEqual([closeFirst]);
+    expect(other.deps.engineAnswers).not.toHaveBeenCalled();
+    expect(other.order).toEqual([]);
+    expect(h.service.deleteInWorker).not.toHaveBeenCalled();
+  });
+
   it('refuses an engine that does not answer and an unsupported endpoint; with nothing to remove it only sets the mark', async () => {
     const silent = removalFake({ answers: false });
     onBuildBox(silent);
@@ -3137,6 +3169,8 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(h.flow.mock.invocationCallOrder[0]).toBeLessThan(h.connection.closeRemoteConnection.mock.invocationCallOrder[0]);
     expect(warningMessages()).toEqual([Messages.otherAccountConnection('acme/api')]);
     expect(h.logger.info).toHaveBeenCalledWith('The GitHub account changed. acme/api belongs to another account: the window closes its remote connection.');
+    // Its status file does not name the devspace anymore.
+    expect(h.coordinator.setPlainDevspace.mock.calls).toEqual([[ENV_ID], [null]]);
     // The window left the devspace: the next change removes nothing more.
     await h.controller.onSessionChanged();
     expect(tokenRemovals()).toBe(1);
@@ -3162,6 +3196,55 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close of the connection');
     expect(tokenRemovals()).toBe(1);
     expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  // Stop, Rebuild and Delete must not change the container under a window that works without Devspaces on it: as for a
+  // connected window, that window closes its connection first, and its reloaded empty window runs the operation.
+  // Mutation: the checks of the connected devspace only (isConnectedHere, devspaceId of the status files) fail it.
+  it('Stop, Rebuild and Delete hand off in a window that works without Devspaces on the devspace', async () => {
+    for (const operation of ['stop', 'rebuild', 'delete'] as const) {
+      recreateHarness({});
+      const env = devspace();
+      await h.registry.add(env);
+      await h.controller.workWithoutDevspaces(env, CONTAINER);
+      if (operation === 'delete') fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.delete);
+      await run(operation, row('acme/api', env));
+      expect(h.connection.closeRemoteConnection).toHaveBeenCalledTimes(1);
+      expect(await h.sessionFiles.readOperations()).toEqual([expect.objectContaining({ devspaceId: ENV_ID, operation, requestedBy: WINDOW_ID })]);
+      expect(h.service.stop).not.toHaveBeenCalled();
+      expect(h.service.deleteInWorker).not.toHaveBeenCalled();
+      expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    }
+  });
+
+  it('Stop and Delete of another window ask a window that works without Devspaces on the devspace; it hands off', async () => {
+    const env = devspace();
+    await h.registry.add(env);
+    h.coordinator.otherActiveWindows.mockResolvedValue([
+      { windowId: OTHER_WINDOW_ID, pid: OTHER_PID, devspaceId: null, plainDevspaceId: ENV_ID, state: 'active', updatedAt: iso(NOW) },
+    ]);
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.stop);
+    await run('stop', row('acme/api', env));
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.otherWindowClosesConnection('acme/api'), { modal: true }, ControllerTexts.stop);
+    expect(await h.disconnectRequests.read(ENV_ID)).toEqual(expect.objectContaining({ operation: 'stop', requestedBy: WINDOW_ID }));
+    expect(h.service.stop).not.toHaveBeenCalled();
+    await h.disconnectRequests.remove(ENV_ID);
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.delete);
+    await run('delete', row('acme/api', env));
+    expect(warningMessages().at(-1)).toBe(`${Messages.deleteConfirm('acme/api')} ${ControllerTexts.otherWindowClosesConnection('acme/api')}`);
+    expect(await h.disconnectRequests.read(ENV_ID)).toEqual(expect.objectContaining({ operation: 'delete', requestedBy: WINDOW_ID }));
+    expect(h.service.deleteInWorker).not.toHaveBeenCalled();
+
+    // The window that works without Devspaces answers such a request as a connected window does.
+    recreateHarness({});
+    await h.registry.add(devspace());
+    await h.controller.workWithoutDevspaces(devspace(), CONTAINER);
+    await h.disconnectRequests.write({ devspaceId: ENV_ID, operation: 'delete', requestedAt: iso(NOW - 2000), requestedBy: OTHER_WINDOW_ID, reason: 'manual', additionalVolumesToRemove: [] });
+    h.controller.onHeartbeat();
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close');
+    expect(await h.sessionFiles.readOperations()).toEqual([expect.objectContaining({ devspaceId: ENV_ID, operation: 'delete', requestedBy: WINDOW_ID })]);
+    expect(await h.disconnectRequests.read(ENV_ID)).toBeUndefined();
+    expect(h.service.deleteInWorker).not.toHaveBeenCalled();
   });
 
   it('is a command of package.json, in the Command Palette and in the "…" menu of the view', () => {

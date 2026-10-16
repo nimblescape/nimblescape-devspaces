@@ -133,6 +133,8 @@ export class SessionCoordinator implements vscode.Disposable {
   private readonly heartbeatEmitter: Emitter<void>;
 
   private currentDevspaceId: string | null = null;
+  /** The devspace of this window while it works without Devspaces (WindowStatus.plainDevspaceId); never a heartbeat. */
+  private plainDevspaceId: string | null = null;
   private timer: NodeJS.Timeout | undefined;
   private cleanupTimer: NodeJS.Timeout | undefined;
   private cleanupRunning = false;
@@ -223,6 +225,19 @@ export class SessionCoordinator implements vscode.Disposable {
     await this.writeStatus();
     this.tickNow(previous, devspaceId);
     this.releaseLeft(previous, devspaceId);
+  }
+
+  /**
+   * The devspace that this window is attached to while it works without Devspaces on an engine with the removal mark
+   * (Controller.workWithoutDevspaces), or null when it leaves it: only the field plainDevspaceId of the status file,
+   * written at once, so that the removal and the operations of other windows see the window. The devspace of the
+   * window (`devspaceId`) stays null: no heartbeat, no release and no reopen record go to it.
+   */
+  async setPlainDevspace(devspaceId: string | null): Promise<void> {
+    if (this.stopped) return;
+    this.plainDevspaceId = devspaceId;
+    if (!this.started) return;
+    await this.writeStatus();
   }
 
   /**
@@ -477,6 +492,7 @@ export class SessionCoordinator implements vscode.Disposable {
     if (this.stopped) return false;
     const generation = ++this.writeGeneration;
     const dockerContext = devspaceId === null ? undefined : this.deps.windowDockerContext?.();
+    const plainDevspaceId = this.plainDevspaceId;
     const status: WindowStatus = {
       windowId: this.windowId,
       pid: this.pid,
@@ -484,6 +500,7 @@ export class SessionCoordinator implements vscode.Disposable {
       state: 'active',
       updatedAt: isoTime(this.clock),
       ...(dockerContext ? { dockerContext } : {}),
+      ...(plainDevspaceId !== null ? { plainDevspaceId } : {}),
     };
     const file = this.paths.sessionFile(this.windowId);
     // The name form of writeJsonAtomic, so that the sweep of the storage folder removes a leftover (storageSweep.ts, R8).
