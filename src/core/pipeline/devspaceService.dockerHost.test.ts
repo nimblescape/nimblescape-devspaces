@@ -6,7 +6,7 @@
 // the devspaces of the current host; the others are never cloned, restored, recreated, deleted, stopped, or given a
 // token.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DockerTargets } from '../docker/dockerTargets';
+import { DockerTargets, podmanDockerTarget } from '../docker/dockerTargets';
 import { UserFacingError } from '../errors';
 import { Messages } from '../messages';
 import { LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, resourceName } from '../names';
@@ -251,6 +251,43 @@ describe('a current Docker context that cannot be read is never used', () => {
     expect(u.helper.calls).toEqual([]);
     expect(u.docker.log).toEqual([]);
     // The devspace keeps its host (the local Docker).
+    expect((await u.registry.get(ENV_ID))?.dockerHost).toBeUndefined();
+  });
+});
+
+// The docker command is Podman (the package podman-docker): `docker context inspect` gives nothing, and the check of
+// the CLI names Podman. Every operation says that Podman is not supported, not that the context cannot be read.
+describe('a docker command that is Podman is never used', () => {
+  const DETAIL = 'docker --version: podman version 5.2.2';
+  let u: Harness;
+  let targets: DockerTargets;
+
+  beforeEach(async () => {
+    const cli = {
+      isInstalled: () => true,
+      run: async () => ({ exitCode: 0, stdout: '', stderr: '', timedOut: false }),
+      podmanCli: async () => DETAIL,
+    };
+    targets = new DockerTargets(cli, {}, silentLogger, 'linux');
+    u = createHarness({ dockerTarget: () => targets.current() });
+    await seedDevspace(u, { container: 'running' });
+  });
+
+  afterEach(() => {
+    u.cleanup();
+  });
+
+  it('an operation is refused with the Podman message before any Docker call', async () => {
+    await expect(targets.resolve()).resolves.toEqual(podmanDockerTarget(DETAIL));
+    for (const operation of [() => u.service.open(TARGET, { progress: u.progress }), () => u.operations.stop(ENV_ID)]) {
+      const error = await rejection(operation());
+      expect(error.code).toBe('dockerEndpointUnsupported');
+      expect(error.message).toBe(Messages.podmanNotSupported);
+      expect(error.detail).toBe(DETAIL);
+    }
+    expect(u.dockerStarts).toBe(0);
+    expect(u.helper.calls).toEqual([]);
+    expect(u.docker.log).toEqual([]);
     expect((await u.registry.get(ENV_ID))?.dockerHost).toBeUndefined();
   });
 });

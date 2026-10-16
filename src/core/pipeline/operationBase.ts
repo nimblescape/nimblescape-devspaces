@@ -320,7 +320,7 @@ export interface OperationBaseDeps {
    * `dockerHost`: an endpoint that is neither local nor SSH ('unsupported') is refused by every operation
    * (dockerEndpointUnsupported) and never read or recorded.
    */
-  dockerTarget?: () => Promise<Pick<DockerTarget, 'kind' | 'host' | 'endpoint'>>;
+  dockerTarget?: () => Promise<Pick<DockerTarget, 'kind' | 'host' | 'endpoint' | 'podman'>>;
   /** Default: `isProcessAlive` of sessionRules.ts (`process.kill(pid, 0)` does not fail with ESRCH). */
   isProcessAlive?: (pid: number) => boolean;
   /**
@@ -436,7 +436,7 @@ export abstract class OperationBase {
    * The one check of the Docker target of the service. The target of the operation (dockerTarget), else the host of
    * `dockerHost` (local or SSH).
    */
-  protected async dockerTarget(): Promise<Pick<DockerTarget, 'kind' | 'host' | 'endpoint'>> {
+  protected async dockerTarget(): Promise<Pick<DockerTarget, 'kind' | 'host' | 'endpoint' | 'podman'>> {
     if (this.deps.dockerTarget) return this.deps.dockerTarget();
     const host = (await this.deps.dockerHost?.()) ?? '';
     return { kind: host === '' ? 'local' : 'remote', host, endpoint: '' };

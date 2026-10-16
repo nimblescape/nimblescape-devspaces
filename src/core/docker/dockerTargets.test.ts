@@ -2,12 +2,22 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { Messages } from '../messages';
 import { silentLogger, type ProcessRunner, type RunOptions, type RunResult } from '../ports';
 // The Docker CLI of the extension (BootstrapDocker).
 import { BootstrapDocker } from './bootstrapDocker';
-import { dockerTargetOf, isOnDockerHost, isUnreadableDockerTarget } from './dockerHost';
-import { CONTEXT_INSPECT_TIMEOUT_MS, DockerTargets, UNREADABLE_DOCKER_TARGET, operationDockerTarget, runWithDockerTarget } from './dockerTargets';
+import { dockerTargetOf, isOnDockerHost, isPodmanDockerTarget, isUnreadableDockerTarget } from './dockerHost';
+import { ensureDockerRunning } from './dockerStart';
+import {
+  CONTEXT_INSPECT_TIMEOUT_MS,
+  DockerTargets,
+  UNREADABLE_DOCKER_TARGET,
+  operationDockerTarget,
+  podmanDockerTarget,
+  runWithDockerTarget,
+} from './dockerTargets';
+import { startDockerFor } from './remoteDocker';
 
 const DOCKER = '/usr/local/bin/docker';
 
@@ -102,6 +112,82 @@ describe('DockerTargets.resolve (remote mode detection from the current context)
     const withHost = setup({ PATH: '/usr/bin', DOCKER_HOST: 'ssh://me@other' });
     withHost.cli.inspectFails = true;
     await expect(withHost.targets.resolve()).resolves.toEqual({ kind: 'remote', host: 'me@other', endpoint: 'ssh://me@other' });
+  });
+
+  // podman-docker on Fedora with the Podman socket not enabled: `docker` runs podman, which has no Docker contexts.
+  describe('a docker command that is Podman (podman-docker)', () => {
+    const NOTE = 'Emulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.\n';
+    const result = (exitCode: number, stdout: string, stderr = NOTE): RunResult => ({ exitCode, stdout, stderr, timedOut: false });
+    /** Podman 5 prints nothing for `context inspect` without a name; older versions do not know the command. */
+    const PODMAN_5 = result(0, '');
+    const PODMAN_4 = result(125, '', `${NOTE}Error: unrecognized command \`podman context\`\nTry 'podman --help' for more information\n`);
+    const DETAIL = 'docker --version: podman version 5.2.2';
+
+    function podmanDocker(contextInspect: RunResult, env: NodeJS.ProcessEnv = { PATH: '/usr/bin' }, version = result(0, 'podman version 5.2.2\n')) {
+      const cli = {
+        calls: [] as string[][],
+        async run(_file: string, args: readonly string[]): Promise<RunResult> {
+          cli.calls.push([...args]);
+          if (args[0] === 'context') return contextInspect;
+          if (args[0] === '--version') return version;
+          // `podman info` has no ServerVersion.
+          if (args[0] === 'info') return result(125, '', `${NOTE}Error: template: info:1:7: executing "info" at <.ServerVersion>: can't evaluate field ServerVersion\n`);
+          throw new Error(`Unexpected call: docker ${args.join(' ')}`);
+        },
+      };
+      const docker = new BootstrapDocker(cli, DOCKER, env, silentLogger, 'linux');
+      const targets = new DockerTargets(docker, env, silentLogger, 'linux');
+      const startLocal = vi.fn(() =>
+        ensureDockerRunning(docker, cli, silentLogger, {
+          platform: 'linux',
+          timeoutMs: 1,
+          sleep: async () => undefined,
+          exists: () => false,
+          launchDetached: async () => {
+            throw new Error('not expected');
+          },
+        }),
+      );
+      const state = { rootlessSocket: async () => undefined, setRootlessSocket: async () => undefined };
+      // The Docker start of an operation (extension.ts), with the target that the operation read.
+      const start = async () => startDockerFor(await targets.resolve(), startLocal, { docker, runner: cli, state, logger: silentLogger, sshPath: undefined, env });
+      return { cli, targets, startLocal, start };
+    }
+
+    it.each([
+      ['Podman 5 (no output)', PODMAN_5],
+      ['an older Podman (unrecognized command)', PODMAN_4],
+    ])('%s: the operation is refused with the Podman message, not as a context that cannot be read', async (_name, contextInspect) => {
+      const p = podmanDocker(contextInspect);
+      const target = await p.targets.resolve();
+      expect(target).toEqual(podmanDockerTarget(DETAIL));
+      expect(isPodmanDockerTarget(target)).toBe(true);
+      expect(isUnreadableDockerTarget(target)).toBe(false);
+      // Its host is that of no devspace.
+      expect(isOnDockerHost({}, target.host)).toBe(false);
+      expect(isOnDockerHost({ dockerHost: 'Podman' }, target.host)).toBe(false);
+      await expect(p.start()).rejects.toMatchObject({ code: 'dockerEndpointUnsupported', message: Messages.podmanNotSupported, detail: DETAIL });
+      expect(p.startLocal).not.toHaveBeenCalled();
+      expect(p.cli.calls.some((args) => args[0] === 'info')).toBe(false);
+      // `docker --version` is asked once for the path of the CLI.
+      expect(p.cli.calls.filter((args) => args[0] === '--version')).toHaveLength(1);
+    });
+
+    it('with DOCKER_HOST set to the Podman socket, the Docker start refuses Podman as before', async () => {
+      const p = podmanDocker(PODMAN_5, { PATH: '/usr/bin', DOCKER_HOST: 'unix:///run/user/1000/podman/podman.sock' });
+      await expect(p.targets.resolve()).resolves.toMatchObject({ kind: 'local', endpoint: 'unix:///run/user/1000/podman/podman.sock' });
+      await expect(p.start()).rejects.toMatchObject({ code: 'dockerEndpointUnsupported', message: Messages.podmanNotSupported, detail: DETAIL });
+      expect(p.startLocal).toHaveBeenCalledTimes(1);
+    });
+
+    it('a check of the CLI that fails counts as Docker: the context cannot be read', async () => {
+      const p = podmanDocker(PODMAN_5, { PATH: '/usr/bin' }, result(1, '', 'unknown flag: --version'));
+      await expect(p.targets.resolve()).resolves.toEqual(UNREADABLE_DOCKER_TARGET);
+      await expect(p.start()).rejects.toMatchObject({ code: 'dockerEndpointUnsupported', message: Messages.dockerContextUnreadable });
+      // A reader without the check (another ContextReader) counts as Docker too.
+      const plain = new DockerTargets({ isInstalled: () => true, run: async () => PODMAN_5 }, {}, silentLogger, 'linux');
+      await expect(plain.resolve()).resolves.toEqual(UNREADABLE_DOCKER_TARGET);
+    });
   });
 
   it('reads the context again for each operation, not once for ever', async () => {

@@ -57,7 +57,7 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Docker context that cannot be read:** when the command `docker context inspect` fails, Devspaces now does nothing with Docker and says so: every operation is refused with a message, and the sidebar shows "Docker context cannot be read". Before, Devspaces took the local Docker, while its Docker commands went to the context that the Docker CLI found, which could be another computer, and a new devspace there was recorded as one of the local Docker.
 
-**Podman:** when the `docker` command uses Podman, for example with the package podman-docker or with a Podman engine behind the Docker CLI, a start now says that Devspaces does not support Podman, and nothing is done. Before, Devspaces tried to start Docker and then said that Docker could not be started, or it went on with Podman.
+**Podman:** when the `docker` command on this computer uses Podman, for example with the package podman-docker, or when the local Docker is a Podman engine behind the Docker CLI, a start now says that Devspaces does not support Podman, and nothing is done. With podman-docker and without `DOCKER_HOST`, every operation is refused with this message, and the sidebar shows "Podman is not supported". Before, Devspaces tried to start Docker and then said that Docker could not be started, or it went on with Podman.
 
 ## 0.5.0
 

@@ -33,6 +33,7 @@ import {
   isOwnContextDescription,
   ownContextDescription,
   isRootlessEngine,
+  isPodmanDockerTarget,
   isUnreadableDockerTarget,
   parseContextInspect,
   remoteContextNames,
@@ -270,16 +271,21 @@ export function dockerHostUnreachable(host: string, problem: DockerHostProblem, 
 }
 
 /**
- * The message of a target that is not supported: an endpoint that is neither local nor SSH, or a current Docker
- * context that could not be read (isUnreadableDockerTarget).
+ * The message of a target that is not supported: an endpoint that is neither local nor SSH, a current Docker context
+ * that could not be read (isUnreadableDockerTarget), or a docker command that is Podman (isPodmanDockerTarget).
  */
-export function unsupportedTargetMessage(target: Pick<DockerTarget, 'kind' | 'endpoint'>): string {
+export function unsupportedTargetMessage(target: Pick<DockerTarget, 'kind' | 'endpoint' | 'podman'>): string {
+  if (isPodmanDockerTarget(target)) return Messages.podmanNotSupported;
   return isUnreadableDockerTarget(target) ? Messages.dockerContextUnreadable : Messages.dockerEndpointUnsupported(target.endpoint);
 }
 
 /** UserFacingError('dockerEndpointUnsupported') for a target that is not supported (unsupportedTargetMessage). */
-export function dockerEndpointUnsupported(target: Pick<DockerTarget, 'kind' | 'endpoint'>): UserFacingError {
-  const detail = isUnreadableDockerTarget(target) ? unsupportedTargetReason(target) : `Docker endpoint: ${target.endpoint}`;
+export function dockerEndpointUnsupported(target: Pick<DockerTarget, 'kind' | 'endpoint' | 'podman'>): UserFacingError {
+  const detail = isPodmanDockerTarget(target)
+    ? target.podman
+    : isUnreadableDockerTarget(target)
+      ? unsupportedTargetReason(target)
+      : `Docker endpoint: ${target.endpoint}`;
   return new UserFacingError('dockerEndpointUnsupported', unsupportedTargetMessage(target), detail);
 }
 
@@ -503,8 +509,8 @@ export async function chooseLocalContext(docker: RemoteDockerCli, remembered: st
 
 /**
  * The step "Docker start" of an operation on `target`: the local Docker (`startLocal`, which starts Docker Desktop or
- * offers the setup); a remote host only gets the reachability check (never a Docker Desktop start); an endpoint that is
- * neither is refused.
+ * offers the setup); a remote host only gets the reachability check (never a Docker Desktop start); a target that is
+ * not supported is refused with its message (unsupportedTargetMessage).
  */
 export async function startDockerFor(
   target: DockerTarget,

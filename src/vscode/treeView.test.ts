@@ -199,6 +199,12 @@ describe('RepositoriesTreeProvider', () => {
     expect(unreadableItem.tooltip).toBe(Messages.dockerContextUnreadableTooltip);
     expect((unreadableItem.iconPath as ThemeIcon).id).toBe('devspaces-monitor-warning');
     expect(unreadableItem.command).toMatchObject({ command: 'devspaces.chooseDockerHost' });
+    // A docker command that is Podman.
+    provider.setDockerHost({ kind: 'podman', host: '' });
+    const podmanItem = provider.getTreeItem(provider.getChildren()[0]) as unknown as TreeItem;
+    expect(podmanItem.label).toBe(Messages.podmanNotSupportedLabel);
+    expect(podmanItem.tooltip).toBe(Messages.podmanNotSupportedTooltip);
+    expect((podmanItem.iconPath as ThemeIcon).id).toBe('devspaces-monitor-warning');
     provider.dispose();
   });
 

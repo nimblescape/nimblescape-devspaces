@@ -23,7 +23,8 @@ export const Messages = {
   dockerEngineNotRunning: 'Docker is not running. Start the Docker service with this command: sudo systemctl enable --now docker',
   /**
    * The docker command of this computer is Podman (for example the package podman-docker), or the engine that it
-   * reaches is the Docker-compatible API of Podman (ensureDockerRunning). Docker is not started.
+   * reaches is the Docker-compatible API of Podman (ensureDockerRunning, and podmanDockerTarget when the current Docker
+   * context cannot be read). Docker is not started.
    */
   podmanNotSupported:
     'The docker command on this computer uses Podman. Devspaces does not support Podman. It needs Docker: Docker Desktop, or Docker Engine on Linux. Nothing was done.',
@@ -387,6 +388,13 @@ export const Messages = {
   dockerContextUnreadableLabel: 'Docker context cannot be read',
   /** The tooltip of that row. */
   dockerContextUnreadableTooltip: 'Devspaces cannot read the current Docker context, so it does nothing with Docker. Click to choose the Docker host.',
+  /** The Docker host of a docker command that uses Podman (podmanDockerTarget), in other texts ("Docker is set to …"). */
+  podmanDockerHost: 'Podman (not supported)',
+  /** The view's title and the first row of the sidebar while the docker command uses Podman (podmanDockerTarget). */
+  podmanNotSupportedLabel: 'Podman is not supported',
+  /** The tooltip of that row. */
+  podmanNotSupportedTooltip:
+    'The docker command on this computer uses Podman. Devspaces does not support Podman, so it does nothing with Docker. It needs Docker: Docker Desktop, or Docker Engine on Linux.',
   /**
    * The window is not connected, because the container did not answer as running on the Docker host that the window
    * uses (checked right before the window connects).
