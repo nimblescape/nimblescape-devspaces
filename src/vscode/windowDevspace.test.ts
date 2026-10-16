@@ -76,6 +76,23 @@ describe('the devspace of the window at its activation', () => {
     expect(allowed.all.service.reconcileInWorker).toHaveBeenCalledTimes(1);
   });
 
+  // An engine with the removal mark: the check runs only for a lost registry, and its false restores nothing.
+  it('restores nothing when the check of the restore says no, and asks it only for a lost registry', async () => {
+    const refused = deps({ found: [undefined as unknown as Devspace, ENTRY], added: 1 });
+    const onRemovedEngine = vi.fn(async () => false);
+    expect(await findWindowDevspace('devspaces-acme-api-x', { ...refused.all, mayRestore: onRemovedEngine })).toBeUndefined();
+    expect(onRemovedEngine).toHaveBeenCalledTimes(1);
+    expect(refused.all.service.reconcileInWorker).not.toHaveBeenCalled();
+    const allowed = deps({ found: [undefined as unknown as Devspace, ENTRY], added: 1 });
+    expect(await findWindowDevspace('devspaces-acme-api-x', { ...allowed.all, mayRestore: async () => true })).toBe(ENTRY);
+    expect(allowed.all.service.reconcileInWorker).toHaveBeenCalledTimes(1);
+    // A known container, or a valid registry: not asked.
+    const check = vi.fn(async () => true);
+    expect(await findWindowDevspace('devspaces-acme-api-x', { ...deps({ found: [ENTRY] }).all, mayRestore: check })).toBe(ENTRY);
+    expect(await findWindowDevspace('c', { ...deps({ needsRestore: false }).all, mayRestore: check })).toBeUndefined();
+    expect(check).not.toHaveBeenCalled();
+  });
+
   it('does the Docker work at the start after the first use, and in the window of a devspace container', () => {
     expect(backgroundWorkAtStart(true, undefined)).toBe(true);
     expect(backgroundWorkAtStart(true, 'my-dev-container')).toBe(true);

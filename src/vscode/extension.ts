@@ -729,8 +729,11 @@ async function activateExtension(
   // background: no restore of lost devspaces, no prebuild of the helper image. The window of a devspace container does
   // both, so it finds its devspace also after the storage folder was lost (backgroundWorkAtStart).
   const startWork = backgroundWorkAtStart(await devspacesUsed(paths, logger), containerName);
+  // A lost registry is restored from the current engine, through its worker: never from an engine with the removal
+  // mark, which this computer asks nothing by itself (the check of the worker for a passive read refuses it there too).
+  const mayRestore = startWork ? async (): Promise<boolean> => !(await engineRemoved(await targets.current())) : false;
   const currentDevspace = containerName
-    ? await findWindowDevspace(containerName, { registry, needsRestore, docker, service, logger, mayRestore: startWork })
+    ? await findWindowDevspace(containerName, { registry, needsRestore, docker, service, logger, mayRestore })
     : undefined;
   // A window of a devspace that the user kept on an engine with the removal mark ("Remove Devspaces from This Docker
   // Engine…") works without Devspaces: its heartbeats and its open would set Devspaces up there again. Its session

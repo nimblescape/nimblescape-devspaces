@@ -402,6 +402,21 @@ describe('nothing before the first use of Devspaces', () => {
       { containerName: kept.containerName, running: true },
     );
   }, 20_000);
+
+  it('the window of a devspace container restores no lost registry from an engine with the mark', async () => {
+    await activateWithDocker(
+      // registry.json is lost.
+      (storage) => fs.writeFileSync(path.join(storage, 'docker-engines.json'), '{"engines":[{"host":"","removedAt":1760000000000}]}'),
+      async (_storage, docker, log) => {
+        await waitFor(() => log().includes('No Docker work in the background at the start: Devspaces was removed from the local Docker.'), 'the log of the mark');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Not even `docker info`: no restore is tried there.
+        expect(spawned.filter(([command, sub]) => !(command === docker && sub === 'context'))).toEqual([]);
+        expect(log()).not.toContain('could not be restored from the volumes');
+      },
+      { containerName: 'devspaces-acme-api-3f2a9c1e', running: true },
+    );
+  }, 20_000);
 });
 
 describe('package.json without the walkthrough', () => {
