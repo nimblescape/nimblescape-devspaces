@@ -590,7 +590,7 @@ describe("the worker's Monitor for Delete", () => {
       expect(side.asked).toEqual(['ghcr.io']);
     });
 
-    it("the pipeline's pulls ask the login of their registry through the operation and forget the registry secret", async () => {
+    it("the pipeline's pulls ask the login of their registry through the operation only after a refusal, and forget the registry secret", async () => {
       const asked: string[] = [];
       const forgotten: string[] = [];
       let slot: string | undefined;
@@ -606,7 +606,14 @@ describe("the worker's Monitor for Delete", () => {
       const logins: string[] = [];
       const all = workerServiceDeps({
         host: side,
-        engine: { ...unusedEngine(), pull: async (_reference, options) => void logins.push(`${options?.login?.secretName} ${slot}`) },
+        engine: {
+          ...unusedEngine(),
+          pull: async (reference, options) => {
+            // ghcr.io/o/i:1 is private: its pull without a login is refused.
+            if (options?.login === undefined && reference === 'ghcr.io/o/i:1') throw new EngineError('unauthorized: authentication required', 401);
+            logins.push(`${options?.login?.secretName} ${slot}`);
+          },
+        },
         secretOf: (name) => (name === 'registry' ? slot : undefined),
         forgetSecret: (name) => {
           forgotten.push(name);
@@ -618,9 +625,13 @@ describe("the worker's Monitor for Delete", () => {
         owner: { windowId: 'w', pid: 1 },
         devspaceLock: async () => Promise.reject(new Error('no lock in this test')),
       });
+      // A public image: no login is asked.
+      await all.docker.pullImage('ghcr.io/o/public:1', { onOutput: () => {} });
+      expect(asked).toEqual([]);
+      expect(logins).toEqual(['undefined undefined']);
       await all.docker.pullImage('ghcr.io/o/i:1', { onOutput: () => {} });
       expect(asked).toEqual(['ghcr.io']);
-      expect(logins).toEqual(['registry gho_x']);
+      expect(logins).toEqual(['undefined undefined', 'registry gho_x']);
       expect(forgotten).toEqual(['registry']);
     });
 

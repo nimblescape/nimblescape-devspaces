@@ -166,15 +166,15 @@ interface OperationLogins {
 }
 
 /**
- * The most registries whose login one operation gets. Each pull of an open asks for the login of its registry, also
- * for a public image, and a check asks for it when the registry refused the request without a login, so every registry
- * of the open for which this computer has a login can count: the registry of the image, of the Features (often
- * ghcr.io, with the GitHub sign-in) and of the images of a Docker Compose configuration. The extension cannot read the
- * configuration on the Docker engine, so this limit is what bounds the logins that a worker that someone else controls
- * gets in one open.
+ * The most registries whose login one operation gets. A pull asks for the login of its registry when the registry
+ * refused the pull without a login (or Docker Hub limited it), and a check when the registry refused the request
+ * without a login (or answered 404), so a registry counts when it refused and this computer has a login for it: the
+ * registry of a private image, of private Features (often ghcr.io, with the GitHub sign-in) and of the private images
+ * of a Docker Compose configuration. The extension cannot read the configuration on the Docker engine, so this limit is
+ * what bounds the logins that a worker that someone else controls gets in one open.
  */
 export const MAX_LOGIN_REGISTRIES = 8;
-/** The most requests for a registry login of one operation: one for each pull, and one for each registry of a check. */
+/** The most requests for a registry login of one operation: at most one for each pull and each registry of a check. */
 export const MAX_LOGIN_REQUESTS = 256;
 
 /** What the answer of a request of the extension's side knows of its operation (hostSideHandler). */

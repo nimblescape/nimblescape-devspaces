@@ -3470,7 +3470,7 @@ export class DevspaceService extends OperationBase {
 
   private async pull(ctx: PipelineContext, reference: string, tolerateFailure: boolean, stale: Set<string>): Promise<void> {
     try {
-      // The worker's EngineDocker asks for the login of the registry of the reference itself.
+      // The worker's EngineDocker asks for the login of the registry of the reference itself, when the pull needs it.
       await this.deps.docker.pullImage(reference, { onOutput: this.output, signal: ctx.signal });
     } catch (error) {
       if (this.isCancellation(error, ctx.signal) || !tolerateFailure) throw error;

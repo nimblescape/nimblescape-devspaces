@@ -3,11 +3,11 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // EngineDocker.pullImage with the logins of the operation (the user of a login without a user name, the output and the
-// signal of a pull that asked for its login).
+// signal of a pull that asked for its login after the registry refused the pull without it).
 import { describe, expect, it } from 'vitest';
 import { SECRET_REGISTRY } from '../helperChannel/protocol';
 import { silentLogger } from '../ports';
-import type { DockerEngine } from './dockerEngine';
+import { EngineError, type DockerEngine } from './dockerEngine';
 import { unusedEngine } from './dockerEngine.testkit';
 import { EngineDocker, type PullLogins } from './engineDocker';
 
@@ -28,14 +28,23 @@ function loginsOf(login: Login) {
   return { run, state };
 }
 
+/** The answer of a registry to a pull without a login of a private image. */
+const REFUSED = new EngineError('unauthorized: authentication required', 401);
+
 describe('EngineDocker.pullImage with the logins of the operation: the user, the output and the signal', () => {
   it('a login without a user name and without an identity token pulls with an empty user name (as hostRegistryCredentials)', async () => {
     const { run, state } = loginsOf({ password: 'pw' });
     const logins: unknown[] = [];
-    const engine: DockerEngine = { ...unusedEngine(), pull: async (_reference, options) => void logins.push(options?.login) };
+    const engine: DockerEngine = {
+      ...unusedEngine(),
+      pull: async (_reference, options) => {
+        logins.push(options?.login);
+        if (options?.login === undefined) throw REFUSED;
+      },
+    };
     const docker = new EngineDocker(engine, silentLogger, (name) => (name === SECRET_REGISTRY ? state.slot : undefined), run);
     await docker.pullImage('r.example/i:1', { onOutput: () => {} });
-    expect(logins).toEqual([{ serveraddress: 'r.example', username: '', secretName: SECRET_REGISTRY }]);
+    expect(logins).toEqual([undefined, { serveraddress: 'r.example', username: '', secretName: SECRET_REGISTRY }]);
   });
 
   it('a pull that asked for its login keeps its output and its signal; the ask gets the signal too', async () => {
@@ -45,7 +54,8 @@ describe('EngineDocker.pullImage with the logins of the operation: the user, the
       ...unusedEngine(),
       pull: async (_reference, options) => {
         signals.push(options?.signal);
-        options?.onLine?.('Pulling fs layer');
+        if (options?.login === undefined) throw REFUSED;
+        options.onLine?.('Pulling fs layer');
       },
     };
     const output: string[] = [];
@@ -53,26 +63,24 @@ describe('EngineDocker.pullImage with the logins of the operation: the user, the
     const controller = new AbortController();
     await docker.pullImage('ghcr.io/o/i:1', { onOutput: (text) => void output.push(text), signal: controller.signal });
     expect(output).toEqual(['Pulling fs layer\n']);
-    expect(signals).toEqual([controller.signal]);
+    expect(signals).toEqual([controller.signal, controller.signal]);
     expect(state.signals).toEqual([controller.signal]);
   });
 
-  it('without a login the pull is anonymous and still keeps its output and its signal', async () => {
+  it('without a login on this computer the refused pull fails with its refusal, after one pull; the ask gets the signal', async () => {
     const { run, state } = loginsOf(undefined);
     const pulls: unknown[] = [];
     const engine: DockerEngine = {
       ...unusedEngine(),
       pull: async (_reference, options) => {
         pulls.push([options?.login, options?.signal]);
-        options?.onLine?.('Digest: sha256:x');
+        throw REFUSED;
       },
     };
-    const output: string[] = [];
     const docker = new EngineDocker(engine, silentLogger, () => undefined, run);
     const controller = new AbortController();
-    await docker.pullImage('ghcr.io/o/i:1', { onOutput: (text) => void output.push(text), signal: controller.signal });
+    await expect(docker.pullImage('ghcr.io/o/i:1', { onOutput: () => {}, signal: controller.signal })).rejects.toBe(REFUSED);
     expect(pulls).toEqual([[undefined, controller.signal]]);
-    expect(output).toEqual(['Digest: sha256:x\n']);
     expect(state.signals).toEqual([controller.signal]);
   });
 });

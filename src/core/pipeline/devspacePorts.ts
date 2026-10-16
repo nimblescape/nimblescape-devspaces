@@ -131,8 +131,9 @@ export interface DevspaceDocker {
   /** The named images `devspaces-*`, each once with its references. */
   listDevspaceImages(signal?: AbortSignal): Promise<ImageInfo[]>;
   /**
-   * `docker pull`. EngineDocker.pullImage asks for the login of the registry of the reference itself, and holds it only
-   * for this pull.
+   * `docker pull`. EngineDocker.pullImage pulls without a login first; it asks for the login of the registry of the
+   * reference itself only when the registry refuses that pull (or Docker Hub limits it), and holds it only for this
+   * pull.
    */
   pullImage(reference: string, options?: { onOutput?: (text: string) => void; signal?: AbortSignal }): Promise<void>;
 }
