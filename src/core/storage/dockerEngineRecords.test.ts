@@ -5,7 +5,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Logger } from '../ports';
 import { DockerEngineRecords } from './dockerEngineRecords';
 
 const NOW = Date.parse('2026-10-16T08:00:00.000Z');
@@ -19,8 +20,23 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+const realReadFile = fs.promises.readFile;
+
+/** The next `times` reads of the file fail with the error `code`, as when another process holds it (Windows). */
+function failReads(code: string, times = Number.POSITIVE_INFINITY): void {
+  let left = times;
+  vi.spyOn(fs.promises, 'readFile').mockImplementation((async (file: fs.PathLike, options?: unknown) => {
+    if (file === records.file && left-- > 0) throw Object.assign(new Error(`${code}: the file is in use, read '${records.file}'`), { code });
+    return realReadFile.call(fs.promises, file, options as BufferEncoding);
+  }) as typeof fs.promises.readFile);
+}
+
+/** Two engines with records: the local Docker with its answer, build-box with the removal mark. */
+const TWO_ENGINES = { engines: [{ host: '', monitorAnsweredAt: NOW }, { host: 'build-box', removedAt: NOW }] };
 
 describe('DockerEngineRecords: the answer to the question about the Monitor', () => {
   it('knows no answer without a file, and records one per engine (the local Docker is the host "")', async () => {
@@ -65,12 +81,58 @@ describe('DockerEngineRecords: the answer to the question about the Monitor', ()
     ]);
   });
 
-  it('a folder in place of the file counts as no answer and no mark, and a write there fails', async () => {
+  it('a folder in place of the file cannot be read: the reads and the writes fail', async () => {
     fs.mkdirSync(records.file);
-    expect(await records.monitorAnswered('')).toBe(false);
-    expect(await records.removed('')).toBe(false);
+    await expect(records.monitorAnswered('')).rejects.toThrow();
+    await expect(records.removed('')).rejects.toThrow();
     await expect(records.recordMonitorAnswer('', NOW)).rejects.toThrow();
     await expect(records.setRemoved('', NOW)).rejects.toThrow();
+  });
+});
+
+describe('DockerEngineRecords: a file that cannot be read, or is not valid', () => {
+  it('a read error of a moment (EBUSY, a virus scanner on Windows) is tried again: a change loses no record of another engine', async () => {
+    fs.writeFileSync(records.file, JSON.stringify(TWO_ENGINES));
+    failReads('EBUSY', 1);
+    await records.recordMonitorAnswer('other', NOW + 1);
+    expect(await records.read()).toEqual([...TWO_ENGINES.engines, { host: 'other', monitorAnsweredAt: NOW + 1 }]);
+    // The plain reads are tried again too: the mark and the answer stay visible.
+    failReads('EPERM', 1);
+    expect(await records.removed('build-box')).toBe(true);
+    failReads('EBUSY', 1);
+    expect(await records.monitorAnswered('')).toBe(true);
+  });
+
+  it('a read error that stays fails the change, and the file stays as it was; the plain reads fail too', async () => {
+    const before = JSON.stringify(TWO_ENGINES);
+    fs.writeFileSync(records.file, before);
+    failReads('EIO');
+    await expect(records.recordMonitorAnswer('other', NOW + 1)).rejects.toThrow('EIO');
+    await expect(records.setRemoved('', NOW + 1)).rejects.toThrow('EIO');
+    // A transient error that does not end in time fails as well.
+    vi.restoreAllMocks();
+    failReads('EBUSY');
+    await expect(records.setRemoved('build-box', undefined)).rejects.toThrow('EBUSY');
+    await expect(records.removed('build-box')).rejects.toThrow('EBUSY');
+    vi.restoreAllMocks();
+    expect(fs.readFileSync(records.file, 'utf8')).toBe(before);
+    expect(fs.existsSync(records.lockDir)).toBe(false);
+  });
+
+  it('a file that is not valid knows no engine; a change keeps a copy of it first, with a warning', async () => {
+    const warn = vi.fn();
+    const logged = new DockerEngineRecords(records.file, { logger: { debug: vi.fn(), info: vi.fn(), warn, error: vi.fn() } as unknown as Logger });
+    fs.writeFileSync(records.file, '{ "engines": [{ "host": "build-box", "removedAt": 17');
+    expect(await logged.removed('build-box')).toBe(false);
+    await logged.setRemoved('', NOW);
+    expect(await logged.read()).toEqual([{ host: '', removedAt: NOW }]);
+    const copies = fs.readdirSync(dir).filter((name) => name.startsWith('docker-engines.json.backup-'));
+    expect(copies).toHaveLength(1);
+    expect(fs.readFileSync(path.join(dir, copies[0]), 'utf8')).toBe('{ "engines": [{ "host": "build-box", "removedAt": 17');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`A copy was saved as ${path.join(dir, copies[0])}.`));
+    // A valid file needs no copy: also not one with entries that are not valid (they record nothing that counts).
+    await logged.recordMonitorAnswer('', NOW + 1);
+    expect(fs.readdirSync(dir).filter((name) => name.startsWith('docker-engines.json.backup-'))).toHaveLength(1);
   });
 });
 
