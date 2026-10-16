@@ -124,7 +124,7 @@ describe('the command Update All Images Now', () => {
     const { controller } = controllerWith(LOCAL, update, startDocker);
     await controller.updateImagesNow();
     // The progress does not say "Starting Docker" while the worker starts and asks the Monitor.
-    expect(events).toEqual(['no step', 'start', Steps.startingDocker, Steps.askingMonitor, 'update']);
+    expect(events).toEqual(['no step', 'start', Steps.startingDocker, Steps.sendingRequest, 'update']);
     expect(startDocker.mock.calls[0][0].signal).toBe(update.mock.calls[0][1]);
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on the local Docker updates the images now.');
   });

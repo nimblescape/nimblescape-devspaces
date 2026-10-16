@@ -1133,7 +1133,7 @@ export class Controller implements vscode.Disposable {
    * flow is refused while this window removes Devspaces from an engine (refusedWhileRemoving), as Start is.
    * In the progress, the step "Docker start" of Start runs first (startDocker): a local Docker that does not run is
    * started, a Podman engine behind the Docker CLI is refused, and an SSH host is checked. After a Docker start, the
-   * progress names the next step (askingMonitor), so that it does not say "Starting Docker" until the Monitor took the
+   * progress names the next step (sendingRequest), so that it does not say "Starting Docker" until the Monitor took the
    * request. The progress can be cancelled, as the one of Start: a cancel during the Docker start asks the Monitor
    * nothing and shows nothing.
    */
@@ -1161,7 +1161,7 @@ export class Controller implements vscode.Disposable {
         await startDocker?.({ onStarting, signal });
         if (signal.aborted) throw new UserFacingError('cancelled', PipelineTexts.cancelled);
         // A Docker that runs already showed no step, and shows none now.
-        if (started) progress.step('askingMonitor');
+        if (started) progress.step('sendingRequest');
         await update(target, signal);
       },
     });
