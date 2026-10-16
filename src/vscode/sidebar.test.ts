@@ -972,28 +972,38 @@ describe('Sidebar progressive display', () => {
       ]);
     });
 
-    it('keeps its time when the Refresh command meets the rate limit before that time', async () => {
+    it('moves to a later time that GitHub names when the Refresh command meets the rate limit, never to an earlier one', async () => {
       const later = resetAt + 15 * 60_000;
+      const earlier = resetAt - 15 * 60_000;
       let fail: (error: unknown) => void = () => undefined;
       h.discovery.refresh
         .mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)))
+        .mockRejectedValueOnce(limitedUntil(later))
+        .mockRejectedValueOnce(limitedUntil(earlier))
         .mockRejectedValue(limitedUntil(later));
       await h.sidebar.initialize();
       await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
       fail(limitedUntil(resetAt));
       await h.sidebar.refreshDiscovery();
+      // GitHub names a later time: the planned refresh moves to it.
       await h.sidebar.refreshDiscovery({ again: true });
-      expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
+      // GitHub names an earlier time: the planned refresh stays at the later time.
+      await h.sidebar.refreshDiscovery({ again: true });
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
       expect(warnings()).toEqual([
         Messages.gitHubRateLimited(shownTime(resetAt), true),
-        Messages.gitHubRateLimited(shownTime(resetAt), true),
+        Messages.gitHubRateLimited(shownTime(later), true),
+        Messages.gitHubRateLimited(shownTime(later), true),
       ]);
-      await vi.advanceTimersByTimeAsync(resetAt + RATE_LIMIT_MARGIN_MS - NOW);
-      await vi.waitFor(() => expect(warnings()).toHaveLength(3));
+      // No refresh before the later time, then the one refresh.
+      await vi.advanceTimersByTimeAsync(later + RATE_LIMIT_MARGIN_MS - NOW - 1);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
-      expect(warnings()[2]).toBe(Messages.gitHubRateLimited(shownTime(later), false));
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => expect(warnings()).toHaveLength(4));
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(4);
+      expect(warnings()[3]).toBe(Messages.gitHubRateLimited(shownTime(later), false));
       await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
-      expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(4);
     });
   });
 
