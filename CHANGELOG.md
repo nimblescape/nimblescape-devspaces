@@ -63,7 +63,7 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Readable code:** the package now holds the code of Devspaces as readable JavaScript: not minified, and with the names of the source. The worker, its batch helpers and the Monitor run one file, dist/helperChannel.js, and the host access analysis runs in a thread of that file, after a check of its SHA-256 hash. Before, this file was minified, carried the Monitor and the analysis as text, and ran the analysis from that text. The package is about 700 KB instead of about 530 KB. A worker start on a remote Docker engine now sends about 1.4 MB of code over SSH instead of about 1 MB. At the first start after the update, Devspaces replaces the Monitor on each Docker engine once, as after every update of its code.
 
-**Marketplace page and support:** the README no longer compares Devspaces with GitHub Codespaces, and the keyword codespaces is gone. The hint of the test field in Edit Repository Groups… now shows the example of the user guide.
+**Marketplace page and support:** the README no longer compares Devspaces with GitHub Codespaces, and the keyword codespaces is gone. The README and the new file ThirdPartyNotices.txt in the package credit the Codicons of Microsoft (CC BY 4.0), which the icons of Devspaces use. The hint of the test field in Edit Repository Groups… now shows the example of the user guide.
 
 ## 0.5.0
 

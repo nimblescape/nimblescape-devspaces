@@ -160,4 +160,22 @@ describe('the Marketplace page and the files of the package', () => {
       expect(read(file), file).not.toMatch(/codespace/i);
     }
   });
+
+  it('credits the Codicons in ThirdPartyNotices.txt, which the package contains and the README links', () => {
+    const notices = read('ThirdPartyNotices.txt');
+    for (const words of ['https://github.com/microsoft/vscode-codicons', 'Microsoft Corporation', 'CC BY 4.0', 'https://creativecommons.org/licenses/by/4.0/legalcode']) {
+      expect(notices).toContain(words);
+    }
+    for (const file of ['resources/icon.svg', 'resources/icon.png', 'resources/icons/devspace-icons.woff']) {
+      expect(fs.existsSync(path.join(ROOT, file)), file).toBe(true);
+      expect(notices).toContain(file);
+    }
+    expect(notices).toContain('"open-in-window"');
+    // Every codicon whose shapes the script of the icon font takes.
+    const codicons = [...new Set([...read('scripts/build-icon-font.py').matchAll(/`(vm[a-z-]*)`/g)].map((match) => match[1]))].sort();
+    expect(codicons).toEqual(['vm', 'vm-connect', 'vm-outline', 'vm-pending', 'vm-running']);
+    for (const codicon of codicons) expect(notices).toContain(`"${codicon}"`);
+    expect(read('.vscodeignore').split('\n').map((line) => line.trim())).toContain('!ThirdPartyNotices.txt');
+    expect(read('README.md')).toContain('(https://github.com/nimblescape/nimblescape-devspaces/blob/main/ThirdPartyNotices.txt)');
+  });
 });

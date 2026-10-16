@@ -69,3 +69,5 @@ Before you uninstall Devspaces, run **Devspaces: Remove Devspaces from This Dock
 [Change log](https://github.com/nimblescape/nimblescape-devspaces/blob/main/CHANGELOG.md) · [Contributing](https://github.com/nimblescape/nimblescape-devspaces/blob/main/CONTRIBUTING.md) · [User guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md) · [Issues](https://github.com/nimblescape/nimblescape-devspaces/issues) · [Source](https://github.com/nimblescape/nimblescape-devspaces)
 
 © 2026 Hannes Stauss (scalarion@nimblescape.com) · [MIT License](https://github.com/nimblescape/nimblescape-devspaces/blob/main/LICENSE).
+
+The icons of Devspaces are based on the [Codicons](https://github.com/microsoft/vscode-codicons) of Microsoft, under the [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) license. See [ThirdPartyNotices.txt](https://github.com/nimblescape/nimblescape-devspaces/blob/main/ThirdPartyNotices.txt).
