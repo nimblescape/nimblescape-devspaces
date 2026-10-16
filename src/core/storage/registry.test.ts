@@ -861,6 +861,50 @@ describe('DevspaceRegistry changes', () => {
     expect(fs.readdirSync(root).filter((name) => name.includes('lock'))).toEqual([]);
   });
 
+  // For example EBUSY on Windows while a virus scanner reads the token file.
+  it('takes a token file that cannot be read for an error, not for a lost lock', async () => {
+    const logger = recordingLogger();
+    const registry = new DevspaceRegistry(paths, undefined, { lockStaleMs: 200, lockTimeoutMs: 5_000, logger });
+    await registry.add(devspace(ID_A, 'o/a', { lastBuildNumber: 0 }));
+    const owner = path.join(paths.registryLock, 'owner');
+    const realReadFile = fs.promises.readFile;
+    let failures = 0;
+    const readFile = vi.spyOn(fs.promises, 'readFile').mockImplementation(async (file, options) => {
+      if (file === owner && failures > 0) {
+        failures--;
+        throw Object.assign(new Error(`EBUSY: resource busy or locked, open '${owner}'`), { code: 'EBUSY' });
+      }
+      return realReadFile(file, options);
+    });
+    let runs = 0;
+    const change = () =>
+      registry.update((file) => {
+        runs++;
+        file.devspaces[0].lastBuildNumber = (file.devspaces[0].lastBuildNumber ?? 0) + 1;
+      });
+    try {
+      // A short failure is tried again.
+      failures = 2;
+      await change();
+      expect(runs).toBe(1);
+      await expect(registry.get(ID_A)).resolves.toMatchObject({ lastBuildNumber: 1 });
+      expect(fs.existsSync(paths.registryLock)).toBe(false);
+      // A failure that stays fails the change with its error: nothing written, and the change does not run again.
+      failures = Infinity;
+      await expect(change()).rejects.toMatchObject({ code: 'EBUSY' });
+      expect(runs).toBe(2);
+      await expect(registry.get(ID_A)).resolves.toMatchObject({ lastBuildNumber: 1 });
+      expect(logger.warnings).toEqual([]);
+      // The folder whose token could not be read is left until it is stale.
+      expect(fs.existsSync(paths.registryLock)).toBe(true);
+    } finally {
+      readFile.mockRestore();
+    }
+    await change();
+    await expect(registry.get(ID_A)).resolves.toMatchObject({ lastBuildNumber: 2 });
+    expect(fs.existsSync(paths.registryLock)).toBe(false);
+  });
+
   it('lets a reader without the lock see complete content during many writes', async () => {
     const registry = new DevspaceRegistry(paths);
     await registry.add(devspace(ID_A, 'o/a', { lastBuildNumber: 0 }));

@@ -46,13 +46,16 @@ export class LockLostError extends Error {
  * - the holder refreshes the folder time while `fn` runs, so a slow `fn` is not taken for stale;
  * - the holder writes a random token into the folder. When its event loop stalls longer than `staleMs` (a blocked
  *   process, a computer that slept), another process takes the folder over as stale. `fn` gets `held`, which is true
- *   while the folder still has the own token, and checks it before its write. The folder is removed only while it has
- *   the own token, so the lock of the other process stays;
+ *   while the folder still has the own token, and checks it before its write. Only a missing token file or another
+ *   token is a lost lock; another error of the read (after the retries of transient errors, for example EBUSY on
+ *   Windows while a virus scanner reads the file) is thrown. The folder is removed only while it has the own token, so
+ *   the lock of the other process stays; a folder whose token cannot be read is left until it is stale;
  * - transient errors of Windows are tried again instead of failing the change.
  */
 export async function withLockFolder<T>(lockDir: string, fn: (held: () => Promise<boolean>) => Promise<T>, timings: LockTimings): Promise<T> {
   const token = await acquireLockFolder(lockDir, timings);
-  const held = async () => (await readTextFile(path.join(lockDir, LOCK_OWNER_FILE)).catch(() => undefined)) === token;
+  // readTextFile: undefined for a missing file (ENOENT), transient errors tried again, any other error thrown.
+  const held = async () => (await readTextFile(path.join(lockDir, LOCK_OWNER_FILE))) === token;
   const heartbeat = setInterval(() => {
     const now = new Date();
     fs.promises.utimes(lockDir, now, now).catch(() => {});
@@ -62,7 +65,7 @@ export async function withLockFolder<T>(lockDir: string, fn: (held: () => Promis
     return await fn(held);
   } finally {
     clearInterval(heartbeat);
-    if (await held()) await removeFolder(lockDir);
+    if (await held().catch(() => false)) await removeFolder(lockDir);
   }
 }
 
