@@ -334,6 +334,7 @@ The checks are a guard rail against mistakes and copied templates, not a sandbox
 - **A devspace stops too early or keeps running.** Check its row for `· kept`, and the settings `stopOnClose`, `stopAfterMinutes`, and `respectShutdownActionNone`. If the window warns that its heartbeats failed, the Monitor may stop the devspace after `stopAfterMinutes`.
 - **GitHub limits the requests.** When GitHub refuses the requests of your account for a while (its rate limit), the view keeps the repositories that it shows, and a message says at what time Devspaces loads the list again. It tries once at that time; after that, use **Refresh**.
 - **`State unknown`.** Devspaces could not read the engine. On a remote host, check that `ssh <host>` works without a question and that Docker runs there. After the images of an engine were removed, Devspaces prepares the engine again in the background; the status bar shows "Devspaces: preparing `<host>`…".
+- **Report a problem.** Open an issue on GitHub. [SUPPORT.md](../SUPPORT.md) says what to include.
 
 ## Uninstall
 

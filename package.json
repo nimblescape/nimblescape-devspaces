@@ -17,6 +17,7 @@
   "bugs": {
     "url": "https://github.com/nimblescape/nimblescape-devspaces/issues"
   },
+  "qna": "https://github.com/nimblescape/nimblescape-devspaces/issues",
   "engines": {
     "vscode": "^1.125.0"
   },

@@ -66,7 +66,7 @@ Before you uninstall Devspaces, run **Devspaces: Remove Devspaces from This Dock
 
 ---
 
-[Change log](https://github.com/nimblescape/nimblescape-devspaces/blob/main/CHANGELOG.md) · [Contributing](https://github.com/nimblescape/nimblescape-devspaces/blob/main/CONTRIBUTING.md) · [User guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md) · [Issues](https://github.com/nimblescape/nimblescape-devspaces/issues) · [Source](https://github.com/nimblescape/nimblescape-devspaces)
+[Change log](https://github.com/nimblescape/nimblescape-devspaces/blob/main/CHANGELOG.md) · [Contributing](https://github.com/nimblescape/nimblescape-devspaces/blob/main/CONTRIBUTING.md) · [User guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md) · [Support](https://github.com/nimblescape/nimblescape-devspaces/blob/main/SUPPORT.md) · [Issues](https://github.com/nimblescape/nimblescape-devspaces/issues) · [Source](https://github.com/nimblescape/nimblescape-devspaces)
 
 © 2026 Hannes Stauss (scalarion@nimblescape.com) · [MIT License](https://github.com/nimblescape/nimblescape-devspaces/blob/main/LICENSE).
 
