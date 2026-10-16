@@ -59,8 +59,6 @@ export const Commands = {
   // The command of a repository row (TreeItem.command, hidden in the Command Palette): a double-click runs Start
   // (rowActivation.ts).
   rowActivated: 'devspaces.rowActivated',
-  // The link "Show details" of a progress notification (hidden from the Command Palette).
-  showProgressDetails: 'devspaces.showProgressDetails',
   // The Monitor of the current Docker engine runs its background run at once (the images in use, the VS Code
   // server and the extensions), for example after a new image was pushed (Command Palette, the "…" menu of the view).
   updateImagesNow: 'devspaces.updateImagesNow',

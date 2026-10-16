@@ -650,11 +650,11 @@ describe('Controller commands', () => {
     };
     const declared = manifest.contributes.commands.map((command) => command.command).sort();
     expect([...h.commands.keys()].sort()).toEqual(declared);
-    // 37 commands, among them hidden ones: Show Docker Setup (the action Install Docker… of an error: it looks for the
-    // CLI, then shows the view), the command of a repository row (a double-click runs Start), the link Show details of
-    // a progress notification (which also closes it), and the choice of the Docker host (the command of the first row
-    // of the view). The last one added: "Remove Devspaces from This Docker Engine…".
-    expect(declared).toHaveLength(37);
+    // 36 commands, among them hidden ones: Show Docker Setup (the action Install Docker… of an error: it looks for the
+    // CLI, then shows the view), the command of a repository row (a double-click runs Start), and the choice of the
+    // Docker host (the command of the first row of the view). The last one added: "Remove Devspaces from This Docker
+    // Engine…".
+    expect(declared).toHaveLength(36);
     expect(declared).toContain(Commands.removeFromDockerEngine);
   });
 
@@ -803,10 +803,6 @@ describe('Controller commands', () => {
     expect(h.logger.show).toHaveBeenCalled();
   });
 
-  it('shows the log for the link Show details of a progress notification, also with an unknown operation', async () => {
-    await run('showProgressDetails', 12345);
-    expect(h.logger.show).toHaveBeenCalled();
-  });
 });
 
 describe('Start', () => {

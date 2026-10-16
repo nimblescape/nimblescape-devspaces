@@ -369,11 +369,6 @@
         "category": "Devspaces"
       },
       {
-        "command": "devspaces.showProgressDetails",
-        "title": "Show Details of the Progress",
-        "category": "Devspaces"
-      },
-      {
         "command": "devspaces.updateImagesNow",
         "title": "Update All Images Now",
         "category": "Devspaces"
@@ -451,10 +446,6 @@
         },
         {
           "command": "devspaces.rowActivated",
-          "when": "false"
-        },
-        {
-          "command": "devspaces.showProgressDetails",
           "when": "false"
         },
         {
