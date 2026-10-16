@@ -11,6 +11,7 @@ import { systemClock, type Clock, type Logger, type PipelineUi, type Configurati
 import type { VsCodeGitHubAuth } from './auth';
 import { GITHUB_PACKAGES_REGISTRY } from '../core/imageCheck/credentials';
 import type { UpdateContainer } from '../core/types';
+import { showInformationMessage, showWarningMessage } from './notifications';
 
 /** Identical non-blocking messages within this time are shown once. */
 export const MESSAGE_DEDUPLICATION_MS = 60_000;
@@ -31,7 +32,7 @@ export class VsCodePipelineUi implements PipelineUi {
   // center unanswered would leave the pipeline waiting without a visible question.
 
   async confirmUntrustedRepository(repository: string): Promise<boolean> {
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await showWarningMessage(
       Messages.untrustedRepository(repository),
       { modal: true },
       Actions.open,
@@ -42,7 +43,7 @@ export class VsCodePipelineUi implements PipelineUi {
   async configurationChanged(repository: string, what?: ConfigurationChangeKind): Promise<'rebuildNow' | 'later'> {
     const rebuildNow: vscode.MessageItem = { title: Actions.rebuildNow };
     const later: vscode.MessageItem = { title: Actions.later, isCloseAffordance: true };
-    const choice = await vscode.window.showInformationMessage(
+    const choice = await showInformationMessage(
       what === 'defaultImage' ? Messages.defaultImageChanged : Messages.configurationChanged,
       { modal: true, detail: repository },
       rebuildNow,
@@ -63,7 +64,7 @@ export class VsCodePipelineUi implements PipelineUi {
     // The counts, worded here.
     const changes = confirmation.changes ? formatChanges(confirmation.changes) : '';
     if (changes !== '') {
-      const choice = await vscode.window.showWarningMessage(
+      const choice = await showWarningMessage(
         `${Messages.deleteUnsaved(repository, changes)}${stateNote}${repositoryDataText}${otherWindow}`,
         { modal: true },
         Actions.openDevspace,
@@ -71,14 +72,14 @@ export class VsCodePipelineUi implements PipelineUi {
       );
       return choice === Actions.deleteAnyway ? 'delete' : choice === Actions.openDevspace ? 'open' : undefined;
     }
-    const choice = await vscode.window.showWarningMessage(`${Messages.deleteConfirm(repository)}${stateNote}${repositoryDataText}${otherWindow}`, { modal: true }, Actions.delete);
+    const choice = await showWarningMessage(`${Messages.deleteConfirm(repository)}${stateNote}${repositoryDataText}${otherWindow}`, { modal: true }, Actions.delete);
     return choice === Actions.delete ? 'delete' : undefined;
   }
 
   /** The additional volumes that Delete may remove. */
   async deleteAdditionalVolumes(volumes: readonly string[]): Promise<'remove' | 'keep' | undefined> {
     // A message of normal length (the names come from the worker); every name that Remove removes is in its detail.
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await showWarningMessage(
       Messages.deleteAdditionalVolumes(listSome(volumes)),
       { modal: true, ...(volumes.length > MAX_LISTED_NAMES ? { detail: volumes.join('\n') } : {}) },
       Actions.remove,
@@ -105,12 +106,12 @@ export class VsCodePipelineUi implements PipelineUi {
     const rebuildNow: vscode.MessageItem = { title: Actions.rebuildNow };
     // Keeping the kind is the answer of a dismissed dialog (it removes nothing).
     const later: vscode.MessageItem = { title: Actions.later, isCloseAffordance: true };
-    const choice = await vscode.window.showWarningMessage(message, { modal: true, detail: repository }, rebuildNow, later);
+    const choice = await showWarningMessage(message, { modal: true, detail: repository }, rebuildNow, later);
     return choice === rebuildNow ? 'rebuildNow' : 'later';
   }
 
   async filesMissing(repository: string): Promise<'cloneAgain' | 'deleteDevspace' | undefined> {
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await showWarningMessage(
       Messages.filesMissing,
       { modal: true, detail: repository },
       Actions.cloneAgain,
@@ -123,7 +124,7 @@ export class VsCodePipelineUi implements PipelineUi {
 
   async recreateContainer(repository: string, question: { message: string; detail: string }): Promise<boolean> {
     // The modal adds Cancel, the answer of a dismissed dialog (it removes nothing).
-    const choice = await vscode.window.showWarningMessage(question.message, { modal: true, detail: question.detail }, Actions.recreateContainer);
+    const choice = await showWarningMessage(question.message, { modal: true, detail: question.detail }, Actions.recreateContainer);
     this.logger.info(`${repository}: ${choice === Actions.recreateContainer ? 'Recreate' : 'Cancel'} was chosen.`);
     return choice === Actions.recreateContainer;
   }
@@ -137,7 +138,7 @@ export class VsCodePipelineUi implements PipelineUi {
     const accept: vscode.MessageItem = { title: ask ? Actions.updateNow : Actions.continue };
     const decline: vscode.MessageItem = { title: ask ? Actions.later : Actions.cancel, isCloseAffordance: true };
     const message = ask ? Messages.containerUpdateQuestion(repository, running) : Messages.containerUpdateNotice(repository, running);
-    const choice = await vscode.window.showInformationMessage(message, { modal: true }, accept, decline);
+    const choice = await showInformationMessage(message, { modal: true }, accept, decline);
     this.logger.info(`${repository}: ${choice === accept ? accept.title : decline.title} was chosen for the update of its container.`);
     return choice === accept ? 'update' : ask ? 'later' : 'cancel';
   }
@@ -145,15 +146,14 @@ export class VsCodePipelineUi implements PipelineUi {
   info(message: string): void {
     if (!this.shouldShow(`info:${message}`)) return;
     this.logger.info(message);
-    vscode.window
-      .showInformationMessage(message)
+    showInformationMessage(message)
       .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
   }
 
   warn(message: string): void {
     if (!this.shouldShow(`warn:${message}`)) return;
     this.logger.warn(message);
-    vscode.window.showWarningMessage(message, Actions.showDetails).then(
+    showWarningMessage(message, Actions.showDetails).then(
       (choice) => {
         if (choice === Actions.showDetails) this.showLog();
       },
@@ -166,13 +166,11 @@ export class VsCodePipelineUi implements PipelineUi {
     if (!this.shouldShow(`registry:${registry.toLowerCase()}`)) return;
     this.logger.info(message);
     if (registry.toLowerCase() !== GITHUB_PACKAGES_REGISTRY) {
-      vscode.window
-        .showInformationMessage(message)
+      showInformationMessage(message)
         .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
       return;
     }
-    vscode.window
-      .showInformationMessage(message, Actions.signIn)
+    showInformationMessage(message, Actions.signIn)
       .then(async (choice) => {
         if (choice !== Actions.signIn) return;
         // The next connection uses the session through the credentials provider of the image check.

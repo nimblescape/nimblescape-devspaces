@@ -198,19 +198,28 @@ export function hostLifecycleMemory(host: HostSide): LifecycleMemory {
 export type RegistryLogin = NonNullable<Awaited<ReturnType<HostSide['secrets']['registry']>>>;
 
 /**
+ * The image or Feature whose registry needs a login: the registry host (`registry-1.docker.io` for Docker Hub) and the
+ * repository, as parseImageReference normalizes them. The extension gives only the login of that registry.
+ */
+export interface LoginReference {
+  registry: string;
+  repository: string;
+}
+
+/**
  * The logins of the registries of one operation. Every login comes as the one registry secret of the operation
  * (SECRET_REGISTRY), so they are used one after the other (two logins asked at once could each read the other's): `use`
- * runs with the login of `registry` (`undefined` when the computer has none, or its request failed, which is logged),
- * and the operation forgets the secret when `use` ends, before the next login is asked.
+ * runs with the login of the registry of `reference` (`undefined` when the computer has none, or its request failed,
+ * which is logged), and the operation forgets the secret when `use` ends, before the next login is asked.
  */
 export function registryLogins(
   host: HostSide,
   forget: () => void,
   log: Logger,
-): <T>(registry: string, use: (login: RegistryLogin | undefined) => Promise<T>, signal?: AbortSignal) => Promise<T> {
+): <T>(reference: LoginReference, use: (login: RegistryLogin | undefined) => Promise<T>, signal?: AbortSignal) => Promise<T> {
   let queue: Promise<unknown> = Promise.resolve();
   // `use` must not ask for a login itself (it would wait for its own turn).
-  return (registry, use, signal) => {
+  return (reference, use, signal) => {
     const previous = queue;
     const run = (async () => {
       // The wait for the turn ends with a cancel (an AbortError: a login whose user gave up is not asked); nothing was
@@ -219,9 +228,9 @@ export function registryLogins(
       try {
         let login: RegistryLogin | undefined;
         try {
-          login = await host.secrets.registry(registry);
+          login = await host.secrets.registry(reference.registry, reference.repository);
         } catch (error) {
-          log.warn(`The login of ${registry} could not be asked: ${errorMessage(error)}`);
+          log.warn(`The login of ${reference.registry} could not be asked: ${errorMessage(error)}`);
         }
         if (signal?.aborted) throw abortError();
         return await use(login);
@@ -252,16 +261,19 @@ function turnOf(previous: Promise<unknown>, signal: AbortSignal | undefined): Pr
 
 /**
  * The login of a registry for one use of the registry client (CredentialsProvider), through `logins` (asked when it is
- * needed, forgotten right after). An identity token is the password of IDENTITY_TOKEN_USER, as the Docker credentials
- * give it. Never throws.
+ * needed, forgotten right after), for the repository of the image or Feature that needs it; without a repository,
+ * none is asked. An identity token is the password of IDENTITY_TOKEN_USER, as the Docker credentials give it. Never
+ * throws.
  */
 export function hostRegistryCredentials(logins: ReturnType<typeof registryLogins>): CredentialsProvider {
-  return (registry, signal) =>
-    logins(
-      registry,
+  return async (registry, signal, repository) => {
+    if (repository === undefined) return undefined;
+    return logins(
+      { registry, repository },
       async (login) => (login === undefined ? undefined : { username: login.identityToken === true ? IDENTITY_TOKEN_USER : (login.username ?? ''), password: login.password }),
       signal,
     ).catch(() => undefined);
+  };
 }
 
 /**

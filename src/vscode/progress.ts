@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { Actions, Steps, type ProgressStep } from '../core/messages';
 import type { ProgressReporter } from '../core/ports';
+import { withoutLinks } from './notifications';
 
 /** Command that opens the output channel (package.json). */
 export const SHOW_LOG_COMMAND = 'devspaces.showLog';
@@ -83,9 +84,11 @@ function busyChange(): BusyChange {
  * the operation: it also closes the notification, showDetailsLink; without: it only opens the output channel).
  */
 export function progressMessage(title: string, step: ProgressStep | undefined, detail: string | undefined, id?: number): string {
-  const parts = [title];
+  // The title and the detail carry names of the repository and texts of the worker: plain text (withoutLinks), so that
+  // the link "Show details" is the only link.
+  const parts = [withoutLinks(title)];
   if (step) parts.push(`${Steps[step]}.`);
-  if (detail) parts.push(detail);
+  if (detail) parts.push(withoutLinks(detail));
   parts.push(id === undefined ? SHOW_DETAILS_LINK : showDetailsLink(id));
   return parts.join(' ');
 }

@@ -35,6 +35,7 @@ import { isStorageId } from '../storage/paths';
 import { HelperOperationError, type OperationOptions } from '../helperChannel/helperChannel';
 import type { AskKind, Secrets } from '../helperChannel/protocol';
 import { errorMessage } from '../errors';
+import { parseImageReference, registryDisplayName } from '../imageCheck/reference';
 import type { Logger } from '../ports';
 
 /** The answer of a request: its value, and the secrets that the operation gets with it. */
@@ -81,6 +82,8 @@ export function hostSideHandler(
   // The devspace of the operation; a first open has none until its `record createDevspace` binds it (`created`:
   // the entry that this operation created, the only one that `record dropCreated` removes).
   const devspace: OperationDevspace = { id: scope.devspaceId };
+  // The registry logins of the operation (`secret registry`).
+  const logins: OperationLogins = { given: new Set(), requests: 0, pending: false };
   return async (kind, payload, signal) => {
     const request = parseHostRequest(payload, kind);
     if (request === undefined) throw new HelperOperationError('invalid', 'The request of the operation is invalid.', false);
@@ -112,7 +115,7 @@ export function hostSideHandler(
       if (request.kind === 'question' && QUESTIONS_WITH_REPOSITORY.has(request.call) && scope.repository !== undefined && !sameRepository(request.args[0], scope.repository)) {
         throw new HelperOperationError('invalid', `The question ${request.call} names another repository than the one of the operation.`, false);
       }
-      if (request.kind !== 'question') return await answer(host, request.kind, request.call, request.args, { dockerHost: scope.dockerHost, repository: scope.repository, logger, replaced, devspace });
+      if (request.kind !== 'question') return await answer(host, request.kind, request.call, request.args, { dockerHost: scope.dockerHost, repository: scope.repository, logger, replaced, devspace, logins });
       scope.onQuestion?.('asked');
       try {
         const answered = await answer(host, request.kind, request.call, request.args);
@@ -149,6 +152,25 @@ interface OperationDevspace {
   created?: string;
 }
 
+/** The registry logins of an operation (`secret registry`). */
+interface OperationLogins {
+  /** The registries whose login the operation got. */
+  given: Set<string>;
+  /** The requests of the operation. */
+  requests: number;
+  /** A request is being answered. */
+  pending: boolean;
+}
+
+/**
+ * The most registries whose login one operation gets. An open needs the logins of the registries of its private images
+ * and Features, rarely more than two. The extension cannot read the configuration on the Docker engine, so this limit
+ * is what keeps a worker that someone else controls from getting every login of this computer at once.
+ */
+export const MAX_LOGIN_REGISTRIES = 4;
+/** The most requests for a registry login of one operation: one for each pull, and one for each registry of a check. */
+export const MAX_LOGIN_REQUESTS = 256;
+
 /** What the answer of a request of the extension's side knows of its operation (hostSideHandler). */
 interface RequestContext {
   dockerHost?: string;
@@ -156,6 +178,7 @@ interface RequestContext {
   logger?: Logger;
   replaced: BusyMark[];
   devspace: OperationDevspace;
+  logins: OperationLogins;
 }
 
 /** The most marks that the handler of an operation remembers as replaced by its `record markBusy`. */
@@ -346,7 +369,13 @@ function strings(args: unknown[], count: number): string[] {
   return values as string[];
 }
 
-async function answer(host: HostSide, kind: AskKind, call: string, args: unknown[], context: RequestContext = { replaced: [], devspace: {} }): Promise<Answer> {
+async function answer(
+  host: HostSide,
+  kind: AskKind,
+  call: string,
+  args: unknown[],
+  context: RequestContext = { replaced: [], devspace: {}, logins: { given: new Set(), requests: 0, pending: false } },
+): Promise<Answer> {
   switch (kind) {
     case 'question':
       return { value: await question(host, call, args) };
@@ -355,7 +384,7 @@ async function answer(host: HostSide, kind: AskKind, call: string, args: unknown
     case 'record':
       return { value: await record(host, call, args, context) };
     case 'secret':
-      return secret(host, call, args);
+      return secret(host, call, args, context);
   }
 }
 
@@ -678,21 +707,63 @@ async function record(host: HostSide, call: string, args: unknown[], context: Re
   }
 }
 
-async function secret(host: HostSide, call: string, args: unknown[]): Promise<Answer> {
+async function secret(host: HostSide, call: string, args: unknown[], context: RequestContext): Promise<Answer> {
   switch (call) {
     case 'token': {
       const token = await host.secrets.token();
       const value: HostSecretAnswer = { given: token !== undefined };
       return token === undefined ? { value } : { value, secrets: { [HOST_SECRET_NAMES.token]: token } };
     }
-    case 'registry': {
-      const login = await host.secrets.registry(strings(args, 1)[0]);
-      if (login === undefined) return { value: { given: false } satisfies HostSecretAnswer };
-      const { password, ...rest } = login;
-      const value: HostSecretAnswer = { given: true, ...rest };
-      return { value, secrets: { [HOST_SECRET_NAMES.registry]: password } };
-    }
+    case 'registry':
+      return registryLogin(host, args, context);
     default:
       throw new HelperOperationError('invalid', `The secret ${call} is unknown.`, false);
   }
+}
+
+/**
+ * `secret registry`: the login of the registry of one image or Feature, which the request names as its registry and
+ * repository, both as parseImageReference normalizes them. The extension gives only the login of that registry, with
+ * a valid host name, one request at a time, for at most MAX_LOGIN_REGISTRIES registries and MAX_LOGIN_REQUESTS
+ * requests of the operation, and logs each request with its answer (never the login).
+ */
+async function registryLogin(host: HostSide, args: unknown[], context: RequestContext): Promise<Answer> {
+  const { logins, logger } = context;
+  const refuse = (why: string): never => {
+    logger?.warn(`The worker asked for a registry login that is refused: ${why}.`);
+    throw new HelperOperationError('invalid', `The registry login of the request is refused: ${why}.`, false);
+  };
+  const [registry, repository] = strings(args, 2);
+  argumentCount(args, 2);
+  // Exactly the normalized registry and repository of an image reference: a host name, then the path of the image.
+  const parsed = parseImageReference(`${registry}/${repository}`);
+  if (parsed === undefined || parsed.registry !== registry || parsed.repository !== repository || !REGISTRY_HOST.test(registry)) {
+    refuse('it does not name a registry and the repository of an image');
+  }
+  if (logins.pending) refuse('another registry login of the operation is being answered');
+  if (logins.requests >= MAX_LOGIN_REQUESTS) refuse(`the operation asked for ${MAX_LOGIN_REQUESTS} registry logins already`);
+  logins.requests += 1;
+  const name = registryDisplayName(registry);
+  const what = `The registry login for ${name}/${repository}${context.repository !== undefined ? ` (open of ${context.repository})` : ''}`;
+  if (!logins.given.has(registry) && logins.given.size >= MAX_LOGIN_REGISTRIES) {
+    const given = [...logins.given].map(registryDisplayName).join(', ');
+    logger?.warn(`${what} is not given: the operation got the logins of ${MAX_LOGIN_REGISTRIES} registries already (${given}).`);
+    return { value: { given: false } satisfies HostSecretAnswer };
+  }
+  logins.pending = true;
+  let login: Awaited<ReturnType<HostSide['secrets']['registry']>>;
+  try {
+    login = await host.secrets.registry(registry, repository);
+  } finally {
+    logins.pending = false;
+  }
+  if (login === undefined) {
+    logger?.info(`${what}: this computer has no login for ${name}.`);
+    return { value: { given: false } satisfies HostSecretAnswer };
+  }
+  logins.given.add(registry);
+  const { password, from, ...rest } = login;
+  logger?.info(`${what}: the worker got ${from === 'github' ? 'the GitHub sign-in as the login' : 'the login that Docker stored'} for ${name}.`);
+  const value: HostSecretAnswer = { given: true, ...rest };
+  return { value, secrets: { [HOST_SECRET_NAMES.registry]: password } };
 }

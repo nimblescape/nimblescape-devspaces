@@ -169,7 +169,8 @@ describe('RegistryClient', () => {
     });
     const client = new RegistryClient(transport, credentials);
     expect(await client.getDigest(ref('ghcr.io/o/private'))).toEqual({ kind: 'digest', digest: DIGEST });
-    expect(credentials).toHaveBeenCalledWith('ghcr.io', expect.any(AbortSignal));
+    // With the repository of the image, which the worker names when it asks the extension for the login.
+    expect(credentials).toHaveBeenCalledWith('ghcr.io', expect.any(AbortSignal), 'o/private');
     expect(new URL(transport.requests[1].url).searchParams.getAll('scope')).toEqual(['repository:o/private:pull']);
   });
 
@@ -517,7 +518,7 @@ describe('RegistryClient', () => {
     });
     const credentials = credentialsOf({ username: 'u', password: 'p' });
     expect(await new RegistryClient(transport, credentials).getDigest(ref('registry.example.com/a'))).toEqual({ kind: 'digest', digest: DIGEST });
-    expect(credentials).toHaveBeenCalledWith('registry.example.com', expect.any(AbortSignal));
+    expect(credentials).toHaveBeenCalledWith('registry.example.com', expect.any(AbortSignal), 'a');
   });
 
   it('does not follow a redirect to HTTP', async () => {

@@ -66,10 +66,11 @@ function listed(container: EngineContainer): ListedContainer {
 
 /**
  * The logins of the registries of the operation, one at a time (workerServices.registryLogins): `use` runs while the
- * operation holds the login of `registry` as its registry secret, which it forgets when `use` ends.
+ * operation holds the login of the registry of `reference` (the image that it pulls) as its registry secret, which it
+ * forgets when `use` ends.
  */
 export type PullLogins = <T>(
-  registry: string,
+  reference: { registry: string; repository: string },
   use: (login: { username?: string; identityToken?: boolean; password: string } | undefined) => Promise<T>,
   signal?: AbortSignal,
 ) => Promise<T>;
@@ -440,10 +441,11 @@ export class EngineDocker implements DevspaceDocker {
     // reference without a registry) and holds it only for its own turn (the operation forgets it when the pull ends); a
     // reference that the parser refuses, or whose registry the daemon would read otherwise, is pulled anonymously, as
     // is one without a login.
-    const registry = options.credentials === undefined && this.logins !== undefined ? loginRegistryOf(reference) : undefined;
-    if (registry === undefined || this.logins === undefined) return this.pullWith(reference, options);
+    const image = options.credentials === undefined && this.logins !== undefined ? loginReferenceOf(reference) : undefined;
+    if (image === undefined || this.logins === undefined) return this.pullWith(reference, options);
+    const { registry } = image;
     return this.logins(
-      registry,
+      image,
       async (login) => {
         if (login === undefined) return this.pullWith(reference, options);
         const credentials = { registry, username: login.identityToken === true ? IDENTITY_TOKEN_USER : (login.username ?? ''), password: login.password };
@@ -485,17 +487,18 @@ export class EngineDocker implements DevspaceDocker {
 }
 
 /**
- * The registry whose login a pull of `reference` sends, only when the daemon reads the same registry from it: no space
- * around it, and a registry part (before the first `/`, when it names a host) in lower case, as Docker compares
- * `docker.io` and `index.docker.io`. `undefined`: no login.
+ * The registry whose login a pull of `reference` sends, with the repository of the image, only when the daemon reads
+ * the same registry from it: no space around it, and a registry part (before the first `/`, when it names a host) in
+ * lower case, as Docker compares `docker.io` and `index.docker.io`. `undefined`: no login.
  */
-function loginRegistryOf(reference: string): string | undefined {
+function loginReferenceOf(reference: string): { registry: string; repository: string } | undefined {
   if (reference !== reference.trim()) return undefined;
   const slash = reference.indexOf('/');
   const first = slash < 0 ? '' : reference.slice(0, slash);
   // Docker reads a first part with an upper-case letter as a host too (`MyHost/img`).
   if (first !== first.toLowerCase()) return undefined;
-  return parseImageReference(reference)?.registry;
+  const parsed = parseImageReference(reference);
+  return parsed === undefined ? undefined : { registry: parsed.registry, repository: parsed.repository };
 }
 
 /** A refusal of the login by the registry (HTTP 401 or 403, or Docker's words for it). */

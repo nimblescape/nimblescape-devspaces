@@ -31,6 +31,7 @@ import { Actions, Messages, dockerHostReason } from '../core/messages';
 import { isAbortError, type Logger, type ProcessRunner } from '../core/ports';
 import type { SshHostEntry } from '../core/sshConfig';
 import type { DockerHostQuestion, RemoteDockerState } from '../core/storage/remoteDockerState';
+import { showErrorMessage, showInformationMessage, showWarningMessage, withoutLinks } from './notifications';
 import { MonitorIcons } from './treeModel';
 
 /** User-visible texts of the remote Docker host (plain language). No `vscode` in them. */
@@ -211,7 +212,7 @@ export class RemoteDockerCommands {
   /** Test, rootless socket, modal, remember the context, switch. True when switched. */
   private async switchToRemote(host: string): Promise<boolean> {
     const check = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: RemoteDockerTexts.testing(host), cancellable: true },
+      { location: vscode.ProgressLocation.Notification, title: withoutLinks(RemoteDockerTexts.testing(host)), cancellable: true },
       async (_progress, token) => {
         const controller = new AbortController();
         const subscription = token.onCancellationRequested(() => controller.abort());
@@ -374,7 +375,7 @@ export class RemoteDockerCommands {
     }
     // The answer is kept per question, not per host: the button of a remote host says so.
     const always = question === 'switchToLocal' ? RemoteDockerTexts.dontAskAgain(button) : RemoteDockerTexts.dontAskAgainAnyHost(button);
-    const choice = await vscode.window.showWarningMessage(message, { modal: true, ...options }, button, always);
+    const choice = await showWarningMessage(message, { modal: true, ...options }, button, always);
     if (choice === always) {
       await this.deps.state.setDontAsk(question);
       return true;
@@ -410,7 +411,7 @@ export class RemoteDockerCommands {
   }
 
   private showError(message: string): void {
-    vscode.window.showErrorMessage(message, Actions.showDetails).then(
+    showErrorMessage(message, Actions.showDetails).then(
       (choice) => {
         if (choice === Actions.showDetails) this.deps.showLog();
       },
@@ -419,7 +420,7 @@ export class RemoteDockerCommands {
   }
 
   private showWarning(message: string): void {
-    vscode.window.showWarningMessage(message, Actions.showDetails).then(
+    showWarningMessage(message, Actions.showDetails).then(
       (choice) => {
         if (choice === Actions.showDetails) this.deps.showLog();
       },
@@ -428,7 +429,7 @@ export class RemoteDockerCommands {
   }
 
   private inform(message: string): void {
-    vscode.window.showInformationMessage(message).then(undefined, (error: unknown) => this.deps.logger.error('Could not show the message.', error));
+    showInformationMessage(message).then(undefined, (error: unknown) => this.deps.logger.error('Could not show the message.', error));
   }
 }
 

@@ -21,6 +21,7 @@ import * as vscode from 'vscode';
 import { errorMessage } from '../core/errors';
 import type { Logger } from '../core/ports';
 import type { PreviewRunner } from './groupsPreviewRunner';
+import { showErrorMessage, showWarningMessage } from './notifications';
 import {
   GroupsEditorTexts,
   canSave,
@@ -337,7 +338,7 @@ export class RepositoryGroupsEditor implements vscode.Disposable {
           return;
         }
         const changed = !sameSettingValue(current, session.base);
-        const answer = await vscode.window.showWarningMessage(
+        const answer = await showWarningMessage(
           changed ? GroupsEditorTexts.changedMeanwhile : GroupsEditorTexts.notAListConflict,
           {
             modal: true,
@@ -364,7 +365,7 @@ export class RepositoryGroupsEditor implements vscode.Disposable {
       }
     } catch (error) {
       this.deps.logger.error('The setting devspaces.repositoryGroups could not be saved.', error);
-      void vscode.window.showErrorMessage(`The repository groups could not be saved: ${errorMessage(error)}`);
+      void showErrorMessage(`The repository groups could not be saved: ${errorMessage(error)}`);
       status = GroupsEditorTexts.saveFailed;
     } finally {
       session.saving = false;

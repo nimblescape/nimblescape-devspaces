@@ -47,6 +47,7 @@ import { StoragePaths } from '../core/storage/paths';
 import { ConfigCheckStore } from '../core/storage/configChecks';
 import { bundleHash } from '../core/loader/pipeLoader';
 import { DevspaceRegistry } from '../core/storage/registry';
+import { showWarningMessage } from './notifications';
 import { findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
 import { workerMonitor } from './workerMonitor';
 import { defaultExtensionEntries, windowVscodeServer } from './vscodeServer';
@@ -395,7 +396,7 @@ async function activateExtension(
     // operation `windowState` of the worker of that engine.
     containerExists: (target, devspace, signal) => heartbeatPreparation.scope(() => monitorCalls.containerExists(target, devspace, signal)),
     warn: (message) => {
-      void vscode.window.showWarningMessage(message).then(undefined, (error: unknown) => logger.error('Could not show the message.', error));
+      void showWarningMessage(message).then(undefined, (error: unknown) => logger.error('Could not show the message.', error));
     },
     logger,
   });

@@ -22,7 +22,7 @@ describe('registryLogins, the wait for the turn', () => {
     const listeners = new Set<unknown>();
     const add = vi.spyOn(signal, 'addEventListener');
     const remove = vi.spyOn(signal, 'removeEventListener');
-    for (let i = 0; i < 3; i++) expect(await logins('ghcr.io', async (login) => login?.password, signal)).toBe('p');
+    for (let i = 0; i < 3; i++) expect(await logins({ registry: 'ghcr.io', repository: 'o/i' }, async (login) => login?.password, signal)).toBe('p');
     await settle();
     for (const [type, listener] of add.mock.calls) if (type === 'abort') listeners.add(listener);
     for (const [type, listener] of remove.mock.calls) if (type === 'abort') listeners.delete(listener);
@@ -41,7 +41,7 @@ describe('registryLogins, the wait for the turn', () => {
     const logins = registryLogins(host, () => void forgotten++, silentLogger);
     const cancel = new AbortController();
     const used: unknown[] = [];
-    const turn = logins('ghcr.io', async (login) => void used.push(login), cancel.signal);
+    const turn = logins({ registry: 'ghcr.io', repository: 'o/i' }, async (login) => void used.push(login), cancel.signal);
     await settle();
     cancel.abort();
     answer();

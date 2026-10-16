@@ -152,15 +152,30 @@ export interface HostRecords {
 export const HOST_SESSION_FILES = ['writePending', 'removePending', 'removeOperation', 'removeReopenOf', 'removeDisconnectRequest'] as const;
 export type HostSessionFile = (typeof HOST_SESSION_FILES)[number];
 
+/** A registry login (HostSecrets.registry). */
+export interface HostRegistryLogin {
+  username?: string;
+  identityToken?: boolean;
+  serveraddress: string;
+  password: string;
+  /**
+   * Where the extension found it: the login that Docker stored on this computer, or the GitHub sign-in. Only for the
+   * log of the extension; the worker never gets it.
+   */
+  from?: 'docker' | 'github';
+}
+
 /** The secrets that only the user's computer has. `undefined`: there is none (an anonymous pull, no sign-in). */
 export interface HostSecrets {
   /** The GitHub token of the signed-in account (SECRET_TOKEN). */
   token(): Promise<string | undefined>;
   /**
-   * The login of a registry: what Docker stored on this computer, else for ghcr.io the GitHub sign-in. The password (or
-   * the identity token) travels as the secret SECRET_REGISTRY, never in the value of the answer.
+   * The login of the registry `registry` for the image or Feature `registry`/`repository` (both as parseImageReference
+   * normalizes them): what Docker stored on this computer, else for ghcr.io the GitHub sign-in. The password (or the
+   * identity token) travels as the secret SECRET_REGISTRY, never in the value of the answer. The extension checks the
+   * request, limits the logins of an operation and logs each request (hostSideHandler).
    */
-  registry(registry: string): Promise<{ username?: string; identityToken?: boolean; serveraddress: string; password: string } | undefined>;
+  registry(registry: string, repository: string): Promise<HostRegistryLogin | undefined>;
 }
 
 /** Everything that a flow in the worker needs from the user's computer. */

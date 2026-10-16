@@ -379,7 +379,7 @@ describe('the Docker of the pipeline over the port', () => {
     /** Logins as registryLogins gives them: the secret slot holds the password only during `use`. */
     function logins(answers: Record<string, { username?: string; identityToken?: boolean; password: string } | undefined>) {
       const state = { slot: undefined as string | undefined, events: [] as string[] };
-      const run: PullLogins = async (registry, use) => {
+      const run: PullLogins = async ({ registry }, use) => {
         state.events.push(`ask ${registry}`);
         const login = answers[registry];
         state.slot = login?.password;

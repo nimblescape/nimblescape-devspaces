@@ -11,6 +11,7 @@ import type { Logger } from '../core/ports';
 import type { ExtensionSettings } from '../core/types';
 import { DEFAULT_CACHE_UPDATE_SCHEDULE, normalizeCacheSchedule } from '../core/remoteMonitor/cacheSettings';
 import { parseImageReference } from '../core/remoteMonitor/protocol';
+import { showWarningMessage } from './notifications';
 import { normalizeListOpenMode, type ListOpenMode } from './rowActivation';
 
 export const SETTINGS_SECTION = 'devspaces';
@@ -107,7 +108,7 @@ export function warnInvalidDefaultImage(logger: Logger, warned: string): string 
   const invalid = invalidDefaultImageValue();
   if (invalid === '' || invalid === warned) return invalid;
   logger.warn(Messages.defaultImageInvalid(invalid));
-  Promise.resolve(vscode.window.showWarningMessage(Messages.defaultImageInvalid(invalid))).catch((error: unknown) =>
+  Promise.resolve(showWarningMessage(Messages.defaultImageInvalid(invalid))).catch((error: unknown) =>
     logger.warn(`The warning about the setting defaultImage could not be shown: ${errorMessage(error)}`),
   );
   return invalid;
@@ -138,7 +139,7 @@ export function warnInvalidHostAccessChecksOff(logger: Logger, warned: string): 
   const invalid = invalidHostAccessChecksOffEntries().join(', ');
   if (invalid === '' || invalid === warned) return invalid;
   logger.warn(Messages.hostAccessChecksOffInvalid(invalid));
-  Promise.resolve(vscode.window.showWarningMessage(Messages.hostAccessChecksOffInvalid(invalid))).catch((error: unknown) =>
+  Promise.resolve(showWarningMessage(Messages.hostAccessChecksOffInvalid(invalid))).catch((error: unknown) =>
     logger.warn(`The warning about the setting hostAccessChecksOff could not be shown: ${errorMessage(error)}`),
   );
   return invalid;

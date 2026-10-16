@@ -231,8 +231,8 @@ export function workerHostSide(ask: AskHost, secretOf: SecretOf): HostSide {
         const answer = (await call('secret', 'token')) as { given?: unknown } | null;
         return answer !== null && typeof answer === 'object' && answer.given === true ? secretOf(HOST_SECRET_NAMES.token) : undefined;
       },
-      registry: async (registry) => {
-        const answer = (await call('secret', 'registry', registry)) as { given?: unknown; username?: unknown; identityToken?: unknown; serveraddress?: unknown } | null;
+      registry: async (registry, repository) => {
+        const answer = (await call('secret', 'registry', registry, repository)) as { given?: unknown; username?: unknown; identityToken?: unknown; serveraddress?: unknown } | null;
         if (answer === null || typeof answer !== 'object' || answer.given !== true) return undefined;
         const password = secretOf(HOST_SECRET_NAMES.registry);
         if (password === undefined) return undefined;
