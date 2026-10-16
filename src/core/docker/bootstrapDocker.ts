@@ -470,18 +470,28 @@ export class BootstrapDocker {
 
   /**
    * Runs `docker --version` for podmanCli, without the signal of a caller (others may share it), and keeps the check.
-   * A call that fails is not kept: it is asked again next time.
+   * A call that fails or rejects is not kept: it is asked again next time.
    */
   private checkCli(path: string, identity: string | undefined): Promise<string | undefined> {
     const check = { path, identity, answer: Promise.resolve<string | undefined>(undefined), done: false };
-    check.answer = this.podmanCheckCall(['--version'], undefined).then((result) => {
+    const forget = (): void => {
       check.done = true;
-      if (result === undefined || result.exitCode !== 0) {
-        if (this.cliCheck === check) this.cliCheck = undefined;
-        return undefined;
-      }
-      return PODMAN_CLI_VERSION.test(result.stdout) ? `docker --version: ${result.stdout.trim()}` : undefined;
-    });
+      if (this.cliCheck === check) this.cliCheck = undefined;
+    };
+    check.answer = this.podmanCheckCall(['--version'], undefined).then(
+      (result) => {
+        if (result === undefined || result.exitCode !== 0) {
+          forget();
+          return undefined;
+        }
+        check.done = true;
+        return PODMAN_CLI_VERSION.test(result.stdout) ? `docker --version: ${result.stdout.trim()}` : undefined;
+      },
+      (error: unknown) => {
+        forget();
+        throw error;
+      },
+    );
     this.cliCheck = check;
     return check.answer;
   }
