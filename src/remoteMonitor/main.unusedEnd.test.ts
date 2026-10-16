@@ -472,6 +472,26 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(fs.existsSync(path.join(stateDir, RUN_NOW_FILE))).toBe(true);
   });
 
+  // With the restart policy "no", Docker would not start it again, so it exits, and the next open creates it again.
+  // Mutation: a monitor that goes on after the failed change never exits (and tries the change again and again).
+  it('a use that comes while it ends, when the restart policy cannot be set back: it says why and exits with 0', async () => {
+    writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
+    let mono = 0;
+    const monitor = startRun({
+      updateRestartPolicy: async (policy) => {
+        if (policy === 'no') await recordUse(stateDir, PERMANENT_ENV, T0 + mono);
+        else throw new EngineError('the daemon is busy', 500);
+      },
+      onTick: (now) => void (mono = now),
+    });
+    expect(await monitor.result).toBe(0);
+    expect(monitor.events).toEqual([LIST, 'policy own no', LIST, 'policy own unless-stopped', 'exit']);
+    const out = monitor.out();
+    expect(out).toContain('A window used Devspaces on this Docker engine while the Monitor was ending, but the Monitor cannot go on (its restart policy could not be changed: the daemon is busy).');
+    expect(out).not.toContain('the Monitor goes on');
+    expect(out.indexOf('the Monitor ends itself')).toBeGreaterThan(out.indexOf('cannot go on'));
+  });
+
   it('a request of "Update All Images Now" that comes while it ends, without a use, runs before the exit', async () => {
     writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
     let runs = 0;
@@ -577,5 +597,56 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     releaseUsed();
     expect(await stillPending(monitor.result)).toBe(true);
     expect(monitor.events).toEqual([]);
+  });
+
+  // After a failed end it tries again an hour later; a use meanwhile ends the pause as during the wait for the second
+  // look. Mutation: without the reads while it waits for the next try, the due run waits for that try.
+  it('a use that comes while it waits to try a failed end again ends the pause at the next check: a due run starts', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] });
+    writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
+    let runs = 0;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let releaseUsed!: () => void;
+    const heldAfterUse = new Promise<void>((resolve) => (releaseUsed = resolve));
+    let first = true;
+    let usedAt: number | undefined;
+    const monitor = startRun({
+      env: { ...PERMANENT_ENV, DEVSPACE_IMAGE_FIRST_MS: '1000' },
+      vscodeBackground: () =>
+        countedVscode(() => {
+          runs += 1;
+          return 'amd64';
+        }),
+      // No container has the nonce of its create, so the end fails.
+      engine: { containerIds: async () => [] },
+      onTick: async (mono) => {
+        if (first) {
+          first = false;
+          await held;
+        }
+        // A heartbeat of the window of a Start ten minutes after the failed end; the test holds the loop two ticks later.
+        if (usedAt === undefined && mono >= UNUSED_END_RECHECK_MS + 10 * MINUTE) {
+          usedAt = mono;
+          await recordUse(stateDir, PERMANENT_ENV, T0 + mono);
+        }
+        if (usedAt !== undefined && mono >= usedAt + 2 * REMOTE_TICK_MS) await heldAfterUse;
+      },
+      maxTicks: Math.ceil((UNUSED_END_RECHECK_MS + 20 * MINUTE) / REMOTE_TICK_MS),
+    });
+    await vi.waitFor(() => expect(monitor.out()).toContain('The Monitor looks again in 1 hour'));
+    // The first check of the schedule: the run is due, but it waits.
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.waitFor(() => expect(monitor.out()).toContain('The background run is due, but it does not start'));
+    release();
+    await vi.waitFor(() => expect(monitor.mono()).toBe(usedAt! + 2 * REMOTE_TICK_MS), { timeout: 10_000 });
+    expect(monitor.out()).toContain('The Monitor could not end itself (0 containers have the nonce of its create). It tries again in 1 hour.');
+    expect(monitor.out()).toContain('A window used Devspaces on this Docker engine again; the Monitor does not end itself.');
+    // The next check of the schedule starts the due run, long before the next try.
+    await vi.advanceTimersByTimeAsync(IMAGE_CHECK_MS);
+    await vi.waitFor(() => expect(runs).toBe(1));
+    expect(monitor.mono()).toBeLessThan(2 * UNUSED_END_RECHECK_MS);
+    releaseUsed();
+    expect(await stillPending(monitor.result)).toBe(true);
   });
 });
