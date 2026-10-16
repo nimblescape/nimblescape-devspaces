@@ -96,6 +96,9 @@ export const ControllerTexts = {
     `${count} ${count === 1 ? 'item' : 'items'} of Devspaces could not be removed from ${engine}. The log names each one and the command to remove it.`,
   removalEnded: (engine: string) =>
     `The removal from ${engine} stopped before the end. The log names the commands that remove the rest.`,
+  /** After the last message of the removal, when it stopped waiting for a background build (HELPER_BUILDS_STOP_WAIT_MS). */
+  helperBuildNotWaitedFor:
+    'The removal did not wait for the end of a background build of the helper image in this window; if that build makes the image again, run the command again.',
   /** After the last message of the removal, when the removal mark could not be written (docker-engines.json). */
   removalNotRecorded: (engine: string) =>
     `This computer could not record the removal, so its background work may set Devspaces up on ${engine} again.`,
