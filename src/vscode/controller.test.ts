@@ -3421,6 +3421,46 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(await h.engineRecords.record('build-box')).toBeUndefined();
   });
 
+  // A Stop or a Delete does not clear the mark (no beforeUserFlow), but its worker would build the helper image and
+  // create the volumes there again while they are removed. Mutations: without the check in operation(), they run; without
+  // the one in stopNow, the Monitor is told to stop the devspace (its channel would start a worker).
+  it('while another window removes Devspaces from the engine, a Stop and a Delete there are refused, and the Monitor is not told', async () => {
+    const sendStop = vi.fn(async () => ({ ok: true as const }));
+    onBuildBox(removalFake(), BUILD_BOX, { sessionMonitor: { sendHeartbeat: vi.fn(async () => ({ ok: true as const })), sendStop } });
+    const env = ownRemote();
+    await h.registry.add(env);
+    await otherWindowRemoves();
+    await run('stop', row('acme/api', env));
+    await run('delete', row('acme/api', env));
+    const elsewhere = ControllerTexts.removalRunningElsewhere('build-box');
+    expect(infoMessages()).toEqual([elsewhere, elsewhere]);
+    expect(h.logger.info).toHaveBeenCalledWith(`Stop did not run: Devspaces is being removed from build-box in another window (process ${OTHER_PID}).`);
+    expect(h.logger.info).toHaveBeenCalledWith(`Delete did not run: Devspaces is being removed from build-box in another window (process ${OTHER_PID}).`);
+    expect(sendStop).not.toHaveBeenCalled();
+    expect(h.service.stop).not.toHaveBeenCalled();
+    expect(h.service.deleteCheckInWorker).not.toHaveBeenCalled();
+    expect(h.service.deleteInWorker).not.toHaveBeenCalled();
+    expect(await h.engineRecords.record('build-box')).toEqual({ host: 'build-box', removedAt: NOW - 30_000, removing: OTHER_REMOVAL });
+
+    // The removal began after the Stop told the Monitor: the stop of this window is refused all the same.
+    await h.engineRecords.endRemoval('build-box', OTHER_REMOVAL);
+    sendStop.mockImplementationOnce(async () => {
+      await otherWindowRemoves();
+      return { ok: true as const };
+    });
+    await run('stop', row('acme/api', env));
+    expect(sendStop).toHaveBeenCalledTimes(1);
+    expect(h.service.stop).not.toHaveBeenCalled();
+    expect(infoMessages()).toEqual([elsewhere, elsewhere, elsewhere]);
+
+    // After that window ended, both run.
+    h.alive.delete(OTHER_PID);
+    await run('stop', row('acme/api', env));
+    expect(h.service.stop).toHaveBeenCalledTimes(1);
+    await run('delete', row('acme/api', env));
+    expect(h.service.deleteCheckInWorker).toHaveBeenCalledTimes(1);
+  });
+
   // The question about the Monitor can stay open for long. Mutation: without the check after it, the Start runs.
   it('a removal that another window begins while the question about the Monitor is open refuses the Start', async () => {
     const fake = removalFake();
