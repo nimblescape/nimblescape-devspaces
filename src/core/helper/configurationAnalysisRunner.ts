@@ -112,7 +112,7 @@ export class WorkerConfigurationAnalyzer implements ConfigurationAnalyzer {
         () => (online ? fail(`it took longer than ${this.limits.timeoutMs} ms`, 'limit') : fail(`the worker did not start within ${this.limits.timeoutMs} ms`)),
         this.limits.timeoutMs,
       );
-      // Only the file of the hash runs: the check reads it again before each start.
+      // Before each start, check the hash of the file again. `new Worker` below reads the file a second time.
       const mismatch = this.checkScript();
       if (mismatch !== undefined) {
         fail(mismatch);

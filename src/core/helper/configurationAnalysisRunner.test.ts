@@ -327,7 +327,8 @@ describe('WorkerConfigurationAnalyzer', () => {
     expect(broken.report).toEqual({ hostAccess: [], unsupported: [analysisInternalItem(broken.failure!.reason)] });
   });
 
-  // The file of the hash runs, or nothing: each start reads the file again and checks its hash.
+  // Each start reads the file again and checks its hash: a file that was changed or removed since the last start does
+  // not run.
   it('refuses a job when the file of its script was changed or removed, and runs nothing of it', async () => {
     const job: AnalysisJob = { kind: 'hostAccess', checksOn: true, input: { config: { runArgs: ['--privileged'] }, ownVolume: OWN } };
     const script = analysisBundle(outDir);
@@ -335,7 +336,7 @@ describe('WorkerConfigurationAnalyzer', () => {
     const logger = warnings();
     const worker = new WorkerConfigurationAnalyzer(script, logger);
     expect(await worker.analyze(job)).toEqual(runAnalysisJob(job));
-    // A changed file never runs: its added line would write the marker.
+    // The changed file does not run: its added line would write the marker.
     const marker = path.join(outDir, 'the-changed-script-ran');
     fs.appendFileSync(script.file, `\nrequire("fs").writeFileSync(${JSON.stringify(marker)}, "");\n`);
     const changed = await worker.analyze(job);
