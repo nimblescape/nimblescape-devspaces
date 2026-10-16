@@ -170,7 +170,9 @@ function startFailed(detail: string): UserFacingError {
  * on win32 `Docker Desktop.exe` from C:\Program Files\Docker\Docker (spawned detached, not awaited); on linux without Docker Desktop
  * (the `desktop` command is missing) → UserFacingError('dockerEngineNotRunning', Messages.dockerEngineNotRunning).
  * No CLI → UserFacingError('dockerNotInstalled'). Timeout, or no way to start Docker → UserFacingError('dockerStartFailed',
- * Messages.dockerStartFailed, detail). Rejects with an AbortError when the signal aborts.
+ * Messages.dockerStartFailed, detail). Podman as the CLI or as the engine (BootstrapDocker.podmanInUse) →
+ * UserFacingError('dockerEndpointUnsupported', Messages.podmanNotSupported), without a start. Rejects with an AbortError
+ * when the signal aborts.
  *
  * The start command runs in parallel with the polling (every `intervalMs`, for at most `timeoutMs`); it gets a head start of
  * at most 10 s, and it is ended when this function returns.
@@ -190,6 +192,13 @@ export async function ensureDockerRunning(
   if (!docker.isInstalled()) throw new UserFacingError('dockerNotInstalled', Messages.dockerNotInstalled);
   if (signal?.aborted) throw abortError();
   const initial = await docker.daemonStatus(signal);
+  // Podman is refused before anything else, and Docker is not started for it: `podman info` has no server version, so
+  // the CLI of the package podman-docker reads as a Docker that does not run.
+  const podman = await docker.podmanInUse(initial.running, signal);
+  if (podman !== undefined) {
+    logger.warn(`Podman is used instead of Docker, which Devspaces does not support. ${podman}`);
+    throw new UserFacingError('dockerEndpointUnsupported', Messages.podmanNotSupported, podman);
+  }
   if (initial.running) return;
   if (SOCKET_PERMISSION_DENIED.test(initial.detail)) {
     // The engine runs, but this user may not use its socket (Linux: not in the group `docker`). A start does not help.

@@ -209,7 +209,8 @@ export function dockerCommandWords(args: readonly string[]): string[] {
  */
 export function isReadOnlyDockerCall(args: readonly string[]): boolean {
   const [command, subcommand] = dockerCommandWords(args);
-  if (command === undefined) return false;
+  // `docker --version` prints the version of the CLI.
+  if (command === undefined) return args.length === 1 && args[0] === '--version';
   if (READ_ONLY_COMMANDS.has(command)) return true;
   return READ_ONLY_OBJECT_COMMANDS[command]?.includes(subcommand ?? '') ?? false;
 }

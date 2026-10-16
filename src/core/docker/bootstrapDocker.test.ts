@@ -827,6 +827,8 @@ describe('BootstrapDocker: every call runs directly', () => {
     /** Key: the command, or the object and its command. */
     const READ_ONLY: Record<string, boolean> = {
       info: true,
+      '--version': true,
+      version: true,
       'image inspect': true,
       'image ls': true,
       'image rm': false,
@@ -850,6 +852,9 @@ describe('BootstrapDocker: every call runs directly', () => {
       'lookUpCliIfMissing',
       'runChecked',
       'queryDaemonStatus',
+      // The calls of podmanInUse.
+      'podmanCli',
+      'podmanCheckCall',
       'isMissing',
       'commandError',
       'run',
@@ -862,6 +867,7 @@ describe('BootstrapDocker: every call runs directly', () => {
     const exercised: Record<string, (d: BootstrapDocker) => Promise<unknown>> = {
       daemonStatus: (d) => d.daemonStatus(),
       isRunning: (d) => d.isRunning(),
+      podmanInUse: (d) => d.podmanInUse(true),
       imageExists: (d) => d.imageExists('i'),
       imageId: (d) => d.imageId('i'),
       listImagesByLabel: (d) => d.listImagesByLabel('l'),
@@ -930,6 +936,9 @@ describe('BootstrapDocker: every call runs directly', () => {
     expect(isReadOnlyDockerCall(['volume', 'ls'])).toBe(true);
     expect(isReadOnlyDockerCall(['stop', 'c'])).toBe(false);
     expect(isReadOnlyDockerCall(['exec', 'c', 'git', 'status'])).toBe(false);
+    // The version of the CLI alone; a global option without a command is not a call that reads.
+    expect(isReadOnlyDockerCall(['--version'])).toBe(true);
+    expect(isReadOnlyDockerCall(['--debug'])).toBe(false);
     expect(dockerCommandWords(['--context', 'x', 'volume', 'rm', 'v'])).toEqual(['volume', 'rm']);
   });
 });
