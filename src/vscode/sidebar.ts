@@ -592,8 +592,11 @@ export class Sidebar implements vscode.Disposable {
       this.renderInBackground();
       return this.data;
     }
-    this.progressiveAccountId = this.data === undefined ? account.id : undefined;
-    this.partial = undefined;
+    // The part of a first load that a rate limit stopped (onRateLimited) stays shown until this refresh gives its first
+    // part (onPartialResult) or ends without a rate limit: a refresh that GitHub refuses at once keeps it.
+    const progressive = this.data === undefined ? account.id : undefined;
+    if (progressive === undefined || progressive !== this.progressiveAccountId) this.partial = undefined;
+    this.progressiveAccountId = progressive;
     this.refreshToken = token;
     let rateLimited = false;
     try {
@@ -616,7 +619,7 @@ export class Sidebar implements vscode.Disposable {
       if (this.account?.id === account.id) this.lookups = lookups;
     } catch (error) {
       if (error instanceof GitHubApiError && error.status === 401) this.offerSignInAgain();
-      // A rate limit of GitHub: the part of the first load that the view shows stays until the next refresh.
+      // A rate limit of GitHub: the part of the first load that the view shows stays, also for the next refresh.
       if (error instanceof GitHubRateLimitError) {
         rateLimited = true;
         this.onRateLimited(error, afterRateLimit);
