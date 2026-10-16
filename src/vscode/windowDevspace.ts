@@ -8,7 +8,8 @@ import type { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import type { HelperPrebuildOutcome } from '../core/helper/helperPrebuild';
 import type { DevspaceOperations } from '../core/pipeline/devspaceOperations';
 import type { Logger } from '../core/ports';
-import { isOnDockerHost } from '../core/docker/dockerHost';
+import { describeDockerHost, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
+import { removedEngineNote } from '../core/docker/engineRemoval';
 import { errorMessage } from '../core/errors';
 import { RESOURCE_NAME_PREFIX } from '../core/names';
 import type { DevspaceRegistry } from '../core/storage/registry';
@@ -44,6 +45,22 @@ export async function windowDevspaceName(
  */
 export function backgroundWorkAtStart(used: boolean, containerName: string | undefined): boolean {
   return used || (containerName !== undefined && containerName.toLowerCase().startsWith(RESOURCE_NAME_PREFIX));
+}
+
+/**
+ * The engine of the Docker work that the activation does in the background (backgroundWorkAtStart): the one of the
+ * current Docker context (`current`), unless the user removed Devspaces from it (`removed`: "Remove Devspaces from This
+ * Docker Engine…", until a Start, a Rebuild or "Update All Images Now" there); then none, with a line in the log.
+ */
+export async function backgroundEngineAtStart(deps: {
+  current(): Promise<DockerTarget>;
+  removed(target: DockerTarget): Promise<boolean>;
+  logger: Logger;
+}): Promise<DockerTarget | undefined> {
+  const target = await deps.current();
+  if (!(await deps.removed(target))) return target;
+  deps.logger.info(`No Docker work in the background at the start: ${removedEngineNote(describeDockerHost(target.host))}`);
+  return undefined;
 }
 
 /**

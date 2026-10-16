@@ -13,6 +13,7 @@ import { attachDiagnostics } from '../core/docker/attachDiagnostics';
 import { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import { dockerProcessEnv, findDockerCli, findExecutable } from '../core/docker/dockerCli';
 import { describeDockerHost, dockerHostOf, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
+import { removedEngineNote } from '../core/docker/engineRemoval';
 import { ensureDockerRunning } from '../core/docker/dockerStart';
 import { DockerTargets, operationDockerTarget, outsideOperation, runWithDockerTarget } from '../core/docker/dockerTargets';
 import { SshLoginCache, findRemoteContext, startDockerFor, type RemoteReachabilityDeps } from '../core/docker/remoteDocker';
@@ -50,7 +51,7 @@ import { ConfigCheckStore } from '../core/storage/configChecks';
 import { bundleHash } from '../core/loader/pipeLoader';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { showWarningMessage } from './notifications';
-import { backgroundWorkAtStart, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
+import { backgroundEngineAtStart, backgroundWorkAtStart, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
 import { workerMonitor } from './workerMonitor';
 import { defaultExtensionEntries, windowVscodeServer } from './vscodeServer';
 import { HELPER_DOCKER_SOCKET, VSCODE_STORE_VOLUME } from '../core/names';
@@ -168,8 +169,19 @@ async function activateExtension(
   const targets = new DockerTargets(docker, env, logger, platform);
   const remoteState = new RemoteDockerState(paths.remoteDocker);
   // What this computer remembers about each Docker engine (docker-engines.json): the answer to the question about its
-  // Monitor (MonitorQuestion).
+  // Monitor (MonitorQuestion), and the removal mark of "Remove Devspaces from This Docker Engine…".
   const engineRecords = new DockerEngineRecords(paths.dockerEngines);
+  // After "Remove Devspaces from This Docker Engine…", this computer does no Docker work on that engine by itself (no
+  // worker for a passive read, no background build of the helper image, no background work at the start) until a
+  // Start, a Rebuild or "Update All Images Now" of the user there clears the mark. A file that cannot be read has no mark.
+  const engineRemoved = async (target: Pick<DockerTarget, 'host'>): Promise<boolean> => {
+    try {
+      return await engineRecords.removed(target.host);
+    } catch (error) {
+      logger.warn(`The records of the Docker engines could not be read: ${errorMessage(error)}`);
+      return false;
+    }
+  };
   const sshPath = (): string | undefined => findExecutable('ssh', env, platform);
   // The SSH check before the Docker calls to a remote host; a success counts for a minute per host.
   const sshLogins = new SshLoginCache();
@@ -296,9 +308,9 @@ async function activateExtension(
   const connection = new ConnectionAdapter(logger);
   const channels = new HelperChannels({
     logger,
-    // The refresh found no helper image (see helperBuilds above).
+    // The refresh found no helper image (see helperBuilds above); never on an engine that Devspaces was removed from.
     onRefreshWithoutHelper: (target) => {
-      void helperBuilds.request(target);
+      void engineRemoved(target).then((removed) => (removed ? undefined : helperBuilds.request(target)));
     },
     // The helper image on the engine of the operation, as withDevspaceLock ensures it before the lock (only a
     // missing tag is built). For a heartbeat, with the long signal. For an operation `open`, the maintaining ensure
@@ -308,8 +320,10 @@ async function activateExtension(
       // on when the tag is present (heartbeatWiring).
       await heartbeats.prepareWorker(target, signal, maintenance);
     },
-    // The refresh of the sidebar only checks that the helper image is present.
+    // The refresh of the sidebar only checks that the helper image is present. On an engine that Devspaces was removed
+    // from, no worker starts for a passive read: its mounts would create the shared volumes again.
     checkPresent: async (target, signal) => {
+      if (await engineRemoved(target)) throw new Error(removedEngineNote(describeDockerHost(target.host)));
       await runWithDockerTarget(target, () => helper.checkImagePresent({ signal }));
     },
     open: (target) =>
@@ -505,8 +519,10 @@ async function activateExtension(
     // operation, of the current one; never read directly). Within an operation, the worker is made ready first; when it
     // cannot be, the refresh fails (never read directly).
     workerRefresh: async (devspaces) => {
-      // Always through the worker, of the target of the operation or else the current one.
+      // Always through the worker, of the target of the operation or else the current one; never on an engine that
+      // Devspaces was removed from (the states stay unknown there).
       const target = operationDockerTarget() ?? (await targets.current());
+      if (await engineRemoved(target)) throw new Error(removedEngineNote(describeDockerHost(target.host)));
       try {
         return await channels.refresh(target, devspaces);
       } catch (error) {
@@ -673,6 +689,20 @@ async function activateExtension(
     // The question about the Monitor of an engine, which a Start, a Rebuild and "Update All Images Now" of the user ask
     // there first (once per engine); its answer goes into the setting stopMonitorWhenIdle and the records of the engines.
     monitorQuestion: new MonitorQuestion({ records: engineRecords, settings: getSettings, logger }),
+    // The removal mark of the engines, which a Start, a Rebuild and "Update All Images Now" of the user clear there.
+    engineRecords,
+    // "Remove Devspaces from This Docker Engine…": whether the engine answers (as for the background builds: Docker is
+    // never started, a remote host gets the SSH check without questions first), the Docker CLI of the extension for the
+    // inventory and the removal, the end of this window's worker there, and the ID of this computer.
+    engineRemoval: {
+      engineAnswers: (target, signal) =>
+        runWithDockerTarget(target, () =>
+          dockerEngineAnswers(target, { daemonStatus: (s, timeoutMs) => docker.daemonStatus(s, timeoutMs), ssh: remoteDeps(), logger }, signal),
+        ),
+      docker,
+      closeWorker: (target) => channels.close(target),
+      computerId,
+    },
   });
   context.subscriptions.push(
     sidebar,
@@ -760,9 +790,14 @@ async function activateExtension(
     background(sidebar.refreshStates(), 'update the sidebar');
   }
   // A lost registry is rebuilt from the volume labels (only when Docker runs, and not before the first use). A window
-  // whose container the registry did not know takes its restored devspace.
+  // whose container the registry did not know takes its restored devspace. Neither runs on an engine that Devspaces
+  // was removed from (backgroundEngineAtStart).
   const adopt = Boolean(containerName) && currentDevspace === undefined;
-  if (startWork) background(controller.reconcileIfRegistryLost({ passive: true, adopt }), 'restore the devspaces from the volumes');
+  const startEngine = startWork ? backgroundEngineAtStart({ current: () => targets.current(), removed: engineRemoved, logger }) : Promise.resolve(undefined);
+  background(
+    startEngine.then((target) => (target === undefined ? undefined : controller.reconcileIfRegistryLost({ passive: true, adopt }))),
+    'restore the devspaces from the volumes',
+  );
   // When helper.json does not know the current helper tag (after the installation, or an update that changed it; there
   // is no previous helper image to fall back to), the helper image is built in the background, when Docker runs and
   // Devspaces was used before (startWork; before the first use, the first Start builds it). No cross-window lock:
@@ -786,21 +821,18 @@ async function activateExtension(
     logger,
   });
   context.subscriptions.push(helperPrebuild);
-  if (startWork) {
-    background(
-      targets
-        .current()
-        .then((target) => helperPrebuild.start(target))
-        // A lost registry is restored again once the helper image was built.
-        .then((outcome) =>
-          // A failed restore is logged as such, not as a failed preparation.
-          restoreAfterPrebuild(outcome, () => controller.reconcileIfRegistryLost({ passive: false, adopt })).catch((error: unknown) =>
-            logger.error('Could not restore the devspaces from the volumes after the helper image was prepared.', error),
-          ),
-        ),
-      'prepare the workspace helper image in the background',
-    );
-  }
+  background(
+    startEngine.then(async (target) => {
+      if (target === undefined) return;
+      const outcome = await helperPrebuild.start(target);
+      // A lost registry is restored again once the helper image was built. A failed restore is logged as such, not as
+      // a failed preparation.
+      await restoreAfterPrebuild(outcome, () => controller.reconcileIfRegistryLost({ passive: false, adopt })).catch((error: unknown) =>
+        logger.error('Could not restore the devspaces from the volumes after the helper image was prepared.', error),
+      );
+    }),
+    'prepare the workspace helper image in the background',
+  );
 
   if (currentDevspace && containerName && docker.isInstalled()) {
     // Which Docker the Dev Containers extension asks when it resolves this window. Only for a devspace of this

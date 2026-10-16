@@ -3,10 +3,12 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // What Devspaces remembers about each Docker engine, in `docker-engines.json` of the global storage folder: that the
-// user answered the question about the Monitor of the engine (src/vscode/monitorQuestion.ts). Before that answer, the
-// Monitor of the engine stops when no devspace runs (src/vscode/monitorSettings.ts). An engine is named by its Docker
-// host (DockerTarget.host): empty for the local Docker, the SSH host otherwise. A file that is missing, cannot be read,
-// or is not valid knows no engine. No `vscode`.
+// user answered the question about the Monitor of the engine (src/vscode/monitorQuestion.ts), and that the user removed
+// Devspaces from the engine ("Remove Devspaces from This Docker Engine…"). Before that answer, the Monitor of the engine
+// stops when no devspace runs (src/vscode/monitorSettings.ts). While the removal mark is set, this computer does no
+// Docker work on the engine by itself (extension.ts); a Start, a Rebuild or "Update All Images Now" of the user there
+// clears it. An engine is named by its Docker host (DockerTarget.host): empty for the local Docker, the SSH host
+// otherwise. A file that is missing, cannot be read, or is not valid knows no engine. No `vscode`.
 import { readJson, writeJsonAtomic } from './atomicJson';
 
 export interface DockerEngineRecord {
@@ -14,6 +16,8 @@ export interface DockerEngineRecord {
   host: string;
   /** When the user answered the question about the Monitor of the engine (milliseconds since the epoch). */
   monitorAnsweredAt?: number;
+  /** When the user removed Devspaces from the engine (milliseconds since the epoch); the removal mark. */
+  removedAt?: number;
 }
 
 export interface DockerEnginesFile {
@@ -41,6 +45,24 @@ export class DockerEngineRecords {
     await this.change(host, (record) => ({ ...record, monitorAnsweredAt: now }));
   }
 
+  /** True while the engine `host` has the removal mark. */
+  async removed(host: string): Promise<boolean> {
+    return (await this.read()).some((record) => record.host === host && record.removedAt !== undefined);
+  }
+
+  /**
+   * Sets the removal mark of the engine `host` (`removedAt`), or clears it (undefined). Setting it also forgets the
+   * answer about the Monitor of the engine: the next user-started flow there asks again.
+   */
+  async setRemoved(host: string, removedAt: number | undefined): Promise<void> {
+    await this.change(host, (record) => {
+      if (removedAt !== undefined) return { host, removedAt };
+      const rest = { ...record };
+      delete rest.removedAt;
+      return rest;
+    });
+  }
+
   /**
    * Writes the record of `host` that `update` makes of the current one (an empty record when there is none); a record
    * with nothing but its host is left out.
@@ -66,10 +88,12 @@ function normalize(value: unknown): DockerEngineRecord[] {
   const records: DockerEngineRecord[] = [];
   for (const entry of engines as unknown[]) {
     if (typeof entry !== 'object' || entry === null) continue;
-    const { host, monitorAnsweredAt } = entry as Record<string, unknown>;
+    const { host, monitorAnsweredAt, removedAt } = entry as Record<string, unknown>;
     if (typeof host !== 'string' || records.some((record) => record.host === host)) continue;
     const answeredAt = timeOf(monitorAnsweredAt);
-    if (answeredAt !== undefined) records.push({ host, monitorAnsweredAt: answeredAt });
+    const removed = timeOf(removedAt);
+    if (answeredAt === undefined && removed === undefined) continue;
+    records.push({ host, ...(answeredAt !== undefined ? { monitorAnsweredAt: answeredAt } : {}), ...(removed !== undefined ? { removedAt: removed } : {}) });
   }
   return records;
 }

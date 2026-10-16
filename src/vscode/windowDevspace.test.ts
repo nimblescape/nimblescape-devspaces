@@ -8,7 +8,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { silentLogger } from '../core/ports';
 import type { Devspace } from '../core/types';
 import { resourceName } from '../core/names';
-import { WINDOW_RESTORE_TIMEOUT_MS, backgroundWorkAtStart, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
+import { LOCAL_DOCKER_TARGET, dockerTargetOf } from '../core/docker/dockerHost';
+import { WINDOW_RESTORE_TIMEOUT_MS, backgroundEngineAtStart, backgroundWorkAtStart, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
 
 const ENTRY = { id: 'e1', containerName: 'devspaces-acme-api-x' } as Devspace;
 
@@ -86,6 +87,21 @@ describe('the devspace of the window at its activation', () => {
     expect(backgroundWorkAtStart(false, 'devspaces-majikmate-module-html-css-2-x-app-1')).toBe(true);
     expect(backgroundWorkAtStart(false, 'Devspaces-Acme-Api-x')).toBe(true);
     expect(backgroundWorkAtStart(false, 'my-devspaces-x')).toBe(false);
+  });
+
+  // "Remove Devspaces from This Docker Engine…": until a flow of the user there, nothing runs there by itself.
+  it('does the Docker work at the start on the current engine, unless Devspaces was removed from it', async () => {
+    const remote = dockerTargetOf('ssh://build-box', 'devspaces-build-box');
+    const lines: string[] = [];
+    const logger = { ...silentLogger, info: (line: string) => void lines.push(line) };
+    const removed = vi.fn(async (target: { host: string }) => target.host === 'build-box');
+    expect(await backgroundEngineAtStart({ current: async () => LOCAL_DOCKER_TARGET, removed, logger })).toBe(LOCAL_DOCKER_TARGET);
+    expect(lines).toEqual([]);
+    expect(await backgroundEngineAtStart({ current: async () => remote, removed, logger })).toBeUndefined();
+    expect(removed).toHaveBeenLastCalledWith(remote);
+    expect(lines).toEqual([
+      'No Docker work in the background at the start: Devspaces was removed from build-box. Nothing runs there by itself until a Start, a Rebuild or "Update All Images Now" there.',
+    ]);
   });
 
   it('a restore that fails or times out never fails the activation (logged)', async () => {

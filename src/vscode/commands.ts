@@ -64,6 +64,9 @@ export const Commands = {
   // The Monitor of the current Docker engine runs its background run at once (the images in use, the VS Code
   // server and the extensions), for example after a new image was pushed (Command Palette, the "…" menu of the view).
   updateImagesNow: 'devspaces.updateImagesNow',
+  // Removes what Devspaces keeps on the current Docker engine (the Monitor, the helper containers and images, the shared
+  // volumes), and on request the devspaces of the signed-in account there (Command Palette, the "…" menu of the view).
+  removeFromDockerEngine: 'devspaces.removeFromDockerEngine',
 } as const;
 
 export type CommandName = keyof typeof Commands;

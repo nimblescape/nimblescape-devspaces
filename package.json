@@ -377,6 +377,11 @@
         "command": "devspaces.updateImagesNow",
         "title": "Update All Images Now",
         "category": "Devspaces"
+      },
+      {
+        "command": "devspaces.removeFromDockerEngine",
+        "title": "Remove Devspaces from This Docker Engine…",
+        "category": "Devspaces"
       }
     ],
     "submenus": [
@@ -502,6 +507,11 @@
           "command": "devspaces.updateImagesNow",
           "when": "view == devspaces.repositories",
           "group": "2_maintenance@1"
+        },
+        {
+          "command": "devspaces.removeFromDockerEngine",
+          "when": "view == devspaces.repositories",
+          "group": "2_maintenance@2"
         }
       ],
       "view/item/context": [

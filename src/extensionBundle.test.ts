@@ -44,6 +44,9 @@ const ALLOWED_MODULES: Record<string, readonly string[]> = {
     'dockerTargets.ts',
     // The time limits of Docker calls, a module of their own, which the worker shares without the bootstrap.
     'dockerTimeouts.ts',
+    // "Remove Devspaces from This Docker Engine…": the removal of the Monitor, the helper containers and images and the
+    // shared volumes with the Docker CLI of the bootstrap, after the worker was ended.
+    'engineRemoval.ts',
     'remoteDocker.ts',
   ],
   // missingHelperBuild.ts: the background build of a helper image that the refresh found missing.

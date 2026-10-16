@@ -152,6 +152,44 @@ describe('HelperChannels', () => {
     channels.dispose();
   });
 
+  // "Remove Devspaces from This Docker Engine…" ends the worker of the engine before it removes its container.
+  it('close ends the channel of one engine; the next call opens a new one, and an open that runs is closed when it ends', async () => {
+    const first = fakeChannel();
+    const second = fakeChannel();
+    const local = fakeChannel();
+    const opening = fakeChannel();
+    let finishOpen: (channel: HelperChannel) => void = () => {};
+    const open = vi
+      .fn()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(local)
+      .mockResolvedValueOnce(second)
+      .mockImplementationOnce(() => new Promise<HelperChannel>((resolve) => (finishOpen = resolve)));
+    const { logger, lines } = recordingLogger();
+    const channels = new HelperChannels({ open, logger });
+    expect(await channels.get(REMOTE)).toBe(first);
+    expect(await channels.get(LOCAL_DOCKER_TARGET)).toBe(local);
+    channels.close(REMOTE);
+    expect(first.closed).toBe(1);
+    expect(lines).toContain('The helper channel to build-box was closed.');
+    // The other engine keeps its channel.
+    expect(local.closed).toBe(0);
+    expect(await channels.get(LOCAL_DOCKER_TARGET)).toBe(local);
+    expect(await channels.get(REMOTE)).toBe(second);
+    expect(open).toHaveBeenCalledTimes(3);
+    // Closed while it is being opened: the channel of that open is closed, and is not used.
+    channels.close(REMOTE);
+    expect(second.closed).toBe(1);
+    const pending = channels.get(dockerTargetOf('ssh://other-box', remoteContextNames('other-box')[0]));
+    channels.close(dockerTargetOf('ssh://other-box', remoteContextNames('other-box')[0]));
+    finishOpen(opening as unknown as HelperChannel);
+    expect(await pending).toBeUndefined();
+    expect(opening.closed).toBe(1);
+    // An engine without a channel: nothing to close.
+    channels.close(dockerTargetOf('ssh://third-box', remoteContextNames('third-box')[0]));
+    channels.dispose();
+  });
+
   it('opens it again after it was lost', async () => {
     const first = fakeChannel();
     const second = fakeChannel();

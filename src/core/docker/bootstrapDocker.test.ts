@@ -912,6 +912,17 @@ describe('BootstrapDocker: every call runs directly', () => {
       [['run', '--rm', 'i'], false],
     ];
     for (const [args, readOnly] of removedAdapterCalls) expect(isReadOnlyDockerCall(args), `read-only: docker ${args.join(' ')}`).toBe(readOnly);
+    // The calls of "Remove Devspaces from This Docker Engine…" through `run` (engineRemoval.ts): its lists only read (an
+    // SSH drop repeats them), its removals do not.
+    const engineRemovalCalls: Array<[string[], boolean]> = [
+      [['ps', '--all', '--no-trunc', '--filter', 'label=nimblescape.devspaces.monitor', '--format', '{{json .}}'], true],
+      [['volume', 'ls', '--filter', 'name=devspaces-', '--format', '{{json .}}'], true],
+      [['image', 'ls', '--filter', 'label=nimblescape.devspaces.worker=true', '--no-trunc', '--format', '{{json .}}'], true],
+      [['rm', '-f', 'c'], false],
+      [['image', 'rm', 'devspaces-worker:0123456789ab'], false],
+      [['volume', 'rm', 'devspaces-vscode'], false],
+    ];
+    for (const [args, readOnly] of engineRemovalCalls) expect(isReadOnlyDockerCall(args), `read-only: docker ${args.join(' ')}`).toBe(readOnly);
   });
 
   it('isReadOnlyDockerCall and dockerCommandWords: the calls that may run again without any effect', () => {
