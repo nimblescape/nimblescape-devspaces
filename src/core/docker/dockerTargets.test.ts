@@ -122,20 +122,24 @@ describe('DockerTargets.resolve (remote mode detection from the current context)
     const PODMAN_5 = result(0, '');
     const PODMAN_4 = result(125, '', `${NOTE}Error: unrecognized command \`podman context\`\nTry 'podman --help' for more information\n`);
     const DETAIL = 'docker --version: podman version 5.2.2';
+    /** `podman info` has no ServerVersion. */
+    const PODMAN_INFO = result(125, '', `${NOTE}Error: template: info:1:7: executing "info" at <.ServerVersion>: can't evaluate field ServerVersion\n`);
 
     function podmanDocker(contextInspect: RunResult, env: NodeJS.ProcessEnv = { PATH: '/usr/bin' }, version = result(0, 'podman version 5.2.2\n')) {
+      // What the docker command answers, and the identity of its file (BootstrapDocker.podmanCli).
+      const answers = { contextInspect, version, info: PODMAN_INFO, server: undefined as RunResult | undefined, file: 'podman-docker 5.2.2' };
       const cli = {
         calls: [] as string[][],
         async run(_file: string, args: readonly string[]): Promise<RunResult> {
           cli.calls.push([...args]);
-          if (args[0] === 'context') return contextInspect;
-          if (args[0] === '--version') return version;
-          // `podman info` has no ServerVersion.
-          if (args[0] === 'info') return result(125, '', `${NOTE}Error: template: info:1:7: executing "info" at <.ServerVersion>: can't evaluate field ServerVersion\n`);
+          if (args[0] === 'context') return answers.contextInspect;
+          if (args[0] === '--version') return answers.version;
+          if (args[0] === 'info') return answers.info;
+          if (args[0] === 'version' && answers.server) return answers.server;
           throw new Error(`Unexpected call: docker ${args.join(' ')}`);
         },
       };
-      const docker = new BootstrapDocker(cli, DOCKER, env, silentLogger, 'linux');
+      const docker = new BootstrapDocker(cli, DOCKER, env, silentLogger, 'linux', { fileIdentity: async () => answers.file });
       const targets = new DockerTargets(docker, env, silentLogger, 'linux');
       const startLocal = vi.fn(() =>
         ensureDockerRunning(docker, cli, silentLogger, {
@@ -151,7 +155,7 @@ describe('DockerTargets.resolve (remote mode detection from the current context)
       const state = { rootlessSocket: async () => undefined, setRootlessSocket: async () => undefined };
       // The Docker start of an operation (extension.ts), with the target that the operation read.
       const start = async () => startDockerFor(await targets.resolve(), startLocal, { docker, runner: cli, state, logger: silentLogger, sshPath: undefined, env });
-      return { cli, targets, startLocal, start };
+      return { cli, answers, targets, startLocal, start };
     }
 
     it.each([
@@ -169,8 +173,27 @@ describe('DockerTargets.resolve (remote mode detection from the current context)
       await expect(p.start()).rejects.toMatchObject({ code: 'dockerEndpointUnsupported', message: Messages.podmanNotSupported, detail: DETAIL });
       expect(p.startLocal).not.toHaveBeenCalled();
       expect(p.cli.calls.some((args) => args[0] === 'info')).toBe(false);
-      // `docker --version` is asked once for the path of the CLI.
+      // `docker --version` is asked once for the same file of the CLI.
       expect(p.cli.calls.filter((args) => args[0] === '--version')).toHaveLength(1);
+    });
+
+    // The user follows the Podman message: removes podman-docker and installs Docker Engine, whose CLI is another file at
+    // the same path.
+    it('asks the docker command again after its file changed: Docker in place of podman-docker works without a reload', async () => {
+      const p = podmanDocker(PODMAN_5);
+      await expect(p.targets.resolve()).resolves.toEqual(podmanDockerTarget(DETAIL));
+      await expect(p.startLocal()).rejects.toMatchObject({ message: Messages.podmanNotSupported });
+      Object.assign(p.answers, {
+        file: 'docker-ce 29.8.0',
+        contextInspect: result(0, `${JSON.stringify({ Name: 'default', Endpoints: { docker: { Host: 'unix:///var/run/docker.sock' } } })}\n`, ''),
+        version: result(0, 'Docker version 29.8.0, build 3f2a5b1\n', ''),
+        info: result(0, '"29.8.0"\n', ''),
+        server: result(0, `${JSON.stringify({ Components: [{ Name: 'Engine', Version: '29.8.0' }], Version: '29.8.0' })}\n`, ''),
+      });
+      await expect(p.targets.resolve()).resolves.toMatchObject({ kind: 'local', host: '', endpoint: 'unix:///var/run/docker.sock' });
+      await expect(p.startLocal()).resolves.toBeUndefined();
+      await expect(p.start()).resolves.toBeUndefined();
+      expect(p.cli.calls.filter((args) => args[0] === '--version')).toHaveLength(2);
     });
 
     it('with DOCKER_HOST set to the Podman socket, the Docker start refuses Podman as before', async () => {
