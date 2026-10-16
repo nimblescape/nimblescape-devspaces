@@ -8,7 +8,7 @@ The complete guide to Devspaces. The short overview is the [README](../README.md
 
 - Visual Studio Code 1.125 or later, the build of Microsoft. The Dev Containers extension is licensed for this build only.
 - Docker: Docker Desktop on macOS, Windows (with WSL 2), or Linux, or Docker Engine on Linux. Without Docker, Devspaces offers to install it (see [Installing Docker](#installing-docker)). Docker can also run on another computer that you reach over SSH (see [Remote Docker host](#remote-docker-host)). Podman is not supported. When the `docker` command on this computer uses Podman, for example with the package podman-docker, or when the local Docker is a Podman engine behind the Docker CLI, Devspaces says so and does nothing. With podman-docker, the sidebar shows "Podman is not supported" unless `DOCKER_HOST` is set.
-- A GitHub account.
+- A GitHub account on github.com. Devspaces does not work with GitHub Enterprise Server or GHE.com: it uses the GitHub sign-in of VS Code for github.com and the GitHub API at `api.github.com`.
 - The Dev Containers extension (`ms-vscode-remote.remote-containers`). VS Code installs it together with Devspaces.
 
 ## Install

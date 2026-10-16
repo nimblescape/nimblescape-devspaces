@@ -8,10 +8,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
+import { GITHUB_GRAPHQL_URL } from '../core/discovery/githubApi';
 import { SHARED_VOLUMES, uninstallCommands } from '../core/docker/engineRemoval';
 import { StateTexts } from '../core/messages';
 import { REMOTE_MONITOR_CONTAINER } from '../core/remoteMonitor/protocol';
-import { GITHUB_SCOPES, PACKAGES_SCOPES } from './auth';
+import { GITHUB_PROVIDER_ID, GITHUB_SCOPES, PACKAGES_SCOPES } from './auth';
 import { Commands } from './commands';
 import { ControllerTexts } from './controllerTexts';
 import { OUTPUT_CHANNEL_NAME } from './logger';
@@ -199,5 +200,16 @@ describe('the Marketplace page and the files of the package', () => {
     expect(read('.vscodeignore').split('\n').map((line) => line.trim())).toContain('!SUPPORT.md');
     expect(read('README.md')).toContain('(https://github.com/nimblescape/nimblescape-devspaces/blob/main/SUPPORT.md)');
     expect(section(read('docs/guide.md'), 'Troubleshooting')).toContain('(../SUPPORT.md)');
+  });
+
+  // Devspaces signs in with the GitHub sign-in of VS Code for github.com and asks the GitHub API of github.com.
+  it('says in the requirements that only accounts on github.com work', () => {
+    expect(GITHUB_PROVIDER_ID).toBe('github');
+    expect(GITHUB_GRAPHQL_URL.startsWith('https://api.github.com/')).toBe(true);
+    for (const file of ['README.md', 'docs/guide.md']) {
+      const requirements = section(read(file), 'Requirements');
+      expect(requirements, file).toContain('- A GitHub account on github.com.');
+      expect(requirements, file).toContain('Devspaces does not work with GitHub Enterprise Server or GHE.com');
+    }
   });
 });
