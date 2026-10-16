@@ -2,7 +2,7 @@
 
 The complete guide to Devspaces. The short overview is the [README](../README.md); how Devspaces works inside is in [architecture.md](architecture.md), and the security model in [security.md](security.md).
 
-**Contents:** [Requirements](#requirements) · [Install](#install) · [First steps](#first-steps) · [The sidebar](#the-sidebar) · [Commands](#commands) · [Settings](#settings) · [Updates](#updates) · [Stop on close](#stop-on-close) · [Remote Docker host](#remote-docker-host) · [Shared Docker engines](#shared-docker-engines) · [Installing Docker](#installing-docker) · [Security](#security) · [Known limits](#known-limits) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
+**Contents:** [Requirements](#requirements) · [Install](#install) · [First steps](#first-steps) · [The sidebar](#the-sidebar) · [Commands](#commands) · [Settings](#settings) · [Updates](#updates) · [Stop on close](#stop-on-close) · [Remote Docker host](#remote-docker-host) · [Shared Docker engines](#shared-docker-engines) · [Installing Docker](#installing-docker) · [Security](#security) · [Known limits](#known-limits) · [Troubleshooting](#troubleshooting) · [Uninstall](#uninstall) · [Build from source](#build-from-source)
 
 ## Requirements
 
@@ -57,7 +57,7 @@ To go to another devspace, use **Devspaces: Switch Devspace…** (`Ctrl+Alt+E`, 
 
 The first row names the Docker engine that the view shows: **Local Docker**, or **Remote Docker host: <host>**. Select it to choose another engine. Below it, the repositories are grouped by owner.
 
-The title bar has **Select Organizations…** (limits the list and the scan to the organizations and accounts that you select), **Show Only Devspaces** (lists only the repositories that have a devspace, in any state; **Show All Repositories** lists all again), **Search**, **Refresh**, **Expand All** (opens every owner, group and repository with several sources), and VS Code's **Collapse All**. Its **…** menu has **Edit Repository Groups…** and **Update All Images Now**.
+The title bar has **Select Organizations…** (limits the list and the scan to the organizations and accounts that you select), **Show Only Devspaces** (lists only the repositories that have a devspace, in any state; **Show All Repositories** lists all again), **Search**, **Refresh**, **Expand All** (opens every owner, group and repository with several sources), and VS Code's **Collapse All**. Its **…** menu has **Edit Repository Groups…**, **Update All Images Now**, and **Remove Devspaces from This Docker Engine…**.
 
 ### What a row shows
 
@@ -146,6 +146,7 @@ All commands are in the category **Devspaces** of the Command Palette. A command
 | Use a Remote Docker Host…, Use the Local Docker | Choose the Docker engine (see [Remote Docker host](#remote-docker-host)). |
 | Ask Again Before Changing the Docker Host | Brings back the questions that you answered with "Don't Ask Again". |
 | Update All Images Now | Runs the background work of the Monitor on the current Docker engine at once (see [Updates](#updates)). |
+| Remove Devspaces from This Docker Engine… | Removes the Monitor, the helper containers and images, and the shared volumes of Devspaces from the current Docker engine, and, if you agree, your devspaces there (see [Uninstall](#uninstall)). |
 
 The buttons of the Docker setup (**Install WSL 2**, **Install Docker**, **Start Docker**) and the host access switches appear only where they apply.
 
@@ -166,7 +167,7 @@ Up to version 0.2.1 the prefix was `devspace.`. Settings with the old prefix are
 | `updateImagesOnConnect` | `true` | At each start, check whether the base image or the Features of the devspace have a newer version, and update the devspace if so (your files stay). Off: the devspace keeps its image until you choose **Rebuild**. |
 | `updateContainer` | `notify` | *User only.* What a start does when a newer image is available for the existing container (see [Updates](#updates)). `notify`: says that the container is updated now, with **Continue** or **Cancel**. `ask`: asks, with **Update Now** or **Later**. |
 | `cacheUpdateSchedule` | `7 6 * * *` | *User only.* When the Monitor on each Docker engine does its background work (see [Updates](#updates)). A cron expression of five fields (minute, hour, day of month, month, day of week) in your time zone, or the minutes between two runs (5 to 1440). Examples: `7 6 * * *` daily at 06:07, `7 6 * * 1-5` on weekdays at 06:07, `7 */6 * * *` every six hours, `60` every hour. An invalid value means the default. |
-| `stopMonitorWhenIdle` | `false` | *User only.* End the Monitor of a Docker engine, local or remote, when no devspace has run for 5 minutes; the next start starts it again. Off: it keeps running, so its background work and its retries also run while no devspace runs. On an engine that several computers use, a permanent Monitor that another computer created stays; the computer that created it replaces it when it turns this setting on, and a computer with the setting off makes it permanent again at its next start. |
+| `stopMonitorWhenIdle` | `false` | *User only.* End the Monitor of a Docker engine, local or remote, when no devspace has run for 5 minutes; the next start starts it again. Off: the Monitor of an engine keeps running once you answered the question about it on that engine (see [The background run](#the-background-run)), so its background work and its retries also run while no devspace runs. Until you answer there, it ends when idle. The answer **Keep Running** turns this setting off, and **Stop When Idle** turns it on, for all engines. On an engine that several computers use, a permanent Monitor that another computer created stays; the computer that created it replaces it when it turns this setting on, and a computer with the setting off and an answer for that engine makes it permanent again at its next start. |
 | `respectShutdownActionNone` | `false` | *User only.* Keep a devspace running after its window closes when its `devcontainer.json` says `"shutdownAction": "none"`. Off: that line is ignored, and `stopOnClose` applies. |
 | `owners` | `[]` | Organizations or accounts whose repositories the sidebar lists. Empty: all repositories that you can access. **Select Organizations…** changes it. |
 | `includeArchived` | `false` | List archived repositories. |
@@ -194,7 +195,14 @@ A small container on each Docker engine, the **Monitor** (`devspaces-monitor`), 
 4. **Cleans up** that store at most once a day.
 5. **Prepares the next image of each devspace** whose base image or Features changed: it builds the new image in the background, so that the update at the next start takes seconds. It prepares one devspace at a time, the most recently used first, and stops a prepare after 30 minutes. It uses no token and no credentials, so devspaces with private images or Features, and repositories whose host access checks are off, are not prepared.
 
-The monitor keeps running on every Docker engine, local and remote, so its background work runs at the scheduled time even when no devspace runs. Turn on `devspaces.stopMonitorWhenIdle` to end it 5 minutes after the last devspace stopped; a missed run then waits until the next start.
+The first time that you start a devspace on a Docker engine with **Start** or **Rebuild**, or run **Update All Images Now** there, Devspaces asks: "Keep the Devspaces background container running on <engine>?"
+
+- **Keep Running** (the default button): the monitor keeps running on that engine, also while VS Code is closed, and Docker starts it again when Docker or the computer restarts. Its background work runs at the scheduled time even when no devspace runs.
+- **Stop When Idle**: the monitor ends 5 minutes after the last devspace stopped, and a missed run waits until the next start. This answer turns on the setting `devspaces.stopMonitorWhenIdle`, for all engines.
+
+Devspaces asks once per engine, and only when you start something: the reopen at startup and a window that VS Code restores never ask. It does not ask while `devspaces.stopMonitorWhenIdle` is on. Until you answer, also when you close the question, the monitor of that engine ends when idle. You can change your answer at any time with the setting. After **Remove Devspaces from This Docker Engine…** (see [Uninstall](#uninstall)), Devspaces asks again on that engine.
+
+A monitor that keeps running ends itself after 30 days in which no devspace was used on its engine: no window was connected to a devspace there, no devspace was started or deleted there, and **Update All Images Now** did not run there. Docker does not start it again, and the next start of a devspace there creates it again.
 
 **Devspaces: Update All Images Now** (Command Palette, or the **…** menu of the view) runs the same work at once on the current Docker engine, for example after a new image was pushed. The run starts within a minute, and the command does not wait for it: the message says "The Monitor on <engine> updates the images now."
 
@@ -249,6 +257,7 @@ Each question before a change of the Docker host has a second button "…, Don't
 - Docker Desktop may make its own context current again when it starts or updates. When a window of a devspace on another host opens again, for example from **Open Recent**, Devspaces asks "Use <host> again?" and switches back after the same test.
 - A Docker context that points to another computer without SSH (for example `tcp://10.0.0.5:2375`) is not supported: no operation runs there, and the view says so.
 - When the host cannot be reached, the message names the reason: the computer does not answer, the login failed, the host key is unknown, or Docker does not run there. Devspaces never starts or installs Docker on a remote host.
+- To stop using a host, run **Devspaces: Remove Devspaces from This Docker Engine…** while it is the current engine, then **Devspaces: Use the Local Docker**. The Docker context of the host stays; [Uninstall](#uninstall) says how to remove it.
 - Published ports are bound to `127.0.0.1` of the other computer. Reach them through the port forwarding of VS Code (the Ports view, `forwardPorts`). `host.docker.internal` exists only with Docker Desktop.
 - Rootless Docker on the other computer works. Its limits: no published ports below 1024, Docker-in-Docker needs set-up there, and resource limits need cgroup v2.
 - **Use SSH connection sharing.** Devspaces keeps one SSH connection per window and engine for its work, but the Docker CLI on your computer opens a new SSH connection for each of its own calls. SSH servers limit new connections (`MaxStartups`, and in OpenSSH 9.8 and later `PerSourcePenalties`), and a dropped connection fails with a message that the SSH server closed it before the login. Connection sharing avoids this and is much faster:
@@ -265,6 +274,8 @@ Each question before a change of the Docker host has a second button "…, Don't
 ## Shared Docker engines
 
 Several people, each with their own computer, can use the same remote Docker engine. Each devspace belongs to the GitHub account that created it, and the Monitor on the engine decides by the newest sign of any computer: closing a window on one computer never stops a devspace that a window on another computer still uses.
+
+The engine has one Monitor for all computers, and each computer asks the question about it for itself (see [The background run](#the-background-run)). **Remove Devspaces from This Docker Engine…** says when other computers use Devspaces on the engine. It deletes only the devspaces of the GitHub account that you are signed in with; the devspaces of other accounts and of other computers stay. It removes the Monitor and the helper containers of all computers, so an operation of another computer that runs at that time can fail. The next work of that computer on the engine creates them again.
 
 **A shared engine is for a group that trusts each other.** Everyone who can use Docker on that engine (root and the members of the group `docker` there) can reach every container and every volume on it, including the GitHub token in the memory of another person's running devspace. Devspaces separates accounts against mistakes, not against the other users of the engine. For people who must not see each other's work, give each person an engine of their own, for example a virtual machine.
 
@@ -315,6 +326,58 @@ The checks are a guard rail against mistakes and copied templates, not a sandbox
 - **The Monitor.** Its log shows each stop, each background run, and each prepare: `docker logs devspaces-monitor` on the engine, or from your computer `docker --context <context> logs devspaces-monitor`. Docker keeps at most 2 × 1 MB of it.
 - **A devspace stops too early or keeps running.** Check its row for `· kept`, and the settings `stopOnClose`, `stopAfterMinutes`, and `respectShutdownActionNone`. If the window warns that its heartbeats failed, the Monitor may stop the devspace after `stopAfterMinutes`.
 - **`State unknown`.** Devspaces could not read the engine. On a remote host, check that `ssh <host>` works without a question and that Docker runs there. After the images of an engine were removed, Devspaces prepares the engine again in the background; the status bar shows "Devspaces: preparing <host>…".
+
+## Uninstall
+
+Devspaces keeps a few things on each Docker engine that you used: the Monitor (`devspaces-monitor`), its helper containers and images, and three volumes that all devspaces of the engine share. Remove them before you uninstall the extension. On each Docker engine:
+
+1. Push the changes that you want to keep from each devspace there.
+2. Close the windows of your devspaces there. The command does not run while a window on this computer is connected to a devspace on the engine, or while an operation runs.
+3. Make the engine current with **Devspaces: Use the Local Docker** or **Devspaces: Use a Remote Docker Host…**. The first row of the view names it.
+4. Run **Devspaces: Remove Devspaces from This Docker Engine…** (Command Palette, or the **…** menu of the view). The question "Remove Devspaces from <engine>?" names what it removes: the container `devspaces-monitor`, the helper containers, the helper images `devspaces-worker:<hash>` with their second tag `devspaces-monitor:<hash>`, and the volumes `devspaces-monitor`, `devspaces-worker-cache` and `devspaces-vscode`. Choose **Remove**.
+5. When you have devspaces there, a second question, "Also delete your devspaces on <engine>?", shows their recorded changes. **Delete Devspaces Too** deletes each one as **Delete** does, with its containers, its images and its volumes, also the clone of the repository, before the rest is removed. A volume that another devspace also uses stays. **Keep Devspaces** keeps them, and the volume `devspaces-vscode` then stays while they use it. If you close the question, nothing is removed.
+
+Then uninstall Devspaces in the Extensions view of VS Code, or run `code --uninstall-extension nimblescape.nimblescape-devspaces`.
+
+What to know:
+
+- The command never starts Docker. When the engine does not answer, it removes nothing and says so.
+- It deletes only the devspaces of the GitHub account that you are signed in with. The devspaces of other accounts and of other computers stay, and the first question says so. Without a sign-in, your devspaces stay too.
+- After the removal, this computer does no Docker work on the engine by itself, also not when VS Code starts, until you start or rebuild a devspace there or run **Update All Images Now**. That sets up the engine again and asks again about the Monitor. Until then, the devspaces that you kept there show `State unknown`.
+- When something cannot be removed, for example a volume that a container still uses, the message says so. The log of Devspaces (**Devspaces: Show Log**) names each item and the command that removes it.
+- Your settings and the files of Devspaces on your computer stay (see below).
+
+### Remove by hand
+
+These Docker commands remove the same without the extension, in a shell such as bash, zsh or PowerShell. For a remote engine, run `docker context use <name>` first, or write `docker --context <name>` for each `docker`. A command with an empty list stops with "requires at least 1 argument": there is nothing of that kind. A volume that does not exist gives an error for that volume only.
+
+1. Only if you want to delete the devspaces too: their containers, volumes, images and Docker Compose networks. These commands delete every devspace on the engine, also those of other accounts and other computers, with the clones of the repositories. Push your changes first.
+
+   ```sh
+   docker rm -f $(docker ps -aq --filter label=nimblescape.devspaces.id)
+   docker volume rm $(docker volume ls -q --filter label=nimblescape.devspaces.id)
+   docker image prune -a -f --filter label=nimblescape.devspaces.id
+   docker network prune -f --filter label=nimblescape.devspaces.id
+   ```
+
+   Images that the devspaces were built from, for example `node:20`, stay; `docker image ls` lists them.
+
+2. What Devspaces keeps on the engine: the Monitor, the helper containers, the helper images, and the shared volumes. The volume `devspaces-vscode` cannot be removed while a container of a devspace uses it.
+
+   ```sh
+   docker rm -f $(docker ps -aq --filter label=nimblescape.devspaces.monitor)
+   docker rm -f $(docker ps -aq --filter label=nimblescape.devspaces.worker-run)
+   docker image prune -a -f --filter label=nimblescape.devspaces.worker
+   docker volume rm devspaces-monitor devspaces-worker-cache devspaces-vscode
+   ```
+
+The objects of version 0.4.0 and older have other names: see [Update from version 0.4.0 or older](#update-from-version-040-or-older).
+
+### Docker contexts and your computer
+
+- **Docker contexts.** For each remote host, Devspaces created a Docker context, named after the host as in your SSH config. `docker context ls` lists them with the description "Devspaces: remote Docker host <host>". To remove one, run `docker context use default` if it is the current context, then `docker context rm <name>`.
+- **Files.** Devspaces keeps its records in a folder of VS Code: `~/.config/Code/User/globalStorage/nimblescape.nimblescape-devspaces` on Linux, `~/Library/Application Support/Code/User/globalStorage/nimblescape.nimblescape-devspaces` on macOS, and `%APPDATA%\Code\User\globalStorage\nimblescape.nimblescape-devspaces` on Windows. For VS Code Insiders, the folder `Code - Insiders` takes the place of `Code`. You can delete this folder after the uninstall.
+- **Settings.** The settings `devspaces.…` stay in your `settings.json` until you remove them.
 
 ## Build from source
 

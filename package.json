@@ -709,7 +709,7 @@
           "type": "boolean",
           "scope": "application",
           "default": false,
-          "markdownDescription": "End the Monitor container of a Docker engine, local or remote, when no devspace has run for 5 minutes (the next open starts it again).\n\nOff (the default), it keeps running, so its background work (**Cache Update Schedule**) and its retries also run while no devspace runs. On an engine that several computers use, a permanent Monitor that another computer created stays; the computer that created it replaces it when it turns this setting on."
+          "markdownDescription": "End the Monitor container of a Docker engine, local or remote, when no devspace has run for 5 minutes (the next open starts it again).\n\nOff (the default): the first Start on an engine asks whether its Monitor keeps running there. After your answer, it keeps running, so its background work (**Cache Update Schedule**) and its retries also run while no devspace runs. It ends itself after 30 days in which no devspace was used on that engine. Until you answer, it ends when idle. The answer **Keep Running** turns this setting off, and **Stop When Idle** turns it on. On an engine that several computers use, a permanent Monitor that another computer created stays; the computer that created it replaces it when it turns this setting on."
         },
         "devspaces.updateImagesOnConnect": {
           "type": "boolean",
