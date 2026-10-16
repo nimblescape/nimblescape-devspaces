@@ -107,7 +107,7 @@ More markers in a row:
 | **Show on GitHub** | Opens the repository in the browser. |
 | **Turn Off Host Access Checks…** / **Turn On Host Access Checks** | Switches the host access checks of this repository (see [Security](#security)). |
 
-The actions after **Delete** are in the context menu of a row and in its **⋯** button. A repository with child rows has no actions of its own: every action is on its child rows.
+A row has the buttons **Start**, **Stop** (when the devspace runs) and **⋯**. The other actions, also **Delete**, are in the context menu of the row and in its **⋯** button. A repository with child rows has no actions of its own: every action is on its child rows.
 
 ### Default image
 
