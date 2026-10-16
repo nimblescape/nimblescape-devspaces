@@ -178,7 +178,8 @@ export interface ControllerDeps {
   /**
    * docker-engines.json: the removal mark of an engine ("Remove Devspaces from This Docker Engine…"), which a Start, a
    * Rebuild and "Update All Images Now" of the user clear on their engine (beforeUserFlow), and the entry of a removal
-   * that runs in a window, which refuses those flows in the other windows while it runs.
+   * that runs in a window, which refuses those flows and every other operation on that engine (operation) in the other
+   * windows while it runs.
    */
   engineRecords?: Pick<DockerEngineRecords, 'removed' | 'setRemoved' | 'record' | 'removing' | 'startRemoval' | 'endRemoval' | 'clearRemoved'>;
   /** "Remove Devspaces from This Docker Engine…" (removeFromDockerEngine). Without it, the command does nothing. */
@@ -1950,8 +1951,10 @@ export class Controller implements vscode.Disposable {
    * (usually faster), and "<owner/name> stopped." at its end. The reopen record of the devspace goes (forgetReopen).
    */
   private async stopNow(target: Target, devspace: Devspace): Promise<void> {
-    // Not even the Monitor is told while Devspaces is being removed from an engine (its channel would start a worker).
+    // Not even the Monitor is told while Devspaces is being removed from an engine (its channel would start a worker),
+    // also by another window from the current one (operation() checks that again).
     if (this.refusedWhileRemoving('Stop')) return;
+    if (await this.refusedWhileOtherWindowRemoves('Stop', await this.currentDockerHost())) return;
     const repository = this.shownName(target);
     await this.stopThroughMonitor(repository, devspace);
     await this.forgetReopen(devspace.id);
@@ -3082,7 +3085,8 @@ export class Controller implements vscode.Disposable {
   /**
    * Runs an operation: at most one per devspace in this window (`key`: operationKey; a second request is ignored with a
    * log line), errors are shown with the action Try again where the error offers it (errors.ts), and the sidebar is
-   * updated afterwards. Returns true when the operation ran without an error.
+   * updated afterwards. Refused (told, and logged) while this window removes Devspaces from an engine, and while
+   * another window removes it from the engine of the operation. Returns true when the operation ran without an error.
    */
   private async operation(
     key: string,
@@ -3094,14 +3098,26 @@ export class Controller implements vscode.Disposable {
     // While Devspaces is being removed from an engine, no operation of this window starts (the removal deletes the
     // devspaces in its own gate).
     if (this.refusedWhileRemoving(label)) return false;
+    let removedElsewhere = false;
     try {
-      const outcome = await this.gate.run(key, label, () => this.withDockerTarget(fn));
+      const outcome = await this.gate.run(key, label, () =>
+        this.withDockerTarget(async () => {
+          // Nor while another window removes Devspaces from the engine of the operation: its worker would build the
+          // helper image and create the volumes there again while they are removed. This also stops a Stop or a Delete,
+          // which do not clear the removal mark (beforeUserFlow), and runs also when the worker of this window is open.
+          if (await this.refusedWhileOtherWindowRemoves(label, (await this.operationTarget()).host)) {
+            removedElsewhere = true;
+            return;
+          }
+          await fn();
+        }),
+      );
       if (!outcome.started) {
         this.logger.info(`${label} of ${key} was not started: ${outcome.running} of ${key} is still running.`);
         options.refused?.();
         return false;
       }
-      return true;
+      return !removedElsewhere;
     } catch (error) {
       this.showError(error, options.retry);
       return false;
