@@ -86,7 +86,10 @@ export function hostSideHandler(
   const logins: OperationLogins = { given: new Set(), requests: 0, pending: false };
   return async (kind, payload, signal) => {
     const request = parseHostRequest(payload, kind);
-    if (request === undefined) throw new HelperOperationError('invalid', 'The request of the operation is invalid.', false);
+    if (request === undefined) {
+      logger.warn(`The worker sent a request of the kind ${kind} that is invalid.`);
+      throw new HelperOperationError('invalid', 'The request of the operation is invalid.', false);
+    }
     const name = `${request.kind} ${request.call}` as HostCall;
     // An allowance can name the kind of a request (its session file, its busy operation).
     const detailAt = Object.hasOwn(DETAILED_REQUESTS, name) ? DETAILED_REQUESTS[name] : undefined;
