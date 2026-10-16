@@ -12,7 +12,7 @@
 // for, the weekly check of the base image), and its maintaining ensure then also runs the daily cleanup when that is due;
 // the cleanup alone never makes it run.
 import * as fs from 'fs';
-import { LOCAL_DOCKER_TARGET, describeDockerHost, type DockerTarget } from '../docker/dockerHost';
+import { LOCAL_DOCKER_TARGET, describeDockerHost, unsupportedTargetReason, type DockerTarget } from '../docker/dockerHost';
 import { runWithDockerTarget } from '../docker/dockerTargets';
 import { REMOTE_INFO_TIMEOUT_MS, checkSshLogin, type SshCheckDeps } from '../docker/remoteDocker';
 import { errorMessage } from '../errors';
@@ -195,7 +195,7 @@ export class HelperPrebuild {
   private async prebuildWithin(target: DockerTarget, signal: AbortSignal): Promise<HelperPrebuildOutcome> {
     const { deps } = this;
     if (target.kind === 'unsupported') {
-      deps.logger.info(`The workspace helper image is not prepared in the background: the Docker endpoint ${target.endpoint} is neither local nor SSH.`);
+      deps.logger.info(`The workspace helper image is not prepared in the background. ${unsupportedTargetReason(target)}`);
       return 'unsupported';
     }
     if (!(await this.isDue(signal))) return signal.aborted ? 'cancelled' : 'notDue';

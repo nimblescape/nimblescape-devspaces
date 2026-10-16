@@ -1157,8 +1157,9 @@ export class Controller implements vscode.Disposable {
 
   private async removeFromDockerEngineNow(removal: EngineRemovalDeps): Promise<void> {
     const target = await this.operationTarget();
-    // Never an endpoint that is neither local nor SSH (every operation refuses it).
-    if (target.kind === 'unsupported') throw dockerEndpointUnsupported(target.endpoint || target.host);
+    // Never a target that is not supported, such as an endpoint that is neither local nor SSH (every operation
+    // refuses it).
+    if (target.kind === 'unsupported') throw dockerEndpointUnsupported(target);
     const engine = describeDockerHost(target.host);
     if (await this.refusedWhileOtherWindowRemoves('Remove Devspaces', target.host)) return;
     const known = await this.deps.registry.list();

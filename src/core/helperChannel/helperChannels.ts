@@ -10,7 +10,7 @@
 // worker runs the whole pipeline itself; the extension relays no Docker calls, pulls, starts or locks through it. No
 // `vscode`.
 import { runWithDockerTarget } from '../docker/dockerTargets';
-import type { DockerTarget } from '../docker/dockerHost';
+import { isUnreadableDockerTarget, type DockerTarget } from '../docker/dockerHost';
 import type { HelperMaintenance } from '../helper/helperImages';
 import { bundleHash, loaderCommand } from '../loader/pipeLoader';
 import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR, freeWorkerNumber, workerName, workerNameStart } from '../names';
@@ -512,9 +512,13 @@ export class HelperChannels {
     }
   }
 
-  /** No worker for the window that closes, or for an endpoint that is neither local nor SSH. */
+  /**
+   * No worker for the window that closes, or for an endpoint that is neither local nor SSH or a current context that
+   * could not be read.
+   */
   private refuseUnsupported(target: DockerTarget): void {
     if (this.disposed) throw new HelperChannelError('unavailable', 'the window is closing');
+    if (isUnreadableDockerTarget(target)) throw new HelperChannelError('unavailable', 'the current Docker context could not be read');
     if (target.kind !== 'remote' && target.kind !== 'local') throw new HelperChannelError('unavailable', 'the Docker endpoint is neither local nor SSH');
   }
 
