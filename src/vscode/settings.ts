@@ -238,6 +238,26 @@ export function readListOpenMode(): ListOpenMode {
   return normalizeListOpenMode(vscode.workspace.getConfiguration('workbench.list').get<unknown>('openMode'));
 }
 
+/** The section of the settings of the built-in extension GitHub Authentication of VS Code for GitHub Enterprise. */
+export const GITHUB_ENTERPRISE_SECTION = 'github-enterprise';
+
+/**
+ * True when the settings of VS Code name a GitHub Enterprise Server or GHE.com instance. Devspaces cannot use an account
+ * there: it signs in with the provider `github`, for github.com only. The settings are read as the built-in extension
+ * GitHub Authentication reads them (VS Code 1.142): the list `github-enterprise.uris` when it has a value, and a value
+ * of the workspace or folder only in a trusted workspace; else the old setting `github-enterprise.uri`.
+ */
+export function githubEnterpriseConfigured(): boolean {
+  const configuration = vscode.workspace.getConfiguration(GITHUB_ENTERPRISE_SECTION);
+  const uris = configuration.inspect<unknown>('uris');
+  const listSet =
+    uris !== undefined &&
+    (uris.globalValue !== undefined ||
+      (vscode.workspace.isTrusted && (uris.workspaceValue !== undefined || uris.workspaceFolderValue !== undefined)));
+  const values = listSet ? configuration.get<unknown>('uris') : [configuration.get<unknown>('uri')];
+  return Array.isArray(values) && values.some((value) => typeof value === 'string' && value.trim() !== '');
+}
+
 /** True if a configuration change affects these settings. */
 export function affectsSettings(event: vscode.ConfigurationChangeEvent): boolean {
   return event.affectsConfiguration(SETTINGS_SECTION);

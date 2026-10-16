@@ -16,6 +16,7 @@ import { GITHUB_PROVIDER_ID, GITHUB_SCOPES, PACKAGES_SCOPES } from './auth';
 import { Commands } from './commands';
 import { ControllerTexts } from './controllerTexts';
 import { OUTPUT_CHANNEL_NAME } from './logger';
+import { GITHUB_ENTERPRISE_SECTION } from './settings';
 import { TreeTexts } from './treeModel';
 
 // nimblescape promised the Visual Studio Marketplace team that the top of the description and of the README (the
@@ -211,5 +212,7 @@ describe('the Marketplace page and the files of the package', () => {
       expect(requirements, file).toContain('- A GitHub account on github.com.');
       expect(requirements, file).toContain('Devspaces does not work with GitHub Enterprise Server or GHE.com');
     }
+    // The user guide names the settings of VS Code that the note of the view reads (githubEnterpriseConfigured).
+    for (const key of ['uris', 'uri']) expect(section(read('docs/guide.md'), 'Requirements')).toContain(`\`${GITHUB_ENTERPRISE_SECTION}.${key}\``);
   });
 });

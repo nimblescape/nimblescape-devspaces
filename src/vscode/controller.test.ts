@@ -35,7 +35,7 @@ import { dockerTargetOf, ownContextDescription, remoteContextNames, type DockerT
 import { DockerTargets, operationDockerTarget, runWithDockerTarget } from '../core/docker/dockerTargets';
 import { silentLogger } from '../core/ports';
 import type { Devspace, DevspaceSource, ExtensionSettings, GitHubAccount, GitSummary, RepositoryInfo, WindowStatus } from '../core/types';
-import { SIGNED_IN_CONTEXT_KEY } from './auth';
+import { GITHUB_ENTERPRISE_CONTEXT_KEY, SIGNED_IN_CONTEXT_KEY } from './auth';
 import { Commands } from './commands';
 import { CONNECTED_CONTEXT_KEY, Controller, HELPER_BUILDS_STOP_WAIT_MS, type ControllerDeps } from './controller';
 import { placeholderRepositoryInfo } from './targets';
@@ -685,6 +685,7 @@ describe('Controller commands', () => {
         LOADED_CONTEXT_KEY,
         LOAD_FAILED_CONTEXT_KEY,
         SIGNED_IN_CONTEXT_KEY,
+        GITHUB_ENTERPRISE_CONTEXT_KEY,
         DEVSPACES_ONLY_CONTEXT_KEY,
       ].sort(),
     );
@@ -728,6 +729,8 @@ describe('Controller commands', () => {
       'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n' +
       'Devspaces asks for the scopes repo (read and change your repositories, also the private ones) and read:org (read your organization memberships). It works only with accounts on github.com.\n' +
       '[Sign in with GitHub](command:devspaces.signIn)';
+    const githubEnterprise =
+      'Your VS Code is set up for GitHub Enterprise Server or GHE.com. Devspaces cannot use an account there. Sign in with an account on github.com.';
     const installWsl =
       '1. Install WSL 2, which Docker Desktop needs. Windows asks for administrator permission; restart afterwards.\n[Install WSL 2](command:devspaces.dockerSetup.installWsl)';
     const wslInstalled = '1. ✓ WSL 2 is installed.';
@@ -757,6 +760,16 @@ describe('Controller commands', () => {
       expect(shownWelcome({ ...setup, isLinux: true })).toEqual([intro, installLinux, afterLinux, signIn]);
     });
 
+    // The settings of VS Code name a GitHub Enterprise instance (devspaces.githubEnterprise): a note after the sign-in.
+    it('shows the note on GitHub Enterprise after the sign-in, only while not signed in, also under the setup', () => {
+      const enterprise = { [GITHUB_ENTERPRISE_CONTEXT_KEY]: true };
+      expect(shownWelcome({ ...enterprise })).toEqual([signIn, githubEnterprise]);
+      expect(shownWelcome({ ...setup, isMac: true, ...enterprise })).toEqual([intro, installMac, after, signIn, githubEnterprise]);
+      expect(shownWelcome({})).toEqual([signIn]);
+      expect(shownWelcome({ ...enterprise, [SIGNED_IN_CONTEXT_KEY]: true })).toEqual(['Loading your repositories…']);
+      expect(shownWelcome({ ...enterprise, ...setup, isMac: true, [SIGNED_IN_CONTEXT_KEY]: true })).toEqual([intro, installMac, after]);
+    });
+
     // Numbers only where there is more than one step (Windows: WSL 2, then Docker Desktop).
     it('numbers the steps 1, 2, … only on the platform with two steps', () => {
       const cases = <Array<[Record<string, boolean>, number]>>[
@@ -781,9 +794,9 @@ describe('Controller commands', () => {
       expect(shownWelcome({ ...signedIn, [LOADED_CONTEXT_KEY]: true })).toEqual([intro, installMac, after]);
       expect(shownWelcome({ ...signedIn, [LOADED_CONTEXT_KEY]: true, [LOAD_FAILED_CONTEXT_KEY]: true })).toEqual([intro, installMac, after]);
       expect(shownWelcome({ ...signedIn, [LOAD_FAILED_CONTEXT_KEY]: true })).toEqual([intro, installMac, after]);
-      // Every entry but the sign-in either belongs to the setup or is hidden under it.
+      // Every entry but the sign-in and its note on GitHub Enterprise either belongs to the setup or is hidden under it.
       for (const view of welcomeManifest().contributes.viewsWelcome) {
-        if (view.when === '!devspaces.signedIn') continue;
+        if (view.when === `!${SIGNED_IN_CONTEXT_KEY}` || view.when === `!${SIGNED_IN_CONTEXT_KEY} && ${GITHUB_ENTERPRISE_CONTEXT_KEY}`) continue;
         const terms = view.when.split('&&').map((term) => term.trim());
         expect(terms.includes(DockerContextKeys.setupRequired) || terms.includes(`!${DockerContextKeys.setupRequired}`)).toBe(true);
       }

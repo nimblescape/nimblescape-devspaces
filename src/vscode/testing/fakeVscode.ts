@@ -97,6 +97,8 @@ export interface FakeOutputChannel {
 }
 
 const sessionChanges = new EventEmitter<{ provider: { id: string; label: string } }>();
+const configurationChanges = new EventEmitter<{ affectsConfiguration(section: string): boolean }>();
+const trustGrants = new EventEmitter<void>();
 
 export const fakeVscode = {
   EventEmitter,
@@ -123,7 +125,13 @@ export const fakeVscode = {
   },
   env: { openExternal: vi.fn(), remoteName: undefined as string | undefined },
   commands: { executeCommand: vi.fn(), registerCommand: vi.fn() },
-  workspace: { getConfiguration: vi.fn() },
+  workspace: {
+    getConfiguration: vi.fn(),
+    /** resetFakeVscode sets it to true. */
+    isTrusted: true,
+    onDidChangeConfiguration: configurationChanges.event,
+    onDidGrantWorkspaceTrust: trustGrants.event,
+  },
   authentication: {
     getSession: vi.fn(),
     onDidChangeSessions: sessionChanges.event,
@@ -131,6 +139,15 @@ export const fakeVscode = {
   /** Test helper: fires `authentication.onDidChangeSessions`. */
   fireSessionChange(providerId: string): void {
     sessionChanges.fire({ provider: { id: providerId, label: providerId } });
+  },
+  /** Test helper: fires `workspace.onDidChangeConfiguration` for a change of the settings `keys` (full keys). */
+  fireConfigurationChange(...keys: string[]): void {
+    configurationChanges.fire({ affectsConfiguration: (section) => keys.some((key) => key === section || key.startsWith(`${section}.`)) });
+  },
+  /** Test helper: VS Code trusts the workspace now (`workspace.isTrusted`, `workspace.onDidGrantWorkspaceTrust`). */
+  grantWorkspaceTrust(): void {
+    fakeVscode.workspace.isTrusted = true;
+    trustGrants.fire();
   },
   statusBarItems: [] as FakeStatusBarItem[],
   terminals: [] as FakeTerminal[],
@@ -143,6 +160,7 @@ export function resetFakeVscode(): void {
   fakeVscode.statusBarItems.length = 0;
   fakeVscode.terminals.length = 0;
   fakeVscode.env.remoteName = undefined;
+  fakeVscode.workspace.isTrusted = true;
   fakeVscode.outputChannels.length = 0;
   for (const mock of [
     ...Object.values(window),
