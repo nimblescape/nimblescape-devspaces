@@ -110,7 +110,7 @@ export class Sidebar implements vscode.Disposable {
    * The engine whose states the last refresh could not read, and whether it answered; `undefined` after a refresh that
    * read them (or knows that nothing runs: the local Docker does not run).
    */
-  private statesUnread: { dockerHost: string; reachable: boolean } | undefined;
+  private statesUnread: { dockerHost: string; reachable: boolean; removed?: true } | undefined;
   private liveBranches: ReadonlyMap<string, string> = new Map();
   private lookups: ReadonlyMap<string, RepositoryInfo | null> = new Map();
   /**
@@ -527,8 +527,12 @@ export class Sidebar implements vscode.Disposable {
     };
     const { dockerHost, states } = await (dockerTargets ? dockerTargets.withOperation(read) : read());
     let runtime: ReadonlyMap<string, DevspaceRuntime> | undefined = states.runtime;
-    let unread: { dockerHost: string; reachable: boolean } | undefined;
-    if (!runtime) {
+    let unread: { dockerHost: string; reachable: boolean; removed?: true } | undefined;
+    if (!runtime && states.engineRemoved === true) {
+      // An engine with the removal mark: refreshStates asked Docker nothing there, and neither does the sidebar (no
+      // `docker info`); the states stay unknown until a flow of the user there.
+      unread = { dockerHost, reachable: true, removed: true };
+    } else if (!runtime) {
       // refreshStates gives `undefined` both when Docker does not run and when Docker failed. Only the first means
       // "nothing runs" (a connection that was lost must not keep showing Connected).
       const running = docker.isInstalled() && (await docker.isRunning());
@@ -553,6 +557,7 @@ export class Sidebar implements vscode.Disposable {
   private statesUnknown(): { statesUnknown?: StatesUnknown } {
     const unread = this.statesUnread;
     if (unread === undefined) return {};
+    if (unread.removed === true) return { statesUnknown: { dockerHost: unread.dockerHost, reason: 'removed' } };
     if (!unread.reachable) return { statesUnknown: { dockerHost: unread.dockerHost, reason: 'unreachable' } };
     const build = this.deps.helperBuilds?.status(unread.dockerHost);
     return { statesUnknown: { dockerHost: unread.dockerHost, reason: build === 'building' ? 'building' : build === 'failed' ? 'buildFailed' : 'notReady' } };

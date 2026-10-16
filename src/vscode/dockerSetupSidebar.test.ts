@@ -422,9 +422,9 @@ describe('nothing before the first use of Devspaces', () => {
         expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
         // The connection stays.
         expect(fakeVscode.commands.executeCommand.mock.calls.filter(([command]) => command === CLOSE_REMOTE_COMMAND)).toEqual([]);
-        // Only `docker info`, before the sidebar reads the states, which starts no worker there. No heartbeat (whose
-        // repair would start the Monitor), no worker, no open pipeline.
-        expect(spawned.filter(([command, sub]) => !(command === docker && (sub === 'context' || sub === 'info')))).toEqual([]);
+        // Not even `docker info` for the states in the sidebar. No heartbeat (whose repair would start the Monitor), no
+        // worker, no open pipeline.
+        expect(spawned.filter(([command, sub]) => !(command === docker && sub === 'context'))).toEqual([]);
       },
       { containerName: kept.containerName, running: true },
     );

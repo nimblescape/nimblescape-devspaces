@@ -426,6 +426,23 @@ describe('Sidebar', () => {
     expect(rowOf('acme/api').description).toContain(StateTexts.filesMissing);
   });
 
+  // "Remove Devspaces from This Docker Engine…": refreshStates asked Docker nothing there, and the sidebar does not ask
+  // `docker info` after it. Mutation: the second isRunning() fails it.
+  it('an engine with the removal mark: the states are unknown with the reason, and Docker is not asked', async () => {
+    await h.registry.add(devspace(API, 'acme/api'));
+    await signedIn();
+    h.docker.isRunning.mockClear();
+    h.service.refreshStates.mockResolvedValue({ runtime: undefined, branches: new Map(), engineRemoved: true });
+    await h.sidebar.refreshStates();
+    expect(h.docker.isRunning).not.toHaveBeenCalled();
+    expect(h.helperBuilds.status).not.toHaveBeenCalled();
+    expect(rowOf('acme/api').stateUnknown).toBe(true);
+    expect(rowOf('acme/api').description).toContain(`${StateTexts.unknown} (Devspaces removed from Docker)`);
+    expect(rowOf('acme/api').tooltip).toContain('Devspaces was removed from Docker, so the state of the devspace is not read. A Start of the devspace sets Devspaces up there again.');
+    // The actions stay (Start sets Devspaces up there again).
+    expect(rowOf('acme/api').contextValue).toContain('canStart');
+  });
+
   it('a remote engine that does not answer is unknown (its containers may run); the local Docker that does not run is Stopped', async () => {
     h.dockerHost.value = 'devspace';
     await h.registry.add(devspace(API, 'acme/api', { dockerHost: 'devspace' }));

@@ -538,6 +538,8 @@ async function activateExtension(
     },
     // Whether the Docker engine of the current target answers (Stop and the refresh do nothing without it).
     dockerRunning: () => docker.isRunning(),
+    // The refresh of the states asks nothing on an engine with the removal mark, also no `docker info`.
+    engineRemoved: (host) => engineRemoved({ host }),
     ui,
     logger,
     clock: systemClock,
