@@ -161,7 +161,8 @@ describe('the Marketplace page and the files of the package', () => {
     const manifest = JSON.parse(read('package.json')) as { displayName: string; description: string; keywords: string[] };
     expect(manifest.keywords).not.toContain('codespaces');
     for (const text of [manifest.displayName, manifest.description, ...manifest.keywords]) expect(text).not.toMatch(/codespace/i);
-    for (const file of ['README.md', 'SUPPORT.md', 'docs/guide.md', 'docs/security.md', 'docs/architecture.md']) {
+    // The CHANGELOG is the Changelog tab of the Marketplace page, and its sections are the notes of the GitHub releases.
+    for (const file of ['README.md', 'CHANGELOG.md', 'SUPPORT.md', 'docs/guide.md', 'docs/security.md', 'docs/architecture.md']) {
       expect(read(file), file).not.toMatch(/codespace/i);
     }
   });
