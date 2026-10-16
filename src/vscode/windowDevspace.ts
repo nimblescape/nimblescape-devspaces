@@ -67,7 +67,8 @@ export async function backgroundEngineAtStart(deps: {
  * The registry entry of the container that this window is attached to. When the registry lost its content (the file is
  * missing, not valid, or has invalid entries), it is restored from the volume labels first, so that the open pipeline
  * of role A can run for a restored window; this needs a running Docker, which is not started for it. With `mayRestore`
- * false (backgroundWorkAtStart), nothing is restored. Never throws.
+ * false (backgroundWorkAtStart), nothing is restored; as a check, it runs only for a lost registry, and nothing is
+ * restored when it answers false (an engine with the removal mark). Never throws.
  */
 export async function findWindowDevspace(
   containerName: string,
@@ -77,14 +78,15 @@ export async function findWindowDevspace(
     docker: Pick<BootstrapDocker, 'isInstalled'>;
     service: Pick<DevspaceOperations, 'reconcileInWorker'>;
     logger: Logger;
-    /** Whether a lost registry may be restored here; true when not given. */
-    mayRestore?: boolean;
+    /** Whether a lost registry may be restored here, or the check of it; true when not given. */
+    mayRestore?: boolean | (() => Promise<boolean>);
   },
 ): Promise<Devspace | undefined> {
   const { registry, needsRestore, docker, service, logger } = deps;
   try {
     const devspace = await registry.findByContainerName(containerName);
     if (devspace || deps.mayRestore === false || !(await needsRestore())) return devspace;
+    if (typeof deps.mayRestore === 'function' && !(await deps.mayRestore())) return undefined;
     // reconcileInWorker checks the Docker target first (never an endpoint that is neither local nor SSH), then whether
     // Docker runs; the worker of the Docker host restores, in the background (passive).
     if (!docker.isInstalled()) return undefined;
