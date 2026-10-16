@@ -69,10 +69,12 @@ describe('cacheUpdateSchedule', () => {
 });
 
 describe('the mode of the monitor and its restart policy', () => {
-  it('runs permanently on every engine unless stopMonitorWhenIdle is on (default off)', () => {
-    expect(monitorRunsPermanently(undefined)).toBe(true);
-    expect(monitorRunsPermanently(false)).toBe(true);
-    expect(monitorRunsPermanently(true)).toBe(false);
+  it('runs permanently on every engine after the answer there, unless stopMonitorWhenIdle is on (default off)', () => {
+    expect(monitorRunsPermanently(undefined, true)).toBe(true);
+    expect(monitorRunsPermanently(false, true)).toBe(true);
+    expect(monitorRunsPermanently(true, true)).toBe(false);
+    // Before the answer about the Monitor of the engine, it ends when idle.
+    for (const stop of [undefined, false, true]) expect(monitorRunsPermanently(stop, false)).toBe(false);
   });
 
   it('a permanent monitor has unless-stopped, one that ends when idle on-failure', () => {

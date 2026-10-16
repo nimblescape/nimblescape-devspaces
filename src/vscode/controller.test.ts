@@ -254,6 +254,8 @@ interface Harness {
   clock: { now: () => number };
   /** The VS Code setting workbench.list.openMode (double-click on a row); a test may change it. */
   listOpenMode: { value: ListOpenMode };
+  /** The question about the Monitor of an engine (MonitorQuestion); by default the engine has its answer. */
+  monitorQuestion: { askIfNeeded: Mock<(host: string) => Promise<string>> };
 }
 
 function createHarness(
@@ -271,6 +273,7 @@ function createHarness(
     readyPollMs?: number;
   } = {},
 ): Harness {
+  const monitorQuestion = { askIfNeeded: vi.fn(async (_host: string): Promise<string> => 'notNeeded') };
   const listOpenMode: Harness['listOpenMode'] = { value: 'singleClick' };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   const clock = { now: () => NOW };
@@ -440,6 +443,7 @@ function createHarness(
     dockerTargets: options.dockerTargets,
     remoteDocker: options.remoteDocker,
     sessionMonitor: options.sessionMonitor,
+    monitorQuestion,
     listOpenMode: () => listOpenMode.value,
     clock,
     isAlive: (pid: number) => alive.has(pid),
@@ -494,6 +498,7 @@ function createHarness(
     settings,
     clock,
     listOpenMode,
+    monitorQuestion,
   };
 }
 
@@ -2628,6 +2633,103 @@ describe('Window roles', () => {
     h.settings.reopenLastOnStartup = false;
     await h.controller.runEmptyWindowTasks();
     expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+  });
+});
+
+// The question about the Monitor of an engine (monitorQuestion.ts): a Start, a Rebuild and "Update All Images Now" that
+// the user started ask it before they run on the engine (the fake here records the hosts); the flows that run by
+// themselves never ask, so the Monitor that they make sure of stops when idle until the engine has an answer.
+describe('the question about the Monitor of the engine', () => {
+  const asked = (): string[] => h.monitorQuestion.askIfNeeded.mock.calls.map((call) => call[0]);
+  /** The question came before the first call of `open`. */
+  const askedBefore = (open: Mock): boolean => h.monitorQuestion.askIfNeeded.mock.invocationCallOrder[0] < open.mock.invocationCallOrder[0];
+
+  it('a Start of the user asks about the engine of the operation before its open; a closed question goes on', async () => {
+    const info = repositoryInfo('acme/api');
+    h.sidebar.infos.set('acme/api', info);
+    h.monitorQuestion.askIfNeeded.mockResolvedValue('closed');
+    h.service.openInWorker.mockImplementation(async () => {
+      const env = devspace();
+      await h.registry.add(env);
+      return openResult(env);
+    });
+    await run('start', row('acme/api', undefined, info));
+    expect(asked()).toEqual(['']);
+    expect(askedBefore(h.service.openInWorker)).toBe(true);
+    expect(h.connection.open).toHaveBeenCalledWith(CONTAINER, '/workspaces/api');
+    // A Start of an existing devspace too.
+    await run('startInNewWindow', row('acme/api', devspace()));
+    expect(asked()).toEqual(['', '']);
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it('a Start asks about the engine of the current Docker context, and not for a devspace of another host', async () => {
+    const target = dockerTargetOf('ssh://build-box', 'build-box');
+    recreateHarness({
+      dockerTargets: {
+        resolve: async () => target,
+        current: async () => operationDockerTarget() ?? target,
+        withOperation: <T,>(fn: () => Promise<T>) => runWithDockerTarget(target, fn),
+      } as unknown as ControllerDeps['dockerTargets'],
+    });
+    const remote = devspace({ dockerHost: 'build-box' });
+    await h.registry.add(remote);
+    await run('start', row('acme/api', remote));
+    expect(asked()).toEqual(['build-box']);
+    // A local devspace: its open is refused on this host, and nothing is asked.
+    const local = devspace({ id: OTHER_ENV_ID, repository: 'acme/web', containerName: 'devspaces-acme-web-7c1d2e3f' });
+    await h.registry.add(local);
+    await run('start', row('acme/web', local));
+    expect(asked()).toEqual(['build-box']);
+  });
+
+  it('the reopen at startup asks nothing; its Try again is a Start of the user', async () => {
+    await h.registry.add(devspace());
+    h.sessionFiles.writeReopenSync({ devspaceId: ENV_ID, closedAt: iso(NOW - 60_000) });
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    h.service.openDevspaceInWorker.mockRejectedValueOnce(new UserFacingError('buildFailed', Messages.buildFailed, 'log'));
+    fakeVscode.window.showErrorMessage.mockResolvedValueOnce(Actions.tryAgain);
+    await h.controller.runEmptyWindowTasks();
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.anything());
+    await settle(() => h.service.openDevspaceInWorker.mock.calls.length === 2, 'the Try again');
+    expect(asked()).toEqual(['']);
+    expect(h.monitorQuestion.askIfNeeded.mock.invocationCallOrder[0]).toBeGreaterThan(h.service.openDevspaceInWorker.mock.invocationCallOrder[0]);
+  });
+
+  it('a restored window and a pending Rebuild ask nothing', async () => {
+    const env = devspace();
+    await h.registry.add(env);
+    await h.controller.openAttachedWindow(env, CONTAINER, undefined);
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    await h.sessionFiles.writeOperation({ devspaceId: OTHER_ENV_ID, operation: 'rebuild', requestedAt: iso(NOW - 5000), requestedBy: 'old-window', reason: 'manual' });
+    await h.registry.add(devspace({ id: OTHER_ENV_ID, repository: 'acme/web', containerName: 'devspaces-acme-web-7c1d2e3f' }));
+    await h.controller.runEmptyWindowTasks();
+    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(OTHER_ENV_ID, expect.objectContaining({ forceRebuild: true }));
+    expect(asked()).toEqual([]);
+  });
+
+  it('a Rebuild of the user asks first, also before the hand-off of the connected window', async () => {
+    await h.registry.add(devspace());
+    await run('rebuild', row('acme/api', devspace()));
+    expect(asked()).toEqual(['']);
+    expect(askedBefore(h.service.openDevspaceInWorker)).toBe(true);
+    const env = devspace();
+    await connectHere(env);
+    await run('rebuild', row('acme/api', env));
+    expect(asked()).toEqual(['', '']);
+    expect(h.connection.closeRemoteConnection).toHaveBeenCalled();
+    expect(h.monitorQuestion.askIfNeeded.mock.invocationCallOrder[1]).toBeLessThan(h.connection.closeRemoteConnection.mock.invocationCallOrder[0]);
+  });
+
+  it('Stop and Delete ask nothing', async () => {
+    await h.registry.add(devspace());
+    await run('stop', row('acme/api', devspace()));
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.delete);
+    await run('delete', row('acme/api', devspace()));
+    expect(h.service.stop).toHaveBeenCalled();
+    expect(h.service.deleteInWorker).toHaveBeenCalledWith(ENV_ID, expect.anything());
+    expect(asked()).toEqual([]);
   });
 });
 

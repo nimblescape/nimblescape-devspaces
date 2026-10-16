@@ -15,8 +15,9 @@
 //   run                          the loop: a tick every 15 s (rules.ts); each automatic stop under the devspace
 //                                lock; exits with 0 after REMOTE_IDLE_EXIT_MS without a running devspace container
 //                                and without a fresh record while it maintains no images (a created container does not
-//                                count), unless it runs permanently (DEVSPACE_MONITOR_PERMANENT: stopMonitorWhenIdle
-//                                off, the default), image updates or not; and its background run
+//                                count), unless it runs permanently (DEVSPACE_MONITOR_PERMANENT: the user answered
+//                                the question about it, and stopMonitorWhenIdle is off), image updates or not; and its
+//                                background run
 //                                (background.ts) by the schedule of cacheUpdateSchedule (CacheSchedule)
 //   heartbeat <json>             writes the records of one heartbeat (exit 0; 2 for an invalid argument, nothing written);
 //                                an entry with `stopNow` (a manual Stop) writes a record that stops the devspace at
@@ -1246,8 +1247,8 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
         await loop.tick();
         // Only here, between two ticks, so never while it holds a lock or stops a container; the removals of the
         // records (each under the lock of the records) end first. The records stay in the volume. A permanent monitor
-        // (stopMonitorWhenIdle off, the default) never exits when idle; one that ends when idle does so
-        // also with image updates.
+        // (after the answer of the user, with stopMonitorWhenIdle off) never exits when idle; one that ends when idle
+        // does so also with image updates.
         if (!permanent && loop.idleMs() >= idleExitMs) {
           // Not during a background run (a download would be cut, and its end not stored). The loop does not wait for
           // the run: it goes on ticking (the stops of devspaces whose windows closed, the heartbeats) and exits at

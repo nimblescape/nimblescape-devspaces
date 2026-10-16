@@ -43,6 +43,7 @@ import { heartbeatWiring } from '../core/session/heartbeatWiring';
 import { WindowHeartbeats, resolveHeartbeatEngine } from '../core/session/windowHeartbeats';
 import { isHandedOffStop, releaseDevspace } from '../core/session/windowRelease';
 import { readOrCreateComputerId } from '../core/storage/computerId';
+import { DockerEngineRecords } from '../core/storage/dockerEngineRecords';
 import { devspacesUsed } from '../core/storage/firstUse';
 import { StoragePaths } from '../core/storage/paths';
 import { ConfigCheckStore } from '../core/storage/configChecks';
@@ -63,6 +64,7 @@ import { DisconnectRequests } from './disconnectRequests';
 import { dockerAdapterOptions } from './dockerAdapterOptions';
 import { DockerHostIndicator } from './dockerHostIndicator';
 import { DockerSetup } from './dockerSetup';
+import { MonitorQuestion } from './monitorQuestion';
 import { OutputChannelLogger } from './logger';
 import { updateOwnersContextKey } from './ownerSelector';
 import { updateDevspacesOnlyContextKey } from './devspacesOnly';
@@ -165,6 +167,9 @@ async function activateExtension(
   // The Docker host is the current Docker context, read at the start of each operation.
   const targets = new DockerTargets(docker, env, logger, platform);
   const remoteState = new RemoteDockerState(paths.remoteDocker);
+  // What this computer remembers about each Docker engine (docker-engines.json): the answer to the question about its
+  // Monitor (MonitorQuestion).
+  const engineRecords = new DockerEngineRecords(paths.dockerEngines);
   const sshPath = (): string | undefined => findExecutable('ssh', env, platform);
   // The SSH check before the Docker calls to a remote host; a success counts for a minute per host.
   const sshLogins = new SshLoginCache();
@@ -351,10 +356,12 @@ async function activateExtension(
   let knownComputerId: string | undefined;
   const computerId = (): string => (knownComputerId ??= readOrCreateComputerId(paths.computerId));
   // The open carries the settings of this computer for the Monitor of its engine (no image prefixes and no
-  // image list): the schedule of the monitor's whole background run (cacheUpdateSchedule), and its mode, the same on
-  // every engine (monitorRunsPermanently with stopMonitorWhenIdle). In monitorSettings.ts, tested by its behaviour.
+  // image list): the schedule of the monitor's whole background run (cacheUpdateSchedule), and its mode, by the same
+  // rule on every engine (monitorRunsPermanently: permanent once the user answered the question about the Monitor of
+  // that engine, unless stopMonitorWhenIdle is on). In monitorSettings.ts, tested by its behaviour.
   const monitorSettings = monitorSettingsOf({
     settings: getSettings,
+    answered: (host) => engineRecords.monitorAnswered(host),
     // An unknown zone of Node.js (`Etc/Unknown`) is UTC.
     timeZone: () => usableTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone),
     computerId,
@@ -365,7 +372,7 @@ async function activateExtension(
   // the wait for the helper image, whose build runs with the long signal of the preparation. The same wait after a
   // failed build on this engine as for the worker of a heartbeat; within it, the repair goes on with the tag when it is
   // present (heartbeatWiring.repair). The repair is the operation `monitorEnsure` of the worker of that engine.
-  const repairSessionMonitor = heartbeats.repair((target, signal) => monitorCalls.monitorEnsure(target, monitorSettings.forTarget(target), signal));
+  const repairSessionMonitor = heartbeats.repair(async (target, signal) => monitorCalls.monitorEnsure(target, await monitorSettings.forTarget(target), signal));
   // Set below (the coordinator makes the ID of this window).
   let windowCoordinator: SessionCoordinator | undefined;
   const windowHeartbeats = new WindowHeartbeats({
@@ -524,7 +531,7 @@ async function activateExtension(
     // runs, and sends its first heartbeat). The Docker host of the open is empty for the local Docker and names the SSH
     // host otherwise. The image references in use come with it from the registry
     // (DevspaceOperations.referencesInUse); there is no image list.
-    openMonitor: (dockerHost) => ({ images: monitorSettings.forOpen(dockerHost) }),
+    openMonitor: async (dockerHost) => ({ images: await monitorSettings.forOpen(dockerHost) }),
     // The commit and quality of this VS Code (product.json under vscode.env.appRoot, read once), which an open sends
     // when the build qualifies.
     vscodeServerOfWindow: windowVscodeServer(vscode.env.appRoot, (file) => fs.promises.readFile(file, 'utf8'), (message) => logger.info(message)),
@@ -662,7 +669,10 @@ async function activateExtension(
     },
     // "Update All Images Now", through this window's worker of the engine, with the monitor settings of this computer
     // for that engine (as the repair of a heartbeat).
-    updateImagesNow: (target, signal) => monitorCalls.monitorRunNow(target, monitorSettings.forTarget(target), signal),
+    updateImagesNow: async (target, signal) => monitorCalls.monitorRunNow(target, await monitorSettings.forTarget(target), signal),
+    // The question about the Monitor of an engine, which a Start, a Rebuild and "Update All Images Now" of the user ask
+    // there first (once per engine); its answer goes into the setting stopMonitorWhenIdle and the records of the engines.
+    monitorQuestion: new MonitorQuestion({ records: engineRecords, settings: getSettings, logger }),
   });
   context.subscriptions.push(
     sidebar,
