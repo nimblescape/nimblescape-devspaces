@@ -195,8 +195,9 @@ export class DockerTargets {
 
   /**
    * The target when the current context cannot be read: DOCKER_HOST decides when it is set. Else the docker command
-   * may be Podman (the package podman-docker: Podman 5 prints nothing for `docker context inspect`, older versions do
-   * not know the command), which the check of the CLI shows; a check that fails counts as Docker. Else nothing. Logged.
+   * may be Podman (the package podman-docker: Podman 5 prints an empty list `[]` for `docker context inspect`, older
+   * versions do not know the command), which the check of the CLI shows; a check that fails counts as Docker. Else
+   * nothing. Logged.
    */
   private async unreadable(dockerHost: string | undefined, detail: string): Promise<DockerTarget> {
     if (dockerHost) {

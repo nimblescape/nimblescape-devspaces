@@ -118,8 +118,12 @@ describe('DockerTargets.resolve (remote mode detection from the current context)
   describe('a docker command that is Podman (podman-docker)', () => {
     const NOTE = 'Emulate Docker CLI using podman. Create /etc/containers/nodocker to quiet msg.\n';
     const result = (exitCode: number, stdout: string, stderr = NOTE): RunResult => ({ exitCode, stdout, stderr, timedOut: false });
-    /** Podman 5 prints nothing for `context inspect` without a name; older versions do not know the command. */
-    const PODMAN_5 = result(0, '');
+    /**
+     * Podman 5 prints an empty list for `context inspect --format '{{json .}}'` without a name (it has no Docker contexts);
+     * older versions do not know the command. A docker command that prints nothing is taken the same way.
+     */
+    const PODMAN_5 = result(0, '[]\n');
+    const NO_OUTPUT = result(0, '');
     const PODMAN_4 = result(125, '', `${NOTE}Error: unrecognized command \`podman context\`\nTry 'podman --help' for more information\n`);
     const DETAIL = 'docker --version: podman version 5.2.2';
     /** `podman info` has no ServerVersion. */
@@ -159,8 +163,9 @@ describe('DockerTargets.resolve (remote mode detection from the current context)
     }
 
     it.each([
-      ['Podman 5 (no output)', PODMAN_5],
+      ['Podman 5 (an empty list)', PODMAN_5],
       ['an older Podman (unrecognized command)', PODMAN_4],
+      ['a docker command without output', NO_OUTPUT],
     ])('%s: the operation is refused with the Podman message, not as a context that cannot be read', async (_name, contextInspect) => {
       const p = podmanDocker(contextInspect);
       const target = await p.targets.resolve();
