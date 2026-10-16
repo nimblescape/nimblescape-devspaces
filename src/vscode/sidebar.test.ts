@@ -16,6 +16,7 @@ import { StoragePaths } from '../core/storage/paths';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { SessionFiles } from '../core/storage/sessionFiles';
 import type { DiscoveryData, Devspace, ExtensionSettings, GitHubAccount, RepositoryInfo, WindowStatus } from '../core/types';
+import { Commands } from './commands';
 import {
   LOADED_CONTEXT_KEY,
   LOAD_FAILED_CONTEXT_KEY,
@@ -887,8 +888,8 @@ describe('Sidebar progressive display', () => {
     expect(warnings[0]).toContain('The repository group "(" in the setting devspaces.repositoryGroups is ignored');
     expect(warnings[1]).toContain('uses the flags "g", which are ignored');
     for (const warning of warnings) expect(h.logger.warn).toHaveBeenCalledWith(warning);
-    // Each warning has the button Open Settings.
-    for (const call of fakeVscode.window.showWarningMessage.mock.calls) expect(call.slice(1)).toEqual([Actions.openSettings]);
+    // Each warning has the button Edit Repository Groups…, which opens the editor of the setting.
+    for (const call of fakeVscode.window.showWarningMessage.mock.calls) expect(call.slice(1)).toEqual([Actions.editRepositoryGroups]);
 
     // Each render compiles the patterns again, but a problem is shown only once.
     await h.sidebar.render();
@@ -1014,6 +1015,7 @@ describe('Sidebar progressive display', () => {
     await signedIn();
     h.settings.repositoryGroups = ['^(web)-(.+)$', String.raw`^(\w+)+$`];
     h.groupMatcher.result = { tooSlow: true, slowEntry: 1 };
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.editRepositoryGroups);
     await h.sidebar.render();
     expect(rows().map((row) => row.label)).toEqual(['api', 'web-shop']);
     const warnings = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => String(call[0]));
@@ -1022,8 +1024,9 @@ describe('Sidebar progressive display', () => {
       'The repository group "^(\\\\w+)+$" in the setting devspaces.repositoryGroups took longer than 1 second for the names of your repositories, for example because of a nested repetition such as (a+)+. The view lists the repositories without groups until you change the setting.',
     ]);
     expect(h.logger.warn).toHaveBeenCalledWith(warnings()[0]);
-    // The warning has the button Open Settings.
-    expect(fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call.slice(1))).toEqual([[Actions.openSettings]]);
+    // The warning has the button Edit Repository Groups…, which opens the editor of the setting.
+    expect(fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call.slice(1))).toEqual([[Actions.editRepositoryGroups]]);
+    await vi.waitFor(() => expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith(Commands.editRepositoryGroups));
     // The view does not ask the worker again for this value of the setting.
     await h.sidebar.render();
     expect(h.groupMatcher.runs).toHaveLength(1);
@@ -1048,8 +1051,8 @@ describe('Sidebar progressive display', () => {
     expect(warnings).toEqual([
       'The repository groups of the setting devspaces.repositoryGroups could not be applied, because the separate thread that runs their regular expressions failed. The view lists the repositories without groups until you change the setting or reload the window.',
     ]);
-    // The warning has the button Open Settings.
-    expect(fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call.slice(1))).toEqual([[Actions.openSettings]]);
+    // The warning has the button Edit Repository Groups….
+    expect(fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call.slice(1))).toEqual([[Actions.editRepositoryGroups]]);
   });
 
   it('runs a value of repositoryGroups again when it is set again after a value without entries', async () => {

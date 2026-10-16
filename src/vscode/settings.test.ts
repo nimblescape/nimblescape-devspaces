@@ -21,10 +21,12 @@ import {
   readSettings,
   SETTINGS_SECTION,
   settingTarget,
+  showRepositoryGroupsWarning,
   showSettingWarning,
   warnInvalidDefaultImage,
   warnInvalidHostAccessChecksOff,
 } from './settings';
+import { Commands } from './commands';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
 
 describe('settings', () => {
@@ -404,6 +406,28 @@ describe('settings', () => {
     showSettingWarning(logger, 'owners', 'A warning.');
     await vi.waitFor(() => expect(logger.warn).toHaveBeenCalledWith('The setting owners could not be opened: no editor'));
     expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', '@id:devspaces.owners');
+  });
+
+  // For the list repositoryGroups, the Settings editor offers only "Edit in settings.json"; the editor of Devspaces has a
+  // preview.
+  it('offers Edit Repository Groups… in a warning about repositoryGroups, which runs that command, and logs a failure', async () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      contributes: { commands: Array<{ command: string; title: string }> };
+    };
+    expect(manifest.contributes.commands.find((entry) => entry.command === Commands.editRepositoryGroups)?.title).toBe(Actions.editRepositoryGroups);
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.editRepositoryGroups);
+    showRepositoryGroupsWarning(logger, 'A warning.');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith('A warning.', Actions.editRepositoryGroups);
+    await vi.waitFor(() => expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith(Commands.editRepositoryGroups));
+    fakeVscode.window.showWarningMessage.mockRejectedValueOnce(new Error('no window'));
+    showRepositoryGroupsWarning(logger, 'A warning.');
+    await vi.waitFor(() => expect(logger.warn).toHaveBeenCalledWith('The warning about the setting repositoryGroups could not be shown: no window'));
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.editRepositoryGroups);
+    fakeVscode.commands.executeCommand.mockRejectedValueOnce(new Error('no editor'));
+    showRepositoryGroupsWarning(logger, 'A warning.');
+    await vi.waitFor(() => expect(logger.warn).toHaveBeenCalledWith('The setting repositoryGroups could not be opened: no editor'));
+    expect(fakeVscode.commands.executeCommand).not.toHaveBeenCalledWith('workbench.action.openSettings', expect.anything());
   });
 
   it('warns once per window session about the invalid entries of hostAccessChecksOff, with Open Settings, until they are valid', async () => {
