@@ -1265,27 +1265,27 @@ describe('setting repositoryGroups', () => {
   }
 
   const STUDENTS = [
-    repo('school/2026-3cWI-SWP-module-oop-felix-he021'),
-    repo('school/2025-3bWI-SWP-module-oop-hailo'),
-    repo('school/2026-3cWI-SWP-module-oop-EnesHA81'),
+    repo('school/2026-3cWI-SWP-module-oop-student-b-021'),
+    repo('school/2025-3bWI-SWP-module-oop-student-c'),
+    repo('school/2026-3cWI-SWP-module-oop-Student-A81'),
   ];
 
   it('a repository with several sources is a node with its child rows inside its group, labelled like its row', () => {
     const python = '.devcontainer/python/devcontainer.json';
     const groups = buildTreeModel(
       input({
-        discovery: discovery([repo('school/2026-3cWI-SWP-module-oop-hailo', { configPaths: ['.devcontainer/devcontainer.json', python] }), repo('school/2026-3cWI-SWP-module-oop-felix')]),
-        devspaces: [devspace('e1', 'school/2026-3cWI-SWP-module-oop-hailo', { configPath: python })],
+        discovery: discovery([repo('school/2026-3cWI-SWP-module-oop-student-c', { configPaths: ['.devcontainer/devcontainer.json', python] }), repo('school/2026-3cWI-SWP-module-oop-student-b')]),
+        devspaces: [devspace('e1', 'school/2026-3cWI-SWP-module-oop-student-c', { configPath: python })],
         repositoryGroups: patterns(EXAMPLE),
       }),
     );
-    expect(tree(groups)).toEqual([['school', [['2026-3cWI-SWP', [['module-oop', ['felix', ['hailo', ['config', 'python']]]]]]]]]);
-    const rowsOfNode = rows(groups).filter((row) => row.repository === 'school/2026-3cWI-SWP-module-oop-hailo');
+    expect(tree(groups)).toEqual([['school', [['2026-3cWI-SWP', [['module-oop', ['student-b', ['student-c', ['config', 'python']]]]]]]]]);
+    const rowsOfNode = rows(groups).filter((row) => row.repository === 'school/2026-3cWI-SWP-module-oop-student-c');
     expect(rowsOfNode.map((row) => [row.id, row.child, row.devspace?.id])).toEqual([
-      ['repo:school/2026-3cwi-swp-module-oop-hailo:config', true, undefined],
-      ['repo:school/2026-3cwi-swp-module-oop-hailo:config:python', true, 'e1'],
+      ['repo:school/2026-3cwi-swp-module-oop-student-c:config', true, undefined],
+      ['repo:school/2026-3cwi-swp-module-oop-student-c:config:python', true, 'e1'],
     ]);
-    expect(findRowByDevspaceId(groups, 'e1')?.id).toBe('repo:school/2026-3cwi-swp-module-oop-hailo:config:python');
+    expect(findRowByDevspaceId(groups, 'e1')?.id).toBe('repo:school/2026-3cwi-swp-module-oop-student-c:config:python');
   });
 
   it('shows the example of the user: the first group is the top level under the owner, the last group labels the row', () => {
@@ -1294,12 +1294,12 @@ describe('setting repositoryGroups', () => {
       [
         'school',
         [
-          ['2025-3bWI-SWP', [['module-oop', ['hailo']]]],
-          ['2026-3cWI-SWP', [['module-oop', ['EnesHA81', 'felix-he021']]]],
+          ['2025-3bWI-SWP', [['module-oop', ['student-c']]]],
+          ['2026-3cWI-SWP', [['module-oop', ['Student-A81', 'student-b-021']]]],
         ],
       ],
     ]);
-    expect(row(groups, 'school/2026-3cWI-SWP-module-oop-EnesHA81').label).toBe('EnesHA81');
+    expect(row(groups, 'school/2026-3cWI-SWP-module-oop-Student-A81').label).toBe('Student-A81');
     expect(node(groups, 'group:school:-:2026-3cWI-SWP')).toMatchObject({ level: 1, owner: 'school', expanded: false });
     expect(node(groups, 'group:school:-:2026-3cWI-SWP/module-oop')).toMatchObject({ level: 2, label: 'module-oop' });
   });
@@ -1315,8 +1315,8 @@ describe('setting repositoryGroups', () => {
           [
             'Courses',
             [
-              ['2025-3bWI-SWP', [['module-oop', ['hailo']]]],
-              ['2026-3cWI-SWP', [['module-oop', ['EnesHA81', 'felix-he021']]]],
+              ['2025-3bWI-SWP', [['module-oop', ['student-c']]]],
+              ['2026-3cWI-SWP', [['module-oop', ['Student-A81', 'student-b-021']]]],
             ],
           ],
         ],
@@ -1341,8 +1341,8 @@ describe('setting repositoryGroups', () => {
       expect(after.tooltip.split('\n')[0]).toBe(before.repository);
     }
     expect(row(grouped, STUDENTS[0].nameWithOwner)).toMatchObject({
-      id: 'repo:school/2026-3cwi-swp-module-oop-felix-he021',
-      label: 'felix-he021',
+      id: 'repo:school/2026-3cwi-swp-module-oop-student-b-021',
+      label: 'student-b-021',
       state: 'stopped',
     });
   });
@@ -1488,9 +1488,9 @@ describe('setting repositoryGroups', () => {
     const groups = buildTreeModel(
       input({
         discovery: discovery([
-          repo('o/2026-3cWI-SWP-module-oop-EnesHA81'),
+          repo('o/2026-3cWI-SWP-module-oop-Student-A81'),
           repo('o/2026-3cWI-SWP-module-oop'),
-          repo('o/2026-3cWI-SWP-module-oop-felix'),
+          repo('o/2026-3cWI-SWP-module-oop-student-b'),
           repo('o/2026-3cWI-SWP-module-io'),
         ]),
         repositoryGroups: patterns('^(\\d{4}-[^-]+-[^-]+)-([^-]+-[^-]+)$', '^(\\d{4}-[^-]+-[^-]+)-([^-]+-[^-]+)-(.+)$'),
@@ -1498,7 +1498,7 @@ describe('setting repositoryGroups', () => {
     );
     // Pattern 1 (the templates) before pattern 2 (the student repositories), also where the labels are equal.
     expect(tree(groups)).toEqual([
-      ['o', [['2026-3cWI-SWP', ['module-io', 'module-oop', ['module-oop', ['EnesHA81', 'felix']]]]]],
+      ['o', [['2026-3cWI-SWP', ['module-io', 'module-oop', ['module-oop', ['Student-A81', 'student-b']]]]]],
     ]);
   });
 
@@ -1622,9 +1622,9 @@ describe('setting repositoryGroups', () => {
       input({ discovery: discovery(STUDENTS), devspaces, repositoryGroups: patterns({ name: 'C', pattern: EXAMPLE }) }),
     );
     // Owner groups in alphabetical order (other, school), then the rows in display order.
-    expect(rows(groups).map((entry) => entry.label)).toEqual(['kept', 'hailo', 'EnesHA81', 'felix-he021']);
-    expect(findRowByDevspaceId(groups, 'e1')?.label).toBe('hailo');
-    expect(findRowByRepository(groups, STUDENTS[0].nameWithOwner.toUpperCase())?.label).toBe('felix-he021');
+    expect(rows(groups).map((entry) => entry.label)).toEqual(['kept', 'student-c', 'Student-A81', 'student-b-021']);
+    expect(findRowByDevspaceId(groups, 'e1')?.label).toBe('student-c');
+    expect(findRowByRepository(groups, STUDENTS[0].nameWithOwner.toUpperCase())?.label).toBe('student-b-021');
     expect(findRowByRepository(groups, 'school/none')).toBeUndefined();
     expect(recentDevspaces(groups, devspaces).map((entry) => [entry.devspaceId, entry.repository, entry.state])).toEqual([
       ['e1', STUDENTS[1].nameWithOwner, 'stopped'],

@@ -54,7 +54,7 @@ export const GroupsEditorTexts = {
     'No entry matches. In an owner where another repository matches an entry, this repository is hidden, unless it has a devspace.',
   testMatch: (position: number, name: string | undefined) =>
     `Entry ${position}${name !== undefined ? ` ("${name}")` : ''} matches.`,
-  testInvalid: 'Enter the repository name without spaces, for example 2026-3cWI-SWP-module-oop-EnesHA81 or owner/name.',
+  testInvalid: 'Enter the repository name without spaces, for example 2026-web-1a-module-html-css or owner/name.',
   invalidEntriesNotSaved: 'Correct the entries with an error first. Nothing was saved.',
   changedMeanwhile: 'devspaces.repositoryGroups was changed in settings.json while this editor was open.',
   changedMeanwhileDetail: (theirs: string) =>

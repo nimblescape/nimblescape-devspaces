@@ -63,6 +63,8 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Readable code:** the package now holds the code of Devspaces as readable JavaScript: not minified, and with the names of the source. The worker, its batch helpers and the Monitor run one file, dist/helperChannel.js, and the host access analysis runs in a thread of that file, after a check of its SHA-256 hash. Before, this file was minified, carried the Monitor and the analysis as text, and ran the analysis from that text. The package is about 700 KB instead of about 530 KB. A worker start on a remote Docker engine now sends about 1.4 MB of code over SSH instead of about 1 MB. At the first start after the update, Devspaces replaces the Monitor on each Docker engine once, as after every update of its code.
 
+**Marketplace page and support:** the hint of the test field in Edit Repository Groups… now shows the example of the user guide.
+
 ## 0.5.0
 
 **Docker names, without migration:** the image of the worker is now `devspaces-worker:<hash>` (was `devspaces-helper:<hash>`), its cache volume devspaces-worker-cache (was devspaces-helper-cache), and its labels nimblescape.devspaces.worker, nimblescape.devspaces.worker-run and nimblescape.devspaces.worker-channel (were nimblescape.devspaces.helper...). The new image is built at the first use. After the update, remove the old devspaces-helper images and the devspaces-helper-cache volume on each Docker engine by hand; the steps are in the user guide, section [Update from version 0.4.0 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-040-or-older).
