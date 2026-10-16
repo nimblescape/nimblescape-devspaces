@@ -1650,6 +1650,10 @@ export class Controller implements vscode.Disposable {
     // The container of this window whose state is read again within the operation, and what that read found running.
     let recheck: string | undefined;
     let found: WindowStateValue | undefined;
+    // The container that this window works on without Devspaces (withoutDevspaces), read within the operation, and the
+    // outdated container that this read found running, which the window leaves after the operation.
+    let plain: string | undefined;
+    let plainOutdated: WindowStateValue['outdated'];
     // The gate refused the operation (another one of the repository runs in this window).
     let refused = false;
     if (devspace) {
@@ -1708,8 +1712,11 @@ export class Controller implements vscode.Disposable {
         reconnecting = true;
       } else if (this.withoutDevspaces?.devspace.id === devspace.id) {
         // This window works without Devspaces on the container of the devspace (an engine with the removal mark): the
-        // Start sets Devspaces up there again and connects this window, never a second one, as a Reconnect.
+        // Start sets Devspaces up there again and connects this window, never a second one, as a Reconnect. As for a
+        // connected window, the pipeline never replaces the container that runs under this window: its state is read
+        // within the operation, once the Start cleared the mark (beforeUserFlow), so no worker starts there before.
         this.logger.info(`This window works without Devspaces on ${repository}. The Start sets Devspaces up there again and connects this window.`);
+        plain = this.withoutDevspaces.containerName;
         reconnecting = true;
       } else if ((otherWindow = await this.otherWindowOf(devspace.id))) {
         if ((await this.containerRuns(devspace, devspace.containerName)) === true) {
@@ -1753,6 +1760,23 @@ export class Controller implements vscode.Disposable {
                 newWindow,
                 async (request) => {
                   let result: OpenResult;
+                  if (devspace && plain !== undefined) {
+                    const state = await service.windowStateInWorker(devspace, plain, { signal });
+                    if (signal.aborted) throw new UserFacingError('cancelled', PipelineTexts.cancelled);
+                    if (state === undefined) throw new UserFacingError('helperFailed', ControllerTexts.containerStateUnreadable(repository));
+                    if (state.state === 'running') {
+                      // An outdated container stays as it is: the window leaves it after the operation. A current one
+                      // only connects this window again, now with Devspaces.
+                      if (state.outdated) {
+                        plainOutdated = state.outdated;
+                        return;
+                      }
+                      this.logger.info(`The container of ${repository} runs. This window connects again, now with Devspaces.`);
+                      const remoteWorkspaceFolder = devspace.remoteWorkspaceFolder ?? repositoryFolder(devspace.repository);
+                      await this.connect({ devspace, containerName: plain, remoteWorkspaceFolder }, progress, request, signal);
+                      return;
+                    }
+                  }
                   if (devspace && recheck !== undefined) {
                     const again = await service.windowStateInWorker(devspace, recheck, { signal });
                     if (signal.aborted) throw new UserFacingError('cancelled', PipelineTexts.cancelled);
@@ -1785,6 +1809,18 @@ export class Controller implements vscode.Disposable {
       );
     } finally {
       if (reserved !== undefined) this.activeConnectRequests.delete(reserved);
+    }
+    if (started && plainOutdated !== undefined && devspace && this.withoutDevspaces?.devspace.id === devspace.id) {
+      // As for a connected window: the pipeline must not replace the container under this window, so the window leaves
+      // it; a Start from the empty window makes a new container.
+      this.logger.info(this.outdatedTexts(plainOutdated, repository).log);
+      await this.leaveDevspace(this.outdatedTexts(plainOutdated, repository).message, {
+        devspaceId: devspace.id,
+        containerName: this.withoutDevspaces.containerName,
+        repository,
+        reason: 'outdated',
+      });
+      return;
     }
     if (started && found !== undefined && devspace && this.current?.devspace.id === devspace.id) {
       // The container runs after all: as for a Start whose first read found it running.
