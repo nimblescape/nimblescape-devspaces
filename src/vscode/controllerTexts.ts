@@ -35,10 +35,12 @@ export const ControllerTexts = {
   monitorQuestion: (engine: string) => `Keep the Devspaces background container running on ${engine}?`,
   monitorQuestionDetail:
     'The container devspaces-monitor updates the images of your devspaces, the VS Code Server and your extensions, by default once a day. ' +
+    'When the base image or the Features of a devspace changed, it also builds the next image of that devspace, so that the update at the next start is fast. ' +
     'If you keep it running, it also runs while VS Code is closed, and Docker starts it again after a restart. ' +
     'It ends itself after 30 days in which no devspace was used on this Docker engine. ' +
-    'If it stops when idle, it ends 5 minutes after the last devspace stops, and the updates run only while a devspace runs. ' +
-    'Your answer applies to all Docker engines. You can change it with the setting "Devspaces: Stop Monitor When Idle". ' +
+    'If it stops when idle, it ends 5 minutes after the last devspace stops, and this work runs only while a devspace runs. ' +
+    'Keep Running applies to this Docker engine only. If you choose Stop When Idle, this applies to all Docker engines. ' +
+    'You can change your answer with the setting "Devspaces: Stop Monitor When Idle". ' +
     'The command "Devspaces: Remove Devspaces from This Docker Engine…" removes the container.',
   keepMonitorRunning: 'Keep Running',
   stopMonitorWhenIdle: 'Stop When Idle',
