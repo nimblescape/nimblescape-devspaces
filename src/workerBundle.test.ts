@@ -4,10 +4,11 @@
 
 // The worker's bundle (dist/helperChannel.js), built with the options of esbuild.mjs (workerBundleOptions of
 // scripts/bundleOptions.mjs), checked on the modules that esbuild bundles into it (its metafile) and on its text. It is
-// the one program of the worker, the batch helpers, the Monitor and the threads of the host access analysis, and it
-// carries no code as text. It holds no code of the helper image of the extension: the worker runs from its own image,
-// so its WorkspaceHelper builds, checks, maintains and records no helper image; HelperImages and what it runs
-// (helperImage.ts) are the extension's.
+// the one program of the worker, the batch helpers, the Monitor and the threads of the host access analysis. It no
+// longer carries the Monitor or the analysis as text, and nothing in it runs with `eval`; it still holds fixed scripts
+// as text (the pipe loader, and the scripts that run in containers with `node -e` or `sh -c`). It holds no code of the
+// helper image of the extension: the worker runs from its own image, so its WorkspaceHelper builds, checks, maintains
+// and records no helper image; HelperImages and what it runs (helperImage.ts) are the extension's.
 import * as fs from 'fs';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
@@ -45,7 +46,7 @@ describe("the worker's bundle", () => {
 
   // Before, a plugin built the Monitor and the analysis thread apart and put each into the bundle as a string
   // (the modules `devspace:monitor-script` and `devspace:analysis-script`), and the analysis thread ran that string.
-  it('carries no code as text: no module of a plugin, no script as a string', () => {
+  it('carries neither the Monitor nor the analysis as text', () => {
     expect(inputs.filter((input) => input.includes(':'))).toEqual([]);
     expect(text).not.toContain('devspace:monitor-script');
     expect(text).not.toContain('devspace:analysis-script');
