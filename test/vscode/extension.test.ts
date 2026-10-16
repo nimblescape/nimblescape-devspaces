@@ -63,6 +63,9 @@ describe('the extension in VS Code', () => {
     const registered = new Set(await vscode.commands.getCommands(true));
     const missing = manifest.contributes.commands.map(({ command }) => command).filter((command) => !registered.has(command));
     assert.deepStrictEqual(missing, []);
+    // Enter on a row of the view runs the VS Code command list.select (devspaces.rowEnter). The weekly run against VS
+    // Code Insiders finds it early when VS Code removes or renames that command.
+    assert.ok(registered.has('list.select'), 'VS Code has no command list.select');
   });
 
   it('logs the Docker CLI it found, and no error', async () => {

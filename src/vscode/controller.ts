@@ -371,6 +371,8 @@ export class Controller implements vscode.Disposable {
    * describeDockerHost): no other operation of this window starts meanwhile, and no restore from the volumes there.
    */
   private removingFrom: { host: string; engine: string } | undefined;
+  /** The VS Code command list.select failed on Enter (rowEnter); logged once per window. */
+  private listSelectFailed = false;
 
   constructor(private readonly deps: ControllerDeps) {
     this.clock = deps.clock ?? systemClock;
@@ -860,11 +862,19 @@ export class Controller implements vscode.Disposable {
   /**
    * Enter on a row without children in the view (the keybinding of package.json). `list.select` of VS Code selects the
    * focused row and runs its command, as Enter does without this keybinding; marked as Enter, the command of a
-   * repository row runs Start at once (rowActivated).
+   * repository row runs Start at once (rowActivated). When list.select fails (a later VS Code may remove or rename
+   * it), Enter does nothing: no message, and one line in the log per window.
    */
   async rowEnter(): Promise<void> {
     this.rowActivations.enter();
-    await vscode.commands.executeCommand('list.select');
+    try {
+      await vscode.commands.executeCommand('list.select');
+    } catch (error) {
+      this.rowActivations.forgetEnter();
+      if (this.listSelectFailed) return;
+      this.listSelectFailed = true;
+      this.logger.warn(`Enter on a row of the view did nothing, because the VS Code command list.select failed: ${errorMessage(error)}`);
+    }
   }
 
   /** Stop: the container stops at once; a connected window closes its connection first. */
