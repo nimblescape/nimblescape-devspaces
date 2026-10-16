@@ -637,14 +637,16 @@ async function writeLastUse(stateDir: string, at: number, createId: string | und
  * Records a use of the engine by a window at `now` (LAST_USE_FILE): after each subcommand of a window (a heartbeat,
  * `images -`, `settings -`, `run-now`, and the forget of a Delete; not the forget of the loop). At most once per
  * LAST_USE_WRITE_MS (and per a quarter of the time without use of the tests), so the heartbeats every 30 s write it
- * about once an hour. A stored time later than `now` (the clock went back) is replaced. Never throws: a failure keeps
- * the older time, and the next use writes it.
+ * about once an hour. It never moves the stored time earlier: a stored time later than `now` (the clock went back, or
+ * was ahead when it was written) stays until the loop finds the clock still behind it at its second look (UnusedEnd),
+ * so a clock that is set back for a while and set right again never makes an old use of it. Never throws: a failure
+ * keeps the older time, and the next use writes it.
  */
 export async function recordUse(stateDir: string, env: NodeJS.ProcessEnv, now: number): Promise<void> {
   try {
     const stored = await readLastUse(stateDir);
     const every = Math.min(LAST_USE_WRITE_MS, Math.floor(unusedEndFromEnv(env) / 4));
-    if (stored !== undefined && now >= stored.at && now - stored.at < every) return;
+    if (stored !== undefined && (now < stored.at || now - stored.at < every)) return;
     await writeLastUse(stateDir, now, createIdOf(env) ?? stored?.createId);
   } catch {
     // The next use writes it.
@@ -653,15 +655,15 @@ export async function recordUse(stateDir: string, env: NodeJS.ProcessEnv, now: n
 
 /**
  * At the start of `run`: a new monitor container (a nonce of its create other than the stored one, or no valid file)
- * counts as a use at `now`; a restart of the same container (Docker starts it again after a restart of the engine) keeps
- * the stored time. Never throws.
+ * counts as a use at `now`, with its nonce; a restart of the same container (Docker starts it again after a restart of
+ * the engine) keeps the stored time. As recordUse, it never moves the stored time earlier. Never throws.
  */
 export async function recordStart(stateDir: string, env: NodeJS.ProcessEnv, now: number): Promise<void> {
   try {
     const stored = await readLastUse(stateDir);
     const createId = createIdOf(env);
     if (stored !== undefined && (createId === undefined || stored.createId === createId)) return;
-    await writeLastUse(stateDir, now, createId);
+    await writeLastUse(stateDir, stored === undefined ? now : Math.max(now, stored.at), createId);
   } catch {
     // Then the first check of UnusedEnd counts a use now.
   }
@@ -671,18 +673,23 @@ export async function recordStart(stateDir: string, env: NodeJS.ProcessEnv, now:
  * The end of a permanent monitor that no window used for `unusedMs` (UNUSED_END_MS; DEVSPACE_MONITOR_UNUSED_MS in the
  * tests of the container), by the last use in the volume (LAST_USE_FILE). `check` runs between two ticks of the loop; it
  * reads the file only when the time it knows is that old. The first check that finds the time without use looks again
- * after UNUSED_END_RECHECK_MS, so a clock that jumped ahead and is set right again ends nothing; a stored time later
- * than now (the clock went back), or no valid file, counts as a use now. Then the restart policy of its own container
- * (found by the nonce of its create, MONITOR_CREATE_ID_ENV) becomes `no`, so Docker leaves it exited after the exit
- * with 0 that follows, also after a restart of the engine; the next open of a window creates it again (its ensure
- * replaces a monitor whose policy is not that of its mode). A failure is logged once, and tried again after
- * UNUSED_END_RECHECK_MS: without the change of the policy the monitor does not exit (Docker would start it again).
+ * after UNUSED_END_RECHECK_MS, so a clock that jumped ahead and is set right again ends nothing. No valid file counts as
+ * a use now. A stored time later than now (the clock went back) counts as a use now too, in memory only: the stored time
+ * is replaced only when the clock is still behind it at a second look after UNUSED_END_RECHECK_MS, so a clock that is
+ * set back and set right again keeps the time of the last use (recordUse moves it only later). Then the restart
+ * policy of its own container (found by the nonce of its create, MONITOR_CREATE_ID_ENV) becomes `no`, so Docker leaves
+ * it exited after the exit with 0 that follows, also after a restart of the engine; the next open of a window creates
+ * it again (its ensure replaces a monitor whose policy is not that of its mode). A failure is logged once, and tried
+ * again after UNUSED_END_RECHECK_MS: without the change of the policy the monitor does not exit (Docker would start it
+ * again).
  */
 export class UnusedEnd {
   /** The time of the last use that the last read found (undefined: none read yet). */
   private lastUseAt: number | undefined;
   /** The monotonic time of the check that found the time without use (undefined: none found). */
   private foundAt: number | undefined;
+  /** The monotonic time of the check that found the clock behind the stored time (undefined: not behind). */
+  private behindAt: number | undefined;
   /** The monotonic time of the next try after a failed end. */
   private retryAt: number | undefined;
   private failureLogged = false;
@@ -705,6 +712,15 @@ export class UnusedEnd {
     return Math.min(UNUSED_END_RECHECK_MS, this.deps.unusedMs);
   }
 
+  /**
+   * True from the check that found the time without use until a check finds a use again, and while the monitor ends: a
+   * background run that is only due waits then (CacheSchedule `paused`), so it neither holds the end back nor pulls,
+   * downloads and builds for an engine that nobody uses.
+   */
+  get paused(): boolean {
+    return this.ending || this.foundAt !== undefined;
+  }
+
   /** True when the monitor ends now (its restart policy is `no`). Never throws. */
   async check(): Promise<boolean> {
     if (this.ending) return true;
@@ -712,17 +728,32 @@ export class UnusedEnd {
     const mono = monotonic();
     if (this.retryAt !== undefined && mono < this.retryAt) return false;
     if (this.foundAt !== undefined && mono - this.foundAt < this.recheckMs) return false;
+    // A clock behind the stored time is a use now until the second look.
+    if (this.behindAt !== undefined && mono - this.behindAt < this.recheckMs) return false;
     const before = now();
     // A use only moves the stored time later, so a recent one needs no read.
-    if (this.foundAt === undefined && this.lastUseAt !== undefined && before >= this.lastUseAt && before - this.lastUseAt < unusedMs) return false;
+    if (this.foundAt === undefined && this.behindAt === undefined && this.lastUseAt !== undefined && before >= this.lastUseAt && before - this.lastUseAt < unusedMs) {
+      return false;
+    }
     const stored = await readLastUse(stateDir);
     const time = now();
-    if (stored === undefined || time < stored.at) {
+    if (stored === undefined || (time < stored.at && this.behindAt !== undefined)) {
+      // No valid file, or the clock is still behind the stored time at the second look: a use now, written.
       this.lastUseAt = time;
       this.foundAt = undefined;
+      this.behindAt = undefined;
       await writeLastUse(stateDir, time, createIdOf(env) ?? stored?.createId).catch(() => undefined);
       return false;
     }
+    if (time < stored.at) {
+      // The clock went back (or the stored time was written by a clock that was ahead): a use now, in memory only, so
+      // that a clock that is set right again within the hour finds the stored time of the last use.
+      this.lastUseAt = time;
+      this.foundAt = undefined;
+      this.behindAt = mono;
+      return false;
+    }
+    this.behindAt = undefined;
     this.lastUseAt = stored.at;
     if (time - stored.at < unusedMs) {
       this.foundAt = undefined;
@@ -1104,6 +1135,8 @@ export class CacheSchedule {
   private checking = false;
   /** The observe of a check that runs now; a pass waits for it. */
   private observing: Promise<void> | undefined;
+  /** A due run waits (`paused`), and the log said so. */
+  private pauseLogged = false;
 
   constructor(
     private readonly deps: {
@@ -1118,6 +1151,11 @@ export class CacheSchedule {
       state: Pick<CacheRunStore, 'read' | 'update'>;
       /** The request of "Update All Images Now" (runRequestStore); none in the tests that leave it out. */
       runRequest?: { take(): Promise<boolean> };
+      /**
+       * True while a run that is only due waits (UnusedEnd.paused: a permanent monitor found the time without use); a
+       * requested run still runs. Never paused when it is left out.
+       */
+      paused?: () => boolean;
     },
   ) {}
 
@@ -1167,6 +1205,12 @@ export class CacheSchedule {
         ? runRetryDue(this.retryAt, time) || (this.lastAttemptAt !== undefined && cacheRunDue(settings.parsed, this.lastAttemptAt, time, settings.timeZone))
         : cacheRunDue(settings.parsed, this.lastEndAt, time, settings.timeZone);
     if (!requested && !due) return;
+    if (!requested && this.deps.paused?.() === true) {
+      if (!this.pauseLogged) this.deps.log('The background run is due, but it does not start: no window used Devspaces on this Docker engine for a long time.');
+      this.pauseLogged = true;
+      return;
+    }
+    this.pauseLogged = false;
     if (!requested && this.retryAt !== undefined) this.deps.log(`The background run is tried again (retry ${this.retries}).`);
     if (requested) this.deps.log('"Update All Images Now" asked for the background run; it runs now.');
     await this.run();
@@ -1427,11 +1471,12 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
       const background = new BackgroundRun({ log, now, images: () => images.pass(), vscode: vscodeOf, state, prepares });
       // With the request of "Update All Images Now" (`run-now`).
       const runRequest = runRequestStore(stateDir, log);
-      const schedule = new CacheSchedule({ now, log, settings, pass: () => background.run(), observe: () => images.observe(), state, runRequest });
-      const { firstMs, intervalMs } = imageTimesFromEnv(deps.env);
       const permanent = permanentFromEnv(deps.env);
       const unusedMs = unusedEndFromEnv(deps.env);
       const unused = new UnusedEnd({ stateDir, env: deps.env, engine, now, monotonic, log, unusedMs });
+      // After the time without use was found, a run that is only due does not start (UnusedEnd.paused).
+      const schedule = new CacheSchedule({ now, log, settings, pass: () => background.run(), observe: () => images.observe(), state, runRequest, paused: () => unused.paused });
+      const { firstMs, intervalMs } = imageTimesFromEnv(deps.env);
       log(
         `Background run (the images in use, the VS Code server${vscode === undefined ? ' left out: no store' : ''}, the cleanup): ` +
           `first check in ${Math.round(firstMs / 1000)} s, then ${scheduleText(settings.value)}; ${permanent ? 'runs permanently.' : `ends after ${Math.round(idleExitMs / 1000)} s without a running devspace.`}` +

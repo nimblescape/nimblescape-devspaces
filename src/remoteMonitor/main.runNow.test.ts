@@ -34,7 +34,7 @@ afterEach(() => {
 const requestFile = () => path.join(stateDir, RUN_NOW_FILE);
 
 /** A schedule with the default setting (no DEVSPACE_IMAGE_SCHEDULE) in Vienna, a clock of the test, and a counted pass. */
-function scheduleAt(start: number, lastEndAt?: number, pass?: () => Promise<void>) {
+function scheduleAt(start: number, lastEndAt?: number, pass?: () => Promise<void>, paused?: () => boolean) {
   let now = start;
   let passes = 0;
   const lines: string[] = [];
@@ -55,6 +55,7 @@ function scheduleAt(start: number, lastEndAt?: number, pass?: () => Promise<void
       },
     },
     runRequest: runRequestStore(stateDir, log),
+    ...(paused !== undefined ? { paused } : {}),
   });
   return {
     schedule,
@@ -100,6 +101,32 @@ describe('the request of "Update All Images Now" in the schedule', () => {
     expect(s.state().lastEndAt).toBe(SIX_SEVEN + 4 * HOUR);
     // No second run: the request is taken, and the schedule's next time is tomorrow.
     expect(await s.minutes(2 * HOUR)).toBe(0);
+  });
+
+  // A permanent monitor that found the time without use (UnusedEnd.paused) starts no run that is only due: it would hold
+  // the end back, and pull, download and build for an engine that nobody uses. Mutation: a schedule without the pause
+  // fails it.
+  it('a due run waits while the monitor found the time without use; a request still runs', async () => {
+    let paused = true;
+    // The run of 06:07 yesterday was the last one: the run of today is due.
+    const s = scheduleAt(SIX_SEVEN + HOUR, SIX_SEVEN - DAY + 10 * MINUTE, undefined, () => paused);
+    expect(await s.minutes(10 * MINUTE)).toBe(0);
+    expect(s.lines.filter((line) => line.startsWith('The background run is due, but it does not start'))).toEqual([
+      'The background run is due, but it does not start: no window used Devspaces on this Docker engine for a long time.',
+    ]);
+    // "Update All Images Now" is a use, and its run runs.
+    expect(await main(['run-now'], { env: {}, stateDir, now: () => SIX_SEVEN + HOUR })).toBe(0);
+    await s.schedule.check();
+    expect(s.passes()).toBe(1);
+    // Another schedule whose run is due: it waits while paused, and runs at the next check once a use came again.
+    paused = false;
+    const t = scheduleAt(SIX_SEVEN + 2 * HOUR, SIX_SEVEN - DAY + 10 * MINUTE, undefined, () => paused);
+    paused = true;
+    await t.schedule.check();
+    expect(t.passes()).toBe(0);
+    paused = false;
+    await t.schedule.check();
+    expect(t.passes()).toBe(1);
   });
 
   it('a request during a run waits for the check after it, then runs once more; many requests are one', async () => {
