@@ -3680,6 +3680,9 @@ describe('Remove Devspaces from This Docker Engine…', () => {
 
   // Mutation: without the own plain devspace as a Reconnect, Start in New Window (or the setting openInNewWindow) opens
   // a second window on the devspace.
+  // As for a connected window, the pipeline never replaces the container that runs under this window. Mutations: without
+  // the read of its state, the pipeline runs under the window (an update would replace its container); without the
+  // leave, the window connects to an outdated container.
   it('a Start of its own devspace in a window that works without Devspaces connects this window, never a new one', async () => {
     for (const how of ['startInNewWindow', 'setting'] as const) {
       recreateHarness({});
@@ -3687,16 +3690,53 @@ describe('Remove Devspaces from This Docker Engine…', () => {
       await h.registry.add(env);
       await h.engineRecords.setRemoved('', NOW - 1000);
       await h.controller.workWithoutDevspaces(env, CONTAINER);
-      pipelineStartsContainer();
       if (how === 'setting') h.settings.openInNewWindow = true;
       await run(how === 'setting' ? 'start' : 'startInNewWindow', row('acme/api', env));
-      expect(h.service.openDevspaceInWorker, how).toHaveBeenCalledWith(ENV_ID, expect.anything());
+      // Its container runs and is current: this window only connects again, without the pipeline.
+      expect(h.service.windowStateInWorker, how).toHaveBeenCalledWith(env, CONTAINER, { signal: expect.any(AbortSignal) });
+      expect(h.service.openDevspaceInWorker, how).not.toHaveBeenCalled();
       expect(h.connection.openInNewWindow, how).not.toHaveBeenCalled();
       expect(h.connection.open.mock.calls, how).toEqual([[CONTAINER, '/workspaces/api']]);
       expect(h.logger.info).toHaveBeenCalledWith('This window works without Devspaces on acme/api. The Start sets Devspaces up there again and connects this window.');
-      // The Start of the user sets Devspaces up there again.
+      expect(h.logger.info).toHaveBeenCalledWith('The container of acme/api runs. This window connects again, now with Devspaces.');
+      // The Start of the user sets Devspaces up there again, before the worker reads the state.
       expect(await h.engineRecords.removed(''), how).toBe(false);
     }
+
+    // A container that does not run: the pipeline starts it, and this window connects.
+    recreateHarness({});
+    await h.registry.add(devspace());
+    await h.engineRecords.setRemoved('', NOW - 1000);
+    await h.controller.workWithoutDevspaces(devspace(), CONTAINER);
+    h.docker.containerState.mockResolvedValue('exited');
+    pipelineStartsContainer();
+    await run('start', row('acme/api', devspace()));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.anything());
+    expect(h.connection.open.mock.calls).toEqual([[CONTAINER, '/workspaces/api']]);
+
+    // A running container of an older version stays as it is: the window leaves it, as a connected window does.
+    recreateHarness({});
+    await h.registry.add(devspace());
+    await h.engineRecords.setRemoved('', NOW - 1000);
+    await h.controller.workWithoutDevspaces(devspace(), CONTAINER);
+    h.docker.findContainer.mockResolvedValue(containerInfo('0'));
+    await run('start', row('acme/api', devspace()));
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    expect(h.connection.open).not.toHaveBeenCalled();
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close');
+    expect(h.coordinator.setPlainDevspace).toHaveBeenLastCalledWith(null);
+    expect(warningMessages()).toEqual([ControllerTexts.outdatedContainerClosed('acme/api')]);
+    expect(await h.engineRecords.removed('')).toBe(false);
+
+    // When the state cannot be read, nothing runs under the window.
+    recreateHarness({});
+    await h.registry.add(devspace());
+    await h.controller.workWithoutDevspaces(devspace(), CONTAINER);
+    h.service.windowStateInWorker.mockResolvedValueOnce(undefined);
+    await run('start', row('acme/api', devspace()));
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    expect(h.connection.open).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showErrorMessage).toHaveBeenCalledWith(ControllerTexts.containerStateUnreadable('acme/api'), Actions.showDetails, Actions.tryAgain);
   });
 
   it('Stop and Delete of another window ask a window that works without Devspaces on the devspace; it hands off', async () => {
