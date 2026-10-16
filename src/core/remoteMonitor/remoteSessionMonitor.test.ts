@@ -280,7 +280,12 @@ describe('RemoteSessionMonitor.ensure', () => {
     await monitor(byTag).ensure(TAG, SOCKET);
     // The same spec as with the tag, the label included; only the image reference and the nonce of each create differ.
     const tagged = byTag.spec(1);
-    expect(byId).toEqual({ ...tagged, image: imageId, labels: { ...tagged.labels, [LABEL_MONITOR_CREATE]: createIdOf(byId) } });
+    expect(byId).toEqual({
+      ...tagged,
+      image: imageId,
+      labels: { ...tagged.labels, [LABEL_MONITOR_CREATE]: createIdOf(byId) },
+      env: { ...tagged.env, DEVSPACE_MONITOR_CREATE_ID: createIdOf(byId) },
+    });
     expect(createIdOf(byId)).not.toBe(createIdOf(tagged));
     expect(byId.labels[LABEL_MONITOR]).toBe(LABEL);
     expect(JSON.stringify(byId)).not.toContain(TAG);
@@ -314,7 +319,8 @@ describe('RemoteSessionMonitor.ensure', () => {
       // The log of the monitor is capped, with the driver named.
       log: { driver: 'json-file', maxSize: '1m', maxFile: '2' },
       mounts: { socket: '/run/user/1000/docker.sock', volume: 'devspaces-monitor', volumeTarget: '/state' },
-      env: {},
+      // The nonce again, so the monitor finds its own container (its end after 30 days without use).
+      env: { DEVSPACE_MONITOR_CREATE_ID: createId },
       // The pipe loader with the path, the hash and the entry; the script is not on the command line.
       command: ['node', '-e', PIPE_LOADER, REMOTE_MONITOR_SCRIPT_PATH, bundleHash(SCRIPT), 'startMonitor'],
     });

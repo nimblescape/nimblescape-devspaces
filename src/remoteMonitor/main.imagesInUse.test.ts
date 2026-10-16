@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { IMAGES_IN_USE_MAX_AGE_MS, imagesInUseFileName } from '../core/remoteMonitor/protocol';
+import { IMAGES_IN_USE_MAX_AGE_MS, LAST_USE_FILE, imagesInUseFileName } from '../core/remoteMonitor/protocol';
 import type { HttpResponse } from '../core/http';
 import type { EngineContainerSummary } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
@@ -48,7 +48,8 @@ describe('monitor.js images with the references in use', () => {
     expect((await images({ source: A, references: [], repositories: ['ghcr.io/acme/app'] }, T0 + 10)).code).toBe(0);
     expect(stored(A)).toEqual({ at: T0 + 10, references: [] });
     expect(stored(B)).toEqual({ at: T0 + 5, references: ['mcr.microsoft.com/devcontainers/base:ubuntu'] });
-    expect(fs.readdirSync(stateDir).sort()).toEqual([imagesInUseFileName(A), imagesInUseFileName(B)].sort());
+    // And the use of the windows (LAST_USE_FILE).
+    expect(fs.readdirSync(stateDir).sort()).toEqual([imagesInUseFileName(A), imagesInUseFileName(B), LAST_USE_FILE].sort());
     expect(await readImagesInUse(stateDir, T0 + 10)).toEqual({ references: ['mcr.microsoft.com/devcontainers/base:ubuntu'], complete: true });
   });
 
@@ -68,7 +69,9 @@ describe('monitor.js images with the references in use', () => {
   // The list alone is taken and ignored.
   it('takes the list alone (an older extension on another computer sends it) and ignores it, and refuses anything else', async () => {
     expect(await images({ repositories: ['ghcr.io/acme/app'] })).toEqual({ code: 0, err: '' });
-    expect(fs.readdirSync(stateDir)).toEqual([]);
+    // Only the use of the window (LAST_USE_FILE).
+    expect(fs.readdirSync(stateDir)).toEqual([LAST_USE_FILE]);
+    fs.rmSync(path.join(stateDir, LAST_USE_FILE));
     for (const input of [{ source: A }, { source: A, references: ['Node:20'] }, { source: '../x', references: [] }, { references: ['node:20'] }, { source: A, references: [], repositories: 'x' }, 'not json']) {
       expect(await images(input)).toEqual({ code: EXIT_INVALID, err: 'Invalid image list.\n' });
     }

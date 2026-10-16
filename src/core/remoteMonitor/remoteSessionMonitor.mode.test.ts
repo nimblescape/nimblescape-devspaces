@@ -201,6 +201,52 @@ describe('the owner of a permanent monitor', () => {
   });
 });
 
+// A permanent monitor that ended itself after 30 days without use has the restart policy `no`
+// (src/remoteMonitor/main.ts): the next ensure replaces it, so Docker starts it again after a restart of the engine. The
+// policy is that of the mode of its own label, so a permanent monitor of another computer stays.
+describe('the restart policy of the monitor', () => {
+  const withPolicy = (found: MonitorInspected, restartPolicy: string): MonitorInspected => ({ ...found, restartPolicy }) as MonitorInspected;
+
+  it('replaces a monitor that ended itself (policy "no"), exited or running, instead of starting it', async () => {
+    for (const found of [withPolicy(exited(PERMANENT, ME), 'no'), withPolicy(running(PERMANENT, ME), 'no')]) {
+      const { engine, calls, specs } = fakeEngine([found]);
+      expect(await monitorOf(engine, true).ensureOrThrow(TAG, SOCKET)).toBe('created');
+      expect(calls).toEqual(['inspect', `remove ${ID}`, 'create']);
+      expect(specs[0].restartPolicy).toBe('unless-stopped');
+    }
+    // One that ends when idle with another policy than `on-failure` too.
+    const idle = fakeEngine([withPolicy(exited(IDLE), 'no')]);
+    expect(await monitorOf(idle.engine, false).ensureOrThrow(TAG, SOCKET)).toBe('created');
+    expect(idle.calls).toEqual(['inspect', `remove ${ID}`, 'create']);
+  });
+
+  it('keeps a monitor with the policy of its mode, and one whose policy cannot be read', async () => {
+    for (const [permanent, found] of [
+      [true, withPolicy(running(PERMANENT, ME), 'unless-stopped')],
+      [false, withPolicy(running(IDLE), 'on-failure')],
+      [true, running(PERMANENT, ME)],
+    ] as const) {
+      const { engine, calls } = fakeEngine([found]);
+      expect(await monitorOf(engine, permanent).ensureOrThrow(TAG, SOCKET)).toBe('running');
+      expect(calls).toEqual(['inspect']);
+    }
+    // An exited one that ends when idle is started again, as before.
+    const stopped = fakeEngine([withPolicy(exited(IDLE), 'on-failure')]);
+    await monitorOf(stopped.engine, false).ensureOrThrow(TAG, SOCKET);
+    expect(stopped.calls.slice(0, 2)).toEqual(['inspect', `start ${ID}`]);
+  });
+
+  it('an ensure that wants one that ends when idle keeps the permanent monitor of another computer by the policy of its label', async () => {
+    const kept = fakeEngine([withPolicy(running(PERMANENT, OTHER), 'unless-stopped')]);
+    expect(await monitorOf(kept.engine, false).ensureOrThrow(TAG, SOCKET)).toBe('running');
+    expect(kept.calls).toEqual(['inspect']);
+    // That one with the policy `no` is replaced.
+    const ended = fakeEngine([withPolicy(running(PERMANENT, OTHER), 'no')]);
+    expect(await monitorOf(ended.engine, false).ensureOrThrow(TAG, SOCKET)).toBe('created');
+    expect(ended.specs[0].restartPolicy).toBe('on-failure');
+  });
+});
+
 // The store that the monitor mounts is part of its label.
 describe('the store in the label of the monitor', () => {
   const WITH_STORE = monitorLabel(SCRIPT, TAG, 'permanent', 'devspaces-vscode');

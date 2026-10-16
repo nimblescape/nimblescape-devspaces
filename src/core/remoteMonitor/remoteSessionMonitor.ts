@@ -89,6 +89,11 @@ export interface ImageMaintenanceSettings {
 export const MONITOR_PERMANENT_ENV = 'DEVSPACE_MONITOR_PERMANENT';
 /** The environment variable with the name of the VS Code server store that the monitor mounts. */
 export const MONITOR_VSCODE_STORE_ENV = 'DEVSPACE_VSCODE_STORE';
+/**
+ * The environment variable with the nonce of the create of the monitor (LABEL_MONITOR_CREATE): the monitor finds its own
+ * container by it, and tells a new container from a restart of the same one (LAST_USE_FILE).
+ */
+export const MONITOR_CREATE_ID_ENV = 'DEVSPACE_MONITOR_CREATE_ID';
 
 /** What ensure found or did. `failed`: logged as a warning (ensureOrThrow rejects instead). */
 export type EnsureOutcome = 'running' | 'started' | 'created' | 'failed';
@@ -241,7 +246,7 @@ export class RemoteSessionMonitor {
     // setting on never replaces one that another computer created, and one with the setting off (and the answer) makes
     // it permanent again at its next ensure.
     const accepted: AcceptedLabels =
-      mode === PERMANENT_LABEL_PART ? { label } : { label, running: monitorLabel(script, helperTag, PERMANENT_LABEL_PART, store), notOwnedBy: images?.computer };
+      mode === PERMANENT_LABEL_PART ? { label, mode } : { label, mode, running: monitorLabel(script, helperTag, PERMANENT_LABEL_PART, store), notOwnedBy: images?.computer };
     // The nonce of this create, so that a failure removes only its own container.
     const createId = randomUUID();
     const spec = this.runSpec(helperImage ?? helperTag, socketPath, label, script, images, createId, imageId);
@@ -316,6 +321,16 @@ export class RemoteSessionMonitor {
     if (!labelAccepted(current, accepted)) {
       this.idOf(current);
       logger.info(`The Monitor on the Docker host is of another version; it is replaced (${this.containerName}).`);
+      return 'replace';
+    }
+    // The restart policy of the mode of its own label (not of the mode that this ensure wants, so a permanent monitor
+    // of another computer stays): a permanent monitor that ended itself after 30 days without use has `no`
+    // (src/remoteMonitor/main.ts), and is replaced, so Docker starts it again after a restart of the engine. A policy
+    // that cannot be read keeps it.
+    const policy = monitorRestartPolicy(acceptedMode(current, accepted) === PERMANENT_LABEL_PART);
+    if (current.restartPolicy !== undefined && current.restartPolicy !== policy) {
+      this.idOf(current);
+      logger.info(`The Monitor on the Docker host has the restart policy "${current.restartPolicy}" instead of "${policy}"; it is replaced (${this.containerName}).`);
       return 'replace';
     }
     if (isRunning(current.status)) {
@@ -545,6 +560,8 @@ export class RemoteSessionMonitor {
     if (permanent && images?.computer !== undefined) labels[LABEL_MONITOR_OWNER] = images.computer;
     for (const [key, value] of Object.entries(this.options.labels ?? {})) labels[key] = value;
     const env: Record<string, string> = { ...(this.options.containerEnv ?? {}) };
+    // The monitor finds its own container by the nonce (its end after 30 days without use).
+    if (createId !== undefined) env[MONITOR_CREATE_ID_ENV] = createId;
     if (images) {
       // The schedule of the whole background run, under the names DEVSPACE_IMAGE_SCHEDULE and DEVSPACE_IMAGE_TZ.
       env.DEVSPACE_IMAGE_SCHEDULE = images.schedule;
@@ -565,7 +582,9 @@ export class RemoteSessionMonitor {
       // of a window repair it; a failure (an uncaught error, the loader's exit 3) is restarted, and the loader resumes
       // from the stored script. A permanent monitor (on any engine, once the user answered the question about it there,
       // with stopMonitorWhenIdle off) never exits when idle and has `unless-stopped`, so Docker starts it again after a
-      // crash and after a restart of the engine. No published port, no capability: it needs the socket and its volumes.
+      // crash and after a restart of the engine; after 30 days in which no window used the engine, it sets its own
+      // policy to `no` and exits (UnusedEnd of main.ts), and the next ensure replaces it (decide). No published port, no
+      // capability: it needs the socket and its volumes.
       restartPolicy: monitorRestartPolicy(permanent),
       // The background run always reaches the update service of VS Code, so it always has the default network (outbound
       // only: it publishes no port and accepts no connection).
@@ -603,6 +622,8 @@ export function monitorLabel(script: string, helperTag: string, mode: MonitorMod
  */
 interface AcceptedLabels {
   label: string;
+  /** The mode of `label`: the one that the ensure wants. */
+  mode: MonitorMode;
   running?: string;
   notOwnedBy?: string;
 }
@@ -612,4 +633,9 @@ function labelAccepted(found: Inspected & { exists: true }, accepted: AcceptedLa
   if (found.label === accepted.label) return true;
   if (accepted.running === undefined || found.label !== accepted.running || !isRunning(found.status)) return false;
   return accepted.notOwnedBy === undefined || found.owner !== accepted.notOwnedBy;
+}
+
+/** The mode of the label of `found`, which labelAccepted took: that of `label`, or permanent (`running`). */
+function acceptedMode(found: Inspected & { exists: true }, accepted: AcceptedLabels): MonitorMode {
+  return found.label === accepted.label ? accepted.mode : PERMANENT_LABEL_PART;
 }

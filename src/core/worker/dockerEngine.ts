@@ -213,6 +213,12 @@ export interface DockerEngine {
   /** Starts the container; one that runs already is left alone. */
   start(container: string, signal?: AbortSignal): Promise<void>;
   /**
+   * Changes the restart policy of the container (`POST /containers/<id>/update`, as `docker update --restart`); a
+   * running container goes on, and the new policy counts from its next end. The Monitor sets `no` before it ends itself
+   * (src/remoteMonitor/main.ts).
+   */
+  updateRestartPolicy(container: string, policy: 'no' | 'on-failure' | 'unless-stopped', signal?: AbortSignal): Promise<void>;
+  /**
    * The API version (`GET /version`, for example `1.48`) and the version of the engine (empty when the engine names
    * none). The version is also the answer of the worker's probe (ProbeValue).
    */

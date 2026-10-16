@@ -18,8 +18,9 @@
 // Delete's forget, as the worker sends them over the Engine API (monitorFlow), to the monitor of this run. The restart
 // policy `on-failure`; an automatic stop waits for the devspace lock that a worker holds, and a monitor killed
 // during its stop under the lock leaves no lock held; the monitor exits with 0 when idle and stays exited until ensure
-// starts it. A window that closes records the Git state and sends its short release; the monitor stops the devspace
-// after the short limit, and keeps one whose window reloaded within the waiting time.
+// starts it; a permanent monitor that no window uses ends itself (restart policy `no`, exit 0), and ensure replaces it.
+// A window that closes records the Git state and sends its short release; the monitor stops the devspace after the
+// short limit, and keeps one whose window reloaded within the waiting time.
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import * as path from 'path';
@@ -737,6 +738,38 @@ describe('the Monitor container: the devspace lock of its stops and its exit whe
     expect(cli.container(containerName)!.Config.Labels?.['nimblescape.devspaces.monitor-owner']).toBe('b'.repeat(32));
     const idle = new RemoteSessionMonitor({ ...options, imageMaintenance: () => ({ schedule: '17', timeZone: 'UTC', permanent: false, computer: 'a'.repeat(32) }) });
     expect(await idle.ensure(helperTag, socket)).toBe('running');
+    expect(cli.container(containerName)!.HostConfig.RestartPolicy?.Name).toBe('unless-stopped');
+    cli.ok(['rm', '-f', containerName]);
+  });
+
+  // A permanent monitor that no window used for its time without use (DEVSPACE_MONITOR_UNUSED_MS, 3 s here; 30 days
+  // without it) looks again after that time, sets the restart policy of its own container (by the nonce of its create)
+  // to `no`, and exits with 0, so Docker leaves it exited. The next ensure replaces it: its policy is not the one of its
+  // mode.
+  it('a permanent monitor that no window uses ends itself: restart policy "no", exit 0; the next ensure replaces it', async () => {
+    cli.run(['rm', '-f', containerName]);
+    const permanent = new RemoteSessionMonitor({
+      engine: engineMonitor(dockerEngine(engineApi(helperDockerSocket(env, process.platform)), engineHijack(helperDockerSocket(env, process.platform)))),
+      logger: log,
+      script: async () => script,
+      containerName,
+      volumeName,
+      labels: { [TEST_RUN_LABEL]: run.runId },
+      containerEnv: { DEVSPACE_MONITOR_TICK_MS: String(TICK_MS), DEVSPACE_MONITOR_UNUSED_MS: '3000', DEVSPACE_IMAGE_FIRST_MS: '86400000' },
+      imageMaintenance: () => ({ schedule: '17', timeZone: 'UTC', permanent: true, computer: 'a'.repeat(32) }),
+    });
+    expect(await permanent.ensure(helperTag, socket)).toBe('created');
+    expect(cli.container(containerName)!.HostConfig.RestartPolicy?.Name).toBe('unless-stopped');
+    await timings.measure('end without use', () => waitUntil(() => !running(containerName), 'the end without use', 60_000));
+    const ended = cli.container(containerName) as unknown as { State: { Status: string; ExitCode: number }; HostConfig: { RestartPolicy: { Name: string } } };
+    expect(ended.State.Status).toBe('exited');
+    expect(ended.State.ExitCode).toBe(0);
+    expect(ended.HostConfig.RestartPolicy.Name).toBe('no');
+    expect(logs()).toContain('the Monitor ends itself. Its restart policy is now "no".');
+    // Docker leaves it exited.
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    expect(running(containerName)).toBe(false);
+    expect(await permanent.ensure(helperTag, socket)).toBe('created');
     expect(cli.container(containerName)!.HostConfig.RestartPolicy?.Name).toBe('unless-stopped');
     cli.ok(['rm', '-f', containerName]);
   });

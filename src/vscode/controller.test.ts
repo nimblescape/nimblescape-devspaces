@@ -2700,6 +2700,8 @@ describe('the question about the Monitor of the engine', () => {
     h.service.openDevspaceInWorker.mockRejectedValueOnce(new UserFacingError('buildFailed', Messages.buildFailed, 'log'));
     fakeVscode.window.showErrorMessage.mockResolvedValueOnce(Actions.tryAgain);
     await h.controller.runEmptyWindowTasks();
+    // The reopen runs in the background.
+    await settle(() => h.service.openDevspaceInWorker.mock.calls.length >= 1, 'the reopen');
     expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.anything());
     await settle(() => h.service.openDevspaceInWorker.mock.calls.length === 2, 'the Try again');
     expect(asked()).toEqual(['']);

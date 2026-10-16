@@ -40,6 +40,15 @@ describe('the engine of the ensure of the Monitor over the Engine API', () => {
       id: undefined,
       createdAt: undefined,
     });
+    // The restart policy (an empty name is `no`, as Docker shows a container created without one).
+    for (const [name, policy] of [
+      ['unless-stopped', 'unless-stopped'],
+      ['no', 'no'],
+      ['', 'no'],
+    ]) {
+      expect(monitorInspected({ ...INSPECT, HostConfig: { RestartPolicy: { Name: name, MaximumRetryCount: 0 } } })).toMatchObject({ restartPolicy: policy });
+    }
+    expect(monitorInspected({ ...INSPECT, HostConfig: { RestartPolicy: { Name: 7 } } })).not.toHaveProperty('restartPolicy');
     const inspect = vi.fn(async () => INSPECT as unknown);
     expect(await with_({ inspect }).inspect('devspaces-monitor')).toMatchObject({ exists: true, id: ID });
     expect(inspect).toHaveBeenCalledWith('container', 'devspaces-monitor', expect.any(AbortSignal));

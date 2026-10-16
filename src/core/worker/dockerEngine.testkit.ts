@@ -21,6 +21,8 @@ export function unusedEngine(): DockerEngine {
     exec: unused('exec'),
     stop: unused('stop'),
     start: unused('start'),
+    // The Monitor that ends itself.
+    updateRestartPolicy: unused('updateRestartPolicy'),
     version: unused('version'),
     // The identity of the engine and the prune of the probe and the sweep.
     identity: unused('identity'),

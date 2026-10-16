@@ -44,10 +44,16 @@ export type VscodeEngine = Pick<DockerEngine, 'proxy' | 'architecture' | 'contai
 export type PrepareEngine = Pick<DockerEngine, 'volumeNames' | 'inspect' | 'images' | 'containerIds' | 'removeImage'>;
 
 /**
- * The engine of `run`: the loop's, the image maintenance's, and the VS Code part's and the prepares' of the background
- * run.
+ * What a permanent monitor asks of its engine when it ends itself after 30 days without use (UnusedEnd, main.ts): its
+ * own container (by the nonce of its create) and the change of its restart policy to `no`.
  */
-export type MonitorEngineParts = LoopEngine & ImageEngine & VscodeEngine & PrepareEngine;
+export type SelfEngine = Pick<DockerEngine, 'containerIds' | 'updateRestartPolicy'>;
+
+/**
+ * The engine of `run`: the loop's, the image maintenance's, the VS Code part's and the prepares' of the background run,
+ * and the one of its own end after 30 days without use.
+ */
+export type MonitorEngineParts = LoopEngine & ImageEngine & VscodeEngine & PrepareEngine & SelfEngine;
 
 /** The engine of the socket of the monitor container (the one of its engine, as the worker's). */
 export function socketEngine(): MonitorEngineParts {

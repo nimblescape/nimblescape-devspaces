@@ -9,7 +9,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LABEL_COMPOSE_SERVICE, LABEL_DEVSPACE_ID } from '../core/names';
 import { abortError } from '../core/ports';
-import { REMOTE_MONITOR_ENTRY, REMOTE_MONITOR_READY_TEXT, RECORDS_LOCK_BUSY_EXIT, forgetIfUnchangedCommand, heartbeatFileName } from '../core/remoteMonitor/protocol';
+import { LAST_USE_FILE, REMOTE_MONITOR_ENTRY, REMOTE_MONITOR_READY_TEXT, RECORDS_LOCK_BUSY_EXIT, forgetIfUnchangedCommand, heartbeatFileName } from '../core/remoteMonitor/protocol';
 import { EngineError, type EngineContainerSummary } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import {
@@ -1674,7 +1674,8 @@ describe('monitor.js images', () => {
   it('takes the list of repositories of an older extension and ignores it', async () => {
     expect(await images(JSON.stringify({ repositories: ['ghcr.io/majikmate/devcontainer-dev', 'ghcr.io/majikmate/devcontainer-dev'] }))).toEqual({ code: 0, out: '', err: '' });
     expect(await images(JSON.stringify({ repositories: [] }))).toEqual({ code: 0, out: '', err: '' });
-    expect(fs.readdirSync(stateDir)).toEqual([]);
+    // Only the use of the window (LAST_USE_FILE).
+    expect(fs.readdirSync(stateDir)).toEqual([LAST_USE_FILE]);
   });
 
   // The entries of the ignored list are not checked; it must be an array, alone or beside the references.

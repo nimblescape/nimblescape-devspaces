@@ -18,7 +18,9 @@
 //                                count), unless it runs permanently (DEVSPACE_MONITOR_PERMANENT: the user answered
 //                                the question about it, and stopMonitorWhenIdle is off), image updates or not; and its
 //                                background run
-//                                (background.ts) by the schedule of cacheUpdateSchedule (CacheSchedule)
+//                                (background.ts) by the schedule of cacheUpdateSchedule (CacheSchedule). A permanent
+//                                one ends itself after 30 days in which no window used the engine (UnusedEnd: its
+//                                restart policy becomes `no`, then it exits with 0)
 //   heartbeat <json>             writes the records of one heartbeat (exit 0; 2 for an invalid argument, nothing written);
 //                                an entry with `stopNow` (a manual Stop) writes a record that stops the devspace at
 //                                a tick soon after, while it is the newest (rules.ts)
@@ -31,10 +33,12 @@
 //   run-now                      "Update All Images Now": asks the loop for its background run at once (RUN_NOW_FILE
 //                                in the volume, taken at its next check, so within a minute; after the run that runs,
 //                                if one does); it does not wait for the run
+// Each subcommand of a window (all but the forget with an `at`) records a use of the engine (recordUse, LAST_USE_FILE).
 // It uses Node.js built-ins, small pure modules of src/core, and the worker's client of the Engine API (engine.ts:
 // src/helperChannel/engineClient.ts over engineApi.ts): it talks to its engine over that socket, never through a Docker
 // CLI. Every argument and every file it reads is checked (protocol.ts); it never acts on a container without the label
-// nimblescape.devspaces.id, and it removes nothing but its own files (records, leftover temporary files of
+// nimblescape.devspaces.id, except the restart policy of its own container before it ends itself (UnusedEnd), and it
+// removes nothing but its own files (records, leftover temporary files of
 // the volume) and, with image maintenance, the images of the repositories it manages that no rule keeps (those of the
 // image references in use); and, in the shared VS Code server store that it mounts at /vscode, the server versions and
 // the temporary folders that its cleanup names (background.ts); and the prepared images of devspaces without a
@@ -44,6 +48,7 @@
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { errorMessage } from '../core/errors';
 import { LABEL_COMPOSE_SERVICE, LABEL_DEVSPACE_ID, VSCODE_STORE_DIR } from '../core/names';
 import { isMissing, type EngineContainerSummary } from '../core/worker/dockerEngine';
 import {
@@ -52,7 +57,12 @@ import {
   RUN_NOW_FILE,
   IMAGE_SETTINGS_FILE,
   IMAGES_IN_USE_MAX_AGE_MS,
+  LABEL_MONITOR_CREATE,
+  LAST_USE_FILE,
   MAX_IMAGE_LIST_LENGTH,
+  UNUSED_END_MS,
+  isMonitorCreateId,
+  parseLastUse,
   imagesInUseFileName,
   parseImageSettingsInput,
   parseImagesInput,
@@ -73,12 +83,13 @@ import {
   type HeartbeatRecord,
   type ImageSettings,
   type ImagesInUseRecord,
+  type LastUse,
 } from '../core/remoteMonitor/protocol';
-import { engineFailure, socketEngine, type LoopEngine, type MonitorEngineParts, type VscodeEngine } from './engine';
+import { engineFailure, socketEngine, type LoopEngine, type MonitorEngineParts, type SelfEngine, type VscodeEngine } from './engine';
 import { BACKGROUND_ENGINE_TIMEOUT_MS, BackgroundRun, type CacheRunStore, type VscodeBackgroundDeps } from './background';
 import { CLOCK_RESET_MS, parseCacheRunState, runRetryDelay, runRetryDue, type CacheRunState } from './backgroundRules';
 import { DEFAULT_CACHE_UPDATE_SCHEDULE, cacheRunDue, parseCacheSchedule, type CacheSchedule as ParsedCacheSchedule } from '../core/remoteMonitor/cacheSettings';
-import { MONITOR_PERMANENT_ENV, MONITOR_VSCODE_STORE_ENV } from '../core/remoteMonitor/remoteSessionMonitor';
+import { MONITOR_CREATE_ID_ENV, MONITOR_PERMANENT_ENV, MONITOR_VSCODE_STORE_ENV } from '../core/remoteMonitor/remoteSessionMonitor';
 import { REGISTRY_ANSWERS_FILE, registryAnswersText } from '../core/remoteMonitor/registryAnswers';
 import type { HttpTransport } from '../core/http';
 import { proxiedHttpsTransport } from '../core/proxyTransport';
@@ -571,6 +582,190 @@ export function idleExitFromEnv(env: NodeJS.ProcessEnv): number {
   return REMOTE_IDLE_EXIT_MS;
 }
 
+/** A use of a window is written to LAST_USE_FILE at most this often (its heartbeats come every 30 s). */
+export const LAST_USE_WRITE_MS = 60 * 60_000;
+/**
+ * The end after the time without use (UnusedEnd) looks again this long after the first check that found that time, and
+ * a failed end is tried again after this time; never longer than the time without use itself (the tests).
+ */
+export const UNUSED_END_RECHECK_MS = 60 * 60_000;
+/** Time limit of each call of the engine for the end after the time without use. */
+export const UNUSED_END_TIMEOUT_MS = 30_000;
+
+/**
+ * The time without use of the tests of the container (DEVSPACE_MONITOR_UNUSED_MS, 100 ms to UNUSED_END_MS); without it,
+ * or with another value, UNUSED_END_MS.
+ */
+export function unusedEndFromEnv(env: NodeJS.ProcessEnv): number {
+  const text = env.DEVSPACE_MONITOR_UNUSED_MS;
+  if (text !== undefined && /^\d{3,10}$/.test(text) && Number(text) >= 100 && Number(text) <= UNUSED_END_MS) return Number(text);
+  return UNUSED_END_MS;
+}
+
+/** A time span for the log: in whole days, hours or minutes, or else in seconds (the tests). */
+export function spanText(ms: number): string {
+  for (const [unit, size] of [
+    ['day', 86_400_000],
+    ['hour', 3_600_000],
+    ['minute', 60_000],
+  ] as const) {
+    const count = ms / size;
+    if (Number.isInteger(count) && count > 0) return `${count} ${count === 1 ? unit : `${unit}s`}`;
+  }
+  return `${Math.round(ms / 1000)} s`;
+}
+
+/** The nonce of the create of this monitor container (MONITOR_CREATE_ID_ENV); undefined when it has none. */
+function createIdOf(env: NodeJS.ProcessEnv): string | undefined {
+  const value = env[MONITOR_CREATE_ID_ENV];
+  return isMonitorCreateId(value) ? value : undefined;
+}
+
+/** The last use in the volume (LAST_USE_FILE); undefined when there is none or it is not valid. Never throws. */
+export async function readLastUse(stateDir: string): Promise<LastUse | undefined> {
+  const text = await fs.promises.readFile(path.join(stateDir, LAST_USE_FILE), 'utf8').catch(() => undefined);
+  return text === undefined ? undefined : parseLastUse(text);
+}
+
+/** Writes a use at `at` (LAST_USE_FILE), with the nonce `createId` when there is one. */
+async function writeLastUse(stateDir: string, at: number, createId: string | undefined): Promise<void> {
+  const use: LastUse = createId === undefined ? { at } : { at, createId };
+  await writeStateFile(stateDir, LAST_USE_FILE, JSON.stringify(use));
+}
+
+/**
+ * Records a use of the engine by a window at `now` (LAST_USE_FILE): after each subcommand of a window (a heartbeat,
+ * `images -`, `settings -`, `run-now`, and the forget of a Delete; not the forget of the loop). At most once per
+ * LAST_USE_WRITE_MS (and per a quarter of the time without use of the tests), so the heartbeats every 30 s write it
+ * about once an hour. A stored time later than `now` (the clock went back) is replaced. Never throws: a failure keeps
+ * the older time, and the next use writes it.
+ */
+export async function recordUse(stateDir: string, env: NodeJS.ProcessEnv, now: number): Promise<void> {
+  try {
+    const stored = await readLastUse(stateDir);
+    const every = Math.min(LAST_USE_WRITE_MS, Math.floor(unusedEndFromEnv(env) / 4));
+    if (stored !== undefined && now >= stored.at && now - stored.at < every) return;
+    await writeLastUse(stateDir, now, createIdOf(env) ?? stored?.createId);
+  } catch {
+    // The next use writes it.
+  }
+}
+
+/**
+ * At the start of `run`: a new monitor container (a nonce of its create other than the stored one, or no valid file)
+ * counts as a use at `now`; a restart of the same container (Docker starts it again after a restart of the engine) keeps
+ * the stored time. Never throws.
+ */
+export async function recordStart(stateDir: string, env: NodeJS.ProcessEnv, now: number): Promise<void> {
+  try {
+    const stored = await readLastUse(stateDir);
+    const createId = createIdOf(env);
+    if (stored !== undefined && (createId === undefined || stored.createId === createId)) return;
+    await writeLastUse(stateDir, now, createId);
+  } catch {
+    // Then the first check of UnusedEnd counts a use now.
+  }
+}
+
+/**
+ * The end of a permanent monitor that no window used for `unusedMs` (UNUSED_END_MS; DEVSPACE_MONITOR_UNUSED_MS in the
+ * tests of the container), by the last use in the volume (LAST_USE_FILE). `check` runs between two ticks of the loop; it
+ * reads the file only when the time it knows is that old. The first check that finds the time without use looks again
+ * after UNUSED_END_RECHECK_MS, so a clock that jumped ahead and is set right again ends nothing; a stored time later
+ * than now (the clock went back), or no valid file, counts as a use now. Then the restart policy of its own container
+ * (found by the nonce of its create, MONITOR_CREATE_ID_ENV) becomes `no`, so Docker leaves it exited after the exit
+ * with 0 that follows, also after a restart of the engine; the next open of a window creates it again (its ensure
+ * replaces a monitor whose policy is not that of its mode). A failure is logged once, and tried again after
+ * UNUSED_END_RECHECK_MS: without the change of the policy the monitor does not exit (Docker would start it again).
+ */
+export class UnusedEnd {
+  /** The time of the last use that the last read found (undefined: none read yet). */
+  private lastUseAt: number | undefined;
+  /** The monotonic time of the check that found the time without use (undefined: none found). */
+  private foundAt: number | undefined;
+  /** The monotonic time of the next try after a failed end. */
+  private retryAt: number | undefined;
+  private failureLogged = false;
+  /** Its restart policy is `no`: the monitor exits at the next chance (not during a background run). */
+  ending = false;
+
+  constructor(
+    private readonly deps: {
+      stateDir: string;
+      env: NodeJS.ProcessEnv;
+      engine: SelfEngine;
+      now: () => number;
+      monotonic: () => number;
+      log: (message: string) => void;
+      unusedMs: number;
+    },
+  ) {}
+
+  private get recheckMs(): number {
+    return Math.min(UNUSED_END_RECHECK_MS, this.deps.unusedMs);
+  }
+
+  /** True when the monitor ends now (its restart policy is `no`). Never throws. */
+  async check(): Promise<boolean> {
+    if (this.ending) return true;
+    const { stateDir, env, now, monotonic, log, unusedMs } = this.deps;
+    const mono = monotonic();
+    if (this.retryAt !== undefined && mono < this.retryAt) return false;
+    if (this.foundAt !== undefined && mono - this.foundAt < this.recheckMs) return false;
+    const before = now();
+    // A use only moves the stored time later, so a recent one needs no read.
+    if (this.foundAt === undefined && this.lastUseAt !== undefined && before >= this.lastUseAt && before - this.lastUseAt < unusedMs) return false;
+    const stored = await readLastUse(stateDir);
+    const time = now();
+    if (stored === undefined || time < stored.at) {
+      this.lastUseAt = time;
+      this.foundAt = undefined;
+      await writeLastUse(stateDir, time, createIdOf(env) ?? stored?.createId).catch(() => undefined);
+      return false;
+    }
+    this.lastUseAt = stored.at;
+    if (time - stored.at < unusedMs) {
+      this.foundAt = undefined;
+      return false;
+    }
+    if (this.foundAt === undefined) {
+      this.foundAt = mono;
+      log(`No window used Devspaces on this Docker engine for ${spanText(unusedMs)}. The Monitor looks again in ${spanText(this.recheckMs)}; then it ends itself.`);
+      return false;
+    }
+    try {
+      await this.endItself();
+    } catch (error) {
+      const reason = errorMessage(error).replace(/\.$/, '');
+      if (!this.failureLogged) log(`The Monitor could not end itself (${reason}). It tries again in ${spanText(this.recheckMs)}.`);
+      this.failureLogged = true;
+      this.retryAt = mono + this.recheckMs;
+      return false;
+    }
+    this.ending = true;
+    return true;
+  }
+
+  /** Sets the restart policy of its own container to `no`; throws with the reason when it cannot. */
+  private async endItself(): Promise<void> {
+    const { env, engine } = this.deps;
+    const createId = createIdOf(env);
+    if (createId === undefined) throw new Error('it does not know its container: the nonce of its create is missing');
+    let ids: string[];
+    try {
+      ids = await engine.containerIds({ label: [`${LABEL_MONITOR_CREATE}=${createId}`] }, AbortSignal.timeout(UNUSED_END_TIMEOUT_MS));
+    } catch (error) {
+      throw new Error(`its container could not be listed: ${engineFailure(error, UNUSED_END_TIMEOUT_MS)}`);
+    }
+    if (ids.length !== 1) throw new Error(`${ids.length} containers have the nonce of its create`);
+    try {
+      await engine.updateRestartPolicy(ids[0], 'no', AbortSignal.timeout(UNUSED_END_TIMEOUT_MS));
+    } catch (error) {
+      throw new Error(`its restart policy could not be changed: ${engineFailure(error, UNUSED_END_TIMEOUT_MS)}`);
+    }
+  }
+}
+
 export interface MainDeps {
   env: NodeJS.ProcessEnv;
   stateDir?: string;
@@ -704,11 +899,11 @@ export async function readImagesInUse(stateDir: string, now: number): Promise<Re
 /**
  * The temporary files of writeStateFile (`<name>.<pid>.<count>.tmp`) that a killed write left behind: of
  * image-settings.json, replaced-images.json, pulled-over-images.json, cache-run.json (written at the end of every
- * background run), registry-digests.json (REGISTRY_ANSWERS_FILE) and the files of the images in use
- * (`images-in-use.<source>.json`). images.json is not written by this monitor; the leftovers of an older monitor are
- * removed too.
+ * background run), registry-digests.json (REGISTRY_ANSWERS_FILE), last-use.json (LAST_USE_FILE) and the files of the
+ * images in use (`images-in-use.<source>.json`). images.json is not written by this monitor; the leftovers of an older
+ * monitor are removed too.
  */
-export const STATE_TEMPORARY_FILE = /^(images|image-settings|replaced-images|pulled-over-images|cache-run|registry-digests|images-in-use\.[0-9a-f]{32})\.json\.\d+\.\d+\.tmp$/;
+export const STATE_TEMPORARY_FILE = /^(images|image-settings|replaced-images|pulled-over-images|cache-run|registry-digests|last-use|images-in-use\.[0-9a-f]{32})\.json\.\d+\.\d+\.tmp$/;
 /**
  * Such a file whose modification time is more than this from now is removed at the start of `run` (only then: a younger
  * one stays until the next start).
@@ -1098,6 +1293,8 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
   const err = deps.err ?? ((text: string) => process.stderr.write(text));
   const now = deps.now ?? Date.now;
   const dir = heartbeatDir(deps.stateDir);
+  // A subcommand of a window is a use of the engine (UnusedEnd).
+  const used = () => recordUse(deps.stateDir ?? REMOTE_MONITOR_STATE_DIR, deps.env, now());
   const [command, ...args] = argv;
   switch (command) {
     case 'heartbeat': {
@@ -1107,6 +1304,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
         return EXIT_INVALID;
       }
       await writeHeartbeat(dir, input, now());
+      await used();
       return 0;
     }
     case 'forget': {
@@ -1117,6 +1315,8 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
         return EXIT_INVALID;
       }
       if ((await removeRecord(dir, args[0], args[1], at)) && at !== undefined) out('removed\n');
+      // The forget of a Delete comes from a window; the one with `at` from the loop.
+      if (at === undefined) await used();
       return 0;
     }
     case 'images': {
@@ -1129,6 +1329,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
       }
       const stateDir = deps.stateDir ?? REMOTE_MONITOR_STATE_DIR;
       if (input.inUse !== undefined) await writeImagesInUse(stateDir, input.inUse.source, input.inUse.references, now(), input.inUse.digests);
+      await used();
       return 0;
     }
     case 'run-now': {
@@ -1139,6 +1340,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
         return EXIT_INVALID;
       }
       await writeRunRequest(deps.stateDir ?? REMOTE_MONITOR_STATE_DIR, now());
+      await used();
       return 0;
     }
     case 'settings': {
@@ -1151,6 +1353,7 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
         return EXIT_INVALID;
       }
       await writeStateFile(deps.stateDir ?? REMOTE_MONITOR_STATE_DIR, IMAGE_SETTINGS_FILE, JSON.stringify(settings));
+      await used();
       return 0;
     }
     case 'run': {
@@ -1175,6 +1378,8 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
       const leftovers = await removeStaleStateTemporaryFiles(deps.stateDir ?? REMOTE_MONITOR_STATE_DIR, now());
       if (leftovers.length > 0) log(`Removed ${leftovers.length} leftover temporary file(s) of the volume.`);
       const stateDir = deps.stateDir ?? REMOTE_MONITOR_STATE_DIR;
+      // A new container is a use; a restart of the same one is none.
+      await recordStart(stateDir, deps.env, now());
       // The whole background run (the images in use, the VS Code server, the cleanup of the store) by the one schedule
       // of the setting cacheUpdateSchedule; the first check one minute after the start runs it when it is due by the
       // end of the last run in the volume.
@@ -1225,9 +1430,12 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
       const schedule = new CacheSchedule({ now, log, settings, pass: () => background.run(), observe: () => images.observe(), state, runRequest });
       const { firstMs, intervalMs } = imageTimesFromEnv(deps.env);
       const permanent = permanentFromEnv(deps.env);
+      const unusedMs = unusedEndFromEnv(deps.env);
+      const unused = new UnusedEnd({ stateDir, env: deps.env, engine, now, monotonic, log, unusedMs });
       log(
         `Background run (the images in use, the VS Code server${vscode === undefined ? ' left out: no store' : ''}, the cleanup): ` +
-          `first check in ${Math.round(firstMs / 1000)} s, then ${scheduleText(settings.value)}; ${permanent ? 'runs permanently' : `ends after ${Math.round(idleExitMs / 1000)} s without a running devspace`}.`,
+          `first check in ${Math.round(firstMs / 1000)} s, then ${scheduleText(settings.value)}; ${permanent ? 'runs permanently.' : `ends after ${Math.round(idleExitMs / 1000)} s without a running devspace.`}` +
+          (permanent ? ` It ends itself when no window used Devspaces on this engine for ${spanText(unusedMs)}.` : ''),
       );
       // Unreferenced: the loop below keeps the process; a monitor that exits when idle does not wait for them.
       setTimeout(() => {
@@ -1245,6 +1453,16 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
       let waitLogged = false;
       for (;;) {
         await loop.tick();
+        // A permanent monitor that no window used for 30 days ends itself (UnusedEnd): between two ticks as the exit
+        // when idle, never during a background run, and after the removals of the records. Its restart policy is `no`
+        // first, so Docker leaves it exited.
+        if (permanent && !schedule.busy && (await unused.check())) {
+          await loop.removals;
+          // The timer of the schedule can start a run meanwhile; the exit waits for the next tick without one.
+          if (schedule.busy) continue;
+          log(`No window used Devspaces on this Docker engine for ${spanText(unusedMs)}; the Monitor ends itself. Its restart policy is now "no". The next open starts a new one.`);
+          return 0;
+        }
         // Only here, between two ticks, so never while it holds a lock or stops a container; the removals of the
         // records (each under the lock of the records) end first. The records stay in the volume. A permanent monitor
         // (after the answer of the user, with stopMonitorWhenIdle off) never exits when idle; one that ends when idle
