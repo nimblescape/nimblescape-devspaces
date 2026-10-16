@@ -1132,9 +1132,10 @@ export class Controller implements vscode.Disposable {
    * message, before the question about the Monitor (beforeUserFlow) and before any progress. Before all of this, the
    * flow is refused while this window removes Devspaces from an engine (refusedWhileRemoving), as Start is.
    * In the progress, the step "Docker start" of Start runs first (startDocker): a local Docker that does not run is
-   * started, a Podman engine behind the Docker CLI is refused, and an SSH host is checked.
-   * The progress can be cancelled, as the one of Start: a cancel during the Docker start asks the Monitor nothing and
-   * shows nothing.
+   * started, a Podman engine behind the Docker CLI is refused, and an SSH host is checked. After a Docker start, the
+   * progress names the next step (askingMonitor), so that it does not say "Starting Docker" until the Monitor took the
+   * request. The progress can be cancelled, as the one of Start: a cancel during the Docker start asks the Monitor
+   * nothing and shows nothing.
    */
   async updateImagesNow(): Promise<void> {
     const update = this.deps.updateImagesNow;
@@ -1152,8 +1153,15 @@ export class Controller implements vscode.Disposable {
       title: ControllerTexts.requestingImageUpdate(engine),
       cancellable: true,
       task: async (progress, signal) => {
-        await startDocker?.({ onStarting: () => progress.step('startingDocker'), signal });
+        let started = false;
+        const onStarting = (): void => {
+          started = true;
+          progress.step('startingDocker');
+        };
+        await startDocker?.({ onStarting, signal });
         if (signal.aborted) throw new UserFacingError('cancelled', PipelineTexts.cancelled);
+        // A Docker that runs already showed no step, and shows none now.
+        if (started) progress.step('askingMonitor');
         await update(target, signal);
       },
     });

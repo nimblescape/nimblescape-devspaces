@@ -7,6 +7,8 @@ import { sshCommandLine } from './docker/dockerHost';
 
 export const Steps = {
   startingDocker: 'Starting Docker',
+  /** Update All Images Now, after a Docker start: the worker is made ready, and the Monitor is asked. */
+  askingMonitor: 'Asking the Monitor',
   downloadingRepository: 'Downloading repository',
   checkingImage: 'Checking for a newer image',
   downloadingImage: 'Downloading the new image',
