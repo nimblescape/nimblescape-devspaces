@@ -653,7 +653,7 @@
       {
         "command": "devspaces.rowEnter",
         "key": "enter",
-        "when": "focusedView == devspaces.repositories && listFocus && !inputFocus && !treeElementCanExpand && !treeElementCanCollapse"
+        "when": "focusedView == devspaces.repositories && listFocus && !inputFocus && !treestickyScrollFocused && !treeElementCanExpand && !treeElementCanCollapse"
       }
     ],
     "configuration": {
