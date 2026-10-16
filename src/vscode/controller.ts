@@ -3100,7 +3100,7 @@ export class Controller implements vscode.Disposable {
    * comes (MonitorQuestion, once per engine), so the Monitor that the flow makes sure of follows the answer. False, after
    * a message, when the flow must not run: while this window removes Devspaces from an engine (refusedWhileRemoving),
    * or another window removes it from the engine of the flow, also when that removal began while the question was open;
-   * the mark stays then.
+   * the mark stays then. The mark of a removal that began and ended while the question was open goes too.
    * Nothing for a target that is neither local nor SSH (every operation refuses it), nor for a `devspace` of another
    * Docker host (its open is refused). Never throws.
    */
@@ -3110,7 +3110,9 @@ export class Controller implements vscode.Disposable {
     if (target.kind === 'unsupported' || (devspace !== undefined && !isOnDockerHost(devspace, target.host))) return true;
     if (!(await this.clearRemovalMark(operation, target.host))) return false;
     await this.deps.monitorQuestion?.askIfNeeded(target.host, () => this.markBlocker());
-    return !(await this.refusedWhileOtherWindowRemoves(operation, target.host));
+    // Again after the question, which can stay open for long: a removal that another window began meanwhile refuses the
+    // flow while it runs, and the mark of one that ended meanwhile goes.
+    return this.clearRemovalMark(operation, target.host);
   }
 
   /**
