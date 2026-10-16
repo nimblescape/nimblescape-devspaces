@@ -59,6 +59,7 @@ vi.mock('../core/storage/firstUse', async (importOriginal) => {
 import { ATTACHED_CONTAINER } from '../core/devContainers';
 import { DockerContextKeys } from '../core/docker/dockerSetup';
 import { Messages } from '../core/messages';
+import { GITHUB_ENTERPRISE_CONTEXT_KEY } from './auth';
 import { Commands } from './commands';
 import { encodeAuthority, REMOTE_SCHEME } from './connection/authority';
 import { CLOSE_REMOTE_COMMAND } from './connectionAdapter';
@@ -151,6 +152,8 @@ describe('no message at activation when Docker is missing', () => {
       expect(userAgent()).toBe(`nimblescape-devspaces/${version}`);
       // The sidebar shows the Docker setup (welcome view) instead of the repositories.
       expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('setContext', DockerContextKeys.setupRequired, true);
+      // The activation sets the context key of the note on GitHub Enterprise; here no setting names an instance.
+      expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('setContext', GITHUB_ENTERPRISE_CONTEXT_KEY, false);
       expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
       expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
       expect(fakeVscode.window.showErrorMessage).not.toHaveBeenCalled();
