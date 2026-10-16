@@ -2613,7 +2613,9 @@ export class Controller implements vscode.Disposable {
       this.logger.warn(`This window is still connected to ${left.repository}, which it must not use. It closes its remote connection again.`);
       // The removal runs while the message is open; the limit of the wait counts from its end.
       const removal = left.reason === 'account' ? this.removeGitToken(left) : undefined;
-      await showWarningMessage(ControllerTexts.stillConnected(left.repository), { modal: true })
+      // The one button names what follows; a close of the message (Escape) does the same.
+      const closeConnection: vscode.MessageItem = { title: ControllerTexts.closeConnection, isCloseAffordance: true };
+      await showWarningMessage(ControllerTexts.stillConnected(left.repository), { modal: true }, closeConnection)
         .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
       if (removal) await this.awaitTokenRemoval(left, removal);
       // The owner account may have signed in while the message was open.

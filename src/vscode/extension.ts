@@ -136,10 +136,11 @@ async function activateExtension(
   }
   let settings: ExtensionSettings = readSettings();
   const getSettings = (): ExtensionSettings => settings;
-  // Invalid entries of devspaces.hostAccessChecksOff are ignored, with one warning (again only when they change).
-  let invalidHostAccessEntries = warnInvalidHostAccessChecksOff(logger, '');
-  // An invalid devspaces.defaultImage is ignored the same way.
-  let invalidDefaultImage = warnInvalidDefaultImage(logger, '');
+  // Invalid entries of devspaces.hostAccessChecksOff are ignored, with a warning once per window session for each
+  // value. An invalid devspaces.defaultImage is ignored the same way.
+  const settingWarnings = new Set<string>();
+  warnInvalidHostAccessChecksOff(logger, settingWarnings);
+  warnInvalidDefaultImage(logger, settingWarnings);
 
   const runner = new NodeProcessRunner();
   const dockerPath = findDockerCli(env, platform);
@@ -797,8 +798,8 @@ async function activateExtension(
       if (!affectsSettings(event)) return;
       const previous = settings;
       settings = readSettings();
-      invalidHostAccessEntries = warnInvalidHostAccessChecksOff(logger, invalidHostAccessEntries);
-      invalidDefaultImage = warnInvalidDefaultImage(logger, invalidDefaultImage);
+      warnInvalidHostAccessChecksOff(logger, settingWarnings);
+      warnInvalidDefaultImage(logger, settingWarnings);
       updateOwnersContextKey(settings.owners, logger);
       updateDevspacesOnlyContextKey(settings.showOnlyDevspaces === true, logger);
       // Another scan scope loads the list again at once.

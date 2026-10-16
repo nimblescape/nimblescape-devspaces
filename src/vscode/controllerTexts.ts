@@ -163,6 +163,8 @@ export const ControllerTexts = {
   noRepositories: 'No repository is available. Sign in with GitHub, or refresh the list.',
   // Buttons.
   stop: 'Stop',
+  /** The one button of the modal message stillConnected: the window closes its connection after it. */
+  closeConnection: 'Close Connection',
   // Quick Picks.
   selectDevspaceToStop: 'Select a devspace to stop',
   selectDevspaceToKeepRunning: 'Select a devspace to keep running when closed',
