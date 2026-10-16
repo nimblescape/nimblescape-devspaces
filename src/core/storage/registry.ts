@@ -21,7 +21,7 @@ import type {
 } from '../types';
 import { isGitSummary } from '../git/gitSummary';
 import { writeJsonAtomic } from './atomicJson';
-import { DEFAULT_LOCK_STALE_MS, DEFAULT_LOCK_TIMEOUT_MS, withLockFolder } from './lockFolder';
+import { DEFAULT_LOCK_STALE_MS, DEFAULT_LOCK_TIMEOUT_MS, LockLostError, withLockFolder } from './lockFolder';
 import { errorCode, isStorageId, parseJson, readTextFile, retryTransient, type StoragePaths } from './paths';
 import { isRecord } from '../valueChecks';
 import { parseImageReference } from '../remoteMonitor/protocol';
@@ -150,15 +150,25 @@ export class DevspaceRegistry {
    * short: do not call Docker or the network in it, and never call `update` from inside it (the lock is not
    * re-entrant). Throws `RegistryVersionError` for a file of a newer format version. `onlyIfClean`: when the file is
    * missing, invalid, or has invalid entries or records (it still needs its restore), neither the mutator runs nor
-   * anything is written; resolves with `undefined`.
+   * anything is written; resolves with `undefined`. If another process took over the lock meanwhile (this process
+   * stalled longer than the stale time), nothing is written and the whole change runs once more on the current
+   * content, so the mutator can run twice.
    */
   async update<T>(mutator: (file: RegistryFile) => T | Promise<T>): Promise<T>;
   async update<T>(mutator: (file: RegistryFile) => T | Promise<T>, options: { onlyIfClean: true }): Promise<T | undefined>;
   async update<T>(mutator: (file: RegistryFile) => T | Promise<T>, options: { onlyIfClean?: boolean } = {}): Promise<T | undefined> {
-    return withLockFolder(this.paths.registryLock, () => this.updateLocked(mutator, options.onlyIfClean === true), {
-      staleMs: this.lockStaleMs,
-      timeoutMs: this.lockTimeoutMs,
-    });
+    const run = () =>
+      withLockFolder(this.paths.registryLock, (held) => this.updateLocked(mutator, options.onlyIfClean === true, held), {
+        staleMs: this.lockStaleMs,
+        timeoutMs: this.lockTimeoutMs,
+      });
+    try {
+      return await run();
+    } catch (error) {
+      if (!(error instanceof LockLostError)) throw error;
+      this.logger.warn(`${error.message} The change runs again on the current content.`);
+      return run();
+    }
   }
 
   /**
@@ -306,7 +316,11 @@ export class DevspaceRegistry {
     });
   }
 
-  private async updateLocked<T>(mutator: (file: RegistryFile) => T | Promise<T>, onlyIfClean = false): Promise<T | undefined> {
+  private async updateLocked<T>(
+    mutator: (file: RegistryFile) => T | Promise<T>,
+    onlyIfClean: boolean,
+    held: () => Promise<boolean>,
+  ): Promise<T | undefined> {
     const parsed = parseRegistry(await readTextFile(this.paths.registry));
     if (parsed.state === 'newer') throw new RegistryVersionError(parsed.version ?? REGISTRY_VERSION);
     if (onlyIfClean && !isClean(parsed)) return undefined;
@@ -315,6 +329,8 @@ export class DevspaceRegistry {
     const result = await mutator(file);
     file.version = REGISTRY_VERSION;
     if (JSON.stringify(file) !== before) {
+      // The process that took over the lock read the file before this write: the write would undo its change.
+      if (!(await held())) throw new LockLostError(this.paths.registryLock);
       if (parsed.state === 'invalid' || parsed.dropped > 0 || parsed.droppedRecords > 0 || parsed.old > 0) await this.backup(parsed);
       await retryTransient(() => writeJsonAtomic(this.paths.registry, file));
     }
