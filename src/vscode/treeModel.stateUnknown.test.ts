@@ -5,9 +5,11 @@
 // The rows of the devspaces on an engine whose states the last refresh could not read show `State unknown` with the
 // reason, not the state that the registry alone gives; the rows of another engine, a busy one (Updating) and every row
 // after a refresh that read the states show their state; the actions stay those of the state (Start works).
+import * as fs from 'fs';
+import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import type { Devspace } from '../core/types';
-import { buildTreeModel, repositoryRows, type DevspaceRuntime, type RepositoryRow, type StatesUnknown, type TreeInput } from './treeModel';
+import { TreeTexts, buildTreeModel, repositoryRows, type DevspaceRuntime, type RepositoryRow, type StatesUnknown, type TreeInput } from './treeModel';
 
 const T0 = Date.parse('2026-10-11T12:00:00.000Z');
 
@@ -92,6 +94,17 @@ describe('the state of the devspaces on an engine that the refresh could not rea
     expect(local.local.description).toBe('main   State unknown (Docker not ready)');
     expect(local.local.tooltip).toContain('Docker not ready: the helper image is being built.');
     expect(local.remote.stateUnknown).toBeUndefined();
+  });
+
+  // The user guide quotes the short reasons as a row shows them. Mutation: the examples with an engine named "devspace"
+  // fail it.
+  it('the user guide quotes the reasons as the rows show them: the local Docker is named Docker, a remote engine by its host', () => {
+    const guide = fs.readFileSync(path.join(__dirname, '..', '..', 'docs', 'guide.md'), 'utf8');
+    const row = guide.split('\n').find((line) => line.startsWith('| `State unknown (…)` |')) ?? '';
+    for (const [engine, reason] of [['Docker', 'notReady'], ['<host>', 'unreachable'], ['Docker', 'removed']] as const) {
+      expect(row, reason).toContain(`(\`${TreeTexts.unknownShort(engine, reason)}\`)`);
+    }
+    expect(row).toContain('The local Docker is named `Docker`, a remote engine by its host.');
   });
 
   it('also over the state that the registry alone gives a connected window, with the suffix of a kept devspace', () => {

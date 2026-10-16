@@ -82,7 +82,7 @@ The same word is in the Docker names of the devspace, for example `devspaces-acm
 | `Updating` | Devspaces creates, updates, rebuilds, or deletes the devspace. |
 | `No container` | The container was removed outside of Devspaces. **Start** creates it again from the image of the devspace. |
 | `Files missing` | The volume with the repository is missing. **Start** offers **Clone again** or **Delete devspace**. |
-| `State unknown (…)` | Devspaces could not read the states on that Docker engine, for example while it prepares the engine (`devspace not ready`), when a remote engine does not answer (`devspace cannot be reached`), or after you removed Devspaces from the engine (`Devspaces removed from devspace`). The actions stay available. |
+| `State unknown (…)` | Devspaces could not read the states on that Docker engine, for example while it prepares the engine (`Docker not ready`), when a remote engine does not answer (`<host> cannot be reached`), or after you removed Devspaces from the engine (`Devspaces removed from Docker`). The local Docker is named `Docker`, a remote engine by its host. The actions stay available. |
 
 A repository without a devspace shows no state; **Start** creates its devspace on the default branch.
 

@@ -54,7 +54,7 @@ export const TreeTexts = {
   servicesRunning: 'Other containers of the devspace run. Stop stops them.',
   /**
    * Why the state of the devspaces on an engine is unknown (StatesUnknown), in short words: in brackets after the
-   * state text, for example `State unknown (devspace not ready)`.
+   * state text, for example `State unknown (Docker not ready)`.
    */
   unknownShort: (engine: string, reason: StatesUnknownReason) =>
     reason === 'unreachable' ? `${engine} cannot be reached` : reason === 'removed' ? `Devspaces removed from ${engine}` : `${engine} not ready`,
@@ -866,7 +866,7 @@ function devspaceRow(
   const keptBySettingText = keptBySettings ? (input.settings.stopOnClose === false ? TreeTexts.keptByStopOnClose : TreeTexts.keptByShutdownAction) : undefined;
   const services = servicesRunning ? StateTexts.servicesRunning : undefined;
   const keptAny = kept || keptOnce || keptBySettings;
-  // `State unknown (devspace not ready)`, with the suffix ` · kept` as every state text.
+  // `State unknown (Docker not ready)`, with the suffix ` · kept` as every state text.
   const engine = unknown === undefined ? '' : unknown.dockerHost === '' ? 'Docker' : unknown.dockerHost;
   const shownState =
     unknown !== undefined
