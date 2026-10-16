@@ -227,7 +227,7 @@ The sidebar reads the states of the devspaces of the current engine with `refres
 
 ### Reopen at startup
 
-VS Code restores the windows of the last session; a restored window that was connected to a devspace runs the open flow before it connects, and switches the Docker context back after a question if the devspace is on another host. When VS Code starts with an empty window instead, the extension opens the devspace of `reopen.json` if `reopenLastOnStartup` is on, no other window is alive, no operation is pending, and the record is older than 5 seconds (a younger one means that the user chose **Close Remote Connection**). A manual **Stop** removes the record of its devspace.
+VS Code restores the windows of the last session; a restored window that was connected to a devspace runs the open flow before it connects, and switches the Docker context back after a question if the devspace is on another host. When VS Code starts with an empty window instead, the extension opens the devspace of `reopen.json` if `reopenLastOnStartup` is on, no other window is alive, no operation is pending, no Start of the user runs in the window (also not one that still asks about the Monitor: a Start takes its request to connect the window before that question, and the newest request connects the window), and the record is older than 5 seconds (a younger one means that the user chose **Close Remote Connection**). A manual **Stop** removes the record of its devspace.
 
 ### Remove from an engine
 
