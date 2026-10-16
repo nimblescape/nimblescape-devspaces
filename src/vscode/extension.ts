@@ -13,7 +13,7 @@ import { attachDiagnostics } from '../core/docker/attachDiagnostics';
 import { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import { dockerProcessEnv, findDockerCli, findExecutable } from '../core/docker/dockerCli';
 import { describeDockerHost, dockerHostOf, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
-import { removedEngineNote } from '../core/docker/engineRemoval';
+import { removedEngineImageNote, removedEngineNote } from '../core/docker/engineRemoval';
 import { ensureDockerRunning } from '../core/docker/dockerStart';
 import { DockerTargets, operationDockerTarget, outsideOperation, runWithDockerTarget } from '../core/docker/dockerTargets';
 import { SshLoginCache, findRemoteContext, startDockerFor, type RemoteReachabilityDeps } from '../core/docker/remoteDocker';
@@ -229,6 +229,9 @@ async function activateExtension(
       heartbeats.imageBuilt();
       // A build (a Start, for example) also ends the wait after a failed background build.
       missingHelperBuild?.clearFailures();
+      // A Stop or a Delete of a devspace that the user kept on an engine with the removal mark builds it there again.
+      const built = operationDockerTarget();
+      if (built !== undefined) void engineRemoved(built).then((removed) => (removed ? logger.info(removedEngineImageNote(describeDockerHost(built.host))) : undefined));
     },
   });
   // The preparation that a heartbeat starts (the helper image for the worker, and for a repair) runs with its own long
@@ -415,6 +418,9 @@ async function activateExtension(
     // operation `heartbeat` of the worker of that engine.
     send: (target, input, signal) => heartbeatPreparation.scope(() => monitorCalls.heartbeat(target, input, signal)),
     repair: repairSessionMonitor,
+    // A Stop or a Delete of a devspace that the user kept on an engine with the removal mark sends its heartbeat there;
+    // the Monitor is not started again.
+    engineRemoved,
     // The container of the devspace (its name in the registry) on that engine; any failure counts as not there. The
     // operation `windowState` of the worker of that engine.
     containerExists: (target, devspace, signal) => heartbeatPreparation.scope(() => monitorCalls.containerExists(target, devspace, signal)),

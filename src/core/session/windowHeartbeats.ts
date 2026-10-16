@@ -34,7 +34,8 @@
 // else, or when the check fails, the engine counts as not found for that tick (a failed heartbeat towards the warning)
 // and nothing is sent or repaired for that devspace there. A verified engine is kept; after a failed heartbeat it is
 // checked again. A repair (the start of a missing monitor container) happens only on an engine where a devspace of
-// the heartbeat has its container (for the busy marks, checked at the repair).
+// the heartbeat has its container (for the busy marks, checked at the repair), and never on an engine that Devspaces
+// was removed from (`engineRemoved`).
 //
 // `engineFor` is bounded like an attempt: a lookup that throws, or still runs after HEARTBEAT_ATTEMPT_DEADLINE_MS,
 // counts as an engine that cannot be found (for the connected devspace, a failed heartbeat towards the warning); a
@@ -125,6 +126,12 @@ export interface WindowHeartbeatsDeps {
    * `signal` aborts when the attempt passed HEARTBEAT_ATTEMPT_DEADLINE_MS.
    */
   repair: (target: DockerTarget, signal: AbortSignal) => Promise<void>;
+  /**
+   * Whether the engine `target` has the removal mark of "Remove Devspaces from This Docker Engine…": no repair starts
+   * its monitor then (a Stop or a Delete of a devspace kept there sends its heartbeat, which finds no monitor). Never
+   * throws. Without it, every engine may be repaired.
+   */
+  engineRemoved?: (target: DockerTarget) => Promise<boolean>;
   /**
    * Whether the container of `devspace` (its containerName in the registry) exists on the engine `target`; false
    * when it does not or cannot be checked. `signal` aborts at HEARTBEAT_ATTEMPT_DEADLINE_MS.
@@ -677,6 +684,9 @@ export class WindowHeartbeats {
     const first = await this.deps.send(target, input, signal);
     if (first.ok) this.resetRepair(series);
     if (first.ok || !first.missing) return first;
+    if (this.deps.engineRemoved !== undefined && (await this.deps.engineRemoved(target))) {
+      return { ok: false, missing: true, detail: `${first.detail} The Monitor is not started there: Devspaces was removed from ${engineName(target)}.` };
+    }
     const now = this.clock.now();
     if (series.repairNotBefore !== undefined && now < series.repairNotBefore) {
       const seconds = Math.ceil((series.repairNotBefore - now) / 1000);

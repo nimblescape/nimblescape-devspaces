@@ -376,9 +376,10 @@ describe('heartbeatWiring: waits, target and failures', () => {
     // monitorSettings.forTarget (src/vscode/monitorSettings.ts, tested by its result in extension.monitorMode.test.ts).
     expect(source).toContain('const repairSessionMonitor = heartbeats.repair(async (target, signal) => monitorCalls.monitorEnsure(target, await monitorSettings.forTarget(target), signal));');
     expect(source).not.toContain('ensureOrThrow(image.tag');
-    // A build also ends the wait of the background build of a missing helper image (MissingHelperBuild.clearFailures).
+    // A build also ends the wait of the background build of a missing helper image (MissingHelperBuild.clearFailures),
+    // and the log names a build on an engine with the removal mark (a Stop or a Delete of a devspace kept there).
     expect(source).toMatch(
-      /onImageBuilt: \(\) => \{\s*helperChannels\?\.clearFailures\(\);\s*heartbeats\.imageBuilt\(\);\s*(\/\/[^\n]*\n\s*)*missingHelperBuild\?\.clearFailures\(\);\s*\}/,
+      /onImageBuilt: \(\) => \{\s*helperChannels\?\.clearFailures\(\);\s*heartbeats\.imageBuilt\(\);\s*(\/\/[^\n]*\n\s*)*missingHelperBuild\?\.clearFailures\(\);\s*(\/\/[^\n]*\n\s*)*const built = operationDockerTarget\(\);\s*if \(built !== undefined\) void engineRemoved\(built\)\.then\(\(removed\) => \(removed \? logger\.info\(removedEngineImageNote\(describeDockerHost\(built\.host\)\)\) : undefined\)\);\s*\}/,
     );
   });
 });

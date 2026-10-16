@@ -82,6 +82,8 @@ function harness(options: { engines?: Record<string, DockerTarget | undefined> }
     repair: async (_target: DockerTarget): Promise<void> => {},
     /** Whether the container of a devspace is on an engine (default: yes). */
     containerExists: (_target: DockerTarget, _devspace: Devspace): boolean | Promise<boolean> => true,
+    /** The hosts of the engines with the removal mark (default: none). */
+    removedHosts: [] as string[],
     /** Runs at each read of the registry (an advancing clock). */
     onList: () => {},
     /** Replaces the answer of engineFor. */
@@ -118,6 +120,7 @@ function harness(options: { engines?: Record<string, DockerTarget | undefined> }
       signals.push(signal);
       return state.repair(target);
     },
+    engineRemoved: async (target) => state.removedHosts.includes(target.host),
     containerExists: async (target, env, signal) => {
       containerChecks.push({ target, id: env.id });
       checkSignals.push(signal);
@@ -263,6 +266,30 @@ describe('WindowHeartbeats', () => {
     expect(h.repairs).toEqual([LOCAL]);
     expect(h.sent).toHaveLength(2);
     expect(h.warnings).toEqual([]);
+  });
+
+  // Mutation: without the check of the removal mark, the repair starts the monitor on build-box.
+  it('never starts the monitor again on an engine that Devspaces was removed from: the Stop and the busy mark of a kept devspace', async () => {
+    const h = harness();
+    h.devspaces.push(
+      devspace(ID_A, 'acme/api', { dockerHost: 'build-box' }),
+      devspace(ID_B, 'acme/web', { dockerHost: 'build-box', busy: { operation: 'delete', since: new Date(T0).toISOString(), pid: PID, windowId: WINDOW } }),
+    );
+    h.state.removedHosts = ['build-box'];
+    h.state.answer = () => ({ ok: false, missing: true, detail: 'No such container: devspaces-monitor' });
+    expect(await h.heartbeats.sendStop(ID_A)).toEqual({
+      ok: false,
+      detail: 'No such container: devspaces-monitor The Monitor is not started there: Devspaces was removed from build-box.',
+    });
+    await h.heartbeats.tick();
+    expect(h.sent.map((call) => call.target)).toEqual([REMOTE, REMOTE]);
+    expect(h.repairs).toEqual([]);
+    expect(h.logs.some((line) => line.includes('it is started again'))).toBe(false);
+
+    // Without the mark, the same Stop starts it again.
+    h.state.removedHosts = [];
+    await h.heartbeats.sendStop(ID_A);
+    expect(h.repairs).toEqual([REMOTE]);
   });
 
   it('does not repair after another failure (the worker repairs itself on the send)', async () => {
