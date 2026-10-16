@@ -1186,9 +1186,9 @@ describe('Sidebar progressive display', () => {
     const example = String.raw`^(\d{4}-[^-]+-[^-]+)-([^-]+-[^-]+)-(.+)$`;
     h.discovery.refresh.mockResolvedValue(
       data([
-        info('school/2026-3cWI-SWP-module-oop-EnesHA81'),
-        info('school/2026-3cWI-SWP-module-oop-felix-he021'),
-        info('school/2025-3bWI-SWP-module-oop-hailo'),
+        info('school/2026-3cWI-SWP-module-oop-Student-A81'),
+        info('school/2026-3cWI-SWP-module-oop-student-b-021'),
+        info('school/2025-3bWI-SWP-module-oop-student-c'),
         info('school/website'),
       ]),
     );

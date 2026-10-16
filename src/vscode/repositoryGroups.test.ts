@@ -91,8 +91,8 @@ describe('matchRepositoryGroup', () => {
     [
       'the example of the user',
       [EXAMPLE],
-      '2026-3cWI-SWP-module-oop-felix-he021',
-      { index: 0, levels: ['2026-3cWI-SWP', 'module-oop'], label: 'felix-he021' },
+      '2026-3cWI-SWP-module-oop-student-b-021',
+      { index: 0, levels: ['2026-3cWI-SWP', 'module-oop'], label: 'student-b-021' },
     ],
     [
       'a group that did not take part is skipped',

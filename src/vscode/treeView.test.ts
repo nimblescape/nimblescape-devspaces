@@ -232,7 +232,7 @@ describe('nodes of the setting repositoryGroups', () => {
   beforeEach(() => resetFakeVscode());
 
   function groupedModel(): OwnerGroup[] {
-    const names = ['2026-3cWI-SWP-module-oop-EnesHA81', '2026-3cWI-SWP-module-oop-felix-he021', '2025-3bWI-SWP-module-oop-hailo'];
+    const names = ['2026-3cWI-SWP-module-oop-Student-A81', '2026-3cWI-SWP-module-oop-student-b-021', '2025-3bWI-SWP-module-oop-student-c'];
     return buildTreeModel({
       discovery: {
         version: 1,
@@ -245,7 +245,7 @@ describe('nodes of the setting repositoryGroups', () => {
         withoutConfiguration: [],
       },
       settings: { owners: [], includeArchived: false, includeForks: true },
-      devspaces: [{ ...env, repository: 'school/2026-3cWI-SWP-module-oop-EnesHA81' }],
+      devspaces: [{ ...env, repository: 'school/2026-3cWI-SWP-module-oop-Student-A81' }],
       runtime: new Map([['e1', { container: 'running', volume: true }]]),
       currentDevspaceId: 'e1',
       otherWindowDevspaceIds: new Set(),
@@ -297,14 +297,14 @@ describe('nodes of the setting repositoryGroups', () => {
     expect(provider.getTreeItem(y2025)).toMatchObject({ label: '2025-3bWI-SWP', collapsibleState: 1 });
     expect(provider.getTreeItem(y2026)).toMatchObject({ label: '2026-3cWI-SWP', collapsibleState: 2 });
     const [module] = provider.getChildren(y2026) as GroupNode[];
-    const [enes, felix] = provider.getChildren(module) as RepositoryRow[];
-    const item = provider.getTreeItem(enes) as unknown as TreeItem;
-    expect(item).toMatchObject({ label: 'EnesHA81', id: 'repo:school/2026-3cwi-swp-module-oop-enesha81', collapsibleState: 0 });
-    expect(item.tooltip).toContain('school/2026-3cWI-SWP-module-oop-EnesHA81');
-    expect((item.accessibilityInformation as { label: string }).label).toContain('school/2026-3cWI-SWP-module-oop-EnesHA81');
-    expect((provider.getTreeItem(felix) as unknown as TreeItem).label).toBe('felix-he021');
+    const [studentA, studentB] = provider.getChildren(module) as RepositoryRow[];
+    const item = provider.getTreeItem(studentA) as unknown as TreeItem;
+    expect(item).toMatchObject({ label: 'Student-A81', id: 'repo:school/2026-3cwi-swp-module-oop-student-a81', collapsibleState: 0 });
+    expect(item.tooltip).toContain('school/2026-3cWI-SWP-module-oop-Student-A81');
+    expect((item.accessibilityInformation as { label: string }).label).toContain('school/2026-3cWI-SWP-module-oop-Student-A81');
+    expect((provider.getTreeItem(studentB) as unknown as TreeItem).label).toBe('student-b-021');
     // Reveal walks up from any row to the owner group.
-    expect(provider.getParent(enes)).toBe(module);
+    expect(provider.getParent(studentA)).toBe(module);
     expect(provider.getParent(module)).toBe(y2026);
     expect(provider.getParent(y2026)).toBe(root);
     expect(provider.getParent(root)).toBe(owner);

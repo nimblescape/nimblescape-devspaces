@@ -2,6 +2,8 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import type { DiscoveryData, Devspace, RepositoryInfo } from '../core/types';
 import { parseRepositoryGroups } from './repositoryGroups';
@@ -33,6 +35,7 @@ import {
 import { buildTreeModel, type GroupNode, type HintRow, type RepositoryEntry, type TreeInput } from './treeModel';
 
 const EXAMPLE = String.raw`^(\d{4}-[^-]+-[^-]+)-([^-]+-[^-]+)-(.+)$`;
+const ROOT = path.join(__dirname, '..', '..');
 const T0 = '2026-09-24T17:00:00.000Z';
 
 const entry = (pattern: string, name = '', flags = ''): EditorEntry => ({ name, pattern, flags });
@@ -199,9 +202,9 @@ describe('checks of the entries', () => {
 
 describe('preview', () => {
   const STUDENTS = [
-    repo('school/2026-3cWI-SWP-module-oop-EnesHA81'),
-    repo('school/2026-3cWI-SWP-module-oop-felix-he021'),
-    repo('school/2025-3bWI-SWP-module-oop-hailo'),
+    repo('school/2026-3cWI-SWP-module-oop-Student-A81'),
+    repo('school/2026-3cWI-SWP-module-oop-student-b-021'),
+    repo('school/2025-3bWI-SWP-module-oop-student-c'),
     repo('school/website'),
     repo('school/notes'),
     repo('acme/api'),
@@ -232,12 +235,12 @@ describe('preview', () => {
       keptWithDevspace: ['notes'],
     });
     expect(previewShape(school.tree)).toEqual([
-      ['2025-3bWI-SWP', [['module-oop', ['hailo']]]],
-      ['2026-3cWI-SWP', [['module-oop', ['EnesHA81', 'felix-he021']]]],
+      ['2025-3bWI-SWP', [['module-oop', ['student-c']]]],
+      ['2026-3cWI-SWP', [['module-oop', ['Student-A81', 'student-b-021']]]],
       'notes',
     ]);
-    const felix = (school.tree[1].children ?? [])[0].children?.[1];
-    expect(felix).toEqual({ kind: 'repository', label: 'felix-he021', detail: '2026-3cWI-SWP-module-oop-felix-he021' });
+    const studentB = (school.tree[1].children ?? [])[0].children?.[1];
+    expect(studentB).toEqual({ kind: 'repository', label: 'student-b-021', detail: '2026-3cWI-SWP-module-oop-student-b-021' });
     expect(school.tree[2]).toEqual({ kind: 'repository', label: 'notes', devspace: true });
 
     // The preview is the model of the sidebar after Save: buildTreeModel with the parsed setting value.
@@ -249,22 +252,22 @@ describe('preview', () => {
 
   it('shows a repository with several sources as one node of the preview, with the devspace of a child row', () => {
     const python = '.devcontainer/python/devcontainer.json';
-    const hailo = { ...repo('school/2026-3cWI-SWP-module-oop-hailo'), configPaths: ['.devcontainer/devcontainer.json', python] };
-    const base = input({ discovery: discovery([hailo, ...STUDENTS]), devspaces: [{ ...devspace('e1', hailo.nameWithOwner), configPath: python }] });
+    const studentC = { ...repo('school/2026-3cWI-SWP-module-oop-student-c'), configPaths: ['.devcontainer/devcontainer.json', python] };
+    const base = input({ discovery: discovery([studentC, ...STUDENTS]), devspaces: [{ ...devspace('e1', studentC.nameWithOwner), configPath: python }] });
     const entries = [entry(EXAMPLE)];
     const preview = buildGroupsPreview(base, entries);
     const school = preview.owners[1];
     expect(school).toMatchObject({ total: 6, counts: [4], keptWithDevspace: [] });
     expect(previewShape(school.tree)).toEqual([
-      ['2025-3bWI-SWP', [['module-oop', ['hailo']]]],
-      ['2026-3cWI-SWP', [['module-oop', ['EnesHA81', 'felix-he021', 'hailo']]]],
+      ['2025-3bWI-SWP', [['module-oop', ['student-c']]]],
+      ['2026-3cWI-SWP', [['module-oop', ['Student-A81', 'student-b-021', 'student-c']]]],
     ]);
     const node = (school.tree[1].children ?? [])[0].children?.[2];
-    expect(node).toEqual({ kind: 'repository', label: 'hailo', detail: '2026-3cWI-SWP-module-oop-hailo', devspace: true });
+    expect(node).toEqual({ kind: 'repository', label: 'student-c', detail: '2026-3cWI-SWP-module-oop-student-c', devspace: true });
     const sidebar = buildTreeModel({ ...base, repositoryGroups: parseRepositoryGroups(toSettingValue(entries)).patterns });
     expect(preview.owners.map((owner) => previewShape(owner.tree))).toEqual(sidebar.map((group) => modelShape(group.children)));
     // Without the groups, the node counts as one repository of the list.
-    expect(previewShape(buildGroupsPreview(base, []).owners[1].tree)).toContain('2026-3cWI-SWP-module-oop-hailo');
+    expect(previewShape(buildGroupsPreview(base, []).owners[1].tree)).toContain('2026-3cWI-SWP-module-oop-student-c');
   });
 
   it('shows a named root with its pattern, and counts per entry (the first entry that matches wins)', () => {
@@ -284,9 +287,9 @@ describe('preview', () => {
     const preview = buildGroupsPreview(input({ discovery: discovery(STUDENTS) }), []);
     expect(preview.owners.every((owner) => !owner.grouped && owner.hidden.length === 0)).toBe(true);
     expect(previewShape(preview.owners[1].tree)).toEqual([
-      '2025-3bWI-SWP-module-oop-hailo',
-      '2026-3cWI-SWP-module-oop-EnesHA81',
-      '2026-3cWI-SWP-module-oop-felix-he021',
+      '2025-3bWI-SWP-module-oop-student-c',
+      '2026-3cWI-SWP-module-oop-Student-A81',
+      '2026-3cWI-SWP-module-oop-student-b-021',
       'notes',
       'website',
     ]);
@@ -303,20 +306,20 @@ describe('preview', () => {
 
 describe('test of a repository name', () => {
   it('names the entry that matches and the place of the row', () => {
-    expect(testRepositoryName([entry('^web-'), entry(EXAMPLE)], '2026-3cWI-SWP-module-oop-EnesHA81')).toEqual({
+    expect(testRepositoryName([entry('^web-'), entry(EXAMPLE)], '2026-3cWI-SWP-module-oop-Student-A81')).toEqual({
       matched: true,
       entryIndex: 1,
       text: GroupsEditorTexts.testMatch(2, undefined),
-      path: ['2026-3cWI-SWP', 'module-oop', 'EnesHA81'],
+      path: ['2026-3cWI-SWP', 'module-oop', 'Student-A81'],
     });
   });
 
   it('starts the path with the owner and the name of the entry', () => {
-    expect(testRepositoryName([entry(EXAMPLE, 'Students')], ' school/2025-3bWI-SWP-module-oop-hailo ')).toMatchObject({
+    expect(testRepositoryName([entry(EXAMPLE, 'Students')], ' school/2025-3bWI-SWP-module-oop-student-c ')).toMatchObject({
       matched: true,
       entryIndex: 0,
       text: 'Entry 1 ("Students") matches.',
-      path: ['school', 'Students', '2025-3bWI-SWP', 'module-oop', 'hailo'],
+      path: ['school', 'Students', '2025-3bWI-SWP', 'module-oop', 'student-c'],
     });
   });
 
@@ -324,6 +327,14 @@ describe('test of a repository name', () => {
     expect(testRepositoryName([entry('('), entry('^web-')], 'api')).toEqual({ matched: false, text: GroupsEditorTexts.testNoMatch, path: [] });
     expect(testRepositoryName([entry(EXAMPLE)], '   ')).toBeUndefined();
     expect(testRepositoryName([entry(EXAMPLE)], 'two words')).toEqual({ matched: false, text: GroupsEditorTexts.testInvalid, path: [] });
+  });
+
+  // The hint for a name that is not valid uses the example of the user guide, which has made-up names.
+  it('shows the example of the user guide in the hint for a name that is not valid', () => {
+    const example = '2026-web-1a-module-html-css';
+    expect(GroupsEditorTexts.testInvalid).toContain(`for example ${example} or owner/name.`);
+    expect(fs.readFileSync(path.join(ROOT, 'docs', 'guide.md'), 'utf8')).toContain(`\`${example}\``);
+    expect(testRepositoryName([entry(EXAMPLE)], example)).toMatchObject({ matched: true, path: ['2026-web-1a', 'module-html', 'css'] });
   });
 });
 
@@ -531,10 +542,10 @@ describe('preview job (worker thread)', () => {
     const messages: PreviewJobMessage[] = [];
     const entries = [entry('^x-'), entry('('), entry(EXAMPLE)];
     const input = cloneableInput(
-      input_({ discovery: discovery([repo('school/2025-3bWI-SWP-module-oop-hailo')]), formatTime: () => 'never cloned' }),
+      input_({ discovery: discovery([repo('school/2025-3bWI-SWP-module-oop-student-c')]), formatTime: () => 'never cloned' }),
     );
     expect(input && 'formatTime' in input).toBe(false);
-    runPreviewJob({ id: 7, entries, testName: 'school/2026-3cWI-SWP-module-oop-EnesHA81', input }, (message) => messages.push(message));
+    runPreviewJob({ id: 7, entries, testName: 'school/2026-3cWI-SWP-module-oop-Student-A81', input }, (message) => messages.push(message));
     expect(messages.map((message) => [message.type, message.type === 'probe' ? message.entryIndex : undefined])).toEqual([
       ['probe', 0],
       ['probe', 2],
@@ -543,7 +554,7 @@ describe('preview job (worker thread)', () => {
     ]);
     expect(messages.every((message) => message.id === 7)).toBe(true);
     expect(messages[2]).toMatchObject({ preview: { loaded: true, owners: [{ owner: 'school', counts: [0, 0, 1] }] } });
-    expect(messages[3]).toMatchObject({ test: { matched: true, path: ['school', '2026-3cWI-SWP', 'module-oop', 'EnesHA81'] } });
+    expect(messages[3]).toMatchObject({ test: { matched: true, path: ['school', '2026-3cWI-SWP', 'module-oop', 'Student-A81'] } });
     // The messages can be sent to another thread (structured clone).
     expect(structuredClone(messages)).toEqual(messages);
   });
