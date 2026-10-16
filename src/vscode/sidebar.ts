@@ -452,13 +452,17 @@ export class Sidebar implements vscode.Disposable {
    * The model with the setting repositoryGroups. Its regular expressions run in the worker thread with a time limit
    * (groupMatcher.ts), never on the extension host: a nested repetition such as `(a+)+` can take seconds for one name.
    * The places of the names are kept until the setting changes, and only names without a place go to the worker. When
-   * the worker takes too long or fails, the view lists the repositories without groups until the setting changes, and
-   * says so once.
+   * an entry takes too long or the worker fails, the view lists the repositories without groups until the setting
+   * changes, and says so once.
    */
   private async groupedModel(input: TreeInput, groups: { entries: readonly unknown[]; patterns: RepositoryGroupPattern[] }): Promise<OwnerGroup[]> {
     const plain = buildTreeModel({ ...input, repositoryGroups: [] });
     const { entries, patterns } = groups;
-    if (patterns.length === 0) return plain;
+    if (patterns.length === 0) {
+      // Without groups, the kept places are not needed; a value that is set again runs again.
+      this.groupPlaces = undefined;
+      return plain;
+    }
     const key = JSON.stringify(entries);
     if (this.groupPlaces?.key !== key) this.groupPlaces = { key, places: new Map() };
     const state = this.groupPlaces;
@@ -466,6 +470,7 @@ export class Sidebar implements vscode.Disposable {
     const missing = [...new Set(repositoryEntriesOf(plain).map((entry) => entry.name))].filter((name) => !state.places.has(name));
     if (!state.off && missing.length > 0) {
       const run = await this.deps.groupMatcher.run(entries, missing);
+      if (this.disposed) return plain;
       if ('places' in run) {
         for (const [name, place] of run.places) state.places.set(name, place);
         for (const pattern of patterns) pattern.failure ??= run.failures.get(pattern.index);

@@ -24,6 +24,7 @@ import {
   type SidebarDeps,
 } from './sidebar';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
+import type { GroupMatchRun } from './groupMatcher';
 import { inThreadGroupMatcher, type InThreadGroupMatcher } from './testing/inThreadGroupMatcher';
 import { parseRepositoryGroups } from './repositoryGroups';
 import { buildGroupsPreview, entriesFromSetting } from './repositoryGroupsEditorModel';
@@ -927,14 +928,14 @@ describe('Sidebar progressive display', () => {
   it('renders when an entry of repositoryGroups throws while it is matched, and logs that once', async () => {
     h.discovery.refresh.mockResolvedValue(data([info('acme/web-shop'), info('acme/aaaa')]));
     h.settings.repositoryGroups = ['(?:(?:a?){10000}){3000}', '^(web)-(.+)$'];
-    await signedIn();
-    // The stack overflow of that pattern, without the time it takes.
+    // The stack overflow of that pattern, without the time it takes; already for the first render.
     const original = RegExp.prototype.exec;
     const exec = vi.spyOn(RegExp.prototype, 'exec').mockImplementation(function (this: RegExp, text: string) {
       if (this.source.startsWith('(?:(?:a?)')) throw new RangeError('Maximum call stack size exceeded');
       return original.call(this, text);
     });
     try {
+      await signedIn();
       await h.sidebar.render();
       await h.sidebar.render();
     } finally {
@@ -1026,6 +1027,38 @@ describe('Sidebar progressive display', () => {
     expect(warnings).toEqual([
       'The repository groups of the setting devspaces.repositoryGroups could not be applied, because the worker thread of Devspaces failed. The view lists the repositories without groups until you change the setting or reload the window.',
     ]);
+  });
+
+  it('runs a value of repositoryGroups again when it is set again after a value without entries', async () => {
+    h.discovery.refresh.mockResolvedValue(data([info('acme/web-shop')]));
+    await signedIn();
+    const value = ['^(web)-(.+)$', String.raw`^(\w+)+$`];
+    h.settings.repositoryGroups = value;
+    h.groupMatcher.result = { tooSlow: true, slowEntry: 1 };
+    await h.sidebar.render();
+    expect(rows().map((row) => row.label)).toEqual(['web-shop']);
+    h.settings.repositoryGroups = [];
+    await h.sidebar.render();
+    h.groupMatcher.result = undefined;
+    h.settings.repositoryGroups = value;
+    await h.sidebar.render();
+    expect(h.groupMatcher.runs).toHaveLength(2);
+    expect(rows().map((row) => row.label)).toEqual(['shop']);
+  });
+
+  it('shows no warning about the groups when the view ends while the worker runs', async () => {
+    h.discovery.refresh.mockResolvedValue(data([info('acme/web-shop')]));
+    await signedIn();
+    let answer: (run: GroupMatchRun) => void = () => undefined;
+    vi.spyOn(h.groupMatcher, 'run').mockImplementation(() => new Promise<GroupMatchRun>((resolve) => (answer = resolve)));
+    h.settings.repositoryGroups = ['^(web)-(.+)$'];
+    const rendered = h.sidebar.render();
+    await vi.waitFor(() => expect(h.groupMatcher.run).toHaveBeenCalled());
+    h.sidebar.dispose();
+    answer({ failed: true });
+    await rendered;
+    expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
+    expect(h.logger.warn).not.toHaveBeenCalled();
   });
 
   it('shows no part of a first load that failed', async () => {
