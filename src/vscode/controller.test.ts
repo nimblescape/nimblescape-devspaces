@@ -3357,6 +3357,47 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     }
   });
 
+  // Never two windows on one devspace. Mutation: a check of the connected windows only (devspaceId) opens a second one.
+  it('a Start in another window shows the window that works without Devspaces on the devspace, and opens no second one', async () => {
+    const env = devspace();
+    await h.registry.add(env);
+    await h.engineRecords.setRemoved('', NOW - 1000);
+    h.coordinator.otherActiveWindows.mockResolvedValue([
+      { windowId: OTHER_WINDOW_ID, pid: OTHER_PID, devspaceId: null, plainDevspaceId: ENV_ID, state: 'active', updatedAt: iso(NOW) },
+    ]);
+    await run('start', row('acme/api', env));
+    await run('startInNewWindow', row('acme/api', env));
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    expect(h.coordinator.writePending).not.toHaveBeenCalled();
+    // That window is shown: VS Code shows the window that has the folder open.
+    expect(h.connection.open.mock.calls).toEqual([[CONTAINER, '/workspaces/api']]);
+    expect(h.connection.openInNewWindow.mock.calls).toEqual([[CONTAINER, '/workspaces/api']]);
+    expect(h.logger.info).toHaveBeenCalledWith('acme/api is open in another window. That window is shown.');
+    // Nothing was set up there: the mark stays.
+    expect(await h.engineRecords.removed('')).toBe(true);
+  });
+
+  // Mutation: without the own plain devspace as a Reconnect, Start in New Window (or the setting openInNewWindow) opens
+  // a second window on the devspace.
+  it('a Start of its own devspace in a window that works without Devspaces connects this window, never a new one', async () => {
+    for (const how of ['startInNewWindow', 'setting'] as const) {
+      recreateHarness({});
+      const env = devspace();
+      await h.registry.add(env);
+      await h.engineRecords.setRemoved('', NOW - 1000);
+      await h.controller.workWithoutDevspaces(env, CONTAINER);
+      pipelineStartsContainer();
+      if (how === 'setting') h.settings.openInNewWindow = true;
+      await run(how === 'setting' ? 'start' : 'startInNewWindow', row('acme/api', env));
+      expect(h.service.openDevspaceInWorker, how).toHaveBeenCalledWith(ENV_ID, expect.anything());
+      expect(h.connection.openInNewWindow, how).not.toHaveBeenCalled();
+      expect(h.connection.open.mock.calls, how).toEqual([[CONTAINER, '/workspaces/api']]);
+      expect(h.logger.info).toHaveBeenCalledWith('This window works without Devspaces on acme/api. The Start sets Devspaces up there again and connects this window.');
+      // The Start of the user sets Devspaces up there again.
+      expect(await h.engineRecords.removed(''), how).toBe(false);
+    }
+  });
+
   it('Stop and Delete of another window ask a window that works without Devspaces on the devspace; it hands off', async () => {
     const env = devspace();
     await h.registry.add(env);

@@ -108,10 +108,19 @@ function isFreshTime(time: string, now: number, maxAgeMs: number): boolean {
 }
 
 /**
+ * Whether the status file `status` names the devspace `devspaceId`: the window is connected to it, or works without
+ * Devspaces on it on an engine with the removal mark (WindowStatus.plainDevspaceId).
+ */
+export function statusNamesDevspace(status: Pick<WindowStatus, 'devspaceId' | 'plainDevspaceId'>, devspaceId: string): boolean {
+  return status.devspaceId === devspaceId || status.plainDevspaceId === devspaceId;
+}
+
+/**
  * What shows that a window other than `ownWindowId` uses the devspace `devspaceId` (without the sleep grace), as
- * SessionCoordinator.otherActiveWindows filters: a status file of another window that names the devspace, in the state
- * `active`, whose process exists, updated at most HEARTBEAT_MAX_AGE_MS ago; or a pending connection file of another window
- * for it, at most PENDING_MAX_AGE_MS old. `undefined`: none (also for files that could not be read).
+ * SessionCoordinator.otherActiveWindows filters: a status file of another window that names the devspace
+ * (statusNamesDevspace, also a window that works without Devspaces on it), in the state `active`, whose process exists,
+ * updated at most HEARTBEAT_MAX_AGE_MS ago; or a pending connection file of another window for it, at most
+ * PENDING_MAX_AGE_MS old. `undefined`: none (also for files that could not be read).
  */
 export function otherWindowUsesDevspace(
   devspaceId: string,
@@ -121,7 +130,7 @@ export function otherWindowUsesDevspace(
   const window = (input.windowStatuses ?? []).find(
     (status) =>
       status.windowId !== ownWindowId &&
-      status.devspaceId === devspaceId &&
+      statusNamesDevspace(status, devspaceId) &&
       status.state === 'active' &&
       isFreshTime(status.updatedAt, input.now, HEARTBEAT_MAX_AGE_MS) &&
       input.isAlive(status.pid),
@@ -179,7 +188,7 @@ export function otherWindowMayUseDevspace(
   return (input.windowStatuses ?? []).find(
     (status) =>
       status.windowId !== ownWindowId &&
-      status.devspaceId === devspaceId &&
+      statusNamesDevspace(status, devspaceId) &&
       status.state === 'active' &&
       input.isAlive(status.pid) &&
       !isFreshTime(status.updatedAt, input.now, HEARTBEAT_MAX_AGE_MS) &&

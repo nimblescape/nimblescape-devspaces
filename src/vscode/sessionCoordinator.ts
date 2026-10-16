@@ -491,8 +491,9 @@ export class SessionCoordinator implements vscode.Disposable {
   private async writeActiveStatus(devspaceId: string | null): Promise<boolean> {
     if (this.stopped) return false;
     const generation = ++this.writeGeneration;
-    const dockerContext = devspaceId === null ? undefined : this.deps.windowDockerContext?.();
     const plainDevspaceId = this.plainDevspaceId;
+    // Also for a window that works without Devspaces: another window that shows it opens exactly its URI.
+    const dockerContext = devspaceId === null && plainDevspaceId === null ? undefined : this.deps.windowDockerContext?.();
     const status: WindowStatus = {
       windowId: this.windowId,
       pid: this.pid,

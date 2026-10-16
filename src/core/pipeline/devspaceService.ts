@@ -7,7 +7,7 @@
 // state first and does nothing when its result exists, so the pipeline can run again at any time.
 import * as path from 'path';
 import { deleteCheck, type DeleteDecision, type RemovableVolumes } from './deleteCheck';
-import { otherWindowMayUseDevspace, otherWindowUsesDevspace, sleepGraceOfWindow, WINDOW_STATUS_SLACK_MS } from '../busy';
+import { otherWindowMayUseDevspace, otherWindowUsesDevspace, sleepGraceOfWindow, statusNamesDevspace, WINDOW_STATUS_SLACK_MS } from '../busy';
 import type { ContainerInfo, ImageInfo, NetworkInfo, VolumeInfo } from '../docker/dockerObjects';
 import { isValidToken, redact } from '../helperChannel/protocol';
 import { runScript, scriptCommand } from '../worker/containerScripts';
@@ -4745,7 +4745,7 @@ export class DevspaceService extends OperationBase {
     // Whether the processes of the windows run is asked first (in the worker, the extension answers). Only for the
     // windows that the rules can count (another window, active, of this devspace), and none when no status file
     // counts: a pid not asked counts as running, but is never looked at.
-    const candidates = (windowStatuses ?? []).filter((status) => status.windowId !== this.deps.owner.windowId && status.devspaceId === env.id && status.state === 'active');
+    const candidates = (windowStatuses ?? []).filter((status) => status.windowId !== this.deps.owner.windowId && statusNamesDevspace(status, env.id) && status.state === 'active');
     const isAlive = await this.processesAlive((check?.runs === false ? [] : candidates).map((status) => status.pid));
     const other = otherWindowUsesDevspace(env.id, this.deps.owner.windowId, { now, isAlive, windowStatuses: windows, pendings });
     if (other !== undefined) {
