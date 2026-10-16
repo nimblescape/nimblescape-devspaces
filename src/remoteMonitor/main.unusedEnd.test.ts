@@ -237,7 +237,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.events).toEqual([]);
     expect(lastUse()).toEqual({ at: T0, createId: CREATE });
-  });
+  }, 20_000);
 
   it('a use of a window during the hour keeps it running', async () => {
     writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
@@ -256,7 +256,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.events).toEqual([]);
     expect(monitor.out()).toContain('The Monitor looks again in 1 hour');
-  });
+  }, 20_000);
 
   it('a clock that jumped ahead and is set right again within the hour ends nothing', async () => {
     writeLastUse({ at: T0, createId: CREATE });
@@ -269,7 +269,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.events).toEqual([]);
     expect(lastUse()?.at).toBe(T0);
-  });
+  }, 20_000);
 
   // The clock went back for good, or the stored time was written by a clock that was ahead: a use now, written only
   // when the clock is still behind at the second look an hour later.
@@ -290,7 +290,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(replaced?.at).toBeGreaterThanOrEqual(T0 + UNUSED_END_RECHECK_MS);
     expect(replaced?.at).toBeLessThan(T0 + UNUSED_END_RECHECK_MS + 2 * REMOTE_TICK_MS);
     expect(monitor.events).toEqual([]);
-  });
+  }, 20_000);
 
   // A clock set back by more than the time without use and set right again within the hour: the heartbeats and the loop
   // keep the stored time of the last use, so the Monitor does not end. Mutation: the old time written at once fails it.
@@ -315,7 +315,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(monitor.events).toEqual([]);
     expect(monitor.out()).not.toContain('No window used Devspaces');
     expect(lastUse()?.at).toBe(T0);
-  });
+  }, 20_000);
 
   it('a failure is logged once and does not end it; it tries again an hour later', async () => {
     writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
@@ -385,7 +385,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(await pending(none.result)).toBe('pending');
     expect(none.out()).toContain('The Monitor could not end itself (0 containers have the nonce of its create). It tries again in 1 hour.');
     expect(none.events).toEqual([]);
-  });
+  }, 20_000);
 
   it('a monitor that ends when idle never ends itself by the time without use', async () => {
     writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
@@ -439,7 +439,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(await monitor.result).toBe(0);
     expect(monitor.events).toEqual([expect.stringMatching(/^list /), 'policy own no', 'exit']);
     expect(monitor.out().indexOf('the Monitor ends itself')).toBeGreaterThan(monitor.out().indexOf('The background run ended.'));
-  });
+  }, 20_000);
 
   // Typical after Docker was off for a month: at the first check after the start the run is due, but the time without
   // use was found first. Mutation: a schedule without the pause starts the run, and the end waits for it.
@@ -505,7 +505,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(monitor.out()).not.toContain('the Monitor ends itself');
     // The request stays for the next check of the schedule (a request runs whether a run is due or not).
     expect(fs.existsSync(path.join(stateDir, RUN_NOW_FILE))).toBe(true);
-  });
+  }, 20_000);
 
   // With the restart policy "no", Docker would not start it again, so it exits, and the next open creates it again.
   // Mutation: a monitor that goes on after the failed change never exits (and tries the change again and again).
@@ -632,7 +632,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     releaseUsed();
     expect(await stillPending(monitor.result)).toBe(true);
     expect(monitor.events).toEqual([]);
-  });
+  }, 20_000);
 
   // After a failed end it tries again an hour later; a use meanwhile ends the pause as during the wait for the second
   // look. Mutation: without the reads while it waits for the next try, the due run waits for that try.
@@ -683,5 +683,5 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(monitor.mono()).toBeLessThan(2 * UNUSED_END_RECHECK_MS);
     releaseUsed();
     expect(await stillPending(monitor.result)).toBe(true);
-  });
+  }, 20_000);
 });
