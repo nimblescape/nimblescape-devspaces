@@ -523,11 +523,13 @@ function needsLogin(registry: string, error: unknown): boolean {
 
 /**
  * The registry did not find the image, in Docker's words: `manifest unknown` and `name unknown` (Docker without the
- * containerd image store), `<reference>: not found` (the containerd image store). Not the status alone: the daemon
- * answers 404 also for failures that a login cannot mend.
+ * containerd image store), `failed to resolve reference "<reference>": <reference>: not found` (the resolver of the
+ * containerd image store). Not the status alone, and not any `not found`: the daemon answers 404 also for failures
+ * that a login cannot mend, and the containerd image store ends other failures with `not found` too, for example an
+ * image without a variant for the platform of the engine (`no match for platform in manifest: not found`).
  */
 function isNotFound(error: unknown): boolean {
-  return /manifest unknown|name unknown|: not found(:|$)/i.test(errorMessage(error));
+  return /manifest unknown|name unknown|failed to resolve reference "[^"]*": \S+: not found(:|$)/i.test(errorMessage(error));
 }
 
 /** A refusal by the registry (HTTP 401 or 403, or Docker's words for it): without a login, or of the login. */

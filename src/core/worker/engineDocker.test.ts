@@ -480,6 +480,10 @@ describe('the Docker of the pipeline over the port', () => {
         ['ghcr.io/o/i:1', new EngineError('manifest unknown', 404), true],
         ['r.example/i:1', new EngineError('name unknown: repository name not known to registry', 500), true],
         ['ghcr.io/o/i:1', new EngineError('failed to resolve reference "ghcr.io/o/i:1": ghcr.io/o/i:1: not found', 500), true],
+        // Other failures of the containerd image store that end with `not found`, which a login cannot mend: an image
+        // without a variant for the platform of the engine, and a missing blob of the local content store.
+        ['mysql:5.7', new EngineError('no matching manifest for linux/arm64/v8 in the manifest list entries: no match for platform in manifest: not found', 500), false],
+        ['ghcr.io/o/i:1', new EngineError(`content sha256:${'a'.repeat(64)}: not found`, 500), false],
         // Docker Hub limits the pulls without a login more than those with one; another registry's limit is no reason.
         ['node:22', new EngineError('toomanyrequests: You have reached your unauthenticated pull rate limit. https://www.docker.com/increase-rate-limit', 500), true],
         ['docker.io/library/node:22', new EngineError('Too Many Requests', 429), true],
