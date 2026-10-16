@@ -311,11 +311,14 @@ export class Controller implements vscode.Disposable {
   private readonly timers = new Set<NodeJS.Timeout>();
   private current: WindowDevspace | undefined;
   /**
-   * This window runs the open pipeline of role A (openAttachedWindow), so a restore of the registry never adopts a
-   * devspace for it; `adoption`: the adoption that runs; `adopted`: an adoption found the devspace of this window
-   * (it took it or left it), so no later restore adopts it again.
+   * This window runs the open pipeline of role A (openAttachedWindow), or works without Devspaces on an engine with the
+   * removal mark (workWithoutDevspaces), so a restore of the registry never adopts a devspace for it; `adoption`: the
+   * adoption that runs; `adopted`: an adoption found the devspace of this window (it took it or left it), so no later
+   * restore adopts it again.
    */
   private attaching = false;
+  /** workWithoutDevspaces said it (once per window). */
+  private toldWithoutDevspaces = false;
   private adoption: Promise<void> | undefined;
   private adopted = false;
   /** See `LeftDevspace`; checked until the window has closed its connection (`checkLeftConnection`). */
@@ -517,16 +520,23 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Role A on an engine with the removal mark ("Remove Devspaces from This Docker Engine…"): VS Code restored this
-   * window of a devspace that the user kept there, or Open Recent opened it. The window does not use the devspace: its
-   * open and its heartbeats would set Devspaces up there again (extension.ts starts the session of this window without
-   * it). It closes its remote connection with a message; a Start there sets Devspaces up again.
+   * window of a devspace that the user kept there, Open Recent opened it, or the user attached to its container by
+   * hand, for example to save changes that are not pushed. The window stays connected and works as a plain container
+   * window: no open pipeline and no Docker work, and its session runs without the devspace (extension.ts), so no
+   * heartbeat (whose repair would create the Monitor again) and no stop on close. One line in the log and one
+   * information message, once per window. A Start of the devspace sets Devspaces up there again.
    */
-  async leaveRemovedEngine(devspace: Devspace): Promise<void> {
+  workWithoutDevspaces(devspace: Devspace): void {
+    // Nor does a restore of the registry adopt the devspace for this window.
     this.attaching = true;
+    if (this.toldWithoutDevspaces) return;
+    this.toldWithoutDevspaces = true;
     const repository = this.shownName(this.devspaceTarget(devspace));
     const engine = describeDockerHost(dockerHostOf(devspace));
-    this.logger.info(`This window does not connect to ${repository}: Devspaces was removed from ${engine}. A Start there sets it up again.`);
-    await this.leaveDevspace(ControllerTexts.windowOnRemovedEngine(repository, engine));
+    this.logger.info(
+      `This window of ${repository} works without Devspaces: Devspaces was removed from ${engine}. No background updates and no stop on close; a Start of ${repository} sets Devspaces up there again.`,
+    );
+    this.inform(ControllerTexts.windowOnRemovedEngine(engine));
   }
 
   private async openAttachedDevspace(
