@@ -1120,15 +1120,21 @@ export class Controller implements vscode.Disposable {
    * "Update All Images Now": the Monitor of the Docker engine of this operation (the sidebar's) is made sure
    * and asked for its background run at once (the images in use, the VS Code server and the extensions), with a
    * progress until it took the request; then a message. The run itself is not waited for (it can take long); the
-   * monitor never runs two at once. A failure is shown by the command (registerCommands).
+   * monitor never runs two at once. A failure is shown by the command (registerCommands). A target that is not
+   * supported (an endpoint that is neither local nor SSH, a context that cannot be read, or Podman) is refused with its
+   * message, before the question about the Monitor (beforeUserFlow) and before any progress. Before all of this, the
+   * flow is refused while this window removes Devspaces from an engine (refusedWhileRemoving), as Start is.
    */
   async updateImagesNow(): Promise<void> {
     const update = this.deps.updateImagesNow;
     if (!update) return;
     await this.ready;
-    // The question about the Monitor of the engine first, which the request makes sure of.
-    if (!(await this.beforeUserFlow('Update All Images Now'))) return;
+    // Not while this window removes Devspaces from an engine (told), as for Start.
+    if (this.refusedWhileRemoving('Update All Images Now')) return;
     const target = await this.operationTarget();
+    if (target.kind === 'unsupported') throw dockerEndpointUnsupported(target);
+    // The question about the Monitor of the engine, which the request makes sure of; it reads only local records.
+    if (!(await this.beforeUserFlow('Update All Images Now'))) return;
     const engine = describeDockerHost(target.host);
     await runWithProgress({ title: ControllerTexts.requestingImageUpdate(engine), task: (_progress, signal) => update(target, signal) });
     this.logger.info(`The Monitor on ${engine} took the request of "Update All Images Now".`);

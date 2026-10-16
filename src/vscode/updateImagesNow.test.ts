@@ -12,8 +12,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
-import type { DockerTarget } from '../core/docker/dockerHost';
+import { dockerTargetOf, type DockerTarget } from '../core/docker/dockerHost';
+import { UNREADABLE_DOCKER_TARGET, podmanDockerTarget } from '../core/docker/dockerTargets';
 import { OP_MONITOR_RUN_NOW } from '../core/helperChannel/protocol';
+import { Messages } from '../core/messages';
 import { MONITOR_ENSURE_FLOW_TIMEOUT_MS, MONITOR_RUN_NOW_FLOW_TIMEOUT_MS } from '../core/pipeline/operationBase';
 import { silentLogger } from '../core/ports';
 import { Commands } from './commands';
@@ -80,6 +82,19 @@ describe('the command Update All Images Now', () => {
   it('a failure rejects (the command shows it) and says nothing of an update', async () => {
     const { controller } = controllerWith(REMOTE, async () => Promise.reject(new Error('The Monitor did not take the request: Usage')));
     await expect(controller.updateImagesNow()).rejects.toThrow('did not take the request');
+    expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Podman', podmanDockerTarget('docker --version: podman version 5.2.2'), Messages.podmanNotSupported],
+    ['a Docker context that cannot be read', UNREADABLE_DOCKER_TARGET, Messages.dockerContextUnreadable],
+    ['an endpoint that is neither local nor SSH', dockerTargetOf('tcp://10.0.0.5:2375', 'tcp-box'), Messages.dockerEndpointUnsupported('tcp://10.0.0.5:2375')],
+  ])('refuses %s with its message, without a progress and without the Monitor', async (_name, target, message) => {
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    const { controller } = controllerWith(target, update);
+    await expect(controller.updateImagesNow()).rejects.toMatchObject({ code: 'dockerEndpointUnsupported', message });
+    expect(update).not.toHaveBeenCalled();
+    expect(fakeVscode.window.withProgress).not.toHaveBeenCalled();
     expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
   });
 
