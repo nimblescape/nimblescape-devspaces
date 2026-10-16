@@ -895,6 +895,38 @@ describe('Sidebar progressive display', () => {
     }
   });
 
+  it('keeps the part of the first load when the next refreshes meet the rate limit at once', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const resetAt = NOW + 30 * 60_000;
+      const limited = new GitHubRateLimitError('GitHub refused the request for its rate limit: API rate limit exceeded', 200, resetAt);
+      let fail: (error: unknown) => void = () => undefined;
+      h.discovery.refresh.mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)));
+      h.discovery.refresh.mockRejectedValue(limited);
+      await h.sidebar.initialize();
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
+      h.sidebar.onPartialResult(part([info('acme/api'), info('acme/web')]));
+      fail(limited);
+      await h.sidebar.refreshDiscovery();
+      await h.sidebar.render();
+      const shown = ['acme/api', 'acme/web'];
+      expect(rows().map((row) => row.repository)).toEqual(shown);
+      // The Refresh command before that time: GitHub refuses it at once.
+      await h.sidebar.refreshDiscovery({ again: true });
+      await h.sidebar.render();
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
+      expect(rows().map((row) => row.repository)).toEqual(shown);
+      // The refresh at that time: GitHub refuses it at once too.
+      await vi.advanceTimersByTimeAsync(resetAt + RATE_LIMIT_MARGIN_MS - NOW);
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(3));
+      await h.sidebar.refreshDiscovery();
+      await h.sidebar.render();
+      expect(rows().map((row) => row.repository)).toEqual(shown);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('ignores a part of another account, of another scope, and after the refresh', async () => {
     let finish: (value: DiscoveryData) => void = () => undefined;
     h.discovery.refresh.mockImplementation(() => new Promise<DiscoveryData>((resolve) => (finish = resolve)));
