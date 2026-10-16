@@ -21,10 +21,19 @@ type Handler = (call: Call) => RunResult | Promise<RunResult>;
 class FakeRunner implements ProcessRunner {
   readonly calls: Call[] = [];
   constructor(private readonly handler: Handler) {}
+  /** As a real process: a call whose signal aborts ends with an AbortError. */
   async run(file: string, args: readonly string[], options: RunOptions = {}): Promise<RunResult> {
     const call = { file, args: [...args], options };
     this.calls.push(call);
-    return this.handler(call);
+    const { signal } = options;
+    if (signal?.aborted) throw abortError();
+    const answer = Promise.resolve(this.handler(call));
+    if (signal === undefined) return answer;
+    return new Promise<RunResult>((resolve, reject) => {
+      const onAbort = (): void => reject(abortError());
+      signal.addEventListener('abort', onAbort, { once: true });
+      answer.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+    });
   }
 }
 
@@ -60,8 +69,8 @@ interface Script {
   info: RunResult[];
   desktop?: (call: Call) => RunResult | Promise<RunResult>;
   open?: (call: Call) => RunResult | Promise<RunResult>;
-  /** `docker --version`. Default: the Docker CLI. */
-  cliVersion?: RunResult | Promise<RunResult>;
+  /** `docker --version`, or a function that answers each call. Default: the Docker CLI. */
+  cliVersion?: RunResult | Promise<RunResult> | (() => RunResult | Promise<RunResult>);
   /** `docker version --format '{{json .Server}}'`. Default: Docker Engine. */
   serverVersion?: RunResult;
 }
@@ -76,7 +85,7 @@ function setup(script: Script) {
       return result;
     }
     if (call.args[0] === 'desktop') return script.desktop ? script.desktop(call) : ok();
-    if (call.args[0] === '--version') return script.cliVersion ?? DOCKER_CLI_VERSION;
+    if (call.args[0] === '--version') return typeof script.cliVersion === 'function' ? script.cliVersion() : (script.cliVersion ?? DOCKER_CLI_VERSION);
     if (call.args[0] === 'version') return script.serverVersion ?? DOCKER_SERVER;
     throw new Error(`Unexpected call: ${call.file} ${call.args.join(' ')}`);
   });
@@ -177,12 +186,38 @@ describe('ensureDockerRunning', () => {
       const first = s.docker.podmanCli(cancel.signal);
       const second = s.docker.podmanCli();
       await vi.waitFor(() => expect(s.versionCalls()).toHaveLength(1));
+      // The shared call has no signal of a caller.
+      expect(s.versionCalls()[0].options.signal).toBeUndefined();
       cancel.abort();
       await expect(first).rejects.toMatchObject({ name: 'AbortError' });
       answer(ok('podman version 5.2.2\n'));
       await expect(second).resolves.toBe('docker --version: podman version 5.2.2');
       await expect(s.docker.podmanCli()).resolves.toBe('docker --version: podman version 5.2.2');
       expect(s.versionCalls()).toHaveLength(1);
+    });
+
+    it('gives the answer to the first caller when the second one, which shares the call, cancels', async () => {
+      let answer: (result: RunResult) => void = () => undefined;
+      const s = setup({ info: [READY], cliVersion: new Promise<RunResult>((resolve) => (answer = resolve)) });
+      const cancel = new AbortController();
+      const first = s.docker.podmanCli();
+      const second = s.docker.podmanCli(cancel.signal);
+      await vi.waitFor(() => expect(s.versionCalls()).toHaveLength(1));
+      cancel.abort();
+      await expect(second).rejects.toMatchObject({ name: 'AbortError' });
+      answer(ok('podman version 5.2.2\n'));
+      await expect(first).resolves.toBe('docker --version: podman version 5.2.2');
+      expect(s.versionCalls()).toHaveLength(1);
+    });
+
+    it('asks docker --version again after a call that failed or rejected', async () => {
+      const answers: Array<() => RunResult | Promise<RunResult>> = [() => fail('error during connect'), () => Promise.reject(abortError())];
+      const s = setup({ info: [READY], cliVersion: () => (answers.shift() ?? (() => ok('podman version 5.2.2\n')))() });
+      await expect(s.docker.podmanCli()).resolves.toBeUndefined();
+      await expect(s.docker.podmanCli()).rejects.toMatchObject({ name: 'AbortError' });
+      await expect(s.docker.podmanCli()).resolves.toBe('docker --version: podman version 5.2.2');
+      await expect(s.docker.podmanCli()).resolves.toBe('docker --version: podman version 5.2.2');
+      expect(s.versionCalls()).toHaveLength(3);
     });
   });
 
