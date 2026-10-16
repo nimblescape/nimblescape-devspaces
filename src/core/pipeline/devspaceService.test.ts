@@ -4173,7 +4173,7 @@ describe('refreshStates', () => {
     await seedTwo(h);
     const said = () => h.logger.warnings.filter((line) => line.includes('Devspaces was removed from the local Docker.')).length;
     for (let refresh = 0; refresh < 3; refresh += 1) {
-      expect(await h.operations.refreshStates(new Set([ENV_ID]))).toEqual({ runtime: undefined, branches: new Map() });
+      expect(await h.operations.refreshStates(new Set([ENV_ID]))).toEqual({ runtime: undefined, branches: new Map(), engineRemoved: true });
     }
     expect(workerRefresh).toHaveBeenCalledTimes(3);
     expect(said()).toBe(1);
@@ -4187,6 +4187,36 @@ describe('refreshStates', () => {
     await h.operations.refreshStates(new Set([ENV_ID]));
     await h.operations.refreshStates(new Set([ENV_ID]));
     expect(said()).toBe(2);
+  });
+
+  // "Remove Devspaces from This Docker Engine…": no `docker info` at each refresh of the sidebar there. Mutation: the
+  // check after dockerRunning fails it.
+  it('an engine with the removal mark: the refresh asks neither Docker nor the worker, says so once, and names the mark', async () => {
+    const workerRefresh = vi.fn(async (): Promise<DevspaceStates> => ({ runtime: new Map(), branches: new Map() }));
+    const dockerRunning = vi.fn(async () => true);
+    const engineRemoved = vi.fn(async (host: string) => host === '');
+    h = recreate({ workerRefresh, dockerRunning, engineRemoved });
+    await seedTwo(h);
+    for (let refresh = 0; refresh < 2; refresh += 1) {
+      expect(await h.operations.refreshStates(new Set([ENV_ID]))).toEqual({ runtime: undefined, branches: new Map(), engineRemoved: true });
+    }
+    expect(engineRemoved).toHaveBeenCalledWith('');
+    expect(dockerRunning).not.toHaveBeenCalled();
+    expect(workerRefresh).not.toHaveBeenCalled();
+    expect(h.logger.warnings.filter((line) => line.includes('Devspaces was removed from the local Docker.'))).toEqual([
+      'The state of the devspaces could not be read: Devspaces was removed from the local Docker. Nothing runs there by itself until a Start, a Rebuild or "Update All Images Now" there.',
+    ]);
+    // Without a devspace there, the mark is not even read.
+    h = recreate({ workerRefresh, dockerRunning, engineRemoved });
+    engineRemoved.mockClear();
+    expect(await h.operations.refreshStates(new Set())).toEqual({ runtime: new Map(), branches: new Map() });
+    expect(engineRemoved).not.toHaveBeenCalled();
+    // An engine without the mark: Docker and the worker are asked.
+    h = recreate({ workerRefresh, dockerRunning, engineRemoved: async () => false });
+    await seedTwo(h);
+    expect(await h.operations.refreshStates(new Set([ENV_ID]))).toEqual({ runtime: new Map(), branches: new Map() });
+    expect(dockerRunning).toHaveBeenCalledTimes(1);
+    expect(workerRefresh).toHaveBeenCalledTimes(1);
   });
 
   it('does not ask the worker when Docker does not run', async () => {

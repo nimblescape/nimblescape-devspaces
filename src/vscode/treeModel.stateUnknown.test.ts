@@ -75,7 +75,7 @@ describe('the state of the devspaces on an engine that the refresh could not rea
     expect(busy.stateUnknown).toBeUndefined();
   });
 
-  it('the reasons: not reachable, being built, a failed build, another cause; the local Docker is named Docker', () => {
+  it('the reasons: not reachable, being built, a failed build, another cause, the removal mark; the local Docker is named Docker', () => {
     expect(rows({ statesUnknown: { dockerHost: 'devspace', reason: 'unreachable' } }).remote.description).toBe('main   State unknown (devspace cannot be reached)');
     expect(rows({ statesUnknown: { dockerHost: 'devspace', reason: 'unreachable' } }).remote.tooltip).toContain('devspace cannot be reached, so the state of the devspace is not known.');
     expect(rows({ statesUnknown: { dockerHost: 'devspace', reason: 'buildFailed' } }).remote.tooltip).toContain(
@@ -83,6 +83,10 @@ describe('the state of the devspaces on an engine that the refresh could not rea
     );
     expect(rows({ statesUnknown: { dockerHost: 'devspace', reason: 'notReady' } }).remote.tooltip).toContain(
       'devspace not ready: the state could not be read (see the Devspaces output).',
+    );
+    expect(rows({ statesUnknown: { dockerHost: 'devspace', reason: 'removed' } }).remote.description).toBe('main   State unknown (Devspaces removed from devspace)');
+    expect(rows({ statesUnknown: { dockerHost: 'devspace', reason: 'removed' } }).remote.tooltip).toContain(
+      'Devspaces was removed from devspace, so the state of the devspace is not read. A Start of the devspace sets Devspaces up there again.',
     );
     const local = rows({ statesUnknown: { dockerHost: '', reason: 'building' } });
     expect(local.local.description).toBe('main   State unknown (Docker not ready)');

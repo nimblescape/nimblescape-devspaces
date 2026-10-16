@@ -56,7 +56,8 @@ export const TreeTexts = {
    * Why the state of the devspaces on an engine is unknown (StatesUnknown), in short words: in brackets after the
    * state text, for example `State unknown (devspace not ready)`.
    */
-  unknownShort: (engine: string, reason: StatesUnknownReason) => (reason === 'unreachable' ? `${engine} cannot be reached` : `${engine} not ready`),
+  unknownShort: (engine: string, reason: StatesUnknownReason) =>
+    reason === 'unreachable' ? `${engine} cannot be reached` : reason === 'removed' ? `Devspaces removed from ${engine}` : `${engine} not ready`,
   /** The tooltip line of a devspace whose state is unknown. */
   unknownDetail: (engine: string, reason: StatesUnknownReason) => {
     switch (reason) {
@@ -68,6 +69,8 @@ export const TreeTexts = {
         return `${engine} not ready: the helper image could not be built (see the Devspaces output). Start builds it.`;
       case 'notReady':
         return `${engine} not ready: the state could not be read (see the Devspaces output).`;
+      case 'removed':
+        return `Devspaces was removed from ${engine}, so the state of the devspace is not read. A Start of the devspace sets Devspaces up there again.`;
     }
   },
   /** Label of the sign-in row (the title of the command devspaces.signIn). */
@@ -90,9 +93,10 @@ export interface DevspaceRuntime {
 /**
  * Why the last refresh could not read the states on an engine. `unreachable`: the remote engine does not answer;
  * `building`: the engine answers, and its helper image is being built in the background (MissingHelperBuild);
- * `buildFailed`: its last background build failed; `notReady`: the worker could not read the states for another cause.
+ * `buildFailed`: its last background build failed; `notReady`: the worker could not read the states for another cause;
+ * `removed`: the engine has the removal mark of "Remove Devspaces from This Docker Engine…", so Docker is not asked.
  */
-export type StatesUnknownReason = 'unreachable' | 'building' | 'buildFailed' | 'notReady';
+export type StatesUnknownReason = 'unreachable' | 'building' | 'buildFailed' | 'notReady' | 'removed';
 
 /** The engine whose states the last refresh could not read, and why. */
 export interface StatesUnknown {

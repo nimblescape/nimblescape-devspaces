@@ -131,6 +131,11 @@ export interface DevspaceOperationsDeps extends OperationBaseDeps {
   /** Whether the Docker engine of the operation answers (Stop does nothing without it). */
   dockerRunning: () => Promise<boolean>;
   /**
+   * Whether the engine of the Docker host `host` has the removal mark of "Remove Devspaces from This Docker Engine…"
+   * (docker-engines.json): the refresh of the states asks Docker nothing there (refreshStates). False when not given.
+   */
+  engineRemoved?: (host: string) => Promise<boolean>;
+  /**
    * readDevspaceStates in the worker of the Docker target (HelperChannels.refresh); it makes the worker ready first,
    * and rejects when it cannot.
    */
@@ -607,11 +612,12 @@ export class DevspaceOperations extends OperationBase {
    * worker refresh that cannot be made or fails is never read directly: the refresh fails (logged, with the cause).
    * `runtime` is `undefined` when Docker does not run or the states could not be read; then there are no branches.
    * Without a devspace on the current Docker host there is nothing to read: empty maps, without `docker info` and
-   * without a worker.
+   * without a worker. On an engine with the removal mark (`engineRemoved`), Docker is not asked either (no `docker
+   * info`, no worker): `runtime` is `undefined`, with `engineRemoved`, so that the caller asks Docker nothing too.
    */
   async refreshStates(
     branchIds: ReadonlySet<string>,
-  ): Promise<{ runtime: Map<string, DevspaceRuntimeState> | undefined; branches: Map<string, string> }> {
+  ): Promise<{ runtime: Map<string, DevspaceRuntimeState> | undefined; branches: Map<string, string>; engineRemoved?: true }> {
     try {
       const readable = await this.readableDockerHost();
       if (readable === undefined) return { runtime: new Map(), branches: new Map() };
@@ -626,6 +632,8 @@ export class DevspaceOperations extends OperationBase {
       }));
       // No devspace here (for example before the first Start): Docker is not asked, and no worker is started for it.
       if (devspaces.length === 0) return { runtime: new Map(), branches: new Map() };
+      // Nor on an engine with the removal mark, until a flow of the user there clears it (below: said once).
+      if (await this.deps.engineRemoved?.(readable)) throw new RemovedEngineError(readable);
       if (!(await this.deps.dockerRunning())) return { runtime: undefined, branches: new Map() };
       // A failure of the worker refresh fails the refresh (below); only through the worker.
       const states = await this.deps.workerRefresh(devspaces);
@@ -638,8 +646,9 @@ export class DevspaceOperations extends OperationBase {
       if (removed === undefined || !this.removedEnginesSaid.has(removed)) {
         this.logger.warn(`The state of the devspaces could not be read: ${errorMessage(error)}`);
       }
-      if (removed !== undefined) this.removedEnginesSaid.add(removed);
-      return { runtime: undefined, branches: new Map() };
+      if (removed === undefined) return { runtime: undefined, branches: new Map() };
+      this.removedEnginesSaid.add(removed);
+      return { runtime: undefined, branches: new Map(), engineRemoved: true };
     }
   }
 
