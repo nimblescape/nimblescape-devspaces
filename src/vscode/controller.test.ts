@@ -6676,6 +6676,26 @@ describe('Double-click on a repository row', () => {
     expect(start).toHaveBeenCalledTimes(1);
   });
 
+  // The Sign in row and the Docker host row run their own command on Enter, not the command of a repository row.
+  it('forgets the Enter when the row runs another command of Devspaces, so that a click right after it only selects', async () => {
+    const start = vi.spyOn(h.controller, 'start').mockResolvedValue(undefined);
+    let rowCommand: string = Commands.signIn;
+    fakeVscode.commands.executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'list.select') await h.commands.get(rowCommand)?.();
+    });
+    for (const [command, repository] of [
+      [Commands.signIn, 'acme/api'],
+      [Commands.chooseDockerHost, 'acme/web'],
+    ]) {
+      rowCommand = command;
+      h.clock.now = () => NOW;
+      await run('rowEnter');
+      await click(viewRow(repository, undefined), 10);
+    }
+    expect(h.auth.getToken).toHaveBeenCalledWith({ interactive: true });
+    expect(start).not.toHaveBeenCalled();
+  });
+
   // A later VS Code may remove or rename list.select.
   it('logs a failed list.select once per window, without a message, and forgets the Enter', async () => {
     const start = vi.spyOn(h.controller, 'start').mockResolvedValue(undefined);

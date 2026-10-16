@@ -444,6 +444,9 @@ export class Controller implements vscode.Disposable {
     // is one.
     const ownTarget = new Set<CommandName>(['useRemoteDockerHost', 'useLocalDocker', 'chooseDockerHost', 'askAgainDockerHost', 'rowActivated', 'rowEnter']);
     const run = async (name: CommandName, argument: unknown): Promise<void> => {
+      // Enter on a row whose command is another command of Devspaces (the Sign in row, the Docker host row) ends with
+      // that command: a click on a repository row right after it only selects that row (rowActivation.ts).
+      if (name !== 'rowEnter' && name !== 'rowActivated') this.rowActivations.forgetEnter();
       try {
         if (ownTarget.has(name)) await handlers[name](argument);
         else await this.withDockerTarget(() => handlers[name](argument));
