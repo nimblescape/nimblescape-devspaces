@@ -49,6 +49,7 @@ import { MAC_OPEN, ensureDockerRunning, launchDetachedProcess } from '../core/do
 import { errorMessage, isUserFacingError } from '../core/errors';
 import { Steps } from '../core/messages';
 import { isAbortError, systemClock, type Clock, type Logger, type ProcessRunner } from '../core/ports';
+import { showErrorMessage, showInformationMessage, showWarningMessage } from './notifications';
 
 /**
  * Command Start Docker (package.json), offered once an installation has put the CLI in place, and as the action of the
@@ -287,7 +288,7 @@ export class DockerSetup implements vscode.Disposable {
     this.deps.logger.info(`Docker installation: ${describePlan(plan)}`);
     switch (plan.kind) {
       case 'manual':
-        void vscode.window.showInformationMessage(DockerSetupUiTexts.manualInstall).then(undefined, () => undefined);
+        void showInformationMessage(DockerSetupUiTexts.manualInstall).then(undefined, () => undefined);
         await vscode.env.openExternal(vscode.Uri.parse(plan.url));
         return;
       case 'terminal': {
@@ -338,7 +339,7 @@ export class DockerSetup implements vscode.Disposable {
       }
       throw error;
     }
-    void vscode.window.showInformationMessage(DockerSetupUiTexts.dockerRunning).then(undefined, () => undefined);
+    void showInformationMessage(DockerSetupUiTexts.dockerRunning).then(undefined, () => undefined);
   }
 
   /** Command devspaces.dockerSetup.installWsl (sidebar button "Install WSL 2", Windows): `wsl --install` in the terminal. */
@@ -460,12 +461,12 @@ export class DockerSetup implements vscode.Disposable {
   }
 
   private inform(message: string): void {
-    vscode.window.showInformationMessage(message).then(undefined, (error: unknown) => this.deps.logger.error('Could not show the message.', error));
+    showInformationMessage(message).then(undefined, (error: unknown) => this.deps.logger.error('Could not show the message.', error));
   }
 
   /** Modal confirmation; true only for the confirming button. */
   private async confirm(confirmation: Confirmation): Promise<boolean> {
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await showWarningMessage(
       confirmation.message,
       { modal: true, detail: confirmation.detail },
       confirmation.button,
@@ -487,7 +488,7 @@ export class DockerSetup implements vscode.Disposable {
   }
 
   private showErrorWithDetails(message: string): void {
-    vscode.window.showErrorMessage(message, DockerSetupUiTexts.showDetails).then(
+    showErrorMessage(message, DockerSetupUiTexts.showDetails).then(
       (choice) => {
         if (choice === DockerSetupUiTexts.showDetails) this.deps.showLog();
       },
@@ -499,8 +500,7 @@ export class DockerSetup implements vscode.Disposable {
   private refuseInRemoteWindow(text: string = DockerSetupUiTexts.localWindowNeeded, done = 'installed'): boolean {
     if (vscode.env.remoteName === undefined) return false;
     this.deps.logger.info(`Docker is ${done} only from a local window (this window: ${vscode.env.remoteName}).`);
-    vscode.window
-      .showInformationMessage(text)
+    showInformationMessage(text)
       .then(undefined, (error: unknown) => this.deps.logger.error('Could not show the message.', error));
     return true;
   }
@@ -587,7 +587,7 @@ export class DockerSetup implements vscode.Disposable {
 
   /** Start Docker, offered once the installation has put the CLI in place. */
   private offerStart(): void {
-    vscode.window.showInformationMessage(DockerSetupUiTexts.installedStartNow, DockerSetupUiTexts.startDocker).then(
+    showInformationMessage(DockerSetupUiTexts.installedStartNow, DockerSetupUiTexts.startDocker).then(
       (choice) => {
         if (choice !== DockerSetupUiTexts.startDocker) return;
         vscode.commands

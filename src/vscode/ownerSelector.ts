@@ -11,6 +11,7 @@ import { errorMessage } from '../core/errors';
 import { Actions, Messages } from '../core/messages';
 import type { Logger } from '../core/ports';
 import type { DiscoveryData, ExtensionSettings, GitHubAccount } from '../core/types';
+import { showInformationMessage } from './notifications';
 import { ownerChoices, ownersFiltered, OwnerTexts, selectedOwners } from './ownerChoices';
 import { SETTINGS_SECTION } from './settings';
 
@@ -42,7 +43,7 @@ interface OwnerItem extends vscode.QuickPickItem {
  */
 export async function selectOwners(deps: OwnerSelectorDeps): Promise<void> {
   if (!(await deps.auth.isSignedIn())) {
-    const choice = await vscode.window.showInformationMessage(Messages.signInRequired, Actions.signIn);
+    const choice = await showInformationMessage(Messages.signInRequired, Actions.signIn);
     if (choice !== Actions.signIn) return;
     await deps.signIn();
     if (!(await deps.auth.isSignedIn())) return;

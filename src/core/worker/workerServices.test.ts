@@ -527,11 +527,11 @@ describe("the worker's Monitor for Delete", () => {
         const warnings: string[] = [];
         // The logins of the operation are one after the other (registryLogins).
         const provider = hostRegistryCredentials(registryLogins(side, () => void forgotten++, { ...silentLogger, warn: (text: string) => warnings.push(text) }));
-        expect(await provider('ghcr.io')).toEqual(expected);
+        expect(await provider('ghcr.io', undefined, 'o/i')).toEqual(expected);
         expect(asked).toEqual(['ghcr.io']);
         expect(forgotten).toBe(1);
         // The next use asks again.
-        await provider('ghcr.io');
+        await provider('ghcr.io', undefined, 'o/i');
         expect(asked).toEqual(['ghcr.io', 'ghcr.io']);
         // Only a failed request is logged.
         expect(warnings.length > 0).toBe(expected === undefined && warnings.some((text) => text.includes('channel closed')));
@@ -560,7 +560,7 @@ describe("the worker's Monitor for Delete", () => {
         slot = undefined;
       }, silentLogger);
       const provider = hostRegistryCredentials(logins);
-      const both = Promise.all([provider('a.example'), provider('b.example')]);
+      const both = Promise.all([provider('a.example', undefined, 'o/i'), provider('b.example', undefined, 'o/i')]);
       // The turn takes a few steps (a cancelable wait).
       for (let i = 0; i < 10 && events.length === 0; i++) await Promise.resolve();
       for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -582,11 +582,11 @@ describe("the worker's Monitor for Delete", () => {
       const provider = hostRegistryCredentials(registryLogins(side.host, () => void forgotten++, silentLogger));
       const gaveUp = new AbortController();
       gaveUp.abort();
-      expect(await provider('ghcr.io', gaveUp.signal)).toBeUndefined();
+      expect(await provider('ghcr.io', gaveUp.signal, 'o/i')).toBeUndefined();
       expect(side.asked).toEqual([]);
       // Nothing was asked, so nothing is forgotten.
       expect(forgotten).toBe(0);
-      expect(await provider('ghcr.io', new AbortController().signal)).toEqual({ username: 'octo', password: 'p1' });
+      expect(await provider('ghcr.io', new AbortController().signal, 'o/i')).toEqual({ username: 'octo', password: 'p1' });
       expect(side.asked).toEqual(['ghcr.io']);
     });
 
@@ -637,10 +637,10 @@ describe("the worker's Monitor for Delete", () => {
         },
       } as unknown as HostSide;
       const logins = registryLogins(side, () => void events.push('forget'), silentLogger);
-      const first = logins('a.example', async (login) => login?.password);
+      const first = logins({ registry: 'a.example', repository: 'o/i' }, async (login) => login?.password);
       const cancel = new AbortController();
-      const second = logins('b.example', async (login) => login?.password, cancel.signal);
-      const third = logins('c.example', async (login) => login?.password);
+      const second = logins({ registry: 'b.example', repository: 'o/i' }, async (login) => login?.password, cancel.signal);
+      const third = logins({ registry: 'c.example', repository: 'o/i' }, async (login) => login?.password);
       for (let i = 0; i < 10; i++) await Promise.resolve();
       cancel.abort();
       await expect(second).rejects.toMatchObject({ name: 'AbortError' });
@@ -667,10 +667,10 @@ describe("the worker's Monitor for Delete", () => {
         },
       } as unknown as HostSide;
       const logins = registryLogins(side, () => void forgotten++, silentLogger);
-      await expect(logins('a.example', async () => void used++, cancel.signal)).rejects.toMatchObject({ name: 'AbortError' });
+      await expect(logins({ registry: 'a.example', repository: 'o/i' }, async () => void used++, cancel.signal)).rejects.toMatchObject({ name: 'AbortError' });
       expect({ forgotten, used }).toEqual({ forgotten: 1, used: 0 });
       // The next turn still runs.
-      expect(await logins('b.example', async (login) => login?.password)).toBe('p');
+      expect(await logins({ registry: 'b.example', repository: 'o/i' }, async (login) => login?.password)).toBe('p');
     });
 
     it("the worker never passes credentials of its own to a pull (they would bypass the turns)", () => {
@@ -693,8 +693,8 @@ describe("the worker's Monitor for Delete", () => {
       const side = host(async () => ({ username: 'octo', serveraddress: 'ghcr.io', password: 'p1' }));
       let forgotten = 0;
       const logins = registryLogins(side.host, () => void forgotten++, silentLogger);
-      await expect(logins('ghcr.io', async () => Promise.reject(new Error('pull failed')))).rejects.toThrow('pull failed');
-      expect(await logins('ghcr.io', async (login) => login?.password)).toBe('p1');
+      await expect(logins({ registry: 'ghcr.io', repository: 'o/i' }, async () => Promise.reject(new Error('pull failed')))).rejects.toThrow('pull failed');
+      expect(await logins({ registry: 'ghcr.io', repository: 'o/i' }, async (login) => login?.password)).toBe('p1');
       expect(forgotten).toBe(2);
     });
 

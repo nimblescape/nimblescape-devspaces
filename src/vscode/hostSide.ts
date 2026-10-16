@@ -189,18 +189,19 @@ export function extensionHostSide(deps: HostSideDeps): HostSide {
     },
     secrets: {
       token: async () => deps.auth.getToken({ interactive: false }),
+      // The handler checked the registry and the repository, and logs the request (hostSideHandler).
       registry: async (registry) => {
         const stored = await deps.credentials.getForPull(registry);
         if (stored !== undefined) {
           const serveraddress = credentialServerName(registry);
           return stored.username === IDENTITY_TOKEN_USER
-            ? { identityToken: true, serveraddress, password: stored.password }
-            : { username: stored.username, serveraddress, password: stored.password };
+            ? { identityToken: true, serveraddress, password: stored.password, from: 'docker' }
+            : { username: stored.username, serveraddress, password: stored.password, from: 'docker' };
         }
         if (registry.toLowerCase() !== GITHUB_PACKAGES_REGISTRY) return undefined;
         // The GitHub sign-in is the login of ghcr.io when Docker has none; never asked with a dialog.
         const login = await deps.auth.getPackagesCredentials({ interactive: false }).catch(() => undefined);
-        return login === undefined ? undefined : { username: login.username, serveraddress: GITHUB_PACKAGES_REGISTRY, password: login.password };
+        return login === undefined ? undefined : { username: login.username, serveraddress: GITHUB_PACKAGES_REGISTRY, password: login.password, from: 'github' };
       },
     },
   };

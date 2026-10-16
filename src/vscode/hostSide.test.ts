@@ -63,20 +63,20 @@ describe('the HostSide of this computer', () => {
     const { all, credentials, auth } = deps();
     credentials.getForPull.mockResolvedValueOnce({ username: 'stored', password: 'stored-password' });
     const host = extensionHostSide(all);
-    expect(await host.secrets.registry('ghcr.io')).toEqual({ username: 'stored', serveraddress: 'ghcr.io', password: 'stored-password' });
+    expect(await host.secrets.registry('ghcr.io', 'octo/app')).toEqual({ username: 'stored', serveraddress: 'ghcr.io', password: 'stored-password', from: 'docker' });
     expect(auth.getPackagesCredentials).not.toHaveBeenCalled();
     credentials.getForPull.mockResolvedValueOnce({ username: IDENTITY_TOKEN_USER, password: 'refresh-token' });
-    expect(await host.secrets.registry('registry.example')).toEqual({ identityToken: true, serveraddress: 'registry.example', password: 'refresh-token' });
+    expect(await host.secrets.registry('registry.example', 'team/app')).toEqual({ identityToken: true, serveraddress: 'registry.example', password: 'refresh-token', from: 'docker' });
   });
 
   it('uses the GitHub sign-in only for ghcr.io, never with a dialog, and nothing for other registries', async () => {
     const { all, auth } = deps();
     const host = extensionHostSide(all);
-    expect(await host.secrets.registry('GHCR.io')).toEqual({ username: 'octocat', serveraddress: 'ghcr.io', password: 'gho_packages' });
+    expect(await host.secrets.registry('GHCR.io', 'octo/app')).toEqual({ username: 'octocat', serveraddress: 'ghcr.io', password: 'gho_packages', from: 'github' });
     expect(auth.getPackagesCredentials).toHaveBeenCalledWith({ interactive: false });
-    expect(await host.secrets.registry('registry.example')).toBeUndefined();
+    expect(await host.secrets.registry('registry.example', 'team/app')).toBeUndefined();
     auth.getPackagesCredentials.mockRejectedValueOnce(new Error('signed out'));
-    expect(await host.secrets.registry('ghcr.io')).toBeUndefined();
+    expect(await host.secrets.registry('ghcr.io', 'octo/app')).toBeUndefined();
     expect(await host.secrets.token()).toBe('ghp_token');
     expect(auth.getToken).toHaveBeenCalledWith({ interactive: false });
   });

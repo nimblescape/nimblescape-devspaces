@@ -110,7 +110,7 @@ function fakeHost(answers: Partial<Record<string, unknown>> = {}) {
     },
     secrets: {
       token: async () => (record('token'), of('token', undefined)),
-      registry: async (registry) => (record('registry', registry), of('registry', undefined)),
+      registry: async (registry, repository) => (record('registry', registry, repository), of('registry', undefined)),
     },
   };
   return { host, calls };
@@ -229,7 +229,7 @@ describe('the requests of a flow in the worker', () => {
       registry: { username: 'octo', serveraddress: 'ghcr.io', password: 'gho_secret' },
     });
     expect(await worker.secrets.token()).toBe('ghp_token_value');
-    expect(await worker.secrets.registry('ghcr.io')).toEqual({ username: 'octo', serveraddress: 'ghcr.io', password: 'gho_secret' });
+    expect(await worker.secrets.registry('ghcr.io', 'octo/app')).toEqual({ username: 'octo', serveraddress: 'ghcr.io', password: 'gho_secret' });
     expect(secrets).toEqual({ [SECRET_TOKEN]: 'ghp_token_value', [SECRET_REGISTRY]: 'gho_secret' });
     expect(JSON.stringify(requests)).not.toContain('gho_secret');
   });
@@ -238,15 +238,15 @@ describe('the requests of a flow in the worker', () => {
     const { worker, secrets, handler, signal } = wired();
     // Nothing but `given: false`.
     expect(await handler('secret', { call: 'token', args: [] }, signal)).toStrictEqual({ value: { given: false } });
-    expect(await handler('secret', { call: 'registry', args: ['ghcr.io'] }, signal)).toStrictEqual({ value: { given: false } });
+    expect(await handler('secret', { call: 'registry', args: ['ghcr.io', 'octo/app'] }, signal)).toStrictEqual({ value: { given: false } });
     expect(await worker.secrets.token()).toBeUndefined();
-    expect(await worker.secrets.registry('ghcr.io')).toBeUndefined();
+    expect(await worker.secrets.registry('ghcr.io', 'octo/app')).toBeUndefined();
     expect(secrets).toEqual({});
   });
 
   it('passes an identity token on without a user', async () => {
     const { worker } = wired({ registry: { identityToken: true, serveraddress: 'reg.example', password: 'refresh-token' } });
-    expect(await worker.secrets.registry('reg.example')).toEqual({ identityToken: true, serveraddress: 'reg.example', password: 'refresh-token' });
+    expect(await worker.secrets.registry('reg.example', 'team/app')).toEqual({ identityToken: true, serveraddress: 'reg.example', password: 'refresh-token' });
   });
 });
 
@@ -361,7 +361,7 @@ describe('the handler of the requests on the side of the extension', () => {
   it('answers a secret only in `secrets`, never in the value', async () => {
     const { handler, signal } = wired({ token: 'ghp_token_value', registry: { username: 'octo', serveraddress: 'ghcr.io', password: 'gho_secret' } });
     expect(await handler('secret', { call: 'token', args: [] }, signal)).toEqual({ value: { given: true }, secrets: { [SECRET_TOKEN]: 'ghp_token_value' } });
-    expect(await handler('secret', { call: 'registry', args: ['ghcr.io'] }, signal)).toEqual({
+    expect(await handler('secret', { call: 'registry', args: ['ghcr.io', 'octo/app'] }, signal)).toEqual({
       value: { given: true, username: 'octo', serveraddress: 'ghcr.io' },
       secrets: { [SECRET_REGISTRY]: 'gho_secret' },
     });
@@ -477,11 +477,11 @@ describe('the handler of the requests on the side of the extension', () => {
     expect(await worker.state.processAlive(1)).toBe(false);
     // A login whose password the operation does not hold is no login; without its server the asked one.
     answers.set('secret registry', { given: true, username: 'octo' });
-    expect(await worker.secrets.registry('ghcr.io')).toBeUndefined();
+    expect(await worker.secrets.registry('ghcr.io', 'octo/app')).toBeUndefined();
     const held = workerHostSide(async () => ({ given: true, username: 'octo' }), (name) => (name === SECRET_REGISTRY ? 'pw' : undefined));
-    expect(await held.secrets.registry('ghcr.io')).toEqual({ username: 'octo', serveraddress: 'ghcr.io', password: 'pw' });
+    expect(await held.secrets.registry('ghcr.io', 'octo/app')).toEqual({ username: 'octo', serveraddress: 'ghcr.io', password: 'pw' });
     const notGiven = workerHostSide(async () => ({ given: 'yes' }), () => 'pw');
-    expect(await notGiven.secrets.registry('ghcr.io')).toBeUndefined();
+    expect(await notGiven.secrets.registry('ghcr.io', 'octo/app')).toBeUndefined();
     expect(await notGiven.secrets.token()).toBeUndefined();
   });
 });

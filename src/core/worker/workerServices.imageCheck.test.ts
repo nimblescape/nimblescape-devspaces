@@ -177,10 +177,10 @@ describe("the worker's image check, probes", () => {
       const provider = hostRegistryCredentials(
         registryLogins({ secrets: { registry: answer } } as unknown as HostSide, () => undefined, { ...silentLogger, warn: (text: string) => void logged.push(text) }),
       );
-      expect(await provider('ghcr.io')).toBeUndefined();
+      expect(await provider('ghcr.io', undefined, 'o/i')).toBeUndefined();
       expect(logged).toEqual(warnings);
     }
     const plain = hostRegistryCredentials(registryLogins({ secrets: { registry: async () => ({ serveraddress: 'ghcr.io', password: 'p1' }) } } as unknown as HostSide, () => undefined, silentLogger));
-    expect(await plain('ghcr.io')).toEqual({ username: '', password: 'p1' });
+    expect(await plain('ghcr.io', undefined, 'o/i')).toEqual({ username: '', password: 'p1' });
   });
 });

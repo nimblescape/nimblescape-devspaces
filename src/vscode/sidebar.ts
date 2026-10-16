@@ -24,6 +24,7 @@ import type { SessionFiles } from '../core/storage/sessionFiles';
 import type { DiscoveryData, Devspace, ExtensionSettings, GitHubAccount, RepositoryInfo, WindowStatus } from '../core/types';
 import { isProcessAlive } from '../core/session/sessionRules';
 import { SIGN_IN_AGAIN_DETAIL, type VsCodeGitHubAuth } from './auth';
+import { showWarningMessage } from './notifications';
 import { RepositoryGroupTexts, parseRepositoryGroups, type RepositoryGroupPattern } from './repositoryGroups';
 import type { SessionCoordinator } from './sessionCoordinator';
 import { dockerStoppedRuntime, devspaceIdsOf, liveBusyDevspaceIds } from './sidebarData';
@@ -432,7 +433,7 @@ export class Sidebar implements vscode.Disposable {
       if (this.shownGroupProblems.has(message)) continue;
       this.shownGroupProblems.add(message);
       this.deps.logger.warn(message);
-      vscode.window.showWarningMessage(message).then(undefined, (error: unknown) => {
+      showWarningMessage(message).then(undefined, (error: unknown) => {
         this.deps.logger.warn(`A warning could not be shown: ${errorMessage(error)}`);
       });
     }
@@ -460,7 +461,7 @@ export class Sidebar implements vscode.Disposable {
     this.slowGroupingWarned = true;
     const message = RepositoryGroupTexts.slow(Math.round(elapsedMs));
     this.deps.logger.warn(message);
-    vscode.window.showWarningMessage(message).then(undefined, (error: unknown) => {
+    showWarningMessage(message).then(undefined, (error: unknown) => {
       this.deps.logger.warn(`A warning could not be shown: ${errorMessage(error)}`);
     });
   }
@@ -597,8 +598,7 @@ export class Sidebar implements vscode.Disposable {
   private offerSignInAgain(): void {
     if (this.signInOffered) return;
     this.signInOffered = true;
-    vscode.window
-      .showWarningMessage(SIGN_IN_AGAIN_DETAIL, Actions.signIn)
+    showWarningMessage(SIGN_IN_AGAIN_DETAIL, Actions.signIn)
       .then(async (choice) => {
         if (choice !== Actions.signIn) return;
         const token = await this.deps.auth.renewToken();

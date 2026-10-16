@@ -54,6 +54,7 @@ import {
 import type { DockerSetup } from './dockerSetup';
 import { showError as presentError } from './errors';
 import type { OutputChannelLogger } from './logger';
+import { showErrorMessage, showInformationMessage, showWarningMessage } from './notifications';
 import { selectOwners } from './ownerSelector';
 import { setShowOnlyDevspaces } from './devspacesOnly';
 import { hideProgressNotification, runWithProgress, type BusyChange } from './progress';
@@ -794,8 +795,7 @@ export class Controller implements vscode.Disposable {
       this.logger.warn(`Close and Keep Running: the heartbeat to the Monitor on ${host === '' ? 'the local Docker' : host} failed: ${sent.detail}`);
       await this.clearKeepRunningOnce(devspace.id);
       const minutes = Math.round(stopAfterSeconds(this.deps.settings().stopAfterMinutes) / 60);
-      vscode.window
-        .showErrorMessage(ControllerTexts.closeAndKeepRunningUnreachable(host, minutes))
+      showErrorMessage(ControllerTexts.closeAndKeepRunningUnreachable(host, minutes))
         .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
       return;
     }
@@ -976,7 +976,7 @@ export class Controller implements vscode.Disposable {
       this.inform(Messages.hostAccessChecksTurnedOff(repository));
       return;
     }
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await showWarningMessage(
       Messages.hostAccessChecksOffConfirm(repository),
       { modal: true, detail: Messages.hostAccessChecksOffDetail },
       Actions.turnOffChecks,
@@ -1652,8 +1652,7 @@ export class Controller implements vscode.Disposable {
     // `take`, so that the connected window cannot take it at the same moment.
     if (!(await disconnectRequests.take(sent.devspaceId))) return;
     this.logger.warn(`The other window did not close its connection for the ${sent.operation} of ${repository}.`);
-    vscode.window
-      .showWarningMessage(ControllerTexts.otherWindowNoAnswer(repository))
+    showWarningMessage(ControllerTexts.otherWindowNoAnswer(repository))
       .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
   }
 
@@ -1914,8 +1913,7 @@ export class Controller implements vscode.Disposable {
       this.logger.warn(`This window is still connected to ${left.repository}, which it must not use. It closes its remote connection again.`);
       // The removal runs while the message is open; the limit of the wait counts from its end.
       const removal = left.reason === 'account' ? this.removeGitToken(left) : undefined;
-      await vscode.window
-        .showWarningMessage(ControllerTexts.stillConnected(left.repository), { modal: true })
+      await showWarningMessage(ControllerTexts.stillConnected(left.repository), { modal: true })
         .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
       if (removal) await this.awaitTokenRemoval(left, removal);
       // The owner account may have signed in while the message was open.
@@ -2222,7 +2220,7 @@ export class Controller implements vscode.Disposable {
 
   /** Another window is connected to the devspace: it closes its connection first. */
   private async confirmOtherWindow(repository: string, action: string): Promise<boolean> {
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await showWarningMessage(
       ControllerTexts.otherWindowClosesConnection(repository),
       { modal: true },
       action,
@@ -2541,14 +2539,12 @@ export class Controller implements vscode.Disposable {
   }
 
   private inform(message: string): void {
-    vscode.window
-      .showInformationMessage(message)
+    showInformationMessage(message)
       .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
   }
 
   private warn(message: string): void {
-    vscode.window
-      .showWarningMessage(message)
+    showWarningMessage(message)
       .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
   }
 

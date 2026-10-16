@@ -338,7 +338,7 @@ describe('requests of an operation to the extension, in the script', () => {
       asking: async (_params, context) => {
         const logins = registryLogins(flowHost(context), () => context.forgetSecret('registry'), silentLogger);
         const provider = hostRegistryCredentials(logins);
-        const got = await Promise.all([provider('a.example'), provider('b.example')]);
+        const got = await Promise.all([provider('a.example', undefined, 'o/i'), provider('b.example', undefined, 'o/i')]);
         // The result is masked: what each provider got is compared here.
         return { own: [got[0]?.password === 'PASS-A1', got[1]?.password === 'PASS-B2'], users: got.map((login) => login?.username), held: Object.keys(context.secrets) };
       },
@@ -347,7 +347,7 @@ describe('requests of an operation to the extension, in the script', () => {
     await vi.advanceTimersByTimeAsync(0);
     // Only one request is open: the second login waits.
     expect(asksOf(1)).toHaveLength(1);
-    expect(asksOf(1)[0]).toMatchObject({ kind: 'secret', payload: { call: 'registry', args: ['a.example'] } });
+    expect(asksOf(1)[0]).toMatchObject({ kind: 'secret', payload: { call: 'registry', args: ['a.example', 'o/i'] } });
     send({ t: 'answer', id: 1, ask: 1, ok: true, value: { given: true, username: 'ua', serveraddress: 'a.example' }, secrets: { registry: 'PASS-A1' } });
     await vi.advanceTimersByTimeAsync(0);
     expect(asksOf(1)).toHaveLength(2);

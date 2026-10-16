@@ -76,7 +76,7 @@ describe('workerServiceDeps: one queue of registry logins', () => {
     // A pull holds the login; the check waits for its turn.
     const pull = all.docker.pullImage('ghcr.io/o/i:1', { onOutput: () => {} });
     await settle();
-    const check = provider('r.example');
+    const check = provider('r.example', undefined, 'o/i');
     await settle();
     expect(events).toEqual(['ask ghcr.io', 'pull ghcr.io/o/i:1 with pw-ghcr.io']);
     release();
@@ -87,13 +87,13 @@ describe('workerServiceDeps: one queue of registry logins', () => {
     // The check holds the login (its use is the provider itself, so a held turn is a pending ask); the pull waits.
     events.length = 0;
     let answer: () => void = () => undefined;
-    (host.secrets as { registry: (registry: string) => Promise<unknown> }).registry = async (registry: string) => {
+    (host.secrets as { registry: (registry: string, repository: string) => Promise<unknown> }).registry = async (registry: string) => {
       events.push(`ask ${registry}`);
       await new Promise<void>((resolve) => (answer = resolve));
       slot = `pw-${registry}`;
       return { username: 'octo', serveraddress: registry, password: slot };
     };
-    const second = provider('r.example');
+    const second = provider('r.example', undefined, 'o/i');
     await settle();
     const nextPull = all.docker.pullImage('ghcr.io/o/i:2', { onOutput: () => {} });
     await settle();

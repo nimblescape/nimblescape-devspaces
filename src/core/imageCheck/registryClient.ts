@@ -51,8 +51,9 @@ export type DigestResult =
 /**
  * Registry credentials for a registry host, or `undefined` if there are none. Must not throw.
  * `signal` aborts when the check ends or the lookup takes too long; a credential helper call must end when it aborts.
+ * `repository`: the repository of the image or Feature that needs them (the first one of the registry in a check).
  */
-export type CredentialsProvider = (registry: string, signal?: AbortSignal) => Promise<Credentials | undefined>;
+export type CredentialsProvider = (registry: string, signal?: AbortSignal, repository?: string) => Promise<Credentials | undefined>;
 
 /** One challenge of a `WWW-Authenticate` header. `scheme` is lower case, parameter names are lower case. */
 export interface AuthChallenge {
@@ -324,7 +325,7 @@ export class RegistryClient {
 
     if (challenges.some((challenge) => challenge.scheme === 'basic')) {
       // The manifest URL is always HTTPS, so Basic credentials are sent over TLS only.
-      const credentials = await this.credentialsFor(registry, signal);
+      const credentials = await this.credentialsFor(reference, signal);
       if (!credentials) return { kind: 'result', result: { kind: 'authRequired', registry } };
       return { kind: 'ok', authorization: `Basic ${basic(credentials)}` };
     }
@@ -352,7 +353,7 @@ export class RegistryClient {
     const scopes = (challenge.params.scope ?? `repository:${reference.repository}:pull`).split(' ').filter((scope) => scope !== '');
     for (const scope of scopes) tokenUrl.searchParams.append('scope', scope);
 
-    const credentials = await this.credentialsFor(registry, signal);
+    const credentials = await this.credentialsFor(reference, signal);
     if (credentials) {
       const withCredentials = await this.requestToken(registry, tokenUrl, credentials, signal);
       if (withCredentials.kind === 'token') return { kind: 'ok', authorization: `Bearer ${withCredentials.token}` };
@@ -409,11 +410,13 @@ export class RegistryClient {
   }
 
   /**
-   * Credentials of the provider, once per registry and signal. The lookup has its own time limit: a credential helper
-   * that waits for a prompt (keychain, GPG) or a slow GitHub session must not make a reachable registry count as
-   * unreachable. After the limit, the registry is asked without credentials.
+   * Credentials of the provider for the registry of `reference`, once per registry and signal (the provider hears the
+   * repository of the first reference). The lookup has its own time limit: a credential helper that waits for a prompt
+   * (keychain, GPG) or a slow GitHub session must not make a reachable registry count as unreachable. After the limit,
+   * the registry is asked without credentials.
    */
-  private credentialsFor(registry: string, signal: AbortSignal | undefined): Promise<Credentials | undefined> {
+  private credentialsFor(reference: RepositoryRef, signal: AbortSignal | undefined): Promise<Credentials | undefined> {
+    const { registry, repository } = reference;
     const load = async (): Promise<Credentials | undefined> => {
       const lookup = new AbortController();
       const onAbort = () => lookup.abort();
@@ -421,7 +424,7 @@ export class RegistryClient {
       signal?.addEventListener('abort', onAbort, { once: true });
       const timer = setTimeout(() => lookup.abort(), this.credentialsTimeoutMs);
       try {
-        return await raceAbort(this.credentials(registry, lookup.signal), lookup.signal);
+        return await raceAbort(this.credentials(registry, lookup.signal, repository), lookup.signal);
       } catch (error) {
         if (signal?.aborted) throw abortError();
         const name = registryDisplayName(registry);

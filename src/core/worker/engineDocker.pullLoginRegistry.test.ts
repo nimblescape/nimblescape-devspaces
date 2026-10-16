@@ -13,11 +13,14 @@ import { EngineDocker, type PullLogins } from './engineDocker';
 
 type Login = Parameters<Parameters<PullLogins>[1]>[0];
 
-/** Logins as registryLogins gives them: the secret slot holds the password only during `use`. */
+/**
+ * Logins as registryLogins gives them: the secret slot holds the password only during `use`. `asked`: the registry and
+ * the repository of each request.
+ */
 function logins(answers: Record<string, Login>) {
   const state = { slot: undefined as string | undefined, asked: [] as string[] };
-  const run: PullLogins = async (registry, use) => {
-    state.asked.push(registry);
+  const run: PullLogins = async ({ registry, repository }, use) => {
+    state.asked.push(`${registry}/${repository}`);
     const login = answers[registry];
     state.slot = login?.password;
     try {
@@ -58,7 +61,8 @@ describe('EngineDocker.pullImage with the logins of the operation: the registry,
     // The case of a tag (or of a digest) is no registry: Docker Hub, with its login.
     await docker.pullImage('node:Latest', { onOutput: () => {} });
     await docker.pullImage(`node@sha256:${'A'.repeat(64)}`, { onOutput: () => {} });
-    expect(state.asked).toEqual(['registry-1.docker.io', 'registry-1.docker.io']);
+    // With the repository of the image, as the extension checks it.
+    expect(state.asked).toEqual(['registry-1.docker.io/library/node', 'registry-1.docker.io/library/node']);
     expect(pulls).toEqual([
       ['Registry:5000/team/app:1', false],
       ['node:Latest', true],
@@ -108,7 +112,7 @@ describe('EngineDocker.pullImage with the logins of the operation: the registry,
     const docker = new EngineDocker(engine, { ...silentLogger, output: (text: string) => void output.push(`log ${text}`) }, () => undefined, run);
     const signal = new AbortController().signal;
     await docker.pullImage('ghcr.io/o/i:1', { onOutput: (text) => void output.push(text), signal });
-    expect(state.asked).toEqual(['ghcr.io']);
+    expect(state.asked).toEqual(['ghcr.io/o/i']);
     expect(seen).toEqual([signal]);
     expect(output).toEqual(['done\n']);
   });

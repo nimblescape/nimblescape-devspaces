@@ -10,6 +10,7 @@ import { Actions } from '../core/messages';
 import { Commands } from './commands';
 import { isAbortError, type Logger } from '../core/ports';
 import { RegistryVersionError } from '../core/storage/registry';
+import { showErrorMessage, showWarningMessage } from './notifications';
 
 // User-visible text that messages.ts lacks; to be moved there.
 /** Message for an error without a plain-language message of its own. */
@@ -62,8 +63,8 @@ export function showError(error: unknown, options: ShowErrorOptions): void {
   const labels = presentation.actions.map((action) => Actions[action]);
   const shown =
     presentation.severity === 'warning'
-      ? vscode.window.showWarningMessage(presentation.message, ...labels)
-      : vscode.window.showErrorMessage(presentation.message, ...labels);
+      ? showWarningMessage(presentation.message, ...labels)
+      : showErrorMessage(presentation.message, ...labels);
   shown.then(
     (choice) => {
       const action = presentation.actions.find((candidate) => Actions[candidate] === choice);
