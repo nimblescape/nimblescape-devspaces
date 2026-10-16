@@ -33,7 +33,7 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Show details in a progress notification:** the link Show details now opens the log and keeps the notification open, with its Cancel button. Before, the link also closed the notification, and then nothing could cancel the operation.
 
-**The pick of a repository to start:** when a Start from the Command Palette or Search asks for the repository, the text in the field now says whether the devspace opens in this window or in a new window, as in Switch Devspace…. Before, it always said "in this window", also when the Start opened a new window.
+**The pick of a repository to start:** when a Start from the Command Palette or Search asks for the repository, the text in the field now says whether the devspace opens in this window or in a new window, as in the switcher. Before, it always said "in this window", also when the Start opened a new window.
 
 **Warnings about settings:** a warning about the value of a setting (devspaces.defaultImage, devspaces.hostAccessChecksOff or devspaces.repositoryGroups) now has the button Open Settings, which opens that setting. A window shows each warning about an invalid value or entry once. It shows the warning that the view lists the repositories without groups again only after you change devspaces.repositoryGroups. Before, these warnings had no button. Two messages told you to see "the Devspace output"; they now name the output "Devspaces", as the Output view does. The modal message that a window is still connected to a devspace that it must not use now has the button Close Connection, which names what happens next; before, it had only OK.
 
