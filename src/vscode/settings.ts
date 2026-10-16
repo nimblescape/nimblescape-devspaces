@@ -119,10 +119,11 @@ export function openSetting(key: string): Thenable<unknown> {
  */
 export function showSettingWarning(logger: Logger, key: string, message: string): void {
   Promise.resolve(showWarningMessage(message, Actions.openSettings))
-    .then(async (choice) => {
-      if (choice === Actions.openSettings) await openSetting(key);
-    })
-    .catch((error: unknown) => logger.warn(`The warning about the setting ${key} could not be shown: ${errorMessage(error)}`));
+    .then(
+      (choice) => (choice === Actions.openSettings ? openSetting(key) : undefined),
+      (error: unknown) => logger.warn(`The warning about the setting ${key} could not be shown: ${errorMessage(error)}`),
+    )
+    .then(undefined, (error: unknown) => logger.warn(`The setting ${key} could not be opened: ${errorMessage(error)}`));
 }
 
 /**

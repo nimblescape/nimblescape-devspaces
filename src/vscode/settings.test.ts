@@ -21,6 +21,7 @@ import {
   readSettings,
   SETTINGS_SECTION,
   settingTarget,
+  showSettingWarning,
   warnInvalidDefaultImage,
   warnInvalidHostAccessChecksOff,
 } from './settings';
@@ -374,6 +375,18 @@ describe('settings', () => {
     inspect.mockReturnValue({ globalValue: undefined, workspaceValue: ['evil/repo'] });
     expect(readSettings().hostAccessChecksOff).toEqual([]);
     expect(normalizeSettings((key) => (key === 'hostAccessChecksOff' ? 'acme/api' : undefined)).hostAccessChecksOff).toEqual([]);
+  });
+
+  it('logs a warning about a setting that could not be shown, and a setting that could not be opened', async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
+    fakeVscode.window.showWarningMessage.mockRejectedValueOnce(new Error('no window'));
+    showSettingWarning(logger, 'owners', 'A warning.');
+    await vi.waitFor(() => expect(logger.warn).toHaveBeenCalledWith('The warning about the setting owners could not be shown: no window'));
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.openSettings);
+    fakeVscode.commands.executeCommand.mockRejectedValueOnce(new Error('no editor'));
+    showSettingWarning(logger, 'owners', 'A warning.');
+    await vi.waitFor(() => expect(logger.warn).toHaveBeenCalledWith('The setting owners could not be opened: no editor'));
+    expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', '@id:devspaces.owners');
   });
 
   it('warns once per window session about the invalid entries of hostAccessChecksOff, with Open Settings', async () => {
