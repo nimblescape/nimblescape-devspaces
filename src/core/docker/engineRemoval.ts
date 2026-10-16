@@ -17,6 +17,7 @@ import { isAbortError, type Logger, type RunOptions, type RunResult } from '../p
 import { LABEL_MONITOR, LABEL_MONITOR_OWNER, REMOTE_MONITOR_VOLUME } from '../remoteMonitor/protocol';
 import { isRecord } from '../valueChecks';
 import { IMAGE_IN_USE_PATTERN, commandText, parseJsonLines, type BootstrapDocker } from './bootstrapDocker';
+import { describeDockerHost } from './dockerHost';
 import { DOCKER_QUERY_TIMEOUT_MS } from './dockerTimeouts';
 
 /**
@@ -411,4 +412,16 @@ export function removedEngineNote(engine: string): string {
  */
 export function removedEngineImageNote(engine: string): string {
   return `The helper image was built again on ${engine}, which Devspaces was removed from. Nothing runs there by itself; "Remove Devspaces from This Docker Engine…" removes it again.`;
+}
+
+/**
+ * The refresh of the sidebar reads no states on the engine `host` ('' for the local Docker) while it has the removal
+ * mark (extension.ts reads the mark); its message is removedEngineNote. DevspaceOperations.refreshStates logs it once
+ * per engine in a window.
+ */
+export class RemovedEngineError extends Error {
+  constructor(readonly host: string) {
+    super(removedEngineNote(describeDockerHost(host)));
+    this.name = 'RemovedEngineError';
+  }
 }
