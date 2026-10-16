@@ -33,24 +33,50 @@ function withoutCode(markdown: string): string {
     .join('');
 }
 
+/** A link reference definition, `[label]: target`, with its label and its target. */
+const DEFINITION = /^ {0,3}\[([^\]]+)\]:\s*<?([^\s>]*)/;
+
+/** A label as CommonMark matches it: without case, and with each run of whitespace as one space. */
+const normalLabel = (label: string) => label.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/** The problem of the source of an image, if any: vsce takes only an image from an HTTPS source, and no SVG. */
+function imageProblem(source: string): string | undefined {
+  if (!/^https:\/\//i.test(source)) return `image not from an HTTPS source ${source}`;
+  if (/\.svg$/i.test(new URL(source).pathname)) return `SVG image ${source}`;
+  return undefined;
+}
+
 /** The problems of a Markdown page for the Marketplace, as `line: problem`. */
 function problems(markdown: string, checks: { links: boolean } = { links: true }): string[] {
   const found: string[] = [];
-  withoutCode(markdown)
-    .split('\n')
-    .forEach((line, index) => {
-      const at = `${index + 1}: `;
-      for (const tag of line.matchAll(/(?<!\\)<\/?[A-Za-z][A-Za-z0-9-]*(?=[\s/>])[^>]*>?/g)) found.push(`${at}raw tag ${tag[0]}`);
-      if (!checks.links) return;
-      const targets = [...line.matchAll(/\]\(\s*<?([^\s>)]*)/g), ...line.matchAll(/^ {0,3}\[[^\]]+\]:\s*<?([^\s>]*)/g)];
-      for (const [, target] of targets) {
-        if (!/^(\w+:\/\/|mailto:|#)/i.test(target)) found.push(`${at}relative link ${target}`);
-      }
-      for (const [, source] of line.matchAll(/!\[[^\]]*\]\(\s*<?([^\s>)]*)/g)) {
-        if (!/^https:\/\//i.test(source)) found.push(`${at}image not from an HTTPS source ${source}`);
-        else if (/\.svg$/i.test(new URL(source).pathname)) found.push(`${at}SVG image ${source}`);
-      }
-    });
+  const lines = withoutCode(markdown).split('\n');
+  // The targets of the definitions by their label; the first definition of a label counts.
+  const definitions = new Map<string, string>();
+  for (const line of lines) {
+    const definition = DEFINITION.exec(line);
+    if (definition && !definitions.has(normalLabel(definition[1]))) definitions.set(normalLabel(definition[1]), definition[2]);
+  }
+  lines.forEach((line, index) => {
+    const at = `${index + 1}: `;
+    for (const tag of line.matchAll(/(?<!\\)<\/?[A-Za-z][A-Za-z0-9-]*(?=[\s/>])[^>]*>?/g)) found.push(`${at}raw tag ${tag[0]}`);
+    if (!checks.links) return;
+    const targets = [...line.matchAll(/\]\(\s*<?([^\s>)]*)/g), ...line.matchAll(/^ {0,3}\[[^\]]+\]:\s*<?([^\s>]*)/g)];
+    for (const [, target] of targets) {
+      if (!/^(\w+:\/\/|mailto:|#)/i.test(target)) found.push(`${at}relative link ${target}`);
+    }
+    const check = (source: string) => {
+      const problem = imageProblem(source);
+      if (problem !== undefined) found.push(`${at}${problem}`);
+    };
+    for (const [, source] of line.matchAll(/!\[[^\]]*\]\(\s*<?([^\s>)]*)/g)) check(source);
+    // `![text][label]`, `![label][]` and `![label]`, each with the target of the definition of its label.
+    for (const [, text, reference] of line.matchAll(/!\[([^\]]*)\](?:\[([^\]]*)\]|(?![[(]))/g)) {
+      const label = reference || text;
+      const source = definitions.get(normalLabel(label));
+      if (source === undefined) found.push(`${at}image reference without a definition ${label}`);
+      else check(source);
+    }
+  });
   return found;
 }
 
@@ -61,6 +87,12 @@ describe('the checks of a Markdown page', () => {
       '![Logo](http://example.com/logo.png) ![Badge](https://example.com/badge.svg?style=flat)',
       'The name devspaces-<owner>-<repo> and <img src="x.png"> and </b>.',
       '[guide]: docs/guide.md',
+      // An image by reference: full, collapsed and shortcut. A label matches without case, and with each run of
+      // whitespace as one space.
+      '![Plain][Plain  HTTP] ![Logo][] ![logo]',
+      '![Lost][nowhere]',
+      '[plain http]: http://example.com/plain.png',
+      '[LOGO]: https://example.com/logo.svg',
     ].join('\n');
     expect(problems(page)).toEqual([
       '1: relative link docs/guide.md',
@@ -72,6 +104,11 @@ describe('the checks of a Markdown page', () => {
       '3: raw tag <img src="x.png">',
       '3: raw tag </b>',
       '4: relative link docs/guide.md',
+      '5: image not from an HTTPS source http://example.com/plain.png',
+      '5: SVG image https://example.com/logo.svg',
+      '5: SVG image https://example.com/logo.svg',
+      // vsce finds no image there.
+      '6: image reference without a definition nowhere',
     ]);
   });
 
@@ -79,6 +116,8 @@ describe('the checks of a Markdown page', () => {
     const page = [
       'See [Security](https://github.com/acme/repo/blob/main/docs/security.md#top), [Usage](#usage), <https://example.com>,',
       '[mail](mailto:team@example.com), ![Shot](https://example.com/shot.png) and the name `devspaces-<owner>-<repo>`.',
+      '![Shot][shot], ![Shot][] and ![shot] by reference.',
+      '[Shot]: https://example.com/shot.png',
       'A worker is devspace-worker-<12 characters>; 1 < 2 and \\<owner> stay text; `` a ` <b> `` is code.',
       '```',
       'docker run --name <worker name> [x](relative.md)',
