@@ -471,9 +471,12 @@ export class Controller implements vscode.Disposable {
     };
   }
 
-  /** A disconnect request may have changed. Only a window with a devspace answers. */
+  /**
+   * A disconnect request may have changed. Only a window with a devspace answers, also one that works without
+   * Devspaces (workWithoutDevspaces).
+   */
   onDisconnectRequested(): void {
-    if (!this.current || this.disposed) return;
+    if (!(this.current ?? this.withoutDevspaces) || this.disposed) return;
     this.background(this.disconnectTask.request(), 'check the requests of other windows');
   }
 
@@ -544,6 +547,11 @@ export class Controller implements vscode.Disposable {
     // (as stillAvailable does).
     await this.onSessionChanged();
     if (this.withoutDevspaces?.devspace.id !== devspace.id) return;
+    // The status file names it apart from the devspace of the window, so that the removal and the Stop, Rebuild and
+    // Delete of other windows see this window (connectedDevspaces, connectedInOtherWindow).
+    await this.deps.coordinator
+      .setPlainDevspace(devspace.id)
+      .catch((error: unknown) => this.logger.warn(`The window status could not be written: ${errorMessage(error)}`));
     const repository = this.shownName(this.devspaceTarget(devspace));
     const engine = describeDockerHost(dockerHostOf(devspace));
     this.logger.info(
@@ -791,7 +799,7 @@ export class Controller implements vscode.Disposable {
     const target = await this.resolveTarget(argument, 'devspace', ControllerTexts.selectDevspaceToStop);
     const devspace = this.requireDevspace(target);
     if (!target || !devspace) return;
-    if (this.isConnectedHere(devspace)) {
+    if (this.isAttachedHere(devspace)) {
       await this.handOff(target, devspace, { operation: 'stop', reason: 'manual' });
       return;
     }
@@ -938,7 +946,7 @@ export class Controller implements vscode.Disposable {
           return;
         }
         const request: HandOffRequest = { operation: 'delete', reason: 'manual', additionalVolumesToRemove };
-        if (this.isConnectedHere(current)) {
+        if (this.isAttachedHere(current)) {
           await this.handOffNow(repository, current, request, 'delete');
           return;
         }
@@ -1222,11 +1230,14 @@ export class Controller implements vscode.Disposable {
     return named.length > 0 ? listSome(named) : ControllerTexts.noChanges;
   }
 
-  /** The names of the devspaces of `devspaces` that a window of this computer is connected to (this one or another). */
+  /**
+   * The names of the devspaces of `devspaces` that a window of this computer is connected to (this one or another),
+   * also one that works without Devspaces (isAttachedHere, WindowStatus.plainDevspaceId).
+   */
   private async connectedDevspaces(devspaces: readonly Devspace[]): Promise<string[]> {
     const others = await this.otherActiveWindowsKnown();
     return devspaces
-      .filter((devspace) => this.isConnectedHere(devspace) || others.some((window) => window.devspaceId === devspace.id))
+      .filter((devspace) => this.isAttachedHere(devspace) || others.some((window) => usesDevspace(window, devspace.id)))
       .map((devspace) => this.shownName(this.devspaceTarget(devspace)));
   }
 
@@ -1768,7 +1779,7 @@ export class Controller implements vscode.Disposable {
     // The question about the Monitor of the engine comes first, also before a hand-off: the window that runs the
     // Rebuild then asks nothing.
     await this.beforeUserFlow(devspace);
-    if (this.isConnectedHere(devspace)) {
+    if (this.isAttachedHere(devspace)) {
       await this.handOff(target, devspace, { operation: 'rebuild', ...request }, 'rebuild');
       return;
     }
@@ -2004,7 +2015,8 @@ export class Controller implements vscode.Disposable {
    * again (`cancelHandOffIfUnclaimed`).
    */
   private async checkDisconnectRequest(): Promise<void> {
-    const current = this.current;
+    // A window that works without Devspaces hands off the same way: the reloaded empty window runs the operation.
+    const current = this.current ?? this.withoutDevspaces;
     if (!current || this.disposed) return;
     const { disconnectRequests, registry } = this.deps;
     const devspaceId = current.devspace.id;
@@ -2020,7 +2032,7 @@ export class Controller implements vscode.Disposable {
     if (this.gate.runningFor(this.keyOfDevspace(repository, current.devspace)) !== undefined) return;
     if (!(await disconnectRequests.take(devspaceId))) return;
     const devspace = await registry.get(devspaceId);
-    if (!devspace || this.current !== current) {
+    if (!devspace || (this.current ?? this.withoutDevspaces) !== current) {
       this.logger.info(`The request of another window for ${repository} is dropped: this window has left the devspace.`);
       return;
     }
@@ -2184,12 +2196,13 @@ export class Controller implements vscode.Disposable {
    * owner account leaves the container before the close (`awaitTokenRemoval`).
    */
   private async leaveDevspace(message?: string, left?: LeftDevspace): Promise<void> {
+    const plain = this.withoutDevspaces !== undefined;
     this.current = undefined;
     this.withoutDevspaces = undefined;
     this.left = left;
-    await this.deps.coordinator
-      .setDevspace(null)
-      .catch((error: unknown) => this.logger.warn(`The window status could not be written: ${errorMessage(error)}`));
+    const statusFailed = (error: unknown): void => this.logger.warn(`The window status could not be written: ${errorMessage(error)}`);
+    if (plain) await this.deps.coordinator.setPlainDevspace(null).catch(statusFailed);
+    await this.deps.coordinator.setDevspace(null).catch(statusFailed);
     this.updateStatusBar();
     if (message) this.warn(message);
     if (left?.reason === 'account') {
@@ -2538,14 +2551,26 @@ export class Controller implements vscode.Disposable {
     return this.current?.devspace.id === devspace.id;
   }
 
+  /**
+   * Whether this window is attached to the container of `devspace`: connected to it (isConnectedHere), or working
+   * without Devspaces on it on an engine with the removal mark (workWithoutDevspaces). Stop, Rebuild and Delete hand
+   * off then; a Start in such a window sets Devspaces up again (isConnectedHere only).
+   */
+  private isAttachedHere(devspace: Devspace): boolean {
+    return this.isConnectedHere(devspace) || this.withoutDevspaces?.devspace.id === devspace.id;
+  }
+
   /** The status of another active window that is connected to the devspace, if any (see otherActiveWindowsKnown). */
   private async otherWindowOf(devspaceId: string): Promise<WindowStatus | undefined> {
     return (await this.otherActiveWindowsKnown()).find((window) => window.devspaceId === devspaceId);
   }
 
-  /** Whether another active window is connected to the devspace (see otherActiveWindowsKnown). */
+  /**
+   * Whether another active window is connected to the devspace (see otherActiveWindowsKnown), also one that works
+   * without Devspaces on it (WindowStatus.plainDevspaceId): it answers the request of a hand-off as well.
+   */
   private async connectedInOtherWindow(devspaceId: string): Promise<boolean> {
-    return (await this.otherActiveWindowsKnown()).some((window) => window.devspaceId === devspaceId);
+    return (await this.otherActiveWindowsKnown()).some((window) => usesDevspace(window, devspaceId));
   }
 
   /**
@@ -3076,4 +3101,12 @@ function uniqueNames(names: readonly string[]): string[] {
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * Whether the window of `status` is attached to the devspace `devspaceId`: connected to it, or working without
+ * Devspaces on it on an engine with the removal mark (WindowStatus.plainDevspaceId).
+ */
+function usesDevspace(status: WindowStatus, devspaceId: string): boolean {
+  return status.devspaceId === devspaceId || status.plainDevspaceId === devspaceId;
 }

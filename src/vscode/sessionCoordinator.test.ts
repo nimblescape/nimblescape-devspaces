@@ -9,7 +9,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '../core/ports';
 import { StoragePaths } from '../core/storage/paths';
-import { SessionFiles } from '../core/storage/sessionFiles';
+import { SessionFiles, isWindowStatus } from '../core/storage/sessionFiles';
 import { ATOMIC_TEMPORARY_FILE, STALE_PENDING_MAX_AGE_MS } from '../core/storage/storageSweep';
 import type { Devspace, ExtensionSettings, WindowStatus } from '../core/types';
 import { CLOSE_RELEASE_BOUNDS, SWITCH_RELEASE_BOUNDS, type ReleaseBounds } from '../core/session/windowRelease';
@@ -311,6 +311,30 @@ describe('SessionCoordinator', () => {
     await h.coordinator.setDevspace(ID_B);
     expect(readStatus(h)?.devspaceId).toBe(ID_B);
     expect(h.coordinator.devspaceId).toBe(ID_B);
+  });
+
+  // A window that works without Devspaces on an engine with the removal mark: other windows see it, but its devspace
+  // gets no heartbeat, no release and no reopen record.
+  it('setPlainDevspace writes the devspace apart, at once and with each update; no heartbeat, no release, no reopen record', async () => {
+    const coordinator = h.create({ heartbeatMs: 20 });
+    h.coordinator.dispose();
+    h.coordinator = coordinator;
+    await coordinator.start(null);
+    await coordinator.setPlainDevspace(ID_A);
+    expect(readStatus(h)).toMatchObject({ devspaceId: null, plainDevspaceId: ID_A, state: 'active' });
+    expect(isWindowStatus(readStatus(h))).toBe(true);
+    h.clock.time = T0 + 20;
+    await nextHeartbeat(coordinator);
+    expect(readStatus(h)).toMatchObject({ devspaceId: null, plainDevspaceId: ID_A, updatedAt: iso(T0 + 20) });
+    // The devspace of the window, which the heartbeats send (WindowHeartbeatsDeps.connected), stays none.
+    expect(coordinator.devspaceId).toBeNull();
+    await coordinator.setPlainDevspace(null);
+    expect(readStatus(h)).not.toHaveProperty('plainDevspaceId');
+    await coordinator.setPlainDevspace(ID_A);
+    await coordinator.deactivate();
+    expect(readStatus(h)?.state).toBe('closing');
+    expect(await h.sessionFiles.readReopen()).toBeUndefined();
+    expect(h.releases).toEqual([]);
   });
 
   it('a newer status write wins over an older one that is still running', async () => {

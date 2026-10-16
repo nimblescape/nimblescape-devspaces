@@ -304,6 +304,13 @@ export interface WindowStatus {
    * its URI. Missing for a window without one.
    */
   dockerContext?: string;
+  /**
+   * The devspace that the window is attached to while it works without Devspaces on an engine with the removal mark
+   * (Controller.workWithoutDevspaces): not `devspaceId`, so that no heartbeat, no release and no reopen record go to it.
+   * The removal ("Remove Devspaces from This Docker Engine…") and the Stop, Rebuild and Delete of another window count
+   * the window as connected to it. Missing for every other window.
+   */
+  plainDevspaceId?: string;
 }
 
 /** Content of pending/<devspace-id>.json. */

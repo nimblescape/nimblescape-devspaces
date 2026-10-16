@@ -401,9 +401,14 @@ describe('nothing before the first use of Devspaces', () => {
     signIn('1001', 'octo');
     await activateWithDocker(
       keptOnRemovedEngine,
-      async (_storage, docker, log) => {
+      async (storage, docker, log) => {
         await waitFor(() => log().includes('This window of acme/api works without Devspaces'), 'the log of the window');
         await new Promise((resolve) => setTimeout(resolve, 500));
+        // Its status file names the devspace apart from the devspace of the window, so that the removal and the
+        // operations of other windows see the window.
+        const sessions = path.join(storage, 'sessions');
+        const statuses = fs.readdirSync(sessions).map((name) => JSON.parse(fs.readFileSync(path.join(sessions, name), 'utf8')) as unknown);
+        expect(statuses).toEqual([expect.objectContaining({ devspaceId: null, plainDevspaceId: kept.id, state: 'active' })]);
         expect(log()).toContain(
           'This window of acme/api works without Devspaces: Devspaces was removed from the local Docker. No background updates and no stop on close; a Start of acme/api sets Devspaces up there again.',
         );
