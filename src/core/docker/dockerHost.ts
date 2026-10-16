@@ -49,8 +49,8 @@ export const DEFAULT_CONTEXT_NAME = 'default';
  * - `local`: the Docker of this computer (Docker Desktop, the default Unix socket, a named pipe, a rootless socket of
  *   this user, or TCP to this computer's loopback).
  * - `remote`: `ssh://…`, the Docker of another computer, reached through SSH.
- * - `unsupported`: any other endpoint (TCP to another computer, an unknown scheme), or a current context that could not
- *   be read (isUnreadableDockerTarget): refused with a message.
+ * - `unsupported`: any other endpoint (TCP to another computer, an unknown scheme), a current context that could not be
+ *   read (isUnreadableDockerTarget), or a docker command that is Podman (isPodmanDockerTarget): refused with a message.
  */
 export type DockerTargetKind = 'local' | 'remote' | 'unsupported';
 
@@ -59,12 +59,12 @@ export interface DockerTarget {
   /**
    * The Docker host that devspaces record (`Devspace.dockerHost`): empty for `local`; for `remote` the part after
    * `ssh://` (an alias of the SSH config or `user@host[:port]`); for `unsupported` the endpoint, or a text for a
-   * context that could not be read (never recorded, and no devspace has it).
+   * context that could not be read or for Podman (never recorded, and no devspace has it).
    */
   host: string;
   /**
    * The endpoint of the context, for example `unix:///var/run/docker.sock` or `ssh://build-box`. Empty when unknown
-   * (without a Docker CLI, or for a context that could not be read).
+   * (without a Docker CLI, for a context that could not be read, or for Podman).
    */
   endpoint: string;
   /**
@@ -72,6 +72,11 @@ export interface DockerTarget {
    * or when it could not be read.
    */
   context?: string;
+  /**
+   * Only for a docker command that is Podman (isPodmanDockerTarget): what showed it, for the log, for example
+   * "docker --version: podman version 5.2.2".
+   */
+  podman?: string;
 }
 
 /** The Docker of this computer, when nothing else is known (for example without a Docker CLI). */
@@ -125,14 +130,24 @@ export function parseContextInspect(stdout: string): { name: string; endpoint: s
  * True for the target of a current Docker context that could not be read (dockerTargets.ts). It is refused like an
  * endpoint that is not supported: the Docker calls would go to the context that the Docker CLI finds, perhaps on
  * another computer, while the operation would record the local Docker. Its endpoint is empty; every other target that
- * is not supported has its endpoint.
+ * is not supported has its endpoint, except Podman (isPodmanDockerTarget).
  */
-export function isUnreadableDockerTarget(target: Pick<DockerTarget, 'kind' | 'endpoint'>): boolean {
-  return target.kind === 'unsupported' && target.endpoint.trim() === '';
+export function isUnreadableDockerTarget(target: Pick<DockerTarget, 'kind' | 'endpoint' | 'podman'>): boolean {
+  return target.kind === 'unsupported' && target.endpoint.trim() === '' && target.podman === undefined;
+}
+
+/**
+ * True for the target of a docker command that is Podman (for example the package podman-docker), found when the
+ * current Docker context could not be read (dockerTargets.ts): Podman has no Docker contexts. Devspaces does not
+ * support Podman, so it is refused like an endpoint that is not supported.
+ */
+export function isPodmanDockerTarget(target: Pick<DockerTarget, 'kind' | 'podman'>): boolean {
+  return target.kind === 'unsupported' && target.podman !== undefined;
 }
 
 /** Why a target that is not supported is refused, for the log (one sentence). */
-export function unsupportedTargetReason(target: Pick<DockerTarget, 'kind' | 'endpoint'>): string {
+export function unsupportedTargetReason(target: Pick<DockerTarget, 'kind' | 'endpoint' | 'podman'>): string {
+  if (isPodmanDockerTarget(target)) return 'The docker command uses Podman, which Devspaces does not support.';
   return isUnreadableDockerTarget(target) ? 'The current Docker context could not be read.' : `The Docker endpoint ${target.endpoint} is neither local nor SSH.`;
 }
 

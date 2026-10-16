@@ -416,7 +416,12 @@ export class BootstrapDocker {
     return undefined;
   }
 
-  private async podmanCli(signal: AbortSignal | undefined): Promise<string | undefined> {
+  /**
+   * The CLI part of podmanInUse: the detail when `docker --version` prints "podman version …" (for example the package
+   * podman-docker), else undefined. The answer is kept for the path of the CLI; a call that fails counts as Docker and
+   * is not kept. DockerTargets asks it when the current context cannot be read. Rejects only with an AbortError.
+   */
+  async podmanCli(signal?: AbortSignal): Promise<string | undefined> {
     const path = this.path;
     if (path === undefined) return undefined;
     if (this.cliVersion?.path === path) return this.cliVersion.podman;

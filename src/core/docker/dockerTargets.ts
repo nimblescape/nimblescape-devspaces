@@ -22,6 +22,16 @@ import { LOCAL_DOCKER_TARGET, dockerTargetOf, parseContextInspect, type DockerTa
 export const UNREADABLE_DOCKER_TARGET: DockerTarget = { kind: 'unsupported', host: Messages.unreadableDockerContextHost, endpoint: '' };
 
 /**
+ * The target when the current Docker context cannot be read, DOCKER_HOST is not set, and the docker command is Podman
+ * (isPodmanDockerTarget; for example the package podman-docker: Podman has no Docker contexts). It counts as not
+ * supported: every operation refuses it with Messages.podmanNotSupported, and its host matches no devspace. `detail`:
+ * what showed Podman, for the log.
+ */
+export function podmanDockerTarget(detail: string): DockerTarget {
+  return { kind: 'unsupported', host: Messages.podmanDockerHost, endpoint: '', podman: detail };
+}
+
+/**
  * The target of an operation while it runs. Timers and listeners that an operation creates keep its store after it
  * ended (AsyncLocalStorage); `active` is false then, so they read the current context again.
  */
@@ -63,6 +73,12 @@ const CONTEXT_NAME = /^[A-Za-z0-9][A-Za-z0-9_.+-]*$/;
 export interface ContextReader {
   isInstalled(): boolean;
   run(args: readonly string[], options?: RunOptions): Promise<RunResult>;
+  /**
+   * Whether the docker command is Podman (BootstrapDocker.podmanCli: `docker --version`, kept for the path of the CLI):
+   * what showed it, or undefined for Docker. Asked only when the current context cannot be read. Without it, the CLI
+   * counts as Docker.
+   */
+  podmanCli?(): Promise<string | undefined>;
 }
 
 /** Reads the current Docker target, and runs operations with it. */
@@ -90,8 +106,9 @@ export class DockerTargets {
 
   /**
    * Reads the current target now: DOCKER_HOST of VS Code's environment if set, else the current Docker context (which
-   * DOCKER_CONTEXT may name). Without a Docker CLI, the local Docker. When the context cannot be read,
-   * UNREADABLE_DOCKER_TARGET (logged), or DOCKER_HOST when it is set. Never throws.
+   * DOCKER_CONTEXT may name). Without a Docker CLI, the local Docker. When the context cannot be read: DOCKER_HOST when
+   * it is set, else podmanDockerTarget for a docker command that is Podman, else UNREADABLE_DOCKER_TARGET (logged).
+   * Never throws.
    */
   async resolve(): Promise<DockerTarget> {
     const read = ++this.readsStarted;
@@ -163,24 +180,45 @@ export class DockerTargets {
   private async read(): Promise<DockerTarget> {
     if (!this.docker.isInstalled()) return LOCAL_DOCKER_TARGET;
     const dockerHost = envValue(this.env, 'DOCKER_HOST', this.platform)?.trim();
+    let detail: string;
     try {
       // With DOCKER_HOST set, the CLI inspects the context `default`, whose endpoint is DOCKER_HOST.
       const result = await this.docker.run(['context', 'inspect', '--format', '{{json .}}'], { timeoutMs: CONTEXT_INSPECT_TIMEOUT_MS });
       const parsed = result.exitCode === 0 ? parseContextInspect(result.stdout) : undefined;
-      if (!parsed) return this.unreadable(dockerHost, (result.stderr || result.stdout).trim());
-      return dockerTargetOf(dockerHost ? dockerHost : parsed.endpoint, dockerHost ? undefined : parsed.name);
+      if (parsed) return dockerTargetOf(dockerHost ? dockerHost : parsed.endpoint, dockerHost ? undefined : parsed.name);
+      detail = (result.stderr || result.stdout).trim();
     } catch (error) {
-      return this.unreadable(dockerHost, errorMessage(error));
+      detail = errorMessage(error);
     }
+    return this.unreadable(dockerHost, detail);
   }
 
-  /** The target when the current context cannot be read: DOCKER_HOST decides when it is set, else nothing (logged). */
-  private unreadable(dockerHost: string | undefined, detail: string): DockerTarget {
+  /**
+   * The target when the current context cannot be read: DOCKER_HOST decides when it is set. Else the docker command
+   * may be Podman (the package podman-docker: Podman 5 prints nothing for `docker context inspect`, older versions do
+   * not know the command), which the check of the CLI shows; a check that fails counts as Docker. Else nothing. Logged.
+   */
+  private async unreadable(dockerHost: string | undefined, detail: string): Promise<DockerTarget> {
     if (dockerHost) {
       this.logger.warn(`The current Docker context could not be read. DOCKER_HOST is used: ${detail}`);
       return dockerTargetOf(dockerHost, undefined);
     }
+    const podman = await this.podmanCli();
+    if (podman !== undefined) {
+      this.logger.warn(`The current Docker context could not be read, and the docker command uses Podman, which Devspaces does not support. ${podman}`);
+      return podmanDockerTarget(podman);
+    }
     this.logger.warn(`The current Docker context could not be read. Devspaces does nothing with Docker until it can be read: ${detail}`);
     return UNREADABLE_DOCKER_TARGET;
+  }
+
+  /** ContextReader.podmanCli; undefined (Docker) without it or when it fails (logged). Never throws. */
+  private async podmanCli(): Promise<string | undefined> {
+    try {
+      return await this.docker.podmanCli?.();
+    } catch (error) {
+      this.logger.warn(`The docker command could not be checked for Podman, so Docker is assumed: ${errorMessage(error)}`);
+      return undefined;
+    }
   }
 }

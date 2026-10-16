@@ -33,12 +33,15 @@ export interface DockerHostRow {
   host: ShownDockerHost;
 }
 
-/** The Docker host of the first row: the local Docker, a remote host, or an endpoint that is not supported. */
+/**
+ * The Docker host of the first row: the local Docker, a remote host, an endpoint that is not supported, or a docker
+ * command that uses Podman (podmanDockerTarget).
+ */
 export interface ShownDockerHost {
-  kind: 'local' | 'remote' | 'unsupported';
+  kind: 'local' | 'remote' | 'unsupported' | 'podman';
   /**
-   * The remote host, or the endpoint that is not supported; empty for the local Docker, and for a current Docker context
-   * that could not be read (kind `unsupported`).
+   * The remote host, or the endpoint that is not supported; empty for the local Docker, for a current Docker context
+   * that could not be read (kind `unsupported`), and for Podman.
    */
   host: string;
 }
@@ -51,25 +54,30 @@ export const DockerHostRowTexts = {
       ? 'Local Docker'
       : shown.kind === 'remote'
         ? `Remote Docker host: ${shown.host}`
-        : shown.host === ''
-          ? Messages.dockerContextUnreadableLabel
-          : `Docker endpoint not supported: ${shown.host}`,
+        : shown.kind === 'podman'
+          ? Messages.podmanNotSupportedLabel
+          : shown.host === ''
+            ? Messages.dockerContextUnreadableLabel
+            : `Docker endpoint not supported: ${shown.host}`,
   tooltip: (shown: ShownDockerHost) =>
     shown.kind === 'local'
       ? 'Docker runs on this computer. Click to use a remote Docker host.'
       : shown.kind === 'remote'
         ? `Docker runs on ${shown.host} over SSH. Click to choose another host or the local Docker.`
-        : shown.host === ''
-          ? Messages.dockerContextUnreadableTooltip
-          : 'Docker is set to an endpoint that Devspaces does not support (only the local Docker and SSH hosts). Click to choose the Docker host.',
+        : shown.kind === 'podman'
+          ? Messages.podmanNotSupportedTooltip
+          : shown.host === ''
+            ? Messages.dockerContextUnreadableTooltip
+            : 'Docker is set to an endpoint that Devspaces does not support (only the local Docker and SSH hosts). Click to choose the Docker host.',
 } as const;
 
 // The monitors of the rows, switched off, with the connection sign for a remote host and the warning sign for an
-// endpoint that is not supported.
+// endpoint that is not supported and for Podman.
 const DOCKER_HOST_ICONS: Record<ShownDockerHost['kind'], string> = {
   local: MonitorIcons.off,
   remote: MonitorIcons.remote,
   unsupported: MonitorIcons.warning,
+  podman: MonitorIcons.warning,
 };
 
 /** Command handlers of row actions receive a RepositoryRow as the first argument. */

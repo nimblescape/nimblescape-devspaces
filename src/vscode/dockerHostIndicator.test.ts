@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
 import { dockerTargetOf, LOCAL_DOCKER_TARGET } from '../core/docker/dockerHost';
-import { UNREADABLE_DOCKER_TARGET } from '../core/docker/dockerTargets';
+import { UNREADABLE_DOCKER_TARGET, podmanDockerTarget } from '../core/docker/dockerTargets';
 import { Messages } from '../core/messages';
 import { silentLogger } from '../core/ports';
 import { DockerHostIndicator, DockerHostTexts } from './dockerHostIndicator';
@@ -50,6 +50,23 @@ describe('DockerHostIndicator', () => {
     expect(view.title).toBe(Messages.dockerContextUnreadableLabel);
     expect(view.title).toBe('Docker context cannot be read');
     expect(rows).toEqual([{ kind: 'unsupported', host: '' }]);
+  });
+
+  // A docker command that is Podman (podman-docker) is not shown as a context that cannot be read.
+  it('says that Podman is not supported, in the title and the first row', () => {
+    const view: { description?: string; title?: string } = {};
+    const rows: Array<ShownDockerHost | undefined> = [];
+    const indicator = new DockerHostIndicator(view, silentLogger, (host) => rows.push(host));
+    indicator.update(podmanDockerTarget('docker --version: podman version 5.2.2'));
+    expect(view.description).toBeUndefined();
+    expect(view.title).toBe(Messages.podmanNotSupportedLabel);
+    expect(view.title).toBe('Podman is not supported');
+    indicator.update(UNREADABLE_DOCKER_TARGET);
+    expect(view.title).toBe(Messages.dockerContextUnreadableLabel);
+    expect(rows).toEqual([
+      { kind: 'podman', host: '' },
+      { kind: 'unsupported', host: '' },
+    ]);
   });
 
   // Without a Docker CLI the target reads as the local Docker; the header then names no Docker host (not "Local Docker"
