@@ -52,8 +52,10 @@ export const RepositoryGroupTexts = {
     `The repository group ${entry} in the setting devspaces.repositoryGroups uses the flags "${flags}", which are ignored. Only the flags i, u, and s are allowed.`,
   failed: (source: string, error: string) =>
     `The repository group ${JSON.stringify(source)} in the setting devspaces.repositoryGroups failed while it was matched (${error}). It does not match the names for which it fails.`,
-  slow: (milliseconds: number) =>
-    `Grouping the repositories took ${milliseconds} ms. A regular expression in the setting devspaces.repositoryGroups may be slow, for example one with a nested repetition such as (a+)+. If VS Code stops responding, remove that entry from your settings.json.`,
+  tooSlow: (seconds: number, source: string | undefined) =>
+    `${source !== undefined ? `The repository group ${JSON.stringify(source)}` : 'A repository group'} in the setting devspaces.repositoryGroups took longer than ${seconds} ${seconds === 1 ? 'second' : 'seconds'} for the names of your repositories, for example because of a nested repetition such as (a+)+. The view lists the repositories without groups until you change the setting.`,
+  workerFailed:
+    'The repository groups of the setting devspaces.repositoryGroups could not be applied, because the worker thread of Devspaces failed. The view lists the repositories without groups until you change the setting or reload the window.',
 } as const;
 
 /**

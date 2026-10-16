@@ -21,7 +21,7 @@ import type {
   ExtensionSettings,
   RepositoryInfo,
 } from '../core/types';
-import { matchRepositoryGroup, type RepositoryGroupPattern } from './repositoryGroups';
+import { matchRepositoryGroup, type RepositoryGroupMatch, type RepositoryGroupPattern } from './repositoryGroups';
 
 // User-visible texts that messages.ts lacks; to be moved there.
 export const TreeTexts = {
@@ -140,6 +140,12 @@ export interface TreeInput {
    * model is the same as without the setting.
    */
   repositoryGroups?: readonly RepositoryGroupPattern[];
+  /**
+   * The place of a repository name under `repositoryGroups`, as matchRepositoryGroup finds it. The sidebar gives the
+   * places that its worker thread found (groupMatcher.ts), so that no regular expression of the setting runs on the
+   * extension host. Default: matchRepositoryGroup, which runs them here (the worker of the editor's preview).
+   */
+  groupMatch?: (name: string) => RepositoryGroupMatch | undefined;
   /**
    * Results of single repository lookups on GitHub (`DiscoveryService.getRepository`) for devspaces whose repository
    * the discovery does not list (outside of its scan, or not visible to the account). Key: lower-case
@@ -555,6 +561,7 @@ export function buildTreeModel(input: TreeInput): OwnerGroup[] {
 
   const byName = (a: RepositoryEntry, b: RepositoryEntry) => compareNames(a.name, b.name) || compareNames(a.id, b.id);
   const patterns = input.repositoryGroups ?? [];
+  const groupMatch = input.groupMatch ?? ((name: string) => matchRepositoryGroup(patterns, name));
   return [...groups.values()]
     .sort((a, b) => compareNames(a.group.owner, b.group.owner))
     .map(({ group, hints, devspaces: withDevspace, others }) => {
@@ -562,7 +569,7 @@ export function buildTreeModel(input: TreeInput): OwnerGroup[] {
       // Patterns apply per owner: an owner where no repository matches a pattern keeps the plain list, so no owner is
       // hidden by the patterns; without patterns, the model is exactly the plain list.
       const grouped =
-        patterns.length > 0 ? groupRows(group.owner, withDevspace, others, patterns, input.currentDevspaceId) : undefined;
+        patterns.length > 0 ? groupRows(group.owner, withDevspace, others, groupMatch, input.currentDevspaceId) : undefined;
       group.children = [...hints, ...(grouped ?? [...withDevspace, ...others].sort(byName))];
       return group;
     });
@@ -626,7 +633,7 @@ function groupRows(
   owner: string,
   withDevspace: readonly RepositoryEntry[],
   others: readonly RepositoryEntry[],
-  patterns: readonly RepositoryGroupPattern[],
+  groupMatch: (name: string) => RepositoryGroupMatch | undefined,
   currentDevspaceId: string | null,
 ): Array<GroupNode | RepositoryEntry> | undefined {
   const ownerKey = owner.toLowerCase();
@@ -638,7 +645,7 @@ function groupRows(
   const order = new WeakMap<GroupNode | RepositoryEntry, number>();
   const note = (item: GroupNode | RepositoryEntry, index: number) => order.set(item, Math.min(order.get(item) ?? index, index));
   for (const row of [...withDevspace, ...others]) {
-    const match = matchRepositoryGroup(patterns, row.name);
+    const match = groupMatch(row.name);
     if (!match) {
       if (hasDevspace(row)) {
         top.push(row);

@@ -19,12 +19,12 @@ import type { DiscoveryData, Devspace, ExtensionSettings, GitHubAccount, Reposit
 import {
   LOADED_CONTEXT_KEY,
   LOAD_FAILED_CONTEXT_KEY,
-  SLOW_GROUPING_MS,
   Sidebar,
   viewProgressLocation,
   type SidebarDeps,
 } from './sidebar';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
+import { inThreadGroupMatcher, type InThreadGroupMatcher } from './testing/inThreadGroupMatcher';
 import { parseRepositoryGroups } from './repositoryGroups';
 import { buildGroupsPreview, entriesFromSetting } from './repositoryGroupsEditorModel';
 import { TreeTexts, buildTreeModel, repositoryRows, type DevspaceRuntime, type OwnerGroup, type RepositoryRow } from './treeModel';
@@ -121,6 +121,8 @@ interface Harness {
   dockerTargets: { withOperation: ReturnType<typeof vi.fn> };
   /** MissingHelperBuild.status. */
   helperBuilds: { status: ReturnType<typeof vi.fn> };
+  /** The matcher of the repository groups (on this thread). */
+  groupMatcher: InThreadGroupMatcher;
 }
 
 function createHarness(): Harness {
@@ -173,6 +175,7 @@ function createHarness(): Harness {
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
   const settings: ExtensionSettings = { ...SETTINGS, owners: [...SETTINGS.owners] };
   const helperBuilds = { status: vi.fn((_dockerHost: string): 'building' | 'failed' | undefined => undefined) };
+  const groupMatcher = inThreadGroupMatcher();
   const sidebar = new Sidebar({
     logger,
     registry,
@@ -184,6 +187,7 @@ function createHarness(): Harness {
     auth,
     tree,
     settings: () => settings,
+    groupMatcher,
     dockerSetupRequired: () => setupRequired.value,
     dockerHost: async () => dockerHost.value,
     dockerTargets,
@@ -212,6 +216,7 @@ function createHarness(): Harness {
     view,
     dockerTargets,
     helperBuilds,
+    groupMatcher,
   };
 }
 
@@ -941,24 +946,86 @@ describe('Sidebar progressive display', () => {
     expect(String(failed[0][0])).toContain('Maximum call stack size exceeded');
   });
 
-  it('names the setting repositoryGroups once when grouping is slow, and never without patterns', async () => {
-    h.discovery.refresh.mockResolvedValue(data([info('acme/web-shop')]));
+  it('runs the patterns of repositoryGroups in the worker only for names without a place, until the setting changes', async () => {
+    h.discovery.refresh.mockResolvedValue(data([info('acme/web-shop'), info('acme/api')]));
     await signedIn();
-    let now = 0;
-    const clockNow = vi.spyOn(h.clock, 'now').mockImplementation(() => (now += SLOW_GROUPING_MS));
-    const slow = () =>
-      fakeVscode.window.showWarningMessage.mock.calls.filter((call: unknown[]) => String(call[0]).includes('took'));
-    // Without patterns, a slow render is not about the setting.
-    await h.sidebar.render();
-    expect(slow()).toHaveLength(0);
+    // Without patterns, nothing runs.
+    expect(h.groupMatcher.runs).toEqual([]);
     h.settings.repositoryGroups = ['^(web)-(.+)$'];
     await h.sidebar.render();
-    expect(slow()).toHaveLength(1);
-    expect(String(slow()[0][0])).toContain('devspaces.repositoryGroups');
-    expect(h.logger.warn).toHaveBeenCalledWith(slow()[0][0]);
+    expect(h.groupMatcher.runs.map((run) => run.names)).toEqual([['api', 'web-shop']]);
+    expect(rows().map((row) => [row.repository, row.label])).toEqual([['acme/web-shop', 'shop']]);
+    // The places are kept: a render with the same names runs nothing.
     await h.sidebar.render();
-    expect(slow()).toHaveLength(1);
-    clockNow.mockRestore();
+    expect(h.groupMatcher.runs).toHaveLength(1);
+    // A new repository: only its name runs.
+    h.discovery.refresh.mockResolvedValue(data([info('acme/web-shop'), info('acme/api'), info('acme/web-blog')]));
+    await h.sidebar.refreshDiscovery({ again: true });
+    await h.sidebar.render();
+    expect(h.groupMatcher.runs.map((run) => run.names)).toEqual([['api', 'web-shop'], ['web-blog']]);
+    expect(rows().map((row) => row.label)).toEqual(['blog', 'shop']);
+    // Another value of the setting: all names run again.
+    h.settings.repositoryGroups = ['^(web)-(shop)$'];
+    await h.sidebar.render();
+    expect(h.groupMatcher.runs.at(-1)).toEqual({ entries: ['^(web)-(shop)$'], names: ['api', 'web-blog', 'web-shop'] });
+    expect(rows().map((row) => row.label)).toEqual(['shop']);
+  });
+
+  it('places a repository with several sources (a node with a child row per source) by its name', async () => {
+    const shop = { ...info('acme/web-shop'), configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] };
+    h.discovery.refresh.mockResolvedValue(data([shop, info('acme/api')]));
+    await signedIn();
+    h.settings.repositoryGroups = ['^(web)-(.+)$'];
+    await h.sidebar.render();
+    expect(h.groupMatcher.runs.map((run) => run.names)).toEqual([['api', 'web-shop']]);
+    const [group] = h.models[h.models.length - 1];
+    expect(group.children.map((child) => [child.kind, child.label])).toEqual([['group', 'web']]);
+    const [web] = group.children;
+    const placed = web.kind === 'group' ? web.children : [];
+    expect(placed.map((child) => [child.kind, child.label])).toEqual([['repositoryNode', 'shop']]);
+    expect(rows().map((row) => [row.repository, row.label])).toEqual([
+      ['acme/web-shop', 'config'],
+      ['acme/web-shop', 'python'],
+    ]);
+  });
+
+  it('lists the repositories without groups when the patterns take too long, says so once, and tries again after a change of the setting', async () => {
+    h.discovery.refresh.mockResolvedValue(data([info('acme/web-shop'), info('acme/api')]));
+    await signedIn();
+    h.settings.repositoryGroups = ['^(web)-(.+)$', String.raw`^(\w+)+$`];
+    h.groupMatcher.result = { tooSlow: true, slowEntry: 1 };
+    await h.sidebar.render();
+    expect(rows().map((row) => row.label)).toEqual(['api', 'web-shop']);
+    const warnings = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => String(call[0]));
+    expect(warnings()).toEqual([
+      // The entry as JSON, as it is written in settings.json.
+      'The repository group "^(\\\\w+)+$" in the setting devspaces.repositoryGroups took longer than 1 second for the names of your repositories, for example because of a nested repetition such as (a+)+. The view lists the repositories without groups until you change the setting.',
+    ]);
+    expect(h.logger.warn).toHaveBeenCalledWith(warnings()[0]);
+    // The view does not ask the worker again for this value of the setting.
+    await h.sidebar.render();
+    expect(h.groupMatcher.runs).toHaveLength(1);
+    expect(warnings()).toHaveLength(1);
+    // A changed setting runs again.
+    h.groupMatcher.result = undefined;
+    h.settings.repositoryGroups = ['^(web)-(.+)$'];
+    await h.sidebar.render();
+    expect(h.groupMatcher.runs).toHaveLength(2);
+    expect(rows().map((row) => row.label)).toEqual(['shop']);
+  });
+
+  it('lists the repositories without groups when the worker fails, and says so once', async () => {
+    h.discovery.refresh.mockResolvedValue(data([info('acme/web-shop'), info('acme/api')]));
+    await signedIn();
+    h.settings.repositoryGroups = ['^(web)-(.+)$'];
+    h.groupMatcher.result = { failed: true };
+    await h.sidebar.render();
+    await h.sidebar.render();
+    expect(rows().map((row) => row.label)).toEqual(['api', 'web-shop']);
+    const warnings = fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => String(call[0]));
+    expect(warnings).toEqual([
+      'The repository groups of the setting devspaces.repositoryGroups could not be applied, because the worker thread of Devspaces failed. The view lists the repositories without groups until you change the setting or reload the window.',
+    ]);
   });
 
   it('shows no part of a first load that failed', async () => {
