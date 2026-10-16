@@ -336,12 +336,12 @@ describe('the commands in the log', () => {
     expect(manualCommand({ kind: 'container', name: 'devspaces-monitor' })).toBe('docker rm -f devspaces-monitor');
     expect(manualCommand({ kind: 'image', name: 'devspaces-worker:0123456789ab' }, 'devspaces-build-box')).toBe('docker --context devspaces-build-box image rm devspaces-worker:0123456789ab');
     expect(manualCommand({ kind: 'volume', name: 'devspaces-vscode' })).toBe('docker volume rm devspaces-vscode');
-    expect(manualCommand({ kind: 'image', name: 'label=nimblescape.devspaces.worker=true' })).toBe('docker image rm $(docker image ls -q --filter label=nimblescape.devspaces.worker=true)');
+    expect(manualCommand({ kind: 'image', name: 'label=nimblescape.devspaces.worker=true' })).toBe('docker image prune -a -f --filter label=nimblescape.devspaces.worker=true');
     expect(itemText({ kind: 'container', name: 'label=nimblescape.devspaces.monitor' })).toBe('the containers with the label nimblescape.devspaces.monitor');
     expect(uninstallCommands('ctx')).toEqual([
       'docker --context ctx rm -f $(docker --context ctx ps -aq --filter label=nimblescape.devspaces.monitor)',
       'docker --context ctx rm -f $(docker --context ctx ps -aq --filter label=nimblescape.devspaces.worker-run)',
-      'docker --context ctx image rm -f $(docker --context ctx image ls -q --filter label=nimblescape.devspaces.worker)',
+      'docker --context ctx image prune -a -f --filter label=nimblescape.devspaces.worker',
       'docker --context ctx volume rm devspaces-monitor devspaces-worker-cache devspaces-vscode',
     ]);
   });

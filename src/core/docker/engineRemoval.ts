@@ -174,7 +174,8 @@ function dockerWord(context: string | undefined): string {
 
 /**
  * The command that removes an item that is left (`context`: the Docker context of a remote engine). For the containers
- * or images of a label that could not be listed (`label=<key>`), the command removes all of them.
+ * or images of a label that could not be listed (`label=<key>`), the command removes all of them; for the images with
+ * `docker image prune`, which removes an image with all its tags and leaves an image that a container uses.
  */
 export function manualCommand(item: Pick<RemovalItem, 'kind' | 'name'>, context?: string): string {
   const docker = dockerWord(context);
@@ -183,19 +184,22 @@ export function manualCommand(item: Pick<RemovalItem, 'kind' | 'name'>, context?
     case 'container':
       return byLabel ? `${docker} rm -f $(${docker} ps -aq --filter ${item.name})` : `${docker} rm -f ${item.name}`;
     case 'image':
-      return byLabel ? `${docker} image rm $(${docker} image ls -q --filter ${item.name})` : `${docker} image rm ${item.name}`;
+      return byLabel ? `${docker} image prune -a -f --filter ${item.name}` : `${docker} image rm ${item.name}`;
     case 'volume':
       return `${docker} volume rm ${item.name}`;
   }
 }
 
-/** The commands that remove all that this removal removes, for the log of a removal that ended early. */
+/**
+ * The commands that remove all that this removal removes, for the log of a removal that ended early. The section
+ * "Uninstall" of docs/guide.md shows the same commands.
+ */
 export function uninstallCommands(context?: string): string[] {
   const docker = dockerWord(context);
   return [
     `${docker} rm -f $(${docker} ps -aq --filter label=${LABEL_MONITOR})`,
     `${docker} rm -f $(${docker} ps -aq --filter label=${LABEL_HELPER_RUN})`,
-    `${docker} image rm -f $(${docker} image ls -q --filter label=${LABEL_HELPER})`,
+    `${docker} image prune -a -f --filter label=${LABEL_HELPER}`,
     `${docker} volume rm ${SHARED_VOLUMES.join(' ')}`,
   ];
 }
