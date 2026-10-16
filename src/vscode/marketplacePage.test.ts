@@ -120,13 +120,13 @@ describe('the texts of the Monitor question and of the removal in the docs', () 
     expect(paragraph).toContain(`A Monitor of an older version on an engine that you do not open again keeps running; Devspaces: ${REMOVE_COMMAND} removes it.`);
   });
 
-  // The mode of a running Monitor changes only at the next ensure on its engine; the answer Keep Running writes the
-  // value that the setting has while the question comes.
+  // The mode of a running Monitor changes only at the next ensure on its engine (a start of a devspace, or Update All
+  // Images Now); the answer Keep Running writes the value that the setting has while the question comes.
   it('the setting and the guide say when a changed answer reaches a running Monitor', () => {
     const { contributes } = JSON.parse(read('package.json')) as { contributes: { configuration: { properties: Record<string, { markdownDescription?: string }> } } };
     const setting = contributes.configuration.properties['devspaces.stopMonitorWhenIdle'];
     const guide = read('docs/guide.md');
-    const changed = 'A change applies on each engine at the next start of a devspace there.';
+    const changed = 'A change applies on each engine at the next start of a devspace or **Update All Images Now** there.';
     for (const text of [setting?.markdownDescription ?? '', guide]) {
       expect(text).toContain(changed);
       expect(text).toContain(`removes it at once`);
@@ -135,6 +135,10 @@ describe('the texts of the Monitor question and of the removal in the docs', () 
     expect(setting?.markdownDescription).toContain('The answer **Keep Running** keeps this setting off (the question only comes while it is off)');
     // A Stop sends a heartbeat: it is a use of the engine.
     expect(guide).toContain('no devspace was started, stopped or deleted there');
+    // Both places in the guide, and the change log.
+    expect(guide.split(changed)).toHaveLength(3);
+    const paragraph = section(read('CHANGELOG.md'), '0.6.0').split('\n\n').find((text) => text.startsWith('**Background container, asked once per engine:**'));
+    expect(paragraph).toContain('on each engine from the next start of a devspace or Update All Images Now there; until then, a Monitor that keeps running goes on');
   });
 
   it('the guide says what the command removes, and removes the Monitor and the helper containers by hand first', () => {
