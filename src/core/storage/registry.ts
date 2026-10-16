@@ -329,10 +329,15 @@ export class DevspaceRegistry {
     const result = await mutator(file);
     file.version = REGISTRY_VERSION;
     if (JSON.stringify(file) !== before) {
-      // The process that took over the lock read the file before this write: the write would undo its change.
-      if (!(await held())) throw new LockLostError(this.paths.registryLock);
+      // The process that took over the lock read the file before this write: the write would undo its change. The token
+      // is checked before the backup, and again after the temporary file is written, right before the rename. Only the
+      // very short time between that last check and the rename is not covered: a takeover exactly then is not seen.
+      const checkHeld = async (): Promise<void> => {
+        if (!(await held())) throw new LockLostError(this.paths.registryLock);
+      };
+      await checkHeld();
       if (parsed.state === 'invalid' || parsed.dropped > 0 || parsed.droppedRecords > 0 || parsed.old > 0) await this.backup(parsed);
-      await retryTransient(() => writeJsonAtomic(this.paths.registry, file));
+      await retryTransient(() => writeJsonAtomic(this.paths.registry, file, { beforeRename: checkHeld }));
     }
     return result;
   }

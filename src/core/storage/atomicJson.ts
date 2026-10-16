@@ -32,11 +32,20 @@ export async function readJson<T>(file: string): Promise<T | undefined> {
   }
 }
 
-export async function writeJsonAtomic(file: string, value: unknown): Promise<void> {
+export interface AtomicWriteOptions {
+  /**
+   * Runs after the temporary file is written, right before the rename (for example a last check of a lock). When it
+   * throws, the temporary file is removed, `file` is not changed, and the error is thrown.
+   */
+  beforeRename?: () => Promise<void>;
+}
+
+export async function writeJsonAtomic(file: string, value: unknown, options: AtomicWriteOptions = {}): Promise<void> {
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   const temp = atomicTemporaryPath(file);
   try {
     await fs.promises.writeFile(temp, JSON.stringify(value, null, 2), 'utf8');
+    await options.beforeRename?.();
     await fs.promises.rename(temp, file);
   } catch (error) {
     await fs.promises.rm(temp, { force: true }).catch(() => {});

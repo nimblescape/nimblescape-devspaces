@@ -36,6 +36,29 @@ describe('atomic JSON files', () => {
     await expect(readJson(syncFile)).resolves.toEqual([1]);
   });
 
+  it('runs beforeRename after the temporary file is written; when it throws, the file stays and no temporary file is left', async () => {
+    const file = path.join(root, 'x.json');
+    await writeJsonAtomic(file, { a: 1 });
+    let seen: string[] = [];
+    await writeJsonAtomic(file, { a: 2 }, {
+      beforeRename: async () => {
+        seen = fs.readdirSync(root);
+      },
+    });
+    expect(seen).toHaveLength(2);
+    await expect(readJson(file)).resolves.toEqual({ a: 2 });
+    const lost = new Error('the lock was lost');
+    await expect(
+      writeJsonAtomic(file, { a: 3 }, {
+        beforeRename: async () => {
+          throw lost;
+        },
+      }),
+    ).rejects.toBe(lost);
+    await expect(readJson(file)).resolves.toEqual({ a: 2 });
+    expect(fs.readdirSync(root)).toEqual(['x.json']);
+  });
+
   it('reads a missing or invalid file as undefined', async () => {
     const file = path.join(root, 'x.json');
     await expect(readJson(file)).resolves.toBeUndefined();
