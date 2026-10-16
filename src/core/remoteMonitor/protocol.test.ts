@@ -11,8 +11,12 @@ import {
   REMOTE_MONITOR_ENTRY,
   REMOTE_MONITOR_READY_TEXT,
   REMOTE_MONITOR_SCRIPT_PATH,
+  LAST_USE_FILE,
+  UNUSED_END_MS,
   clampLimitSeconds,
   forgetIfUnchangedCommand,
+  isMonitorCreateId,
+  parseLastUse,
   isUnderRecordsLock,
   monitorExecFailure,
   heartbeatFileName,
@@ -220,5 +224,27 @@ describe('release heartbeats and records', () => {
     expect(parseHeartbeatRecord(input(plain))).toEqual(plain);
     expect(parseHeartbeatRecord(input({ ...plain, release: false }))).toBeUndefined();
     expect(parseHeartbeatRecord(input({ ...plain, release: 'yes' }))).toBeUndefined();
+  });
+});
+
+// The last use of the engine by a window, which ends a permanent monitor after 30 days without one.
+describe('the last use of the engine', () => {
+  const CREATE = '0f0f0f0f-0000-4000-8000-000000000001';
+
+  it('names its file and the time without use', () => {
+    expect(LAST_USE_FILE).toBe('last-use.json');
+    expect(UNUSED_END_MS).toBe(30 * 24 * 60 * 60_000);
+  });
+
+  it('parses the time and the nonce of the create, and refuses anything else', () => {
+    expect(parseLastUse(input({ at: 1000, createId: CREATE }))).toEqual({ at: 1000, createId: CREATE });
+    expect(parseLastUse(input({ at: 0 }))).toEqual({ at: 0 });
+    for (const value of [{}, { at: -1 }, { at: 1.5 }, { at: '1000' }, { at: 1000, createId: 'x' }, { at: 1000, createId: CREATE.toUpperCase() }, { at: 1000, extra: 1 }, [], null]) {
+      expect(parseLastUse(input(value)), JSON.stringify(value)).toBeUndefined();
+    }
+    expect(parseLastUse('not json')).toBeUndefined();
+    expect(parseLastUse(input({ at: 1000, createId: CREATE }).padEnd(2000, ' '))).toBeUndefined();
+    expect(isMonitorCreateId(CREATE)).toBe(true);
+    expect(isMonitorCreateId(undefined)).toBe(false);
   });
 });

@@ -27,12 +27,21 @@ export function limited<T>(ms: number, signal: AbortSignal | undefined, call: (s
 /** The inspect of a container as the ensure reads it (MonitorInspected). */
 export function monitorInspected(value: unknown): MonitorInspected {
   if (value === undefined) return { exists: false };
-  const raw = value as { State?: { Status?: unknown; ExitCode?: unknown }; Config?: { Labels?: unknown }; RestartCount?: unknown; Id?: unknown; Created?: unknown };
+  const raw = value as {
+    State?: { Status?: unknown; ExitCode?: unknown };
+    Config?: { Labels?: unknown };
+    HostConfig?: { RestartPolicy?: { Name?: unknown } };
+    RestartCount?: unknown;
+    Id?: unknown;
+    Created?: unknown;
+  };
   const labels = raw.Config?.Labels;
   const label = typeof labels === 'object' && labels !== null ? (labels as Record<string, unknown>)[LABEL_MONITOR] : undefined;
   const owner = typeof labels === 'object' && labels !== null ? (labels as Record<string, unknown>)[LABEL_MONITOR_OWNER] : undefined;
   const { RestartCount: restartCount, Id: id } = raw;
   const exitCode = raw.State?.ExitCode;
+  // An empty name is the policy `no` (as Docker shows a container created without one).
+  const policy = raw.HostConfig?.RestartPolicy?.Name;
   return {
     exists: true,
     status: typeof raw.State?.Status === 'string' ? raw.State.Status : '',
@@ -42,6 +51,7 @@ export function monitorInspected(value: unknown): MonitorInspected {
     id: typeof id === 'string' && /^[0-9a-f]{64}$/.test(id) ? id : undefined,
     createdAt: parseDockerTime(raw.Created),
     ...(typeof owner === 'string' ? { owner } : {}),
+    ...(typeof policy === 'string' ? { restartPolicy: policy === '' ? 'no' : policy } : {}),
   };
 }
 

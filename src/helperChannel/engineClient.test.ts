@@ -234,6 +234,15 @@ describe('the port of the engine over the Engine API', () => {
     }
   });
 
+  it('changes the restart policy of a container; any other answer than 200 is an EngineError', async () => {
+    const { engine, calls } = await serve((call) => (call.url.startsWith('/containers/c1/') ? { status: 200, json: { Warnings: [] } } : { status: 404, json: { message: 'No such container: gone' } }));
+    await engine.updateRestartPolicy('c1', 'no');
+    expect(calls).toEqual([{ method: 'POST', url: '/containers/c1/update', body: JSON.stringify({ RestartPolicy: { Name: 'no' } }) }]);
+    const thrown = await engine.updateRestartPolicy('gone', 'no').catch((error: unknown) => error);
+    expect(isMissing(thrown)).toBe(true);
+    expect(thrown).toMatchObject({ message: 'No such container: gone' });
+  });
+
   it('throws an EngineError with the message of the engine and its status', async () => {
     const { engine } = await serve(() => ({ status: 500, json: { message: 'the daemon is busy' } }));
     for (const call of [engine.container('c1'), engine.containers('label'), engine.stop('c1', 10), engine.start('c1'), engine.exec('c1', ['true'])]) {

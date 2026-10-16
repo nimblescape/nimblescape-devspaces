@@ -86,8 +86,13 @@ describe('the ensure of the Monitor in the worker', () => {
     // here one that ends when idle.
     expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, []));
     expect(specs[0].network).toBe('default');
-    // No DEVSPACE_IMAGE_PREFIXES: the monitor gets no image list of repositories.
-    expect(specs[0].env).toEqual({ DEVSPACE_IMAGE_SCHEDULE: images.schedule, DEVSPACE_IMAGE_TZ: images.timeZone });
+    // No DEVSPACE_IMAGE_PREFIXES: the monitor gets no image list of repositories. The nonce of the create, by which it
+    // finds its own container.
+    expect(specs[0].env).toEqual({
+      DEVSPACE_IMAGE_SCHEDULE: images.schedule,
+      DEVSPACE_IMAGE_TZ: images.timeZone,
+      DEVSPACE_MONITOR_CREATE_ID: specs[0].labels['nimblescape.devspaces.monitor-create'],
+    });
   });
 
   // A permanent monitor (MonitorSettings.permanent) has its part of the label and the restart policy `unless-stopped`;
@@ -100,7 +105,13 @@ describe('the ensure of the Monitor in the worker', () => {
     expect(specs[0].labels[LABEL_MONITOR]).toBe(remoteMonitorLabelValue(SCRIPT, OWN.image.tag, [PERMANENT_LABEL_PART, vscodeStoreLabelPart('devspaces-vscode')]));
     expect(specs[0].restartPolicy).toBe('unless-stopped');
     expect(specs[0].mounts).toEqual({ socket: OWN.socket, volume: 'devspaces-monitor', volumeTarget: '/state', store: { volume: 'devspaces-vscode', target: '/vscode' } });
-    expect(specs[0].env).toEqual({ DEVSPACE_IMAGE_SCHEDULE: IMAGES.schedule, DEVSPACE_IMAGE_TZ: IMAGES.timeZone, DEVSPACE_MONITOR_PERMANENT: '1', DEVSPACE_VSCODE_STORE: 'devspaces-vscode' });
+    expect(specs[0].env).toEqual({
+      DEVSPACE_IMAGE_SCHEDULE: IMAGES.schedule,
+      DEVSPACE_IMAGE_TZ: IMAGES.timeZone,
+      DEVSPACE_MONITOR_PERMANENT: '1',
+      DEVSPACE_VSCODE_STORE: 'devspaces-vscode',
+      DEVSPACE_MONITOR_CREATE_ID: specs[0].labels['nimblescape.devspaces.monitor-create'],
+    });
     // One that ends when idle: `on-failure`, no part, no variable of the mode.
     const idle = engineWith({});
     await monitorEnsureOperation(() => idle.engine, async () => own, () => SCRIPT)({ images: { ...IMAGES, permanent: false } }, contextOf().context);

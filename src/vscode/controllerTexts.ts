@@ -36,6 +36,7 @@ export const ControllerTexts = {
   monitorQuestionDetail:
     'The container devspaces-monitor updates the images of your devspaces, the VS Code Server and your extensions, by default once a day. ' +
     'If you keep it running, it also runs while VS Code is closed, and Docker starts it again after a restart. ' +
+    'It ends itself after 30 days in which no devspace was used on this Docker engine. ' +
     'If it stops when idle, it ends 5 minutes after the last devspace stops, and the updates run only while a devspace runs. ' +
     'Your answer applies to all Docker engines. You can change it with the setting "Devspaces: Stop Monitor When Idle". ' +
     'The command "Devspaces: Remove Devspaces from This Docker Engine…" removes the container.',

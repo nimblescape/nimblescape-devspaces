@@ -645,6 +645,50 @@ export const CACHE_RUN_FILE = 'cache-run.json';
 export const RUN_NOW_FILE = 'run-now.json';
 
 /**
+ * The last use of the engine by a window, in the volume of the monitor (LastUse): written by the subcommands of the
+ * windows (src/remoteMonitor/main.ts, at most once an hour) and by the start of a new monitor container. A permanent
+ * monitor ends itself after UNUSED_END_MS without a use.
+ */
+export const LAST_USE_FILE = 'last-use.json';
+/**
+ * A permanent monitor that no window used for this time (by the clock of the engine's host) ends itself: its restart
+ * policy becomes `no`, then it exits with 0. The next open of a window creates it again.
+ */
+export const UNUSED_END_MS = 30 * 24 * 60 * 60_000;
+
+/** The content of LAST_USE_FILE. */
+export interface LastUse {
+  /** The time of the last use (milliseconds since the epoch, on the clock of the engine's host). */
+  at: number;
+  /**
+   * The nonce of the monitor container that wrote it (LABEL_MONITOR_CREATE): the start of a container with another one
+   * is a use; a restart of the same container is none.
+   */
+  createId?: string;
+}
+
+/** The nonce of a create of the monitor (LABEL_MONITOR_CREATE): a UUID. */
+export function isMonitorCreateId(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
+}
+
+/** The content of LAST_USE_FILE; undefined when it is not valid. */
+export function parseLastUse(text: string): LastUse | undefined {
+  if (text.length > 1024) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(value) || !hasOnlyKeys(value, ['at'], ['createId'])) return undefined;
+  const { at, createId } = value;
+  if (typeof at !== 'number' || !Number.isSafeInteger(at) || at < 0) return undefined;
+  if (createId !== undefined && !isMonitorCreateId(createId)) return undefined;
+  return createId === undefined ? { at } : { at, createId };
+}
+
+/**
  * The value of LABEL_MONITOR: 12 hex digits of sha256 of the script, the helper tag, the pipe loader (a new
  * loader is a new version of the container, so every monitor of an older way of loading is replaced once), and the
  * `extra` parts.

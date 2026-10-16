@@ -239,6 +239,11 @@ export function dockerEngine(
       // 204: started; 304: it runs already.
       if (answer.status !== 204 && answer.status !== 304) fail(answer);
     },
+    updateRestartPolicy: async (container, policy, signal) => {
+      const answer = await api({ method: 'POST', path: `/containers/${encodeURIComponent(container)}/update`, json: { RestartPolicy: { Name: policy } }, signal });
+      // 200 with the warnings of the engine, which change nothing here.
+      if (answer.status !== 200) fail(answer);
+    },
     version: async (signal) => {
       const value = (await list('/version', signal)) as { ApiVersion?: unknown; Version?: unknown };
       return { apiVersion: typeof value?.ApiVersion === 'string' ? value.ApiVersion : '', version: typeof value?.Version === 'string' ? value.Version : '' };

@@ -28,8 +28,12 @@ describe('the ensure over MonitorEngine, probes', () => {
   it('the settings of the background run set the schedule and the time zone, no prefixes', () => {
     const monitor = new RemoteSessionMonitor({ engine: engine({}), logger: logger([]), script: async () => SCRIPT });
     // The schedule and the time zone of the background run always go to the container (the VS Code server and the
-    // cleanup always run).
-    expect(monitor.runSpec('img', '/sock', 'label', SCRIPT, { schedule: '7 6 * * *', timeZone: 'UTC' }, 'n1').env).toEqual({ DEVSPACE_IMAGE_SCHEDULE: '7 6 * * *', DEVSPACE_IMAGE_TZ: 'UTC' });
+    // cleanup always run), and the nonce of the create, by which the monitor finds its own container.
+    expect(monitor.runSpec('img', '/sock', 'label', SCRIPT, { schedule: '7 6 * * *', timeZone: 'UTC' }, 'n1').env).toEqual({
+      DEVSPACE_IMAGE_SCHEDULE: '7 6 * * *',
+      DEVSPACE_IMAGE_TZ: 'UTC',
+      DEVSPACE_MONITOR_CREATE_ID: 'n1',
+    });
   });
 
   it('the create waits for the ready text of the monitor', async () => {

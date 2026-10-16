@@ -98,7 +98,13 @@ describe('the ensure of the Monitor with the worker script', () => {
     await ensureWorkerMonitor(engine(specs), OWN, silentLogger, () => 'the monitor', IMAGES, new AbortController().signal, { read: () => 'the worker', stateDir });
     const hash = bundleHash('the worker');
     expect(readWorkerScript(stateDir, hash)).toEqual({ script: 'the worker' });
-    expect(specs[0].env).toEqual({ DEVSPACE_IMAGE_SCHEDULE: '7 6 * * *', DEVSPACE_IMAGE_TZ: 'UTC', [MONITOR_WORKER_HASH_ENV]: hash });
+    expect(specs[0].env).toEqual({
+      DEVSPACE_IMAGE_SCHEDULE: '7 6 * * *',
+      DEVSPACE_IMAGE_TZ: 'UTC',
+      [MONITOR_WORKER_HASH_ENV]: hash,
+      // The nonce of the create (by which the monitor finds its own container), not of the worker.
+      DEVSPACE_MONITOR_CREATE_ID: specs[0].labels['nimblescape.devspaces.monitor-create'],
+    });
   });
 
   it('without a worker script, as before (no variable)', async () => {
