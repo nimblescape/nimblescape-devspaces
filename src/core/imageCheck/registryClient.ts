@@ -51,9 +51,10 @@ export type DigestResult =
 /**
  * Registry credentials for a registry host, or `undefined` if there are none. Must not throw.
  * `signal` aborts when the check ends or the lookup takes too long; a credential helper call must end when it aborts.
- * `repository`: the repository of the image or Feature that needs them (the first one of the registry in a check).
+ * `repository`: the repository of the image or Feature that needs them (the first one of the registry in a check); the
+ * worker names it in its request for the login (hostRegistryCredentials).
  */
-export type CredentialsProvider = (registry: string, signal?: AbortSignal, repository?: string) => Promise<Credentials | undefined>;
+export type CredentialsProvider = (registry: string, signal: AbortSignal | undefined, repository: string) => Promise<Credentials | undefined>;
 
 /** One challenge of a `WWW-Authenticate` header. `scheme` is lower case, parameter names are lower case. */
 export interface AuthChallenge {

@@ -221,7 +221,7 @@ describe('DockerCredentialStore', () => {
 
   it('works as a CredentialsProvider', async () => {
     writeConfig({ auths: { 'ghcr.io': { auth: base64('a:b') } } });
-    expect(await store().provider()('ghcr.io')).toEqual({ username: 'a', password: 'b' });
+    expect(await store().provider()('ghcr.io', undefined, 'acme/app')).toEqual({ username: 'a', password: 'b' });
   });
 });
 
@@ -229,20 +229,20 @@ describe('withGitHubPackagesFallback', () => {
   it('uses the GitHub session for ghcr.io without a dialog when Docker has no credentials', async () => {
     const github = { getPackagesCredentials: vi.fn(async () => ({ username: 'octocat', password: 'gho_x' })) };
     const provider = withGitHubPackagesFallback(async () => undefined, github);
-    expect(await provider('ghcr.io')).toEqual({ username: 'octocat', password: 'gho_x' });
+    expect(await provider('ghcr.io', undefined, 'acme/app')).toEqual({ username: 'octocat', password: 'gho_x' });
     expect(github.getPackagesCredentials).toHaveBeenCalledWith({ interactive: false });
   });
 
   it('prefers the Docker credentials and never asks GitHub for other registries', async () => {
     const github = { getPackagesCredentials: vi.fn(async () => ({ username: 'octocat', password: 'gho_x' })) };
     const docker = { username: 'docker', password: 'pw' };
-    expect(await withGitHubPackagesFallback(async () => docker, github)('ghcr.io')).toBe(docker);
-    expect(await withGitHubPackagesFallback(async () => undefined, github)('registry-1.docker.io')).toBeUndefined();
+    expect(await withGitHubPackagesFallback(async () => docker, github)('ghcr.io', undefined, 'acme/app')).toBe(docker);
+    expect(await withGitHubPackagesFallback(async () => undefined, github)('registry-1.docker.io', undefined, 'library/node')).toBeUndefined();
     expect(github.getPackagesCredentials).not.toHaveBeenCalled();
   });
 
   it('returns undefined when the GitHub session fails', async () => {
     const github = { getPackagesCredentials: vi.fn(async () => Promise.reject(new Error('no session'))) };
-    expect(await withGitHubPackagesFallback(async () => undefined, github)('ghcr.io')).toBeUndefined();
+    expect(await withGitHubPackagesFallback(async () => undefined, github)('ghcr.io', undefined, 'acme/app')).toBeUndefined();
   });
 });

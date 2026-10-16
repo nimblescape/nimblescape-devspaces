@@ -35,7 +35,7 @@ import { isStorageId } from '../storage/paths';
 import { HelperOperationError, type OperationOptions } from '../helperChannel/helperChannel';
 import type { AskKind, Secrets } from '../helperChannel/protocol';
 import { errorMessage } from '../errors';
-import { parseImageReference, registryDisplayName } from '../imageCheck/reference';
+import { isLoginReference, registryDisplayName } from '../imageCheck/reference';
 import type { Logger } from '../ports';
 
 /** The answer of a request: its value, and the secrets that the operation gets with it. */
@@ -163,11 +163,13 @@ interface OperationLogins {
 }
 
 /**
- * The most registries whose login one operation gets. An open needs the logins of the registries of its private images
- * and Features, rarely more than two. The extension cannot read the configuration on the Docker engine, so this limit
- * is what keeps a worker that someone else controls from getting every login of this computer at once.
+ * The most registries whose login one operation gets. Each check and pull of an open asks for the login of its
+ * registry, also for a public image, so every registry of the open for which this computer has a login counts: the
+ * registry of the image, of the Features (often ghcr.io, with the GitHub sign-in) and of the images of a Docker Compose
+ * configuration. The extension cannot read the configuration on the Docker engine, so this limit is what bounds the
+ * logins that a worker that someone else controls gets in one open.
  */
-export const MAX_LOGIN_REGISTRIES = 4;
+export const MAX_LOGIN_REGISTRIES = 8;
 /** The most requests for a registry login of one operation: one for each pull, and one for each registry of a check. */
 export const MAX_LOGIN_REQUESTS = 256;
 
@@ -723,9 +725,10 @@ async function secret(host: HostSide, call: string, args: unknown[], context: Re
 
 /**
  * `secret registry`: the login of the registry of one image or Feature, which the request names as its registry and
- * repository, both as parseImageReference normalizes them. The extension gives only the login of that registry, with
- * a valid host name, one request at a time, for at most MAX_LOGIN_REGISTRIES registries and MAX_LOGIN_REQUESTS
- * requests of the operation, and logs each request with its answer (never the login).
+ * repository, as parseImageReference normalizes them (isLoginReference). The extension gives only the login of that
+ * registry, answers one request at a time (it refuses a second request while it answers one), gives the logins of at
+ * most MAX_LOGIN_REGISTRIES registries and answers at most MAX_LOGIN_REQUESTS requests of the operation, and logs each
+ * request with its answer or the reason of its refusal (never the login).
  */
 async function registryLogin(host: HostSide, args: unknown[], context: RequestContext): Promise<Answer> {
   const { logins, logger } = context;
@@ -733,18 +736,17 @@ async function registryLogin(host: HostSide, args: unknown[], context: RequestCo
     logger?.warn(`The worker asked for a registry login that is refused: ${why}.`);
     throw new HelperOperationError('invalid', `The registry login of the request is refused: ${why}.`, false);
   };
-  const [registry, repository] = strings(args, 2);
-  argumentCount(args, 2);
-  // Exactly the normalized registry and repository of an image reference: a host name, then the path of the image.
-  const parsed = parseImageReference(`${registry}/${repository}`);
-  if (parsed === undefined || parsed.registry !== registry || parsed.repository !== repository || !REGISTRY_HOST.test(registry)) {
-    refuse('it does not name a registry and the repository of an image');
-  }
-  if (logins.pending) refuse('another registry login of the operation is being answered');
-  if (logins.requests >= MAX_LOGIN_REQUESTS) refuse(`the operation asked for ${MAX_LOGIN_REQUESTS} registry logins already`);
-  logins.requests += 1;
+  const [registry, repository] = args;
+  if (args.length !== 2 || typeof registry !== 'string' || typeof repository !== 'string') return refuse('the request does not name a registry and a repository');
+  // The texts of the worker in the log: in quotes, on one line, and short.
+  const quoted = (text: string) => JSON.stringify(text.slice(0, 100));
+  if (!isLoginReference(registry, repository)) return refuse(`${quoted(registry)} and ${quoted(repository)} are not the registry and the repository of an image`);
   const name = registryDisplayName(registry);
-  const what = `The registry login for ${name}/${repository}${context.repository !== undefined ? ` (open of ${context.repository})` : ''}`;
+  const image = `${name}/${repository}`;
+  if (logins.pending) return refuse(`the request for ${image} came while another registry login of the operation was answered`);
+  if (logins.requests >= MAX_LOGIN_REQUESTS) return refuse(`the request for ${image} came after ${MAX_LOGIN_REQUESTS} registry logins of the operation`);
+  logins.requests += 1;
+  const what = `The registry login for ${image}${context.repository !== undefined ? ` (open of ${context.repository})` : ''}`;
   if (!logins.given.has(registry) && logins.given.size >= MAX_LOGIN_REGISTRIES) {
     const given = [...logins.given].map(registryDisplayName).join(', ');
     logger?.warn(`${what} is not given: the operation got the logins of ${MAX_LOGIN_REGISTRIES} registries already (${given}).`);
@@ -754,6 +756,9 @@ async function registryLogin(host: HostSide, args: unknown[], context: RequestCo
   let login: Awaited<ReturnType<HostSide['secrets']['registry']>>;
   try {
     login = await host.secrets.registry(registry, repository);
+  } catch (error) {
+    logger?.warn(`${what}: the login could not be read: ${errorMessage(error)}`);
+    throw new HelperOperationError('failed', errorMessage(error), false);
   } finally {
     logins.pending = false;
   }

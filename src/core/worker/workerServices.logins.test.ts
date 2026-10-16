@@ -94,12 +94,10 @@ describe('registryLogins and hostRegistryCredentials, probes', () => {
     expect(asked).toEqual(['ghcr.io', 'ghcr.io']);
   });
 
-  it('hostRegistryCredentials asks with the repository of the image, and asks nothing without one', async () => {
+  it('hostRegistryCredentials asks with the repository of the image', async () => {
     const repositories: unknown[] = [];
     const host = { secrets: { registry: async (_name: string, repository: unknown) => (repositories.push(repository), { serveraddress: 'ghcr.io', password: 'p1' }) } } as unknown as HostSide;
     const provider = hostRegistryCredentials(registryLogins(host, () => undefined, silentLogger));
-    expect(await provider('ghcr.io')).toBeUndefined();
-    expect(repositories).toEqual([]);
     expect(await provider('ghcr.io', undefined, 'acme/app')).toEqual({ username: '', password: 'p1' });
     expect(repositories).toEqual(['acme/app']);
   });

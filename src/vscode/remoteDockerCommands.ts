@@ -31,7 +31,7 @@ import { Actions, Messages, dockerHostReason } from '../core/messages';
 import { isAbortError, type Logger, type ProcessRunner } from '../core/ports';
 import type { SshHostEntry } from '../core/sshConfig';
 import type { DockerHostQuestion, RemoteDockerState } from '../core/storage/remoteDockerState';
-import { showErrorMessage, showInformationMessage, showWarningMessage, withoutLinks } from './notifications';
+import { showErrorMessage, showInformationMessage, showWarningMessage, withNotificationProgress } from './notifications';
 import { MonitorIcons } from './treeModel';
 
 /** User-visible texts of the remote Docker host (plain language). No `vscode` in them. */
@@ -211,8 +211,8 @@ export class RemoteDockerCommands {
 
   /** Test, rootless socket, modal, remember the context, switch. True when switched. */
   private async switchToRemote(host: string): Promise<boolean> {
-    const check = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: withoutLinks(RemoteDockerTexts.testing(host)), cancellable: true },
+    const check = await withNotificationProgress(
+      { title: RemoteDockerTexts.testing(host), cancellable: true },
       async (_progress, token) => {
         const controller = new AbortController();
         const subscription = token.onCancellationRequested(() => controller.abort());

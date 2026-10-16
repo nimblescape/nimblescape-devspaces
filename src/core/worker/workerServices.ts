@@ -261,19 +261,16 @@ function turnOf(previous: Promise<unknown>, signal: AbortSignal | undefined): Pr
 
 /**
  * The login of a registry for one use of the registry client (CredentialsProvider), through `logins` (asked when it is
- * needed, forgotten right after), for the repository of the image or Feature that needs it; without a repository,
- * none is asked. An identity token is the password of IDENTITY_TOKEN_USER, as the Docker credentials give it. Never
- * throws.
+ * needed, forgotten right after), for the repository of the image or Feature that needs it. An identity token is the
+ * password of IDENTITY_TOKEN_USER, as the Docker credentials give it. Never throws.
  */
 export function hostRegistryCredentials(logins: ReturnType<typeof registryLogins>): CredentialsProvider {
-  return async (registry, signal, repository) => {
-    if (repository === undefined) return undefined;
-    return logins(
+  return (registry, signal, repository) =>
+    logins(
       { registry, repository },
       async (login) => (login === undefined ? undefined : { username: login.identityToken === true ? IDENTITY_TOKEN_USER : (login.username ?? ''), password: login.password }),
       signal,
     ).catch(() => undefined);
-  };
 }
 
 /**

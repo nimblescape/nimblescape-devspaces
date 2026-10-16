@@ -196,8 +196,8 @@ export function withGitHubPackagesFallback(
   primary: CredentialsProvider,
   github: Pick<GitHubAuth, 'getPackagesCredentials'>,
 ): CredentialsProvider {
-  return async (registry, signal) => {
-    const found = await primary(registry, signal);
+  return async (registry, signal, repository) => {
+    const found = await primary(registry, signal, repository);
     if (found || registry.toLowerCase() !== GITHUB_PACKAGES_REGISTRY || signal?.aborted) return found;
     try {
       return await github.getPackagesCredentials({ interactive: false });

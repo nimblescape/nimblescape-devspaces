@@ -5,10 +5,11 @@
 // The messages of Devspaces, with their text as plain text. VS Code renders `[label](target)` in the text of a
 // notification as a link, and a click on it runs the target, also a `command:` with its arguments. The messages of
 // Devspaces carry texts that come from a repository, from a Dev Container configuration, from the worker on the Docker
-// engine, or from an error, so every message goes through this module, which breaks the syntax of a link in its text
-// and in its detail (withoutLinks). Devspaces shows no link of its own in a message; the link "Show details" of a
-// progress notification is added after its text is cleaned (progress.ts). A test keeps every other call of the
-// `show…Message` functions out of the sources (notifications.test.ts). The log keeps every text as it was.
+// engine, or from an error, so every message and every progress notification goes through this module, which breaks
+// the syntax of a link in its text and in its detail (withoutLinks). Devspaces shows no link of its own in a message;
+// the progress of an operation (progress.ts) cleans its text in the same way and then adds its link "Show details". A
+// test keeps every other call of the `show…Message` functions and every other progress notification out of the
+// sources (notifications.test.ts). The log keeps every text as it was.
 import * as vscode from 'vscode';
 
 /** A `]` that a `(` follows: the middle of a link `[label](target)`. */
@@ -19,7 +20,7 @@ const LINK_MIDDLE = /\](?=\()/g;
  * renders no part of it as a link. The text looks the same.
  */
 export function withoutLinks(text: string): string {
-  return text.replace(LINK_MIDDLE, ']​');
+  return text.replace(LINK_MIDDLE, ']\u200b');
 }
 
 type Show = (message: string, ...rest: unknown[]) => Thenable<unknown>;
@@ -60,4 +61,18 @@ export function showErrorMessage<T extends vscode.MessageItem>(message: string, 
 export function showErrorMessage<T extends vscode.MessageItem>(message: string, options: vscode.MessageOptions, ...items: T[]): Thenable<T | undefined>;
 export function showErrorMessage(message: string, ...rest: unknown[]): Thenable<unknown> {
   return (vscode.window.showErrorMessage as Show)(withoutLinks(message), ...plainArguments(rest));
+}
+
+/**
+ * vscode.window.withProgress in a notification, with the title and every message of the progress as plain text
+ * (withoutLinks).
+ */
+export function withNotificationProgress<R>(
+  options: { title?: string; cancellable?: boolean },
+  task: (progress: vscode.Progress<{ message?: string; increment?: number }>, token: vscode.CancellationToken) => Thenable<R>,
+): Thenable<R> {
+  const title = options.title === undefined ? {} : { title: withoutLinks(options.title) };
+  return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, ...options, ...title }, (progress, token) =>
+    task({ report: (value) => progress.report(value.message === undefined ? value : { ...value, message: withoutLinks(value.message) }) }, token),
+  );
 }

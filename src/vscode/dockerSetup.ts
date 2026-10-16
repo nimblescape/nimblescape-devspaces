@@ -49,7 +49,7 @@ import { MAC_OPEN, ensureDockerRunning, launchDetachedProcess } from '../core/do
 import { errorMessage, isUserFacingError } from '../core/errors';
 import { Steps } from '../core/messages';
 import { isAbortError, systemClock, type Clock, type Logger, type ProcessRunner } from '../core/ports';
-import { showErrorMessage, showInformationMessage, showWarningMessage } from './notifications';
+import { showErrorMessage, showInformationMessage, showWarningMessage, withNotificationProgress } from './notifications';
 
 /**
  * Command Start Docker (package.json), offered once an installation has put the CLI in place, and as the action of the
@@ -313,8 +313,8 @@ export class DockerSetup implements vscode.Disposable {
   async start(): Promise<void> {
     if (this.refuseInRemoteWindow(DockerSetupUiTexts.localWindowNeededToStart, 'started')) return;
     try {
-      await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: Steps.startingDocker, cancellable: true },
+      await withNotificationProgress(
+        { title: Steps.startingDocker, cancellable: true },
         (_progress, token) => {
           const abort = new AbortController();
           const subscription = token.onCancellationRequested(() => abort.abort());
@@ -380,8 +380,8 @@ export class DockerSetup implements vscode.Disposable {
     if (!confirmation || !(await this.confirm(confirmation))) return;
     try {
       await fs.promises.mkdir(folder, { recursive: true });
-      await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: DockerSetupUiTexts.downloading, cancellable: true },
+      await withNotificationProgress(
+        { title: DockerSetupUiTexts.downloading, cancellable: true },
         async (progress, token) => {
           const abort = new AbortController();
           const subscription = token.onCancellationRequested(() => abort.abort());
