@@ -223,11 +223,18 @@ describe('an endpoint that is neither local nor SSH is never reached', () => {
 // computer, while the devspace would record the local Docker. So nothing is done, with a message that says why.
 describe('a current Docker context that cannot be read is never used', () => {
   let u: Harness;
+  /** `docker context inspect` fails while this is false. */
+  let readable: boolean;
+  const NOT_READ = 'The current Docker context could not be read. Its containers and volumes are not read.';
 
   beforeEach(async () => {
+    readable = false;
     const cli = {
       isInstalled: () => true,
-      run: async () => ({ exitCode: 1, stdout: '', stderr: 'context "gone": context not found', timedOut: false }),
+      run: async () =>
+        readable
+          ? { exitCode: 0, stdout: JSON.stringify({ Name: 'default', Endpoints: { docker: { Host: 'unix:///var/run/docker.sock' } } }), stderr: '', timedOut: false }
+          : { exitCode: 1, stdout: '', stderr: 'context "gone": context not found', timedOut: false },
     };
     const targets = new DockerTargets(cli, {}, silentLogger, 'linux');
     u = createHarness({ dockerTarget: () => targets.current() });
@@ -238,7 +245,7 @@ describe('a current Docker context that cannot be read is never used', () => {
     u.cleanup();
   });
 
-  it('an operation is refused with the message before any Docker call, and the reads show it once', async () => {
+  it('an operation is refused with the message before any Docker call, and the reads only log it', async () => {
     for (const operation of [() => u.service.open(TARGET, { progress: u.progress }), () => u.operations.stop(ENV_ID)]) {
       const error = await rejection(operation());
       expect(error.code).toBe('dockerEndpointUnsupported');
@@ -246,12 +253,28 @@ describe('a current Docker context that cannot be read is never used', () => {
     }
     expect(await u.operations.inspectStates()).toEqual(new Map());
     expect(await u.operations.inspectStates()).toEqual(new Map());
-    expect(u.ui.warnings.filter((warning) => warning === Messages.dockerContextUnreadable)).toHaveLength(1);
+    // No message from the reads: the sidebar names the context that cannot be read.
+    expect(u.ui.warnings).toEqual([]);
+    expect(u.logger.infos.filter((line) => line === NOT_READ)).toHaveLength(2);
     expect(u.dockerStarts).toBe(0);
     expect(u.helper.calls).toEqual([]);
     expect(u.docker.log).toEqual([]);
     // The devspace keeps its host (the local Docker).
     expect((await u.registry.get(ENV_ID))?.dockerHost).toBeUndefined();
+  });
+
+  // For example a time-out of `docker context inspect` during a refresh in the background (the window got the focus).
+  it('a short failure in a background read shows no message and marks nothing: an operation shows it later', async () => {
+    expect(await u.operations.inspectStates()).toEqual(new Map());
+    readable = true;
+    expect([...((await u.operations.inspectStates())?.keys() ?? [])]).toEqual([ENV_ID]);
+    // A later failure: the reads still only log it, and an operation of the user is refused with the message.
+    readable = false;
+    expect(await u.operations.inspectStates()).toEqual(new Map());
+    expect(u.ui.warnings).toEqual([]);
+    expect(u.logger.infos.filter((line) => line === NOT_READ)).toHaveLength(2);
+    const error = await rejection(u.operations.stop(ENV_ID));
+    expect(error.message).toBe(Messages.dockerContextUnreadable);
   });
 });
 
@@ -289,5 +312,12 @@ describe('a docker command that is Podman is never used', () => {
     expect(u.helper.calls).toEqual([]);
     expect(u.docker.log).toEqual([]);
     expect((await u.registry.get(ENV_ID))?.dockerHost).toBeUndefined();
+  });
+
+  // Podman does not go away by itself, as an endpoint that is not supported.
+  it('the reads show the Podman message once', async () => {
+    expect(await u.operations.inspectStates()).toEqual(new Map());
+    expect(await u.operations.inspectStates()).toEqual(new Map());
+    expect(u.ui.warnings).toEqual([Messages.podmanNotSupported]);
   });
 });
