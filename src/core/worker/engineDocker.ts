@@ -15,7 +15,7 @@ import { COMPOSE_PROJECT_LABEL, LABEL_DEVSPACE_ID, RESOURCE_NAME_PREFIX } from '
 import type { DevspaceDocker } from '../pipeline/devspacePorts';
 import { abortError, isAbortError, silentLogger, withTimeLimit, type Credentials, type Logger, type RunResult } from '../ports';
 import type { ContainerState } from '../types';
-import { credentialServerName, parseImageReference } from '../imageCheck/reference';
+import { credentialServerName, isDockerHub, parseImageReference } from '../imageCheck/reference';
 import { IDENTITY_TOKEN_USER } from '../imageCheck/credentials';
 import { EngineError, isDevContainer, isMissing, type DockerEngine, type EngineContainer } from './dockerEngine';
 import { devContainerOf, devspaceContainers } from './devspaceContainers';
@@ -77,7 +77,7 @@ export type PullLogins = <T>(
 
 /**
  * DevspaceDocker over the port. `secretOf` gives the secrets of the operation (the registry login of a pull is one
- * of them, SECRET_REGISTRY). `logins`: the login of the registry of each pull.
+ * of them, SECRET_REGISTRY). `logins`: the login of the registry of a pull that needs one (pullImage).
  */
 export class EngineDocker implements DevspaceDocker {
   constructor(
@@ -434,33 +434,42 @@ export class EngineDocker implements DevspaceDocker {
    * DevspaceDocker.pullImage over the API. With `credentials`, their password must be the registry secret that the
    * operation holds (SECRET_REGISTRY: the worker got it through its request); it goes only into the header of the pull.
    * Without `credentials`, the logins that the Docker CLI of the host would read are not here; the login of the
-   * registry comes from `logins` as the registry secret of the operation (below).
+   * registry comes from `logins` as the registry secret of the operation, only when the pull without it failed (below).
    */
   async pullImage(reference: string, options: { onOutput?: (text: string) => void; signal?: AbortSignal; credentials?: PullCredentials } = {}): Promise<void> {
-    // Without credentials of the caller, the pull asks for the login of the registry of the reference (Docker Hub for a
-    // reference without a registry) and holds it only for its own turn (the operation forgets it when the pull ends); a
-    // reference that the parser refuses, or whose registry the daemon would read otherwise, is pulled anonymously, as
-    // is one without a login.
+    // Without credentials of the caller, the pull goes without a login first, so a public image needs none and no login
+    // is asked for it. The pull asks for the login of the registry of the reference (Docker Hub for a reference without
+    // a registry) only when the registry refuses that pull (a private image), or when Docker Hub limits the pulls
+    // without a login. It then pulls again with the login and holds it only for its own turn (the operation forgets it
+    // when the pull ends). A reference that the parser refuses, or whose registry the daemon would read otherwise, is
+    // pulled without a login only.
     const image = options.credentials === undefined && this.logins !== undefined ? loginReferenceOf(reference) : undefined;
-    if (image === undefined || this.logins === undefined) return this.pullWith(reference, options);
-    const { registry } = image;
-    return this.logins(
-      image,
-      async (login) => {
-        if (login === undefined) return this.pullWith(reference, options);
-        const credentials = { registry, username: login.identityToken === true ? IDENTITY_TOKEN_USER : (login.username ?? ''), password: login.password };
-        try {
-          return await this.pullWith(reference, { ...options, credentials });
-        } catch (error) {
-          // A login that the registry refuses (an expired token of the credential store) never keeps a public image
-          // from downloading: once more without it, as the image check does.
-          if (options.signal?.aborted || !isLoginRefusal(error)) throw error;
-          this.logger.warn(`The registry ${registry} refused the login of this computer for ${reference}; it is downloaded without it: ${errorMessage(error)}`);
-          return this.pullWith(reference, options);
-        }
-      },
-      options.signal,
-    );
+    const logins = this.logins;
+    if (image === undefined || logins === undefined) return this.pullWith(reference, options);
+    try {
+      return await this.pullWith(reference, options);
+    } catch (error) {
+      if (options.signal?.aborted || !needsLogin(image.registry, error)) throw error;
+      const { registry } = image;
+      return logins(
+        image,
+        async (login) => {
+          // No login on this computer: the failure of the pull without it stays.
+          if (login === undefined) throw error;
+          this.logger.info(`The pull of ${reference} without a login failed; it is pulled again with the login of this computer for ${registry}: ${errorMessage(error)}`);
+          const credentials = { registry, username: login.identityToken === true ? IDENTITY_TOKEN_USER : (login.username ?? ''), password: login.password };
+          try {
+            return await this.pullWith(reference, { ...options, credentials });
+          } catch (failure) {
+            if (!options.signal?.aborted && isLoginRefusal(failure)) {
+              this.logger.warn(`The pull of ${reference} with the login of this computer for ${registry} was refused: ${errorMessage(failure)}`);
+            }
+            throw failure;
+          }
+        },
+        options.signal,
+      );
+    }
   }
 
   private async pullWith(reference: string, options: { onOutput?: (text: string) => void; signal?: AbortSignal; credentials?: PullCredentials }): Promise<void> {
@@ -501,11 +510,21 @@ function loginReferenceOf(reference: string): { registry: string; repository: st
   return parsed === undefined ? undefined : { registry: parsed.registry, repository: parsed.repository };
 }
 
-/** A refusal of the login by the registry (HTTP 401 or 403, or Docker's words for it). */
+/**
+ * A failed pull without a login that a login can mend: the registry refused it (isLoginRefusal), or Docker Hub limits
+ * the pulls without a login of this address (HTTP 429, `toomanyrequests`), with a higher limit for a login.
+ */
+function needsLogin(registry: string, error: unknown): boolean {
+  if (isLoginRefusal(error)) return true;
+  return isDockerHub(registry) && ((error instanceof EngineError && error.status === 429) || /toomanyrequests/i.test(errorMessage(error)));
+}
+
+/** A refusal by the registry (HTTP 401 or 403, or Docker's words for it): without a login, or of the login. */
 function isLoginRefusal(error: unknown): boolean {
   if (error instanceof EngineError && (error.status === 401 || error.status === 403)) return true;
-  // Also the words of the containerd image store and of ghcr.io and ECR.
-  return /unauthori[sz]ed|forbidden|failed to authorize|authentication required|incorrect username or password|(^|: )denied(:|$)|authorization token has expired|invalid username\/password/i.test(
+  // Also the words of the containerd image store and of ghcr.io and ECR, and Docker's words for a private repository
+  // or one that does not exist (`may require 'docker login'`; the containerd image store: `may require authorization`).
+  return /unauthori[sz]ed|forbidden|failed to authorize|authentication required|incorrect username or password|(^|: )denied(:|$)|authorization token has expired|invalid username\/password|may require 'docker login'|may require authorization/i.test(
     errorMessage(error),
   );
 }

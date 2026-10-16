@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SECRET_REGISTRY } from '../helperChannel/protocol';
 import type { CredentialsProvider } from '../imageCheck/registryClient';
 import { silentLogger } from '../ports';
+import { EngineError } from './dockerEngine';
 import { unusedEngine } from './dockerEngine.testkit';
 import type { HostSide } from './hostSide';
 import { workerServiceDeps } from './workerServices';
@@ -53,7 +54,12 @@ describe('workerServiceDeps: one queue of registry logins', () => {
       host,
       engine: {
         ...unusedEngine(),
-        pull: async (reference) => {
+        pull: async (reference, options) => {
+          // A private image: the pull without a login is refused, and needs no turn.
+          if (options?.login === undefined) {
+            events.push(`refused ${reference}`);
+            throw new EngineError('unauthorized: authentication required', 401);
+          }
           events.push(`pull ${reference} with ${slot}`);
           await new Promise<void>((resolve) => (release = resolve));
           events.push(`pulled ${reference}`);
@@ -78,13 +84,14 @@ describe('workerServiceDeps: one queue of registry logins', () => {
     await settle();
     const check = provider('r.example', undefined, 'o/i');
     await settle();
-    expect(events).toEqual(['ask ghcr.io', 'pull ghcr.io/o/i:1 with pw-ghcr.io']);
+    expect(events).toEqual(['refused ghcr.io/o/i:1', 'ask ghcr.io', 'pull ghcr.io/o/i:1 with pw-ghcr.io']);
     release();
     await pull;
     expect(await check).toEqual({ username: 'octo', password: 'pw-r.example' });
-    expect(events).toEqual(['ask ghcr.io', 'pull ghcr.io/o/i:1 with pw-ghcr.io', 'pulled ghcr.io/o/i:1', `forget ${SECRET_REGISTRY}`, 'ask r.example', `forget ${SECRET_REGISTRY}`]);
+    expect(events).toEqual(['refused ghcr.io/o/i:1', 'ask ghcr.io', 'pull ghcr.io/o/i:1 with pw-ghcr.io', 'pulled ghcr.io/o/i:1', `forget ${SECRET_REGISTRY}`, 'ask r.example', `forget ${SECRET_REGISTRY}`]);
 
-    // The check holds the login (its use is the provider itself, so a held turn is a pending ask); the pull waits.
+    // The check holds the login (its use is the provider itself, so a held turn is a pending ask); the pull without a
+    // login runs, and the pull with the login waits.
     events.length = 0;
     let answer: () => void = () => undefined;
     (host.secrets as { registry: (registry: string, repository: string) => Promise<unknown> }).registry = async (registry: string) => {
@@ -97,7 +104,7 @@ describe('workerServiceDeps: one queue of registry logins', () => {
     await settle();
     const nextPull = all.docker.pullImage('ghcr.io/o/i:2', { onOutput: () => {} });
     await settle();
-    expect(events).toEqual(['ask r.example']);
+    expect(events).toEqual(['ask r.example', 'refused ghcr.io/o/i:2']);
     answer();
     await second;
     await settle();
@@ -105,6 +112,6 @@ describe('workerServiceDeps: one queue of registry logins', () => {
     await settle();
     release();
     await nextPull;
-    expect(events).toEqual(['ask r.example', `forget ${SECRET_REGISTRY}`, 'ask ghcr.io', 'pull ghcr.io/o/i:2 with pw-ghcr.io', 'pulled ghcr.io/o/i:2', `forget ${SECRET_REGISTRY}`]);
+    expect(events).toEqual(['ask r.example', 'refused ghcr.io/o/i:2', `forget ${SECRET_REGISTRY}`, 'ask ghcr.io', 'pull ghcr.io/o/i:2 with pw-ghcr.io', 'pulled ghcr.io/o/i:2', `forget ${SECRET_REGISTRY}`]);
   });
 });
