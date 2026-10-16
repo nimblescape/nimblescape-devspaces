@@ -4,8 +4,9 @@
 
 // A permanent monitor ends itself after 30 days in which no window used the engine: the subcommands of the windows
 // record the use (last-use.json, at most once an hour), a new container is a use and a restart is none, and the loop
-// looks again after an hour before it sets the restart policy of its own container to `no` and exits with 0. The volume
-// is a temporary folder; the engine is a fake.
+// looks again after an hour before it sets the restart policy of its own container to `no` and exits with 0; a use
+// that comes meanwhile ends the wait, and one that comes while it ends sets the policy back. The volume is a temporary
+// folder; the engine is a fake.
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -14,7 +15,7 @@ import { LAST_USE_FILE, RUN_NOW_FILE, UNUSED_END_MS, parseLastUse, type LastUse 
 import { EngineError, type EngineContainerSummary, type EngineFilters } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import type { MonitorEngineParts } from './engine';
-import { EXIT_INVALID, STATE_TEMPORARY_FILE, UNUSED_END_RECHECK_MS, main, recordStart, recordUse, spanText, unusedEndFromEnv, vscodeBackgroundDeps } from './main';
+import { EXIT_INVALID, IMAGE_CHECK_MS, STATE_TEMPORARY_FILE, UNUSED_END_RECHECK_MS, main, recordStart, recordUse, spanText, unusedEndFromEnv, vscodeBackgroundDeps } from './main';
 import { REMOTE_TICK_MS } from './rules';
 
 const T0 = Date.parse('2026-10-16T10:00:00Z');
@@ -141,7 +142,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
   function startRun(options: {
     env?: NodeJS.ProcessEnv;
     now?: (mono: number) => number;
-    updateRestartPolicy?: () => Promise<void>;
+    updateRestartPolicy?: (policy: string) => Promise<void>;
     onTick?: (mono: number) => Promise<void> | void;
     maxTicks?: number;
     engine?: Partial<MonitorEngineParts>;
@@ -164,7 +165,7 @@ describe('the end of a permanent monitor after 30 days without use', () => {
         },
         updateRestartPolicy: async (id, policy) => {
           events.push(`policy ${id === OWN_ID ? 'own' : id} ${policy}`);
-          await options.updateRestartPolicy?.();
+          await options.updateRestartPolicy?.(policy);
         },
         ...options.engine,
       },
@@ -190,6 +191,29 @@ describe('the end of a permanent monitor after 30 days without use', () => {
 
   const pending = async (promise: Promise<unknown>) =>
     (await Promise.race([promise.then(() => 'ended'), new Promise((resolve) => setTimeout(() => resolve('pending'), 200))])) as string;
+
+  /** With fake timers (the timeout of `pending` would never come): still pending after some turns of the event loop. */
+  const stillPending = async (promise: Promise<unknown>) => {
+    let ended = false;
+    void promise.then(() => (ended = true));
+    for (let turn = 0; turn < 50; turn++) await new Promise<void>((resolve) => setImmediate(resolve));
+    return !ended;
+  };
+
+  /** The VS Code part of the background run, which counts the runs (each asks for the architecture first). */
+  function countedVscode(onRun: () => Promise<string> | string): NonNullable<ReturnType<typeof vscodeBackgroundDeps>> {
+    const store = path.join(stateDir, 'store');
+    fs.mkdirSync(store, { recursive: true });
+    return {
+      store: { root: store },
+      storeVolume: 'devspaces-vscode',
+      extensionStateDir: stateDir,
+      engine: { ...unusedEngine(), architecture: async () => onRun() },
+      tryLock: async () => ({ kind: 'busy' as const }),
+    } as unknown as NonNullable<ReturnType<typeof vscodeBackgroundDeps>>;
+  }
+
+  const LIST = `list ${JSON.stringify({ label: [`nimblescape.devspaces.monitor-create=${CREATE}`] })}`;
 
   it('looks again after an hour, sets the restart policy of its own container to "no", then exits with 0', async () => {
     writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
@@ -424,5 +448,134 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(runs).toBe(0);
     expect(monitor.out()).not.toContain('The background run starts.');
     expect(monitor.events).toEqual([expect.stringMatching(/^list /), 'policy own no', 'exit']);
+  });
+
+  // The ensure of a window can accept the monitor while it is still "unless-stopped", just before it ends; the window
+  // then uses it ("Update All Images Now" here). Mutation: the exit without the look at the use loses the request.
+  it('a use that comes while it ends sets the restart policy back, and it goes on; the request waits for the schedule', async () => {
+    writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
+    let mono = 0;
+    const monitor = startRun({
+      updateRestartPolicy: async (policy) => {
+        if (policy !== 'no') return;
+        expect(await main(['run-now'], { env: PERMANENT_ENV, stateDir, now: () => T0 + mono, err: () => {} })).toBe(0);
+      },
+      onTick: (now) => void (mono = now),
+      maxTicks: Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS),
+    });
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)));
+    expect(await pending(monitor.result)).toBe('pending');
+    expect(monitor.events).toEqual([LIST, 'policy own no', LIST, 'policy own unless-stopped']);
+    expect(monitor.out()).toContain('A window used Devspaces on this Docker engine while the Monitor was ending; the Monitor goes on. Its restart policy is "unless-stopped" again.');
+    expect(monitor.out()).not.toContain('the Monitor ends itself');
+    // The request stays for the next check of the schedule (a request runs whether a run is due or not).
+    expect(fs.existsSync(path.join(stateDir, RUN_NOW_FILE))).toBe(true);
+  });
+
+  it('a request of "Update All Images Now" that comes while it ends, without a use, runs before the exit', async () => {
+    writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
+    let runs = 0;
+    const monitor = startRun({
+      vscodeBackground: () =>
+        countedVscode(() => {
+          runs += 1;
+          return 'amd64';
+        }),
+      updateRestartPolicy: async (policy) => {
+        if (policy === 'no') fs.writeFileSync(path.join(stateDir, RUN_NOW_FILE), JSON.stringify({ requestedAt: T0 }));
+      },
+      // From the end on, each tick takes a moment, so that the run ends within the ticks of the test.
+      onTick: async () => {
+        if (monitor.events.includes('policy own no')) await new Promise((resolve) => setTimeout(resolve, 2));
+      },
+    });
+    expect(await monitor.result).toBe(0);
+    expect(runs).toBe(1);
+    expect(fs.existsSync(path.join(stateDir, RUN_NOW_FILE))).toBe(false);
+    expect(monitor.events).toEqual([LIST, 'policy own no', 'exit']);
+    expect(monitor.out().indexOf('the Monitor ends itself')).toBeGreaterThan(monitor.out().indexOf('The background run ended.'));
+  });
+
+  // The timer of the schedule starts a run between the end and the exit. Mutation: the exit without the second look
+  // at a run that runs cuts that run.
+  it('a run that starts while it ends holds the exit back until the run ended', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] });
+    writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
+    let started!: () => void;
+    const runStarted = new Promise<void>((resolve) => (started = resolve));
+    let finish!: () => void;
+    const gate = new Promise<string>((resolve) => (finish = () => resolve('amd64')));
+    const monitor = startRun({
+      env: { ...PERMANENT_ENV, DEVSPACE_IMAGE_FIRST_MS: '1000' },
+      vscodeBackground: () =>
+        countedVscode(() => {
+          started();
+          return gate;
+        }),
+      updateRestartPolicy: async (policy) => {
+        if (policy !== 'no') return;
+        // A request, and the first check of the schedule: the run starts while the policy changes.
+        fs.writeFileSync(path.join(stateDir, RUN_NOW_FILE), JSON.stringify({ requestedAt: T0 }));
+        await vi.advanceTimersByTimeAsync(1_000);
+        await runStarted;
+      },
+    });
+    await vi.waitFor(() => expect(monitor.events).toContain('policy own no'));
+    const endedAt = monitor.mono();
+    await vi.waitFor(() => expect(monitor.mono()).toBeGreaterThan(endedAt + 10 * REMOTE_TICK_MS));
+    expect(await stillPending(monitor.result)).toBe(true);
+    expect(monitor.events).toEqual([LIST, 'policy own no']);
+    finish();
+    expect(await monitor.result).toBe(0);
+    expect(monitor.events).toEqual([LIST, 'policy own no', 'exit']);
+    expect(monitor.out().indexOf('the Monitor ends itself')).toBeGreaterThan(monitor.out().indexOf('The background run ended.'));
+  });
+
+  // Typical after a month without use: the first Start of the user comes while the Monitor waits for its second look.
+  // Mutation: without the reads during the wait, the due run waits for the second look an hour later.
+  it('a use that comes while it waits for the second look ends the pause at the next check: a due run starts', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] });
+    writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
+    let runs = 0;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let releaseUsed!: () => void;
+    const heldAfterUse = new Promise<void>((resolve) => (releaseUsed = resolve));
+    let first = true;
+    let usedAt: number | undefined;
+    const monitor = startRun({
+      env: { ...PERMANENT_ENV, DEVSPACE_IMAGE_FIRST_MS: '1000' },
+      vscodeBackground: () =>
+        countedVscode(() => {
+          runs += 1;
+          return 'amd64';
+        }),
+      onTick: async (mono) => {
+        if (first) {
+          first = false;
+          await held;
+        }
+        // A heartbeat of the window of the Start ten minutes after the first look; the test holds the loop two ticks later.
+        if (usedAt === undefined && mono >= 10 * MINUTE) {
+          usedAt = mono;
+          await recordUse(stateDir, PERMANENT_ENV, T0 + mono);
+        }
+        if (usedAt !== undefined && mono >= usedAt + 2 * REMOTE_TICK_MS) await heldAfterUse;
+      },
+    });
+    await vi.waitFor(() => expect(monitor.out()).toContain('The Monitor looks again in 1 hour'));
+    // The first check of the schedule: the run is due, but it waits.
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.waitFor(() => expect(monitor.out()).toContain('The background run is due, but it does not start'));
+    release();
+    await vi.waitFor(() => expect(monitor.mono()).toBe(usedAt! + 2 * REMOTE_TICK_MS));
+    expect(monitor.out()).toContain('A window used Devspaces on this Docker engine again; the Monitor does not end itself.');
+    // The next check of the schedule starts the due run, long before the second look.
+    await vi.advanceTimersByTimeAsync(IMAGE_CHECK_MS);
+    await vi.waitFor(() => expect(runs).toBe(1));
+    expect(monitor.mono()).toBeLessThan(UNUSED_END_RECHECK_MS);
+    releaseUsed();
+    expect(await stillPending(monitor.result)).toBe(true);
+    expect(monitor.events).toEqual([]);
   });
 });

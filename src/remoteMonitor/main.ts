@@ -639,8 +639,9 @@ async function writeLastUse(stateDir: string, at: number, createId: string | und
  * LAST_USE_WRITE_MS (and per a quarter of the time without use of the tests), so the heartbeats every 30 s write it
  * about once an hour. It never moves the stored time earlier: a stored time later than `now` (the clock went back, or
  * was ahead when it was written) stays until the loop finds the clock still behind it at its second look (UnusedEnd),
- * so a clock that is set back for a while and set right again never makes an old use of it. Never throws: a failure
- * keeps the older time, and the next use writes it.
+ * so a clock that is set back and set right again within the hour keeps the last use. A clock that stays behind longer
+ * can make the monitor end early (UnusedEnd); the next open creates it again. Never throws: a failure keeps the older
+ * time, and the next use writes it.
  */
 export async function recordUse(stateDir: string, env: NodeJS.ProcessEnv, now: number): Promise<void> {
   try {
@@ -673,15 +674,18 @@ export async function recordStart(stateDir: string, env: NodeJS.ProcessEnv, now:
  * The end of a permanent monitor that no window used for `unusedMs` (UNUSED_END_MS; DEVSPACE_MONITOR_UNUSED_MS in the
  * tests of the container), by the last use in the volume (LAST_USE_FILE). `check` runs between two ticks of the loop; it
  * reads the file only when the time it knows is that old. The first check that finds the time without use looks again
- * after UNUSED_END_RECHECK_MS, so a clock that jumped ahead and is set right again ends nothing. No valid file counts as
- * a use now. A stored time later than now (the clock went back) counts as a use now too, in memory only: the stored time
- * is replaced only when the clock is still behind it at a second look after UNUSED_END_RECHECK_MS, so a clock that is
- * set back and set right again keeps the time of the last use (recordUse moves it only later). Then the restart
+ * after UNUSED_END_RECHECK_MS, so a clock that jumped ahead and is set right again within that time ends nothing.
+ * Until the second look it reads the file at each check, and a use that returns ends the wait at once (`paused`). No
+ * valid file counts as a use now. A stored time later than now (the clock went back) counts as a use now too, in memory
+ * only: the stored time is replaced only when the clock is still behind it at a second look after
+ * UNUSED_END_RECHECK_MS, so a clock that is set back and set right again within that time keeps the time of the last
+ * use (recordUse moves it only later). A clock that stays behind longer loses it: once it is set right, the time that
+ * replaced it can be old enough to end the monitor early; the next open creates it again. At the end, the restart
  * policy of its own container (found by the nonce of its create, MONITOR_CREATE_ID_ENV) becomes `no`, so Docker leaves
  * it exited after the exit with 0 that follows, also after a restart of the engine; the next open of a window creates
- * it again (its ensure replaces a monitor whose policy is not that of its mode). A failure is logged once, and tried
- * again after UNUSED_END_RECHECK_MS: without the change of the policy the monitor does not exit (Docker would start it
- * again).
+ * it again (its ensure replaces a monitor whose policy is not that of its mode). A use that comes before the exit
+ * (`usedAgain`) sets the policy back, and the monitor goes on. A failure is logged once, and tried again after
+ * UNUSED_END_RECHECK_MS: without the change of the policy the monitor does not exit (Docker would start it again).
  */
 export class UnusedEnd {
   /** The time of the last use that the last read found (undefined: none read yet). */
@@ -713,9 +717,9 @@ export class UnusedEnd {
   }
 
   /**
-   * True from the check that found the time without use until a check finds a use again, and while the monitor ends: a
-   * background run that is only due waits then (CacheSchedule `paused`), so it neither holds the end back nor pulls,
-   * downloads and builds for an engine that nobody uses.
+   * True from the check that found the time without use until a check finds a use again (the next check after the
+   * use), and while the monitor ends: a background run that is only due waits then (CacheSchedule `paused`), so it
+   * neither holds the end back nor pulls, downloads and builds for an engine that nobody uses.
    */
   get paused(): boolean {
     return this.ending || this.foundAt !== undefined;
@@ -726,8 +730,12 @@ export class UnusedEnd {
     if (this.ending) return true;
     const { stateDir, env, now, monotonic, log, unusedMs } = this.deps;
     const mono = monotonic();
+    // While the end waits for the second look, or for the next try after a failure, a use that returns ends the wait.
+    if (this.foundAt !== undefined && (mono - this.foundAt < this.recheckMs || (this.retryAt !== undefined && mono < this.retryAt))) {
+      await this.endWaitIfUsed();
+      return false;
+    }
     if (this.retryAt !== undefined && mono < this.retryAt) return false;
-    if (this.foundAt !== undefined && mono - this.foundAt < this.recheckMs) return false;
     // A clock behind the stored time is a use now until the second look.
     if (this.behindAt !== undefined && mono - this.behindAt < this.recheckMs) return false;
     const before = now();
@@ -777,8 +785,45 @@ export class UnusedEnd {
     return true;
   }
 
+  /**
+   * While the monitor ends (its restart policy is `no`), before its exit: true when a window used the engine since the
+   * end was found (a later use in LAST_USE_FILE; the ensure of a window can accept the monitor just before its policy
+   * changes). Then its restart policy is `unless-stopped` again, and the monitor goes on. False without such a use, and
+   * when the policy cannot be set back (logged): then it exits, and the next open creates it again. Never throws.
+   */
+  async usedAgain(): Promise<boolean> {
+    if (!this.ending) return false;
+    const stored = await readLastUse(this.deps.stateDir);
+    if (stored === undefined || this.lastUseAt === undefined || stored.at <= this.lastUseAt) return false;
+    try {
+      await this.setOwnRestartPolicy('unless-stopped');
+    } catch (error) {
+      this.deps.log(`A window used Devspaces on this Docker engine while the Monitor was ending, but the Monitor cannot go on (${errorMessage(error).replace(/\.$/, '')}).`);
+      return false;
+    }
+    this.ending = false;
+    this.foundAt = undefined;
+    this.lastUseAt = stored.at;
+    this.deps.log('A window used Devspaces on this Docker engine while the Monitor was ending; the Monitor goes on. Its restart policy is "unless-stopped" again.');
+    return true;
+  }
+
+  /** While the end waits (paused): a later use in LAST_USE_FILE ends the wait. */
+  private async endWaitIfUsed(): Promise<void> {
+    const stored = await readLastUse(this.deps.stateDir);
+    if (stored === undefined || this.lastUseAt === undefined || stored.at <= this.lastUseAt) return;
+    this.lastUseAt = stored.at;
+    this.foundAt = undefined;
+    this.deps.log('A window used Devspaces on this Docker engine again; the Monitor does not end itself.');
+  }
+
   /** Sets the restart policy of its own container to `no`; throws with the reason when it cannot. */
-  private async endItself(): Promise<void> {
+  private endItself(): Promise<void> {
+    return this.setOwnRestartPolicy('no');
+  }
+
+  /** Sets the restart policy of its own container (by the nonce of its create); throws with the reason when it cannot. */
+  private async setOwnRestartPolicy(policy: 'no' | 'unless-stopped'): Promise<void> {
     const { env, engine } = this.deps;
     const createId = createIdOf(env);
     if (createId === undefined) throw new Error('it does not know its container: the nonce of its create is missing');
@@ -790,7 +835,7 @@ export class UnusedEnd {
     }
     if (ids.length !== 1) throw new Error(`${ids.length} containers have the nonce of its create`);
     try {
-      await engine.updateRestartPolicy(ids[0], 'no', AbortSignal.timeout(UNUSED_END_TIMEOUT_MS));
+      await engine.updateRestartPolicy(ids[0], policy, AbortSignal.timeout(UNUSED_END_TIMEOUT_MS));
     } catch (error) {
       throw new Error(`its restart policy could not be changed: ${engineFailure(error, UNUSED_END_TIMEOUT_MS)}`);
     }
@@ -1505,6 +1550,10 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<num
           await loop.removals;
           // The timer of the schedule can start a run meanwhile; the exit waits for the next tick without one.
           if (schedule.busy) continue;
+          // A window that used the engine meanwhile (its ensure can accept the monitor just before the end) sets the
+          // restart policy back, and the monitor goes on; a request of "Update All Images Now" then runs at the next
+          // check of the schedule. A request without such a use runs before the exit, as before the exit when idle.
+          if ((await unused.usedAgain()) || (await schedule.runIfRequested())) continue;
           log(`No window used Devspaces on this Docker engine for ${spanText(unusedMs)}; the Monitor ends itself. Its restart policy is now "no". The next open starts a new one.`);
           return 0;
         }
