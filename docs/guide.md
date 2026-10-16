@@ -199,6 +199,8 @@ A small container on each Docker engine, the **Monitor** (`devspaces-monitor`), 
 4. **Cleans up** that store at most once a day.
 5. **Prepares the next image of each devspace** whose base image or Features changed: it builds the new image in the background, so that the update at the next start takes seconds. It prepares one devspace at a time, the most recently used first, and stops a prepare after 30 minutes. It uses no token and no credentials, so devspaces with private images or Features, and repositories whose host access checks are off, are not prepared.
 
+The monitor sends `User-Agent: nimblescape-devspaces/<version>` with each request to the update service of VS Code and to the Visual Studio Marketplace.
+
 The first time that you start a devspace on a Docker engine with **Start** or **Rebuild**, or run **Update All Images Now** there, Devspaces asks: "Keep the Devspaces background container running on `<engine>`?"
 
 - **Keep Running** (the default button): the monitor keeps running on that engine, also while VS Code is closed, and Docker starts it again when Docker or the computer restarts. Its background work runs at the scheduled time even when no devspace runs.

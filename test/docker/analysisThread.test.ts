@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { buildDefines } from '../../scripts/buildDefines.mjs';
 import { workerScriptsPlugin } from '../../scripts/workerScripts.mjs';
 // The Docker CLI of the extension (BootstrapDocker).
 import { BootstrapDocker } from '../../src/core/docker/bootstrapDocker';
@@ -43,7 +44,7 @@ describe('the analysis thread of the worker in the helper image', () => {
     const entry = path.join(root, `.analysis-thread-${run.runId}.ts`);
     fs.writeFileSync(entry, PROGRAM);
     try {
-      const define = { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) };
+      const define = buildDefines();
       const result = await esbuild.build({
         entryPoints: [entry],
         bundle: true,

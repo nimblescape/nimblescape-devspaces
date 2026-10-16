@@ -3,8 +3,9 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // Version of the Dev Container CLI in the workspace helper. package.json lists
-// `@devcontainers/cli` as an exact devDependency only to pin this version: esbuild.mjs and vitest.config.mts pass it to
-// the code as __DEVCONTAINER_CLI_VERSION__ (src/types/globals.d.ts). The package is neither bundled nor shipped.
+// `@devcontainers/cli` as an exact devDependency only to pin this version: the builds and the tests pass it to the code
+// as __DEVCONTAINER_CLI_VERSION__ (scripts/buildDefines.mjs, src/types/globals.d.ts). The package is neither bundled
+// nor shipped.
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 

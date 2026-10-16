@@ -8,7 +8,7 @@
 // redirect handling as the worker's image check.
 import * as crypto from 'crypto';
 import { errorMessage } from '../errors';
-import type { HttpRequest, HttpResponse, HttpTransport } from '../http';
+import { USER_AGENT, type HttpRequest, type HttpResponse, type HttpTransport } from '../http';
 import { abortError, isAbortError, silentLogger, type Credentials, type Logger } from '../ports';
 import { isDockerHub, registryDisplayName, type ImageReference } from './reference';
 
@@ -25,7 +25,6 @@ export const MANIFEST_MEDIA_TYPES = [
 
 export const MANIFEST_ACCEPT = MANIFEST_MEDIA_TYPES.join(', ');
 
-const USER_AGENT = 'nimblescape-devspaces';
 /**
  * Default time limit for one credentials lookup (credential helper, GitHub session). It is shorter than the time limit
  * of the check (5 seconds): when a lookup takes too long, the check still ends in time with the answer that the

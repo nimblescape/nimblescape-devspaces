@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
 import * as esbuild from 'esbuild';
-import { devcontainerCliVersion } from './scripts/cliVersion.mjs';
+import { buildDefines } from './scripts/buildDefines.mjs';
 import { workerBundleOptions } from './scripts/workerScripts.mjs';
 
 const production = process.argv.includes('--production');
@@ -46,7 +46,7 @@ const shared = {
   plugins: watch ? [watchReporter] : [],
   // Compile-time constants (src/types/globals.d.ts). Every bundle gets them, so that code of src/core that a bundle
   // imports never contains an undefined global.
-  define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(devcontainerCliVersion()) },
+  define: buildDefines(),
 };
 
 const outfiles = [

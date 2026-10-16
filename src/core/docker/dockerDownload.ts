@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as https from 'https';
 import { pipeline } from 'stream/promises';
+import { USER_AGENT } from '../http';
 import { abortError } from '../ports';
 import { isOfficialDownloadUrl } from './dockerSetup';
 
@@ -21,10 +22,13 @@ export interface DownloadResponse {
 /** GET of one URL, without following redirects. Rejects with an AbortError when the signal aborts. */
 export type HttpGet = (url: string, signal: AbortSignal) => Promise<DownloadResponse>;
 
-/** GET with the Node.js `https` module (VS Code applies its proxy settings to it in the extension host). */
+/**
+ * GET with the Node.js `https` module (VS Code applies its proxy settings to it in the extension host), with the
+ * User-Agent of Devspaces.
+ */
 export const nodeHttpsGet: HttpGet = (url, signal) =>
   new Promise((resolve, reject) => {
-    const request = https.get(url, { signal }, (response) => {
+    const request = https.get(url, { signal, headers: { 'User-Agent': USER_AGENT } }, (response) => {
       resolve({ statusCode: response.statusCode ?? 0, headers: response.headers, body: response });
     });
     request.on('error', reject);

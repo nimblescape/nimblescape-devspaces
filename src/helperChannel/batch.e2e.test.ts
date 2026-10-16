@@ -24,6 +24,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawn, type ChildProcess } from 'child_process';
 import * as esbuild from 'esbuild';
+import { buildDefines } from '../../scripts/buildDefines.mjs';
 import { workerScriptsPlugin } from '../../scripts/workerScripts.mjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HelperChannel } from '../core/helperChannel/helperChannel';
@@ -256,10 +257,10 @@ describeUnix('the batch helper of the worker in Node.js processes', () => {
     await engine.listen();
     const result = await esbuild.build({
       // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
-      define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) },
+      define: buildDefines(),
       // The script of the Monitor in the worker, as esbuild.mjs bundles it. The Engine API of this bundle on
       // the socket of the fake engine (only in the build of this test).
-      plugins: [workerScriptsPlugin(path.resolve(__dirname, '..', '..'), { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) }), engineSocketPlugin(engine.socketPath)],
+      plugins: [workerScriptsPlugin(path.resolve(__dirname, '..', '..'), buildDefines()), engineSocketPlugin(engine.socketPath)],
       // The worker of main.ts with the operation of the test (batchE2eWorker.testkit.ts).
       entryPoints: [path.resolve(__dirname, 'batchE2eWorker.testkit.ts')],
       bundle: true,

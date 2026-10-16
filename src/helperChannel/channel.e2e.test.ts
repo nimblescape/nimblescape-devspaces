@@ -15,6 +15,7 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
+import { buildDefines } from '../../scripts/buildDefines.mjs';
 import { workerScriptsPlugin } from '../../scripts/workerScripts.mjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HelperChannel } from '../core/helperChannel/helperChannel';
@@ -130,10 +131,10 @@ describeUnix('the helper channel script in a Node.js process', () => {
     await engine.listen();
     const result = await esbuild.build({
       // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
-      define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) },
+      define: buildDefines(),
       // The script of the Monitor in the worker, as esbuild.mjs bundles it, and the Engine API on the socket of
       // the fake engine.
-      plugins: [workerScriptsPlugin(path.resolve(__dirname, '..', '..'), { __DEVCONTAINER_CLI_VERSION__: JSON.stringify(__DEVCONTAINER_CLI_VERSION__) }), engineSocketPlugin(socketPath)],
+      plugins: [workerScriptsPlugin(path.resolve(__dirname, '..', '..'), buildDefines()), engineSocketPlugin(socketPath)],
       entryPoints: [path.resolve(__dirname, 'main.ts')],
       bundle: true,
       platform: 'node',

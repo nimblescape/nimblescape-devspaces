@@ -4,12 +4,11 @@
 
 // GitHub GraphQL API over an HttpTransport. The token is used only for the Authorization header: it never appears in a
 // log line or in an error message.
-import type { HttpResponse, HttpTransport } from '../http';
+import { USER_AGENT, type HttpResponse, type HttpTransport } from '../http';
 import { abortError, isAbortError, silentLogger, systemClock, type Clock, type Logger } from '../ports';
 import { isRecord } from '../valueChecks';
 
 export const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
-export const GITHUB_USER_AGENT = 'nimblescape-devspaces';
 /** Time limit of one request. The HttpTransport has no time limit of its own. */
 export const DEFAULT_GITHUB_TIMEOUT_MS = 30_000;
 
@@ -162,7 +161,7 @@ export class GitHubApi {
           url: GITHUB_GRAPHQL_URL,
           headers: {
             Authorization: `bearer ${token}`,
-            'User-Agent': GITHUB_USER_AGENT,
+            'User-Agent': USER_AGENT,
             'Content-Type': 'application/json',
             Accept: 'application/json',
             'Content-Length': String(Buffer.byteLength(body, 'utf8')),
