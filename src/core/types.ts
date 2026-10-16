@@ -382,7 +382,8 @@ export interface ExtensionSettings {
   cacheUpdateSchedule?: string;
   /**
    * The Monitor of an engine, local or remote, ends after 5 minutes without a running devspace (true); false, the
-   * default: it runs permanently.
+   * default: it runs permanently once the user answered the question about it on that engine (monitorQuestion.ts,
+   * which writes this setting).
    */
   stopMonitorWhenIdle?: boolean;
   /**

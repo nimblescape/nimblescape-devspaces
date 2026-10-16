@@ -34,13 +34,14 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function controllerWith(target: DockerTarget, update?: ControllerDeps['updateImagesNow']) {
+function controllerWith(target: DockerTarget, update?: ControllerDeps['updateImagesNow'], monitorQuestion?: ControllerDeps['monitorQuestion']) {
   const infos: string[] = [];
   const logger = { info: vi.fn((text: string) => void infos.push(text)), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), show: vi.fn() };
   const deps = {
     logger,
     dockerTargets: { current: async () => target, resolve: async () => target, withOperation: <T>(fn: () => Promise<T>) => fn() },
     ...(update !== undefined ? { updateImagesNow: update } : {}),
+    ...(monitorQuestion !== undefined ? { monitorQuestion } : {}),
   } as unknown as ControllerDeps;
   return { controller: new Controller(deps), infos };
 }
@@ -56,6 +57,18 @@ describe('the command Update All Images Now', () => {
     expect(fakeVscode.window.withProgress).toHaveBeenCalledTimes(1);
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on build-box updates the images now.');
     expect(infos).toContain('The Monitor on build-box took the request of "Update All Images Now".');
+  });
+
+  it('asks about the Monitor of the engine first (monitorQuestion.ts); a closed question goes on with the request', async () => {
+    const order: string[] = [];
+    const update = vi.fn(async () => void order.push('update'));
+    const askIfNeeded = vi.fn(async (host: string) => {
+      order.push(`ask ${host}`);
+      return 'closed' as const;
+    });
+    await controllerWith(REMOTE, update, { askIfNeeded }).controller.updateImagesNow();
+    expect(order).toEqual(['ask build-box', 'update']);
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on build-box updates the images now.');
   });
 
   it('names the local Docker for a local engine', async () => {

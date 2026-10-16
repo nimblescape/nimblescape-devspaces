@@ -3,10 +3,11 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The settings of the Monitor of an engine that extension.ts gives to an open (by the Docker host of the open)
-// and to the repair of the heartbeats (by the Docker target): the schedule of its background run (cacheUpdateSchedule),
-// the time zone of this computer, and its mode: permanent on every engine, local or remote, unless stopMonitorWhenIdle
-// is on; a permanent one names this computer as its owner (its computer ID). No image patterns. Pure apart from the
-// getters it is given; no `vscode`.
+// and to the repair of the heartbeats and "Update All Images Now" (by the Docker target): the schedule of its background
+// run (cacheUpdateSchedule), the time zone of this computer, and its mode: permanent on every engine, local or remote,
+// once the user answered the question about the Monitor of that engine (monitorQuestion.ts), unless stopMonitorWhenIdle
+// is on; before that answer it ends when idle, whatever flow creates it. A permanent one names this computer as its
+// owner (its computer ID). No image patterns. Pure apart from the getters it is given; no `vscode`.
 import type { DockerTarget } from '../core/docker/dockerHost';
 import { DEFAULT_CACHE_UPDATE_SCHEDULE, monitorRunsPermanently } from '../core/remoteMonitor/cacheSettings';
 import type { MonitorSettings } from '../core/remoteMonitor/protocol';
@@ -14,6 +15,11 @@ import type { ExtensionSettings } from '../core/types';
 
 export interface MonitorSettingsDeps {
   settings: () => Pick<ExtensionSettings, 'cacheUpdateSchedule' | 'stopMonitorWhenIdle'>;
+  /**
+   * Whether the user answered the question about the Monitor of the engine `host` ('' for the local Docker;
+   * DockerEngineRecords.monitorAnswered). A failed read counts as no answer.
+   */
+  answered: (host: string) => Promise<boolean>;
   /** The time zone of this computer (usableTimeZone). */
   timeZone: () => string;
   /**
@@ -23,10 +29,11 @@ export interface MonitorSettingsDeps {
   computerId: () => string;
 }
 
-/** The settings of the monitor of any engine of this computer (local and remote alike). */
-export function monitorSettingsFor(deps: MonitorSettingsDeps): MonitorSettings {
+/** The settings of the monitor of the engine `host` of this computer (local and remote alike). Never rejects. */
+export async function monitorSettingsFor(deps: MonitorSettingsDeps, host: string): Promise<MonitorSettings> {
+  const answered = await answeredOf(deps, host);
   const settings = deps.settings();
-  const permanent = monitorRunsPermanently(settings.stopMonitorWhenIdle);
+  const permanent = monitorRunsPermanently(settings.stopMonitorWhenIdle, answered);
   return {
     schedule: settings.cacheUpdateSchedule ?? DEFAULT_CACHE_UPDATE_SCHEDULE,
     timeZone: deps.timeZone(),
@@ -35,6 +42,15 @@ export function monitorSettingsFor(deps: MonitorSettingsDeps): MonitorSettings {
     // its own permanent monitor from one that another computer keeps.
     ...computerOf(deps),
   };
+}
+
+/** Whether the engine `host` has an answer; false when it cannot be read. */
+async function answeredOf(deps: MonitorSettingsDeps, host: string): Promise<boolean> {
+  try {
+    return await deps.answered(host);
+  } catch {
+    return false;
+  }
 }
 
 /** `{ computer }` with the ID of this computer, or nothing when it cannot be read. */
@@ -48,11 +64,14 @@ function computerOf(deps: MonitorSettingsDeps): { computer?: string } {
 
 /**
  * The monitor settings of an open (its Docker host: empty for the local Docker, the SSH host otherwise) and of the
- * repair of a Docker target; the same for every engine.
+ * repair or "Update All Images Now" on a Docker target: the same rules for every engine, with the answer of that engine.
  */
-export function monitorSettingsOf(deps: MonitorSettingsDeps): { forOpen(dockerHost: string): MonitorSettings; forTarget(target: Pick<DockerTarget, 'kind'>): MonitorSettings } {
+export function monitorSettingsOf(deps: MonitorSettingsDeps): {
+  forOpen(dockerHost: string): Promise<MonitorSettings>;
+  forTarget(target: Pick<DockerTarget, 'kind' | 'host'>): Promise<MonitorSettings>;
+} {
   return {
-    forOpen: () => monitorSettingsFor(deps),
-    forTarget: () => monitorSettingsFor(deps),
+    forOpen: (dockerHost) => monitorSettingsFor(deps, dockerHost),
+    forTarget: (target) => monitorSettingsFor(deps, target.host),
   };
 }

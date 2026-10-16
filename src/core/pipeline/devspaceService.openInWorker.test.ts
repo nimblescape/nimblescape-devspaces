@@ -118,6 +118,20 @@ describe('the open in the worker, from the extension', () => {
     expect(sent[0].params.settings).toEqual({ updateImagesOnConnect: true, hostAccessChecks: 'off', stopOnClose: false, respectShutdownActionNone: true, stopAfterMinutes: 30 });
   });
 
+  it('waits for the Monitor settings of the Docker host of the open (its mode follows the answer of that engine)', async () => {
+    const hosts: string[] = [];
+    const { h, sent } = harness(async () => ({ opened: OPENED }), {
+      openMonitor: async (dockerHost) => {
+        hosts.push(dockerHost);
+        return { images: { ...IMAGES, permanent: false } };
+      },
+    });
+    await seedDevspace(h, { container: 'stopped' });
+    await h.operations.openDevspaceInWorker(ENV_ID, { progress: h.progress });
+    expect(hosts).toEqual(['']);
+    expect(sent[0].params.images).toEqual({ ...IMAGES, permanent: false });
+  });
+
   it('shows the steps of the worker and their details; other steps of the operation are not shown', async () => {
     const { h } = harness(async (_op, _params, options) => {
       options.onProgress?.('open', ENV_ID);

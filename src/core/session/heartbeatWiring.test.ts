@@ -372,9 +372,9 @@ describe('heartbeatWiring: waits, target and failures', () => {
   it('extension.ts starts the monitor of a repair through monitorEnsure and retries the workers after a build', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', '..', 'vscode', 'extension.ts'), 'utf8');
     // The operation `monitorEnsure` of the worker of the repair's engine, with the mode of the monitor of that engine
-    // (a remote target runs it permanently): the settings of the target come from monitorSettings.forTarget
-    // (src/vscode/monitorSettings.ts, tested by its result in extension.monitorMode.test.ts).
-    expect(source).toContain('const repairSessionMonitor = heartbeats.repair((target, signal) => monitorCalls.monitorEnsure(target, monitorSettings.forTarget(target), signal));');
+    // (permanent only after the answer of the user there): the settings of the target come from
+    // monitorSettings.forTarget (src/vscode/monitorSettings.ts, tested by its result in extension.monitorMode.test.ts).
+    expect(source).toContain('const repairSessionMonitor = heartbeats.repair(async (target, signal) => monitorCalls.monitorEnsure(target, await monitorSettings.forTarget(target), signal));');
     expect(source).not.toContain('ensureOrThrow(image.tag');
     // A build also ends the wait of the background build of a missing helper image (MissingHelperBuild.clearFailures).
     expect(source).toMatch(

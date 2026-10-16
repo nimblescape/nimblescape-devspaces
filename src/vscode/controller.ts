@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { isBlockingBusyMark } from '../core/busy';
 import { attachDiagnostics } from '../core/docker/attachDiagnostics';
-import { describeDockerHost, dockerHostOf, devspacesOfHost, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
+import { LOCAL_DOCKER_TARGET, describeDockerHost, dockerHostOf, devspacesOfHost, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
 import { ensureRemoteContext } from '../core/docker/remoteDocker';
 import { operationDockerTarget, outsideOperation, type DockerTargets } from '../core/docker/dockerTargets';
 import type { BootstrapDocker } from '../core/docker/bootstrapDocker';
@@ -52,6 +52,7 @@ import {
   type DisconnectRequests,
 } from './disconnectRequests';
 import type { DockerSetup } from './dockerSetup';
+import type { MonitorQuestion } from './monitorQuestion';
 import { showError as presentError } from './errors';
 import type { OutputChannelLogger } from './logger';
 import { showErrorMessage, showInformationMessage, showWarningMessage } from './notifications';
@@ -166,6 +167,12 @@ export interface ControllerDeps {
    * the request. Without it, the command does nothing.
    */
   updateImagesNow?: (target: DockerTarget, signal: AbortSignal) => Promise<void>;
+  /**
+   * The question about the Monitor of an engine (MonitorQuestion; once per engine, never rejects), which a Start, a
+   * Rebuild and "Update All Images Now" of the user ask before they run there (beforeUserFlow). The flows that run by
+   * themselves never ask. Without it, nothing is asked.
+   */
+  monitorQuestion?: Pick<MonitorQuestion, 'askIfNeeded'>;
   /** The VS Code setting `workbench.list.openMode` (double-click on a row, rowActivation.ts). Default: `readListOpenMode`. */
   listOpenMode?: () => ListOpenMode;
   /** True in an Extension Development Host (a debug run of this extension): the reopen rule is relaxed. */
@@ -231,6 +238,11 @@ interface StartOptions {
    * devspace keeps the source it was created with (sourceOf), whatever the options name.
    */
   source?: DevspaceSource;
+  /**
+   * The reopen at startup: a Start that the user did not start, so it asks nothing about the Monitor of the engine
+   * (beforeUserFlow). Its Try again is a Start of the user.
+   */
+  automatic?: boolean;
 }
 
 /** The devspace that this window is attached to. A window changes its devspace only by reloading. */
@@ -638,8 +650,9 @@ export class Controller implements vscode.Disposable {
     const devspace = devspaces.find((candidate) => candidate.id === decision.devspaceId);
     if (!devspace) return;
     this.logger.info(`Opening the last used devspace ${devspace.repository}.`);
-    // The progress notification "Opening owner/name…" has Cancel: the user can stay in the empty window.
-    await this.startTarget(this.devspaceTarget(devspace));
+    // The progress notification "Opening owner/name…" has Cancel: the user can stay in the empty window. The user did
+    // not start it, so it asks nothing about the Monitor of the engine.
+    await this.startTarget(this.devspaceTarget(devspace), { automatic: true });
   }
 
   /**
@@ -941,8 +954,10 @@ export class Controller implements vscode.Disposable {
     const update = this.deps.updateImagesNow;
     if (!update) return;
     await this.ready;
-    const target: DockerTarget = this.deps.dockerTargets ? await this.deps.dockerTargets.current() : { kind: 'local', host: '', endpoint: '' };
+    const target = await this.operationTarget();
     const engine = describeDockerHost(target.host);
+    // The question about the Monitor of the engine first, which the request makes sure of.
+    await this.beforeUserFlow();
     await runWithProgress({ title: ControllerTexts.requestingImageUpdate(engine), task: (_progress, signal) => update(target, signal) });
     this.logger.info(`The Monitor on ${engine} took the request of "Update All Images Now".`);
     this.inform(ControllerTexts.imagesUpdatingNow(engine));
@@ -1172,6 +1187,9 @@ export class Controller implements vscode.Disposable {
         );
       }
     }
+    // A Start of the user asks about the Monitor of the engine before its open makes sure of it; the reopen at startup
+    // asks nothing.
+    if (options.automatic !== true) await this.beforeUserFlow(devspace);
     const newWindow = this.opensNewWindow(options.window ?? 'default', reconnecting);
     const started = await this.operation(
       key,
@@ -1427,6 +1445,9 @@ export class Controller implements vscode.Disposable {
   /** Rebuild of a devspace that this window may be connected to. */
   private async rebuildDevspace(target: Target, devspace: Devspace, request: { reason: PendingOperation['reason'] }): Promise<void> {
     const repository = this.shownName(target);
+    // The question about the Monitor of the engine comes first, also before a hand-off: the window that runs the
+    // Rebuild then asks nothing.
+    await this.beforeUserFlow(devspace);
     if (this.isConnectedHere(devspace)) {
       await this.handOff(target, devspace, { operation: 'rebuild', ...request }, 'rebuild');
       return;
@@ -2493,6 +2514,23 @@ export class Controller implements vscode.Disposable {
   /** Runs `fn` as one operation on the Docker host that is current now (DockerTargets.withOperation). */
   private withDockerTarget<T>(fn: () => Promise<T>): Promise<T> {
     return this.deps.dockerTargets ? this.deps.dockerTargets.withOperation(fn) : fn();
+  }
+
+  /** The Docker target of the operation (outside of one, the current one); the local Docker without dockerTargets. */
+  private async operationTarget(): Promise<DockerTarget> {
+    return this.deps.dockerTargets ? this.deps.dockerTargets.current() : LOCAL_DOCKER_TARGET;
+  }
+
+  /**
+   * Before a Start, a Rebuild or "Update All Images Now" that the user started on the engine of the operation: the
+   * question about the Monitor of that engine (MonitorQuestion, once per engine), so the Monitor that the flow makes
+   * sure of follows the answer. Not for a target that is neither local nor SSH (every operation refuses it), nor for a
+   * `devspace` of another Docker host (its open is refused). Never throws.
+   */
+  private async beforeUserFlow(devspace?: Devspace): Promise<void> {
+    const target = await this.operationTarget();
+    if (target.kind === 'unsupported' || (devspace !== undefined && !isOnDockerHost(devspace, target.host))) return;
+    await this.deps.monitorQuestion?.askIfNeeded(target.host);
   }
 
   /** The Docker host of the operation ('' = the local Docker). */

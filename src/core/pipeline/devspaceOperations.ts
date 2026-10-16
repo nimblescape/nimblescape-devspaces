@@ -140,9 +140,9 @@ export interface DevspaceOperationsDeps extends OperationBaseDeps {
   monitorSource?: () => string;
   /**
    * The image maintenance of an open: the schedule of the monitor's background run and its mode for the engine
-   * `dockerHost`.
+   * `dockerHost` (its mode after a read of the answer of that engine; never rejects).
    */
-  openMonitor?: (dockerHost: string) => { images: MonitorSettings };
+  openMonitor?: (dockerHost: string) => { images: MonitorSettings } | Promise<{ images: MonitorSettings }>;
   /**
    * The image references in use on the engine `dockerHost` that an open carries for its Monitor; undefined:
    * none. Default: those of the build records of this computer's devspaces there
@@ -246,7 +246,7 @@ export class DevspaceOperations extends OperationBase {
     await this.startDocker(steps, signal);
     this.throwIfCancelled(signal);
     const dockerHost = await this.currentDockerHost();
-    const monitor = this.deps.openMonitor?.(dockerHost);
+    const monitor = await this.deps.openMonitor?.(dockerHost);
     // The image references in use on this engine, for its Monitor.
     const references = monitor === undefined ? undefined : this.deps.imageReferencesInUse !== undefined ? await this.deps.imageReferencesInUse(dockerHost) : await this.referencesInUse(dockerHost);
     const settings = this.deps.settings();

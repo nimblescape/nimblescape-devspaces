@@ -1,0 +1,149 @@
+// SPDX-License-Identifier: MIT
+// © 2026 Hannes Stauss (scalarion@nimblescape.com)
+// Licensed under the MIT License. See LICENSE in the repository root for details.
+
+// The question about the Monitor of a Docker engine (monitorQuestion.ts): once per engine while the setting
+// stopMonitorWhenIdle is not on; "Keep Running" first; the answer goes into the user setting, then into the records of
+// the engines; a closed question stores nothing and comes again; one question per engine at a time.
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
+
+import { DockerEngineRecords } from '../core/storage/dockerEngineRecords';
+import { ControllerTexts } from './controllerTexts';
+import { MonitorQuestion, STOP_MONITOR_WHEN_IDLE_SETTING } from './monitorQuestion';
+import { SETTINGS_SECTION } from './settings';
+import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
+
+const NOW = Date.parse('2026-10-16T08:00:00.000Z');
+
+let dir: string;
+let records: DockerEngineRecords;
+let settings: { stopMonitorWhenIdle?: boolean };
+let update: ReturnType<typeof vi.fn>;
+/** The order of the writes: the setting and the record. */
+let writes: string[];
+const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
+
+beforeEach(() => {
+  resetFakeVscode();
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-question-'));
+  records = new DockerEngineRecords(path.join(dir, 'docker-engines.json'));
+  settings = {};
+  writes = [];
+  update = vi.fn(async (key: string, value: unknown) => {
+    writes.push(`${key}=${String(value)}`);
+    settings = { stopMonitorWhenIdle: value as boolean };
+  });
+  fakeVscode.workspace.getConfiguration.mockImplementation((section: string) => (section === SETTINGS_SECTION ? { update } : undefined));
+  for (const mock of Object.values(logger)) mock.mockReset();
+});
+
+afterEach(() => {
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function question(over: Partial<ConstructorParameters<typeof MonitorQuestion>[0]> = {}): MonitorQuestion {
+  const recording = {
+    monitorAnswered: (host: string) => records.monitorAnswered(host),
+    recordMonitorAnswer: async (host: string, now: number) => {
+      writes.push(`record ${host}`);
+      await records.recordMonitorAnswer(host, now);
+    },
+  };
+  return new MonitorQuestion({ records: recording, settings: () => settings, logger, clock: { now: () => NOW }, ...over });
+}
+
+function modals(): unknown[][] {
+  return fakeVscode.window.showInformationMessage.mock.calls;
+}
+
+describe('the question about the Monitor of an engine', () => {
+  it('asks with "Keep Running" first; the answer writes the user setting, then records the engine', async () => {
+    fakeVscode.window.showInformationMessage.mockResolvedValueOnce(ControllerTexts.keepMonitorRunning);
+    await expect(question().askIfNeeded('build-box')).resolves.toBe('keepRunning');
+    expect(modals()).toEqual([
+      [
+        'Keep the Devspaces background container running on build-box?',
+        { modal: true, detail: ControllerTexts.monitorQuestionDetail },
+        'Keep Running',
+        'Stop When Idle',
+      ],
+    ]);
+    // An explicit user value, also for the default.
+    expect(update).toHaveBeenCalledWith(STOP_MONITOR_WHEN_IDLE_SETTING, false, fakeVscode.ConfigurationTarget.Global);
+    expect(writes).toEqual(['stopMonitorWhenIdle=false', 'record build-box']);
+    expect(await records.read()).toEqual([{ host: 'build-box', monitorAnsweredAt: NOW }]);
+    // Asked once per engine: the next flow there asks nothing; another engine is asked.
+    await expect(question().askIfNeeded('build-box')).resolves.toBe('notNeeded');
+    await question().askIfNeeded('');
+    expect(modals()).toHaveLength(2);
+    expect(modals()[1][0]).toBe('Keep the Devspaces background container running on the local Docker?');
+  });
+
+  it('"Stop When Idle" turns the setting on (for every engine); then no engine is asked', async () => {
+    fakeVscode.window.showInformationMessage.mockResolvedValueOnce(ControllerTexts.stopMonitorWhenIdle);
+    await expect(question().askIfNeeded('')).resolves.toBe('stopWhenIdle');
+    expect(writes).toEqual(['stopMonitorWhenIdle=true', 'record ']);
+    await expect(question().askIfNeeded('build-box')).resolves.toBe('notNeeded');
+    expect(modals()).toHaveLength(1);
+  });
+
+  it('a closed question stores nothing, and the next flow asks again', async () => {
+    const asked = question();
+    await expect(asked.askIfNeeded('')).resolves.toBe('closed');
+    expect(update).not.toHaveBeenCalled();
+    expect(await records.read()).toEqual([]);
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('the Monitor there stops when no devspace runs'));
+    await expect(asked.askIfNeeded('')).resolves.toBe('closed');
+    expect(modals()).toHaveLength(2);
+  });
+
+  it('asks nothing while the setting is on, or when another window answered before the question opened', async () => {
+    settings = { stopMonitorWhenIdle: true };
+    await expect(question().askIfNeeded('')).resolves.toBe('notNeeded');
+    settings = { stopMonitorWhenIdle: false };
+    await records.recordMonitorAnswer('', NOW - 1);
+    await expect(question().askIfNeeded('')).resolves.toBe('notNeeded');
+    expect(modals()).toEqual([]);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('one question per engine at a time: a second flow there gets the same answer', async () => {
+    let answer!: (choice: string | undefined) => void;
+    fakeVscode.window.showInformationMessage.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    const asked = question();
+    const first = asked.askIfNeeded('build-box');
+    const second = asked.askIfNeeded('build-box');
+    await vi.waitFor(() => expect(modals()).toHaveLength(1));
+    answer(ControllerTexts.keepMonitorRunning);
+    await expect(Promise.all([first, second])).resolves.toEqual(['keepRunning', 'keepRunning']);
+    expect(modals()).toHaveLength(1);
+    expect(writes).toEqual(['stopMonitorWhenIdle=false', 'record build-box']);
+  });
+
+  it('an answer that cannot be stored counts as closed, with a warning', async () => {
+    fakeVscode.window.showInformationMessage.mockResolvedValue(ControllerTexts.keepMonitorRunning);
+    update.mockRejectedValueOnce(new Error('Unable to write into user settings.'));
+    await expect(question().askIfNeeded('')).resolves.toBe('closed');
+    expect(await records.read()).toEqual([]);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.monitorAnswerNotSaved);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Unable to write into user settings.'));
+    // The record of the engine fails: no answer either.
+    const failing = question({
+      records: { monitorAnswered: async () => false, recordMonitorAnswer: async () => Promise.reject(new Error('EACCES: permission denied')) },
+    });
+    await expect(failing.askIfNeeded('')).resolves.toBe('closed');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('a question that cannot be shown counts as closed and stores nothing', async () => {
+    fakeVscode.window.showInformationMessage.mockRejectedValueOnce(new Error('no window'));
+    await expect(question().askIfNeeded('')).resolves.toBe('closed');
+    expect(update).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
+  });
+});

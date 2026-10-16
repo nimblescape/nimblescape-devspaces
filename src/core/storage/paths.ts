@@ -61,6 +61,8 @@ export class StoragePaths {
   readonly helperState: string;
   /** Remote Docker hosts: the context before the switch, and the rootless sockets (RemoteDockerState). */
   readonly remoteDocker: string;
+  /** The Docker engines: the answer to the question about the Monitor of each (DockerEngineRecords). */
+  readonly dockerEngines: string;
   /** The random id of this installation for the heartbeats to the Monitor on a remote host. */
   readonly computerId: string;
   /** The remembered check results of the configurations, `<devspace-id>.json` (configChecks.ts). */
@@ -81,6 +83,7 @@ export class StoragePaths {
     this.reopen = path.join(root, 'reopen.json');
     this.helperState = path.join(root, 'helper.json');
     this.remoteDocker = path.join(root, 'remote-docker.json');
+    this.dockerEngines = path.join(root, 'docker-engines.json');
     this.computerId = path.join(root, 'computer.id');
     this.configChecksDir = path.join(root, 'checks');
     this.usedMarker = path.join(root, 'used');

@@ -28,6 +28,20 @@ export const ControllerTexts = {
   // "Update All Images Now" (`engine`: describeDockerHost).
   requestingImageUpdate: (engine: string) => `Asking the Monitor on ${engine} to update the images…`,
   imagesUpdatingNow: (engine: string) => `The Monitor on ${engine} updates the images now.`,
+  /**
+   * The question about the Monitor of an engine (monitorQuestion.ts), once per engine before the first Monitor there
+   * that would keep running (`engine`: describeDockerHost). "Keep Running" is the first and default button.
+   */
+  monitorQuestion: (engine: string) => `Keep the Devspaces background container running on ${engine}?`,
+  monitorQuestionDetail:
+    'The container devspaces-monitor updates the images of your devspaces, the VS Code Server and your extensions, by default once a day. ' +
+    'If you keep it running, it also runs while VS Code is closed, and Docker starts it again after a restart. ' +
+    'If it stops when idle, it ends 5 minutes after the last devspace stops, and the updates run only while a devspace runs. ' +
+    'Your answer applies to all Docker engines. You can change it with the setting "Devspaces: Stop Monitor When Idle".',
+  keepMonitorRunning: 'Keep Running',
+  stopMonitorWhenIdle: 'Stop When Idle',
+  /** The answer to the question about the Monitor could not be stored (the log names the cause). */
+  monitorAnswerNotSaved: 'Your answer about the background container could not be saved. Details are in the log.',
   // On every engine; for the local Docker (host '') the Monitor there is named.
   closeAndKeepRunningUnreachable: (host: string, minutes: number) =>
     `${host === '' ? 'The Monitor of the local Docker' : `The Docker host ${host}`} cannot be reached. The container would stop after ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} without contact. The window stays open.`,
