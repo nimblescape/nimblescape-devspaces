@@ -960,8 +960,8 @@ describe('Sidebar progressive display', () => {
       await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
       fail(limitedUntil(resetAt));
       await h.sidebar.refreshDiscovery();
-      // Another refresh, for example of the Refresh command, still waits for GitHub when that time comes.
-      const other = h.sidebar.refreshDiscovery({ again: true });
+      // A Refresh of the user still waits for GitHub when that time comes.
+      const other = h.sidebar.refreshDiscovery({ again: true, byUser: true });
       await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(2));
       await vi.advanceTimersByTimeAsync(resetAt + RATE_LIMIT_MARGIN_MS - NOW);
       fail(limitedUntil(resetAt));
@@ -976,7 +976,7 @@ describe('Sidebar progressive display', () => {
       ]);
     });
 
-    it('moves to a later time that GitHub names when the Refresh command meets the rate limit, never to an earlier one', async () => {
+    it('moves to a later time that GitHub names when another refresh meets the rate limit, never to an earlier one', async () => {
       const later = resetAt + 15 * 60_000;
       const earlier = resetAt - 15 * 60_000;
       let fail: (error: unknown) => void = () => undefined;
@@ -989,6 +989,7 @@ describe('Sidebar progressive display', () => {
       await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
       fail(limitedUntil(resetAt));
       await h.sidebar.refreshDiscovery();
+      // Two automatic refreshes, for example after changes of the setting owners.
       // GitHub names a later time: the planned refresh moves to it.
       await h.sidebar.refreshDiscovery({ again: true });
       // GitHub names an earlier time: the planned refresh stays at the later time, which a message named already.
@@ -1004,6 +1005,36 @@ describe('Sidebar progressive display', () => {
       expect(warnings()[2]).toBe(Messages.gitHubRateLimited(shownTime(later), false));
       await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(4);
+    });
+
+    it('names the time again when GitHub refuses a Refresh of the user, but not when it refuses an automatic refresh', async () => {
+      const earlier = resetAt - 15 * 60_000;
+      let fail: (error: unknown) => void = () => undefined;
+      h.discovery.refresh
+        .mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)))
+        .mockRejectedValueOnce(limitedUntil(resetAt))
+        .mockRejectedValueOnce(limitedUntil(resetAt))
+        .mockRejectedValueOnce(limitedUntil(earlier))
+        .mockRejectedValue(limitedUntil(resetAt));
+      await h.sidebar.initialize();
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
+      fail(limitedUntil(resetAt));
+      await h.sidebar.refreshDiscovery();
+      const named = Messages.gitHubRateLimited(shownTime(resetAt), true);
+      expect(warnings()).toEqual([named]);
+      // An automatic refresh, for example after a change of the setting owners: the same time, only the log says it.
+      await h.sidebar.refreshDiscovery({ again: true });
+      expect(warnings()).toEqual([named]);
+      // The Refresh command: the same time, and the message again, so that the user sees why the list did not change.
+      await h.sidebar.refreshDiscovery({ again: true, byUser: true });
+      expect(warnings()).toEqual([named, named]);
+      // An earlier time: the message names the time of the planned refresh.
+      await h.sidebar.refreshDiscovery({ again: true, byUser: true });
+      expect(warnings()).toEqual([named, named, named]);
+      // The next automatic refresh is not one of the user.
+      await h.sidebar.refreshDiscovery({ again: true });
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(5);
+      expect(warnings()).toEqual([named, named, named]);
     });
 
     it('names a time rounded up to the next full minute, so that it is never too early', async () => {
@@ -1035,8 +1066,8 @@ describe('Sidebar progressive display', () => {
       expect(h.logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('GitHub refused the update'));
     });
 
-    // refreshIntervalMinutes 5 and a time in 50 minutes: without this, 11 requests and 11 messages instead of 1.
-    it('asks GitHub nothing in the background while it waits, and shows a time once', async () => {
+    // refreshIntervalMinutes 5 and a time in 50 minutes: without the wait, 10 more requests that GitHub refuses.
+    it('asks GitHub nothing in the background while it waits', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
       h.settings.refreshIntervalMinutes = 5;
       const reset = NOW + 50 * 60_000;
@@ -1056,13 +1087,14 @@ describe('Sidebar progressive display', () => {
       // The refreshes every 5 minutes wait for the planned one.
       await vi.advanceTimersByTimeAsync(20 * 60_000);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(1);
-      // A Refresh that the user chooses still asks GitHub. Its refusal names no new time: only the log says it.
-      await h.sidebar.refreshDiscovery({ again: true });
+      // A Refresh that the user chooses still asks GitHub. Its refusal names the same time again.
+      await h.sidebar.refreshDiscovery({ again: true, byUser: true });
       expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
       expect(refusals()).toBe(2);
       await vi.advanceTimersByTimeAsync(30 * 60_000);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
-      expect(warnings()).toEqual([Messages.gitHubRateLimited(shownTime(reset), true)]);
+      const named = Messages.gitHubRateLimited(shownTime(reset), true);
+      expect(warnings()).toEqual([named, named]);
       // The planned refresh loads the list; after it, the refreshes every 5 minutes run again.
       limited = false;
       let load: (value: DiscoveryData) => void = () => undefined;
@@ -1078,7 +1110,7 @@ describe('Sidebar progressive display', () => {
       expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
       await vi.advanceTimersByTimeAsync(5 * 60_000);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(4);
-      expect(warnings()).toHaveLength(1);
+      expect(warnings()).toHaveLength(2);
     });
   });
 

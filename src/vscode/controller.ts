@@ -1106,7 +1106,7 @@ export class Controller implements vscode.Disposable {
 
   /** Refresh: the repository list (sign-in first when needed), a lost registry, and the states. */
   async refresh(): Promise<void> {
-    if (await this.deps.auth.isSignedIn()) await this.deps.sidebar.refreshDiscovery({ again: true });
+    if (await this.deps.auth.isSignedIn()) await this.deps.sidebar.refreshDiscovery({ again: true, byUser: true });
     else await this.signIn();
     // The user asked for it, so the worker is made ready in full (as for an operation of the user). Not while Devspaces
     // is being removed from the engine (told); the rest of Refresh runs.
