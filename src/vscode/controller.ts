@@ -317,8 +317,12 @@ export class Controller implements vscode.Disposable {
    * restore adopts it again.
    */
   private attaching = false;
-  /** workWithoutDevspaces said it (once per window). */
-  private toldWithoutDevspaces = false;
+  /**
+   * The devspace of this window when it works without Devspaces on an engine with the removal mark
+   * (workWithoutDevspaces, which says so once per window). An account change checks it as the devspace of this window
+   * (onSessionChanged).
+   */
+  private withoutDevspaces: { devspace: Devspace; containerName: string } | undefined;
   private adoption: Promise<void> | undefined;
   private adopted = false;
   /** See `LeftDevspace`; checked until the window has closed its connection (`checkLeftConnection`). */
@@ -521,16 +525,25 @@ export class Controller implements vscode.Disposable {
   /**
    * Role A on an engine with the removal mark ("Remove Devspaces from This Docker Engine…"): VS Code restored this
    * window of a devspace that the user kept there, Open Recent opened it, or the user attached to its container by
-   * hand, for example to save changes that are not pushed. The window stays connected and works as a plain container
+   * hand, for example to save changes that are not pushed. The account rule comes first, as in openAttachedWindow: it
+   * outranks the mark. A devspace that the signed-in account may not use (another account's, or nobody is signed in)
+   * closes the window after the token of its owner left the container through the worker of the engine
+   * (ownWindowDevspace), also when that builds the helper image there again; so does a later sign-out or change of the
+   * account (onSessionChanged). A devspace of the account: the window stays connected and works as a plain container
    * window: no open pipeline and no Docker work, and its session runs without the devspace (extension.ts), so no
    * heartbeat (whose repair would create the Monitor again) and no stop on close. One line in the log and one
    * information message, once per window. A Start of the devspace sets Devspaces up there again.
    */
-  workWithoutDevspaces(devspace: Devspace): void {
+  async workWithoutDevspaces(attached: Devspace, containerName: string): Promise<void> {
     // Nor does a restore of the registry adopt the devspace for this window.
     this.attaching = true;
-    if (this.toldWithoutDevspaces) return;
-    this.toldWithoutDevspaces = true;
+    const devspace = await this.ownWindowDevspace(attached, containerName);
+    if (devspace === undefined || this.withoutDevspaces) return;
+    this.withoutDevspaces = { devspace, containerName };
+    // An account change while the account was read found no devspace of this window yet: check the account again now
+    // (as stillAvailable does).
+    await this.onSessionChanged();
+    if (this.withoutDevspaces?.devspace.id !== devspace.id) return;
     const repository = this.shownName(this.devspaceTarget(devspace));
     const engine = describeDockerHost(dockerHostOf(devspace));
     this.logger.info(
@@ -2172,6 +2185,7 @@ export class Controller implements vscode.Disposable {
    */
   private async leaveDevspace(message?: string, left?: LeftDevspace): Promise<void> {
     this.current = undefined;
+    this.withoutDevspaces = undefined;
     this.left = left;
     await this.deps.coordinator
       .setDevspace(null)
@@ -2341,10 +2355,12 @@ export class Controller implements vscode.Disposable {
    * Sign-in, sign-out, or account change: a window connected to a devspace that the new account may not use closes
    * its remote connection at once, after the token of the owner left the container (leaveDevspace). The Monitor
    * container stops it after the waiting time (the release of the window). A window that has left such a devspace but
-   * kept its connection reloads when the owner account signs in again.
+   * kept its connection reloads when the owner account signs in again. The account rule outranks the removal mark: a
+   * window that works without Devspaces on an engine with the mark (workWithoutDevspaces) leaves its devspace in the
+   * same way, without a release (its session has no devspace).
    */
   async onSessionChanged(): Promise<void> {
-    const current = this.current;
+    const current = this.current ?? this.withoutDevspaces;
     if (this.disposed) return;
     if (!current) {
       await this.checkLeftConnection(false);
@@ -2352,7 +2368,7 @@ export class Controller implements vscode.Disposable {
     }
     const account = await this.readAccount();
     const devspace = (await this.deps.registry.get(current.devspace.id).catch(() => undefined)) ?? current.devspace;
-    if (isAvailableTo(devspace, account) || this.current !== current) return;
+    if (isAvailableTo(devspace, account) || (this.current ?? this.withoutDevspaces) !== current) return;
     const repository = this.displayName({ repository: devspace.repository });
     this.logger.info(
       account
