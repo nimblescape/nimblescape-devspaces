@@ -89,8 +89,8 @@ export function takeUserAgentVersion(value: unknown, source: string): string | u
 /**
  * The header User-Agent of the HTTPS requests of Devspaces: `nimblescape-devspaces/<version>`, or
  * `nimblescape-devspaces` when this program has no version (setUserAgentVersion). httpsRequest and httpsStream send
- * it; the clients of GitHub (githubApi.ts) and of the registries (registryClient.ts) and the download of Docker Desktop
- * (dockerDownload.ts) send it too.
+ * it; the clients of GitHub (githubApi.ts) and of the registries (registryClient.ts), the download of Docker Desktop
+ * (dockerDownload.ts) and the tunnel through the proxy of a Docker daemon (proxyTransport.ts) send it too.
  */
 export function userAgent(): string {
   return version === undefined ? USER_AGENT_PRODUCT : `${USER_AGENT_PRODUCT}/${version}`;
