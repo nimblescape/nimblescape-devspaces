@@ -5,9 +5,10 @@
 /// <reference types="mocha" />
 // Attach tests in the window of a container that is no devspace (.vscode-test.mjs, label attach,
 // DEVSPACE_TEST_ATTACH=plain), as after "Attach to Running Container" of Dev Containers. The extension activates for
-// every attached container and blocks the connection while it activates; with an empty registry it first restores the
-// devspaces from the volumes (up to WINDOW_RESTORE_TIMEOUT_MS). The container has the dev image of the devspace, so the
-// checks of the credentials see here what Dev Containers sets up without the settings of the override.
+// every attached container and blocks the connection while it activates. After the first use of Devspaces, with an
+// empty registry, it first restores the devspaces from the volumes (up to WINDOW_RESTORE_TIMEOUT_MS); the profile of
+// this test is new, so it restores nothing here. The container has the dev image of the devspace, so the checks of the
+// credentials see here what Dev Containers sets up without the settings of the override.
 import * as assert from 'assert';
 import { LABEL_PREFIX } from '../../../src/core/names';
 import { WINDOW_RESTORE_TIMEOUT_MS } from '../../../src/vscode/windowDevspace';

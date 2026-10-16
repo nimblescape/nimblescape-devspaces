@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { silentLogger, type Logger } from '../ports';
 import { devspacesUsed } from './firstUse';
 import { StoragePaths } from './paths';
@@ -70,19 +70,28 @@ describe('the first use of Devspaces', () => {
   });
 
   it('a file that cannot be checked counts as used (logged), and no marker is written for it', async () => {
-    // A file where the storage folder should be: every check fails with ENOTDIR, not with ENOENT.
-    const file = path.join(root, 'not-a-folder');
-    fs.writeFileSync(file, '');
-    const { logger, warnings } = recording();
-    expect(await devspacesUsed(new StoragePaths(file), logger)).toBe(true);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain(`Whether Devspaces was used before could not be read (${path.join(file, 'registry.json')}): `);
-    expect(warnings[0]).toContain('ENOTDIR');
-    // registry.json is missing, but the marker cannot be checked.
-    const marker = recording();
-    expect(await devspacesUsed({ registry: paths.registry, usedMarker: path.join(file, 'used') }, marker.logger)).toBe(true);
-    expect(marker.warnings).toHaveLength(1);
-    expect(fs.readdirSync(root)).toEqual(['not-a-folder']);
+    // A check that fails with another error than ENOENT (EIO here: the same on every platform, and not retried).
+    const stat = fs.promises.stat;
+    const unreadable = new Set<string>();
+    const spy = vi.spyOn(fs.promises, 'stat').mockImplementation(((file: fs.PathLike, ...rest: unknown[]) => {
+      if (unreadable.has(String(file))) return Promise.reject(Object.assign(new Error(`EIO: i/o error, stat '${String(file)}'`), { code: 'EIO' }));
+      return (stat as (...all: unknown[]) => unknown)(file, ...rest);
+    }) as typeof fs.promises.stat);
+    try {
+      unreadable.add(paths.registry);
+      const { logger, warnings } = recording();
+      expect(await devspacesUsed(paths, logger)).toBe(true);
+      expect(warnings).toEqual([`Whether Devspaces was used before could not be read (${paths.registry}): EIO: i/o error, stat '${paths.registry}'. It counts as used.`]);
+      // registry.json is missing, but the marker cannot be checked.
+      unreadable.clear();
+      unreadable.add(paths.usedMarker);
+      const marker = recording();
+      expect(await devspacesUsed(paths, marker.logger)).toBe(true);
+      expect(marker.warnings).toEqual([`Whether Devspaces was used before could not be read (${paths.usedMarker}): EIO: i/o error, stat '${paths.usedMarker}'. It counts as used.`]);
+      expect(fs.readdirSync(root)).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('a marker that cannot be written is logged, and the use counts all the same', async () => {

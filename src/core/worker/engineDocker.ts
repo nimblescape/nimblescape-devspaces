@@ -439,10 +439,11 @@ export class EngineDocker implements DevspaceDocker {
   async pullImage(reference: string, options: { onOutput?: (text: string) => void; signal?: AbortSignal; credentials?: PullCredentials } = {}): Promise<void> {
     // Without credentials of the caller, the pull goes without a login first, so a public image needs none and no login
     // is asked for it. The pull asks for the login of the registry of the reference (Docker Hub for a reference without
-    // a registry) only when the registry refuses that pull (a private image), or when Docker Hub limits the pulls
-    // without a login. It then pulls again with the login and holds it only for its own turn (the operation forgets it
-    // when the pull ends). A reference that the parser refuses, or whose registry the daemon would read otherwise, is
-    // pulled without a login only.
+    // a registry) only when the registry refuses that pull (a private image), when it does not find the image (a
+    // registry can hide a private repository behind a 404, as the image check assumes too), or when Docker Hub limits
+    // the pulls without a login. It then pulls again with the login and holds it only for its own turn (the operation
+    // forgets it when the pull ends). A reference that the parser refuses, or whose registry the daemon would read
+    // otherwise, is pulled without a login only.
     const image = options.credentials === undefined && this.logins !== undefined ? loginReferenceOf(reference) : undefined;
     const logins = this.logins;
     if (image === undefined || logins === undefined) return this.pullWith(reference, options);
@@ -511,20 +512,32 @@ function loginReferenceOf(reference: string): { registry: string; repository: st
 }
 
 /**
- * A failed pull without a login that a login can mend: the registry refused it (isLoginRefusal), or Docker Hub limits
- * the pulls without a login of this address (HTTP 429, `toomanyrequests`), with a higher limit for a login.
+ * A failed pull without a login that a login can mend: the registry refused it (isLoginRefusal), it did not find the
+ * image (isNotFound: a registry can hide a private repository behind a 404), or Docker Hub limits the pulls without a
+ * login of this address (HTTP 429, `toomanyrequests`), with a higher limit for a login.
  */
 function needsLogin(registry: string, error: unknown): boolean {
-  if (isLoginRefusal(error)) return true;
+  if (isLoginRefusal(error) || isNotFound(error)) return true;
   return isDockerHub(registry) && ((error instanceof EngineError && error.status === 429) || /toomanyrequests/i.test(errorMessage(error)));
+}
+
+/**
+ * The registry did not find the image, in Docker's words: `manifest unknown` and `name unknown` (Docker without the
+ * containerd image store), `<reference>: not found` (the containerd image store). Not the status alone: the daemon
+ * answers 404 also for failures that a login cannot mend.
+ */
+function isNotFound(error: unknown): boolean {
+  return /manifest unknown|name unknown|: not found(:|$)/i.test(errorMessage(error));
 }
 
 /** A refusal by the registry (HTTP 401 or 403, or Docker's words for it): without a login, or of the login. */
 function isLoginRefusal(error: unknown): boolean {
   if (error instanceof EngineError && (error.status === 401 || error.status === 403)) return true;
   // Also the words of the containerd image store and of ghcr.io and ECR, and Docker's words for a private repository
-  // or one that does not exist (`may require 'docker login'`; the containerd image store: `may require authorization`).
-  return /unauthori[sz]ed|forbidden|failed to authorize|authentication required|incorrect username or password|(^|: )denied(:|$)|authorization token has expired|invalid username\/password|may require 'docker login'|may require authorization/i.test(
+  // or one that does not exist (`may require 'docker login'`; the containerd image store: `may require authorization`),
+  // and for a registry with Basic authentication, such as ECR or a registry with a password file, without a login
+  // (`no basic auth credentials`).
+  return /unauthori[sz]ed|forbidden|failed to authorize|authentication required|incorrect username or password|(^|: )denied(:|$)|authorization token has expired|invalid username\/password|may require 'docker login'|may require authorization|no basic auth credentials/i.test(
     errorMessage(error),
   );
 }

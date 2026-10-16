@@ -743,7 +743,12 @@ async function activateExtension(
   // The stored list at once, then the background refresh.
   const listed = sidebar.initialize();
   background(listed, 'show the repository list');
-  if (view.visible) background(sidebar.refreshStates(), 'update the sidebar');
+  if (view.visible) {
+    // The view may have become visible while the activation waited above: VS Code sends that event once, before the
+    // listener existed, so the setup looks at the view here too (`wsl --status` while it shows the Docker setup).
+    setup.onViewShown();
+    background(sidebar.refreshStates(), 'update the sidebar');
+  }
   // A lost registry is rebuilt from the volume labels (only when Docker runs, and not before the first use). A window
   // whose container the registry did not know takes its restored devspace.
   const adopt = Boolean(containerName) && currentDevspace === undefined;

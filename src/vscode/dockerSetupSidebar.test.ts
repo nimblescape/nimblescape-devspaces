@@ -35,6 +35,7 @@ import { DockerContextKeys } from '../core/docker/dockerSetup';
 import { Messages } from '../core/messages';
 import { Commands } from './commands';
 import { Controller } from './controller';
+import { DockerSetup } from './dockerSetup';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -143,6 +144,53 @@ describe('no message at activation when Docker is missing', () => {
     }
   });
 
+  it('lets the Docker setup look at a view that became visible while the activation waited, before its listener existed', async () => {
+    vi.useRealTimers();
+    const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-activation-test-'));
+    const view = { visible: false, onDidChangeVisibility: new fakeVscode.EventEmitter<{ visible: boolean }>().event, dispose() {} };
+    // The view becomes visible after the setup looked at it, while the activation still waits: VS Code sends that event
+    // once, before the listener exists, so the listener never hears it.
+    const initialize = DockerSetup.prototype.initialize;
+    const initialized = vi.spyOn(DockerSetup.prototype, 'initialize').mockImplementation(function (this: DockerSetup) {
+      initialize.call(this);
+      view.visible = true;
+    });
+    const shown = vi.spyOn(DockerSetup.prototype, 'onViewShown');
+    const window = fakeVscode.window as unknown as Record<string, unknown>;
+    window.createTreeView = vi.fn(() => view);
+    window.onDidChangeWindowState = vi.fn(() => ({ dispose() {} }));
+    const workspace = fakeVscode.workspace as unknown as Record<string, unknown>;
+    workspace.onDidChangeConfiguration = vi.fn(() => ({ dispose() {} }));
+    workspace.workspaceFolders = undefined;
+    workspace.workspaceFile = undefined;
+    fakeVscode.workspace.getConfiguration.mockImplementation(() => ({ get: () => undefined, inspect: () => undefined, update: async () => {} }));
+    const context = {
+      subscriptions: [] as Array<{ dispose(): unknown }>,
+      globalStorageUri: { fsPath: storage },
+      extensionUri: { fsPath: ROOT },
+      extensionMode: 1,
+      asAbsolutePath: (relative: string) => path.join(storage, 'extension', relative),
+    };
+    try {
+      const { activate } = await import('./extension');
+      await activate(context as never);
+      expect(initialized).toHaveBeenCalledTimes(1);
+      // On Windows without Docker, the setup runs `wsl --status` now, so that the step Install WSL 2 shows the state.
+      expect(shown).toHaveBeenCalledTimes(1);
+    } finally {
+      initialized.mockRestore();
+      shown.mockRestore();
+      for (const subscription of context.subscriptions) {
+        try {
+          subscription.dispose();
+        } catch {
+          // Only the cleanup of the test.
+        }
+      }
+      fs.rmSync(storage, { recursive: true, force: true });
+    }
+  });
+
   it('has no check of the view that shows "Docker Desktop is not installed." once', () => {
     expect('onViewVisible' in Controller.prototype).toBe(false);
     const extension = fs.readFileSync(path.join(ROOT, 'src', 'vscode', 'extension.ts'), 'utf8');
@@ -231,6 +279,7 @@ describe('nothing before the first use of Devspaces', () => {
     }
   }
 
+  /** Waits for `condition`, at most 10 seconds; the tests that wait have a time limit of 20 seconds. */
   async function waitFor(condition: () => boolean, what: string): Promise<void> {
     for (let waited = 0; !condition(); waited += 20) {
       if (waited > 10_000) throw new Error(`Waited in vain for ${what}.`);
@@ -251,7 +300,7 @@ describe('nothing before the first use of Devspaces', () => {
         for (const name of ['registry.json', 'helper.json', 'used']) expect(fs.existsSync(path.join(storage, name)), name).toBe(false);
       },
     );
-  });
+  }, 20_000);
 
   it('after the first use (registry.json exists), the activation prepares the helper image in the background and writes the marker', async () => {
     await activateWithDocker(
@@ -265,7 +314,7 @@ describe('nothing before the first use of Devspaces', () => {
         expect(spawned.filter(([command, sub]) => command === docker && sub === 'info')).toHaveLength(1);
       },
     );
-  });
+  }, 20_000);
 });
 
 describe('package.json without the walkthrough', () => {

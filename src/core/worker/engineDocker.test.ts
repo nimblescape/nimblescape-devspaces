@@ -458,7 +458,7 @@ describe('the Docker of the pipeline over the port', () => {
       expect(pulls).toEqual([['ghcr.io/o/i:1', { serveraddress: 'ghcr.io', username: 'octo', secretName: SECRET_REGISTRY }]]);
     });
 
-    it("which failures of the pull without a login ask for the login: Docker's words for a refusal, and Docker Hub's limit for pulls without a login", async () => {
+    it("which failures of the pull without a login ask for the login: Docker's words for a refusal or a missing image, and Docker Hub's limit for pulls without a login", async () => {
       for (const [reference, failure, asked] of [
         ['ghcr.io/o/i:1', new EngineError('unauthorized: incorrect username or password', 500), true],
         ['ghcr.io/o/i:1', new EngineError('Head "https://ghcr.io/v2/o/i/manifests/1": unauthorized', 500), true],
@@ -472,16 +472,28 @@ describe('the Docker of the pipeline over the port', () => {
         ['ghcr.io/o/i:1', new EngineError('failed to resolve reference "ghcr.io/o/i:1": failed to authorize: failed to fetch oauth token: unexpected status from POST request to https://ghcr.io/token: 403 Forbidden', 500), true],
         ['ghcr.io/o/i:1', new EngineError('Head "https://ghcr.io/v2/o/i/manifests/1": denied', 500), true],
         ['ghcr.io/o/i:1', new EngineError('denied: Your authorization token has expired. Reauthenticate and try again.', 500), true],
+        // A registry with Basic authentication (ECR, a registry with a password file), Docker without the containerd
+        // image store.
+        ['r.example/i:1', new EngineError('Head "https://r.example/v2/i/manifests/1": no basic auth credentials', 500), true],
+        // A registry can hide a private repository behind a 404: Docker without and with the containerd image store.
+        ['ghcr.io/o/i:1', new EngineError('manifest for ghcr.io/o/i:1 not found: manifest unknown: manifest unknown', 404), true],
+        ['ghcr.io/o/i:1', new EngineError('manifest unknown', 404), true],
+        ['r.example/i:1', new EngineError('name unknown: repository name not known to registry', 500), true],
+        ['ghcr.io/o/i:1', new EngineError('failed to resolve reference "ghcr.io/o/i:1": ghcr.io/o/i:1: not found', 500), true],
         // Docker Hub limits the pulls without a login more than those with one; another registry's limit is no reason.
         ['node:22', new EngineError('toomanyrequests: You have reached your unauthenticated pull rate limit. https://www.docker.com/increase-rate-limit', 500), true],
         ['docker.io/library/node:22', new EngineError('Too Many Requests', 429), true],
         ['ghcr.io/o/i:1', new EngineError('toomanyrequests: retry later', 500), false],
         ['ghcr.io/o/i:1', new EngineError('Too Many Requests', 429), false],
-        ['ghcr.io/o/i:1', new EngineError('manifest unknown', 404), false],
         ['ghcr.io/o/i:1', new EngineError('pull access for o/i is not possible: repository does not exist or may require login (denied later)', 500), false],
+        ['ghcr.io/o/i:1', new EngineError('Get "https://ghcr.io/v2/": dial tcp: lookup ghcr.io: no such host', 500), false],
         ['ghcr.io/o/i:1', new Error('no space left on device'), false],
       ] as const) {
-        const { run, state } = logins({ 'ghcr.io': { username: 'octo', password: 'gho_x' }, 'registry-1.docker.io': { username: 'hub', password: 'hub_x' } });
+        const { run, state } = logins({
+          'ghcr.io': { username: 'octo', password: 'gho_x' },
+          'registry-1.docker.io': { username: 'hub', password: 'hub_x' },
+          'r.example': { username: 'aws', password: 'ecr_x' },
+        });
         const { engine } = engineWith(state, [reference], () => failure);
         const docker = new EngineDocker(engine, silentLogger, (name) => (name === SECRET_REGISTRY ? state.slot : undefined), run);
         const pulled = docker.pullImage(reference, { onOutput: () => {} });
