@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
-// workerAnalyzer runs the text of `devspace:analysis-script` (never as a path) with the limits of the extension
-// (ANALYSIS_LIMITS), and each of the 5 operations whose pipeline is workerServices gives it that analyzer (none of them
-// falls back to ANALYZER_NOT_IN_WORKER).
+// workerAnalyzer starts each job from the worker's own file (ownScript: in the bundle, the file that the pipe loader
+// checked and stored) with its hash and the limits of the extension (ANALYSIS_LIMITS), and each of the 5 operations whose
+// pipeline is workerServices gives it that analyzer (none of them falls back to ANALYZER_NOT_IN_WORKER).
+import * as fs from 'fs';
+import * as path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const captured = vi.hoisted(() => ({ deps: [] as Array<Record<string, unknown>> }));
@@ -22,8 +24,8 @@ vi.mock('../core/worker/workerServices', () => ({
   },
 }));
 
-import analysisScriptStub from './analysisScript.stub';
 import { ANALYSIS_LIMITS, WorkerConfigurationAnalyzer } from '../core/helper/configurationAnalysisRunner';
+import { bundleHash } from '../core/loader/pipeLoader';
 import type { DockerEngine } from '../core/worker/dockerEngine';
 import type { OwnHelper } from '../core/worker/ownHelper';
 import {
@@ -36,6 +38,7 @@ import {
   type OpenWorkerBatch,
 } from './flowOperations';
 import { contextSecrets } from './operationContext.testkit';
+import { ownScript } from './ownScript';
 import type { OperationContext } from './server';
 
 const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
@@ -63,11 +66,14 @@ beforeEach(() => {
 });
 
 describe('the analyzer of the operations of the worker: the script and its limits', () => {
-  it('workerAnalyzer runs the text of the script with `eval`, with the limits of the extension', () => {
+  it("workerAnalyzer starts the worker's own file with its hash, with the limits of the extension", () => {
     // The shared slots wrap the analyzer: the thread's analyzer of the operation is workerThreadAnalyzer.
     const analyzer = workerThreadAnalyzer(context()) as unknown as { script: unknown; limits: unknown };
     expect(analyzer).toBeInstanceOf(WorkerConfigurationAnalyzer);
-    expect(analyzer.script).toEqual({ code: analysisScriptStub });
+    // The file of the module itself (`__filename`; in the bundle: the bundle), never a text.
+    const file = path.join(__dirname, 'ownScript.ts');
+    expect(analyzer.script).toEqual({ file, hash: bundleHash(fs.readFileSync(file, 'utf8')) });
+    expect(ownScript()).toEqual({ file, text: fs.readFileSync(file, 'utf8'), hash: bundleHash(fs.readFileSync(file, 'utf8')) });
     expect(analyzer.limits).toBe(ANALYSIS_LIMITS);
   });
 

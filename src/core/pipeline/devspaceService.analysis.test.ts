@@ -2,18 +2,19 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The open pipeline with the host access analysis in the real worker bundle (WorkerConfigurationAnalyzer, as the
-// extension runs it; the analysis runs with limits of time and memory, against a denial of service by the parser). A
-// normal configuration opens as with the analysis in this thread; a failed analysis (too slow, too much memory, a
-// worker that does not start) refuses the configuration before anything is built.
-import { buildSync } from 'esbuild';
+// The open pipeline with the host access analysis in a thread (WorkerConfigurationAnalyzer, as the worker runs it, with
+// a bundle of the thread: configurationAnalysisRunner.testkit.ts; the analysis runs with limits of time and memory,
+// against a denial of service by the parser). A normal configuration opens as with the analysis in this thread; a
+// failed analysis (too slow, too much memory, a worker that does not start, a script file that was changed) refuses the
+// configuration before anything is built.
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { UserFacingError } from '../errors';
 import { analysisInternalItem } from '../helper/configurationAnalysis';
-import { ANALYSIS_LIMITS, WorkerConfigurationAnalyzer, type AnalysisLimits } from '../helper/configurationAnalysisRunner';
+import { ANALYSIS_LIMITS, WorkerConfigurationAnalyzer, type AnalysisLimits, type AnalysisScript } from '../helper/configurationAnalysisRunner';
+import { analysisBundle, scriptFile } from '../helper/configurationAnalysisRunner.testkit';
 import { Messages } from '../messages';
 import { resourceName } from '../names';
 import type { RepositoryTarget } from './operationBase';
@@ -24,26 +25,13 @@ const TARGET: RepositoryTarget = { repository: REPO, defaultBranch: 'main', conf
 const FAILED_LINE = /^The host access analysis of the configuration failed \((.*)\); the configuration is refused\.$/;
 
 let outDir: string;
-let bundle: string;
-/** The text of the bundle, as the worker carries it (the analyzer takes no path). */
-let bundleCode: string;
+/** The bundle of the thread in its file, and its hash. */
+let bundle: AnalysisScript;
 let h: Harness | undefined;
 
 beforeAll(() => {
   outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
-  bundle = path.join(outDir, 'configurationAnalysisWorker.js');
-  // Same options as esbuild.mjs.
-  buildSync({
-    entryPoints: [path.join(__dirname, '..', 'helper', 'configurationAnalysisWorker.ts')],
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    target: 'node24',
-    outfile: bundle,
-    logLevel: 'silent',
-    define: { __DEVCONTAINER_CLI_VERSION__: JSON.stringify('0.0.0'), __DEVSPACES_VERSION__: JSON.stringify('0.0.0') },
-  });
-  bundleCode = fs.readFileSync(bundle, 'utf8');
+  bundle = analysisBundle(outDir);
 });
 
 afterEach(() => {
@@ -55,11 +43,11 @@ afterAll(() => {
   fs.rmSync(outDir, { recursive: true, force: true });
 });
 
-/** A harness whose pipeline analyses in the worker of the script `code` with `limits`. */
-function harness(limits: Partial<AnalysisLimits> = {}, code = bundleCode): Harness {
+/** A harness whose pipeline analyses in a thread of `script` with `limits`. */
+function harness(limits: Partial<AnalysisLimits> = {}, script = bundle): Harness {
   let created: Harness | undefined;
   const logger = { warn: (message: string) => created?.logger.warn(message) };
-  created = createHarness({ analyzer: new WorkerConfigurationAnalyzer({ code }, logger, { ...ANALYSIS_LIMITS, ...limits }) });
+  created = createHarness({ analyzer: new WorkerConfigurationAnalyzer(script, logger, { ...ANALYSIS_LIMITS, ...limits }) });
   h = created;
   return created;
 }
@@ -107,9 +95,9 @@ describe('the open pipeline with the host access analysis in the worker', () => 
   });
 
   it('refuses the configuration when the worker does not start, before anything is built', async () => {
-    // A script that cannot load a module, as Node names it (the analyzer takes no path; the require stack of a real one
-    // would break the lines of the message).
-    const failing = harness({}, 'throw Object.assign(new Error("Cannot find module \'./missing\'"), { code: "MODULE_NOT_FOUND" });');
+    // A script that cannot load a module, as Node names it (the require stack of a real one would break the lines of the
+    // message).
+    const failing = harness({}, scriptFile(outDir, 'throw Object.assign(new Error("Cannot find module \'./missing\'"), { code: "MODULE_NOT_FOUND" });'));
     const error = await rejection(failing.service.open(TARGET, { progress: failing.progress }));
     expect(error.code).toBe('hostAccess');
     // An internal error, not "too complex, change the configuration" (the configuration is not to blame); still
@@ -118,6 +106,21 @@ describe('the open pipeline with the host access analysis in the worker', () => 
     expect(failing.helper.builds).toEqual([]);
     expect(failing.helper.ups).toEqual([]);
     expect(failing.logger.warnings.filter((line) => FAILED_LINE.test(line))).toHaveLength(1);
+  });
+
+  it('refuses the configuration when the file of the analysis was changed, before anything is built', async () => {
+    const script = analysisBundle(outDir);
+    fs.appendFileSync(script.file, '\n// changed\n');
+    const changed = harness({}, script);
+    const error = await rejection(changed.service.open(TARGET, { progress: changed.progress }));
+    expect(error.code).toBe('hostAccess');
+    // An internal error, not a limit of the configuration; still refused.
+    expect(error.message).toBe(Messages.configurationCheckInternal(analysisInternalItem('the script of the thread does not match its hash')));
+    expect(changed.helper.builds).toEqual([]);
+    expect(changed.helper.ups).toEqual([]);
+    expect(changed.logger.warnings.filter((line) => FAILED_LINE.test(line))).toEqual([
+      'The host access analysis of the configuration failed (the script of the thread does not match its hash); the configuration is refused.',
+    ]);
   });
 
   it('refuses the configuration when the analysis takes longer than its time limit', async () => {

@@ -52,7 +52,7 @@ export interface RemoteSessionMonitorOptions {
   /** The engine of the monitor (the worker's, over the Engine API). */
   engine: MonitorEngine;
   logger: Logger;
-  /** The script of the monitor (the module `devspace:monitor-script` of the worker's bundle). */
+  /** The script of the monitor: the worker's bundle (dist/helperChannel.js), whose entry startMonitor runs the Monitor. */
   script: () => Promise<string>;
   /**
    * The settings of the monitor's background run: its schedule (the setting cacheUpdateSchedule: a cron expression or

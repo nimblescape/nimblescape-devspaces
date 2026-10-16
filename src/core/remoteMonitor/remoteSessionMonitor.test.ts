@@ -9,9 +9,9 @@
 // `exec <container> <command>`, `ps <label>`, `info`, `run <name>` with the spec of the create). The tests check the
 // decisions, the calls and their order; the production create and readings have their own tests
 // (engineClient.attached.test.ts, engineClient.createAttached.test.ts, engineMonitor*.test.ts).
-import * as path from 'path';
 import * as esbuild from 'esbuild';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { sharedBundleOptions, workerBundleOptions } from '../../../scripts/bundleOptions.mjs';
 import { MAX_BUNDLE_LINE_LENGTH, PIPE_LOADER, bundleHash, encodeBundle } from '../loader/pipeLoader';
 import { abortError, type Logger } from '../ports';
 import { EngineError, type DockerEngine, type MonitorCreated, type MonitorRunSpec } from '../worker/dockerEngine';
@@ -557,19 +557,10 @@ describe('RemoteSessionMonitor.ensure with the pipe loader', () => {
     expect(docker.commands()).toEqual(['inspect', 'run']);
   });
 
-  // The real script, built as esbuild.mjs does: no part of the script is in the spec of the create (its command, labels
-  // and variables), which stays short.
+  // The real script, the worker's bundle as a production build of esbuild.mjs builds it: no part of the script is in the
+  // spec of the create (its command, labels and variables), which stays short.
   it('the command line holds no bundle (the real script)', { timeout: 30_000 }, async () => {
-    const built = await esbuild.build({
-      entryPoints: [path.resolve(__dirname, '../../remoteMonitor/main.ts')],
-      bundle: true,
-      platform: 'node',
-      format: 'cjs',
-      target: 'node24',
-      minify: true,
-      write: false,
-      logLevel: 'silent',
-    });
+    const built = await esbuild.build({ ...workerBundleOptions(sharedBundleOptions({ production: true })), write: false, logLevel: 'silent' });
     const script = built.outputFiles[0].text;
     expect(script).toContain(REMOTE_MONITOR_READY_TEXT);
     const spec = monitor(new FakeDocker(() => undefined), new Log(), script).runSpec(TAG, '/run/user/1000/docker.sock', LABEL, script, {

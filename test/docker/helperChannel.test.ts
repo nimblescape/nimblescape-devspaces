@@ -10,10 +10,8 @@
 // over. The channel starts no step container (the end of a batch helper with its worker is tested in
 // src/helperChannel/batch.e2e.test.ts). The probe and the sweep of the worker go over the Engine API of its socket (no
 // Docker CLI of the worker), so their answers are checked against what the Docker CLI of the runner reports.
-import * as path from 'path';
 import * as esbuild from 'esbuild';
-import { buildDefines } from '../../scripts/buildDefines.mjs';
-import { workerScriptsPlugin } from '../../scripts/workerScripts.mjs';
+import { sharedBundleOptions, workerBundleOptions } from '../../scripts/bundleOptions.mjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // The Docker CLI of the extension (BootstrapDocker).
 import { BootstrapDocker } from '../../src/core/docker/bootstrapDocker';
@@ -43,16 +41,9 @@ import { Timings, dockerTestContext, testHelperImage, testStateVolume, testVscod
 
 async function bundleScript(): Promise<string> {
   const result = await esbuild.build({
-    // The compile-time constants of esbuild.mjs (the worker bundles the workspace helper).
-    define: buildDefines(),
-    // The script of the Monitor in the worker, as esbuild.mjs bundles it.
-    plugins: [workerScriptsPlugin(path.resolve(__dirname, '../..'), buildDefines())],
-    entryPoints: [path.resolve(__dirname, '../../src/helperChannel/main.ts')],
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    target: 'node24',
-    minify: true,
+    // The worker's bundle as a production build of esbuild.mjs builds it: also the program of the Monitor and of
+    // the analysis thread.
+    ...workerBundleOptions(sharedBundleOptions({ production: true })),
     write: false,
     logLevel: 'silent',
   });

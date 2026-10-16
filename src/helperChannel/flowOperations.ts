@@ -56,7 +56,6 @@ import { removeTokenFlow } from '../core/worker/tokenRemoveFlow';
 import { requestBackgroundRun, sendHeartbeat, sendMonitorSettings } from '../core/worker/monitorFlow';
 import type { ExtensionSettings } from '../core/types';
 import { engineMonitor, limited } from '../core/worker/engineMonitor';
-import analysisScript from 'devspace:analysis-script';
 import { WorkerConfigurationAnalyzer, analysisSlots } from '../core/helper/configurationAnalysisRunner';
 import { analysisFailure, type ConfigurationAnalyzer } from '../core/helper/configurationAnalysis';
 import { monitorImageTag } from '../core/helper/helperState';
@@ -66,6 +65,7 @@ import { MONITOR_WORKER_HASH_ENV, storeWorkerScript } from '../core/remoteMonito
 import { bundleHash } from '../core/loader/pipeLoader';
 import { workerHostSide } from '../core/worker/workerHostSide';
 import type { HostRequest } from '../core/worker/hostSide';
+import { ownScript } from './ownScript';
 import { runPrepare } from './prepare';
 import { OperationError, type OperationContext, type OperationHandler } from './server';
 
@@ -234,8 +234,8 @@ async function ownHelperOfOperation(ownHelperOf: OwnHelperOf, context: Operation
 }
 
 /**
- * The host access analysis of an operation in the worker: each job in a thread of its own, started from the script in
- * the worker's bundle (`devspace:analysis-script`) with the limits of the extension's (ANALYSIS_LIMITS), its failures
+ * The host access analysis of an operation in the worker: each job in a thread of its own, started from the worker's
+ * own file after the check of its hash (ownScript), with the limits of the extension's (ANALYSIS_LIMITS), its failures
  * logged to the operation and refused (fail closed).
  */
 export function workerAnalyzer(context: OperationContext): ConfigurationAnalyzer {
@@ -252,12 +252,13 @@ export function workerAnalyzer(context: OperationContext): ConfigurationAnalyzer
 }
 
 /**
- * The analyzer of the thread of an operation (workerAnalyzer, without the shared slots): the text of the script in the
- * worker's bundle, the limits of the extension, the log of the operation. Apart, so that its tests need no seam in
- * workerAnalyzer.
+ * The analyzer of the thread of an operation (workerAnalyzer, without the shared slots): the worker's own file and its
+ * hash (ownScript, the file that the loader checked; the end of main.ts starts the analysis in a thread of it), the
+ * limits of the extension, the log of the operation. Apart, so that its tests need no seam in workerAnalyzer.
  */
 export function workerThreadAnalyzer(context: OperationContext): WorkerConfigurationAnalyzer {
-  return new WorkerConfigurationAnalyzer({ code: analysisScript }, contextLogger(context));
+  const { file, hash } = ownScript();
+  return new WorkerConfigurationAnalyzer({ file, hash }, contextLogger(context));
 }
 
 /** The most analysis threads that the worker runs at once, for all its operations. */
@@ -496,12 +497,13 @@ export async function monitorImage(engine: DockerEngine, own: { tag: string; id?
 /**
  * The Monitor of the worker's engine made sure, as `monitorEnsure` does it, for that operation and for the open
  * in the worker (WorkerServicesDeps.monitorEnsure): from the worker's own helper image (its monitor tag, monitorImage),
- * with the socket that the worker mounts, the monitor script of the worker's bundle and the image maintenance of the
- * operation. Rejects with the cause when it cannot. With the mode of the monitor (MonitorSettings.permanent), and with
- * the shared VS Code server store that the worker mounts (OwnHelper.vscodeStore), which the monitor mounts too for its
- * background run. With `worker`, the worker's own script stored in the volume of the monitor first (storeWorkerScript;
- * a failure is one warning and the ensure goes on), and its hash given to a monitor that this ensure creates
- * (MONITOR_WORKER_HASH_ENV), so that the monitor's prepares run this worker; no token, no credential, nothing else.
+ * with the socket that the worker mounts, the worker's own script as the script of the Monitor and the image
+ * maintenance of the operation. Rejects with the cause when it cannot. With the mode of the monitor
+ * (MonitorSettings.permanent), and with the shared VS Code server store that the worker mounts (OwnHelper.vscodeStore),
+ * which the monitor mounts too for its background run. With `worker`, the worker's own script stored in the volume of
+ * the monitor first (storeWorkerScript; a failure is one warning and the ensure goes on), and its hash given to a
+ * monitor that this ensure creates (MONITOR_WORKER_HASH_ENV), so that the monitor's prepares run this worker; no token,
+ * no credential, nothing else.
  */
 export async function ensureWorkerMonitor(
   engine: DockerEngine,
@@ -559,7 +561,8 @@ function storedWorkerHash(worker: WorkerScriptSource, logger: Logger): string | 
  * `monitorEnsure`, the Monitor container of the worker's engine made sure (RemoteSessionMonitor.ensureOrThrow
  * over the Engine API, engineMonitor): with the worker's own helper image (the image the worker runs from: its tag in
  * the label, its ID as the image of the container, its monitor tag: monitorImage), the socket that the worker mounts,
- * and `script` (the monitor of the worker's bundle). A failure fails the operation with its cause.
+ * and `script` (the worker's own script, whose entry startMonitor runs the Monitor). A failure fails the operation with
+ * its cause.
  */
 export function monitorEnsureOperation(engineOf: EngineOfOperation, ownHelperOf: OwnHelperOf, script: () => string, worker?: WorkerScriptSource): OperationHandler {
   return checkedOperation('monitorEnsure', parseMonitorEnsureParams, async (checked, context) => {

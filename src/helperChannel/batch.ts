@@ -10,7 +10,6 @@
 // removes the container by its session label. It also ends by itself as the worker does (the end of its input when the
 // worker ends, its silence, its idle time). The worker never relays the batch helper for the extension: only its own
 // flows use it.
-import * as fs from 'fs';
 import {
   BATCH_MISSING_VOLUME_CODE,
   BATCH_HOLD_LIMIT_MS,
@@ -26,6 +25,7 @@ import { MAX_CAPTURED_OUTPUT_BYTES } from '../core/helper/analysisLimits';
 import { bundleHash } from '../core/loader/pipeLoader';
 import { abortError, isAbortError, type Logger } from '../core/ports';
 import { EngineError, type DockerEngine, type EngineAttachedRun } from '../core/worker/dockerEngine';
+import { ownScript } from './ownScript';
 import { OperationError, type OperationContext } from './server';
 
 export interface BatchDeps {
@@ -37,9 +37,9 @@ export interface BatchDeps {
   openTimeoutMs?: number;
 }
 
-/** The deps of the worker: its own script file (the loader `require`d it from there), and the port of its engine. */
+/** The deps of the worker: its own script (ownScript: the file that the loader stored and `require`d), and the port of its engine. */
 export function batchDeps(engineOf: (context: OperationContext) => DockerEngine): BatchDeps {
-  return { engineOf, readScript: () => fs.readFileSync(__filename, 'utf8') };
+  return { engineOf, readScript: () => ownScript().text };
 }
 
 /**

@@ -4,8 +4,8 @@
 
 // The Monitor container of a remote Docker host, against the real Docker engine of the runner (the same code
 // path as on a remote host: RemoteSessionMonitor.ensure with the workspace helper image and the socket of the engine).
-// The script is bundled from src/remoteMonitor/main.ts as the worker's bundle carries it (the module
-// `devspace:monitor-script` of scripts/workerScripts.mjs). The container, its volume, and the test containers have
+// The script is the worker's bundle (dist/helperChannel.js, as esbuild.mjs builds it), whose entry startMonitor runs the
+// Monitor (src/remoteMonitor/main.ts). The container, its volume, and the test containers have
 // names of this run; the test containers carry the label nimblescape.devspaces.id with new ids, so the
 // monitor acts on them. The tick of the monitor is shortened with DEVSPACE_MONITOR_TICK_MS (read only by main.ts).
 // Checked: a labeled container with a stale record is stopped; one whose record keeps it running is not; one with a
@@ -23,10 +23,9 @@
 // short limit, and keeps one whose window reloaded within the waiting time.
 import { spawn } from 'child_process';
 import * as crypto from 'crypto';
-import * as path from 'path';
 import * as esbuild from 'esbuild';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildDefines } from '../../scripts/buildDefines.mjs';
+import { sharedBundleOptions, workerBundleOptions } from '../../scripts/bundleOptions.mjs';
 // The Docker CLI of the extension (BootstrapDocker).
 import { BootstrapDocker } from '../../src/core/docker/bootstrapDocker';
 import { helperDockerSocket } from '../../src/core/helper/helperImages';
@@ -74,20 +73,9 @@ const TEST_RELEASE_LIMIT_MS = MIN_LIMIT_SECONDS * 1000;
 /** The wait for the stop: the limit, then some ticks of the monitor, the stop itself, and slack for a loaded runner. */
 const RELEASE_STOP_WAIT_MS = TEST_RELEASE_LIMIT_MS + 60_000;
 
-/** Bundles the script of the remote monitor as the worker's bundle carries it (workerScriptsPlugin: minified, one file). */
+/** The script of the Monitor: the worker's bundle, as a production build of esbuild.mjs builds it. */
 async function bundleScript(): Promise<string> {
-  const result = await esbuild.build({
-    entryPoints: [path.resolve(__dirname, '../../src/remoteMonitor/main.ts')],
-    // The compile-time constants of esbuild.mjs.
-    define: buildDefines(),
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    target: 'node24',
-    minify: true,
-    write: false,
-    logLevel: 'silent',
-  });
+  const result = await esbuild.build({ ...workerBundleOptions(sharedBundleOptions({ production: true })), write: false, logLevel: 'silent' });
   return result.outputFiles[0].text;
 }
 
