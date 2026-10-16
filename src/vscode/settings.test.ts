@@ -23,6 +23,7 @@ import {
   settingTarget,
   showRepositoryGroupsWarning,
   showSettingWarning,
+  warnInvalidCacheUpdateSchedule,
   warnInvalidDefaultImage,
   warnInvalidHostAccessChecksOff,
 } from './settings';
@@ -140,6 +141,33 @@ describe('settings', () => {
     warnInvalidDefaultImage(logger, warned, change('defaultImage'));
     expect(shown()).toEqual([invalid, other, invalid]);
     expect(logged()).toHaveLength(5);
+  });
+
+  // The settings editor takes any five fields (the pattern in package.json); the Monitor would use the default in place
+  // of a schedule that it does not take, without a word.
+  it('warns once about a cacheUpdateSchedule that the Monitor does not take, and again only when it changes', () => {
+    let value: unknown = ' 0 25 * * * ';
+    fakeVscode.workspace.getConfiguration.mockReturnValue({ get: (key: string) => (key === 'cacheUpdateSchedule' ? value : undefined), inspect: () => undefined });
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
+    const warned = warnInvalidCacheUpdateSchedule(logger, '');
+    expect(warned).toBe('0 25 * * *');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(Messages.cacheUpdateScheduleInvalid('0 25 * * *'));
+    expect(logger.warn).toHaveBeenCalledWith(Messages.cacheUpdateScheduleInvalid('0 25 * * *'));
+    expect(warnInvalidCacheUpdateSchedule(logger, warned)).toBe(warned);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
+    // Every minute is less than 5 minutes apart; a number of minutes below 5 is named too.
+    value = '* * * * *';
+    expect(warnInvalidCacheUpdateSchedule(logger, warned)).toBe('* * * * *');
+    value = 3;
+    expect(warnInvalidCacheUpdateSchedule(logger, '* * * * *')).toBe('3');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(3);
+    // A valid value, and none: nothing to warn about.
+    for (const valid of ['7 6 * * *', '*/5 * * * *', '60', 60, undefined, '']) {
+      value = valid;
+      expect(warnInvalidCacheUpdateSchedule(logger, ''), JSON.stringify(valid)).toBe('');
+    }
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(3);
   });
 
   // There is no setting imageUpdates: a value that settings.json holds is not read (VS Code shows it as an unknown

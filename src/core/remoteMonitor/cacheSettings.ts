@@ -6,7 +6,7 @@
 // devspaces.cacheUpdateSchedule (a cron schedule of five fields or an interval in minutes), when a run is due, and
 // whether the monitor of an engine runs permanently (its restart policy). The default is daily at 06:07 in the
 // computer's time zone. Pure functions; no I/O, no `vscode`.
-import { nextCronTime, parseCronSchedule, type CronSchedule } from './cron';
+import { nextCronTime, parseCronSchedule, shortestCronGapMinutes, type CronSchedule } from './cron';
 
 /**
  * The default of devspaces.cacheUpdateSchedule: daily at 06:07 in the time zone of the computer (DEVSPACE_IMAGE_TZ of
@@ -14,7 +14,10 @@ import { nextCronTime, parseCronSchedule, type CronSchedule } from './cron';
  * (cacheRunDue).
  */
 export const DEFAULT_CACHE_UPDATE_SCHEDULE = '7 6 * * *';
-/** The shortest interval in minutes (a whole number, at least 5). */
+/**
+ * The shortest interval in minutes (a whole number, at least 5), and the shortest time between two times of a cron
+ * schedule.
+ */
 export const MIN_CACHE_INTERVAL_MINUTES = 5;
 /**
  * The longest interval in minutes: a day (1440), as the pattern of the setting in package.json, so that every number
@@ -32,6 +35,8 @@ export type CacheSchedule = { kind: 'interval'; minutes: number; text: string } 
  * of package.json) is an interval, five fields that parseCronSchedule takes are a cron schedule (its text with single
  * spaces); `undefined` for anything else (fewer minutes, a fraction, other text, another type). Also a cron schedule
  * that has no time (`0 0 30 2 *`, no 30 February): it would never run once a run is known, so it means the default.
+ * And a cron schedule with two times less than MIN_CACHE_INTERVAL_MINUTES apart (`* * * * *`, shortestCronGapMinutes):
+ * the shortest interval holds for both forms.
  */
 export function parseCacheSchedule(value: unknown): CacheSchedule | undefined {
   const text = typeof value === 'number' ? (Number.isInteger(value) ? String(value) : '') : typeof value === 'string' ? value.trim() : '';
@@ -44,6 +49,7 @@ export function parseCacheSchedule(value: unknown): CacheSchedule | undefined {
   if (/^\d+$/.test(text)) return undefined;
   const cron = parseCronSchedule(text);
   if (cron === undefined || nextCronTime(CRON_CHECK_FROM, cron, 'UTC') === undefined) return undefined;
+  if (shortestCronGapMinutes(cron) < MIN_CACHE_INTERVAL_MINUTES) return undefined;
   return { kind: 'cron', cron, text: text.split(/\s+/).join(' ') };
 }
 

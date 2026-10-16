@@ -50,6 +50,17 @@ describe('cacheUpdateSchedule', () => {
     expect(normalizeCacheSchedule('0 0 30 2 *')).toBe(DEFAULT_CACHE_UPDATE_SCHEDULE);
   });
 
+  // The shortest interval holds for a cron schedule too: `* * * * *` would run the background work every minute.
+  it('refuses a cron schedule with two times less than 5 minutes apart, also across the full hour', () => {
+    for (const value of ['* * * * *', '*/4 * * * *', '0,3 6 * * *', '0,58 * * * *', '0,58 23,0 * * *']) {
+      expect(parseCacheSchedule(value), value).toBeUndefined();
+    }
+    for (const value of ['*/5 * * * *', '0,55 * * * *', '0,58 6,8 * * *', '59 6,7 * * *', '7 * * * *', '0-59/5 6 * * 1-5']) {
+      expect(parseCacheSchedule(value)?.kind, value).toBe('cron');
+    }
+    expect(normalizeCacheSchedule('* * * * *')).toBe(DEFAULT_CACHE_UPDATE_SCHEDULE);
+  });
+
   it('refuses junk: other text, four or six fields, an invalid field, other types', () => {
     for (const value of ['', ' ', 'soon', '17 minutes', '7 6 * *', '7 6 * * * *', '61 6 * * *', '05:30', null, undefined, true, ['17'], { minutes: 17 }]) {
       expect(parseCacheSchedule(value), JSON.stringify(value)).toBeUndefined();
