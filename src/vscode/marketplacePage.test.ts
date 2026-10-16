@@ -10,8 +10,11 @@ vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode)
 
 import { SHARED_VOLUMES, uninstallCommands } from '../core/docker/engineRemoval';
 import { StateTexts } from '../core/messages';
+import { REMOTE_MONITOR_CONTAINER } from '../core/remoteMonitor/protocol';
 import { GITHUB_SCOPES, PACKAGES_SCOPES } from './auth';
+import { Commands } from './commands';
 import { ControllerTexts } from './controllerTexts';
+import { OUTPUT_CHANNEL_NAME } from './logger';
 import { TreeTexts } from './treeModel';
 
 // nimblescape promised the Visual Studio Marketplace team that the top of the description and of the README (the
@@ -156,7 +159,7 @@ describe('the Marketplace page and the files of the package', () => {
     const manifest = JSON.parse(read('package.json')) as { displayName: string; description: string; keywords: string[] };
     expect(manifest.keywords).not.toContain('codespaces');
     for (const text of [manifest.displayName, manifest.description, ...manifest.keywords]) expect(text).not.toMatch(/codespace/i);
-    for (const file of ['README.md', 'docs/guide.md', 'docs/security.md', 'docs/architecture.md']) {
+    for (const file of ['README.md', 'SUPPORT.md', 'docs/guide.md', 'docs/security.md', 'docs/architecture.md']) {
       expect(read(file), file).not.toMatch(/codespace/i);
     }
   });
@@ -177,5 +180,24 @@ describe('the Marketplace page and the files of the package', () => {
     for (const codicon of codicons) expect(notices).toContain(`"${codicon}"`);
     expect(read('.vscodeignore').split('\n').map((line) => line.trim())).toContain('!ThirdPartyNotices.txt');
     expect(read('README.md')).toContain('(https://github.com/nimblescape/nimblescape-devspaces/blob/main/ThirdPartyNotices.txt)');
+  });
+
+  it('has SUPPORT.md in the package, linked from the README and the user guide, and the Q&A link opens the issues', () => {
+    const manifest = JSON.parse(read('package.json')) as {
+      bugs: { url: string };
+      qna: unknown;
+      contributes: { commands: Array<{ command: string; title: string; category: string }> };
+    };
+    // vsce turns a qna text other than "marketplace" into the Q&A link of the Marketplace page (CustomerQnALink).
+    expect(manifest.qna).toBe(manifest.bugs.url);
+    const support = read('SUPPORT.md');
+    const showLog = manifest.contributes.commands.find((command) => command.command === Commands.showLog);
+    expect(showLog).toMatchObject({ title: 'Show Log', category: 'Devspaces' });
+    for (const words of [`(${manifest.bugs.url})`, '**Devspaces: Show Log**', `"${OUTPUT_CHANNEL_NAME}"`, `\`docker logs ${REMOTE_MONITOR_CONTAINER}\``]) {
+      expect(support).toContain(words);
+    }
+    expect(read('.vscodeignore').split('\n').map((line) => line.trim())).toContain('!SUPPORT.md');
+    expect(read('README.md')).toContain('(https://github.com/nimblescape/nimblescape-devspaces/blob/main/SUPPORT.md)');
+    expect(section(read('docs/guide.md'), 'Troubleshooting')).toContain('(../SUPPORT.md)');
   });
 });
