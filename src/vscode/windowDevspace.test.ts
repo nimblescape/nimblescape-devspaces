@@ -9,7 +9,18 @@ import { silentLogger } from '../core/ports';
 import type { Devspace } from '../core/types';
 import { resourceName } from '../core/names';
 import { LOCAL_DOCKER_TARGET, dockerTargetOf } from '../core/docker/dockerHost';
-import { WINDOW_RESTORE_TIMEOUT_MS, backgroundEngineAtStart, backgroundWorkAtStart, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
+import { operationDockerTarget } from '../core/docker/dockerTargets';
+import type { RunResult } from '../core/ports';
+import {
+  WINDOW_RESTORE_TIMEOUT_MS,
+  backgroundEngineAtStart,
+  backgroundWorkAtStart,
+  containerDevspace,
+  findWindowDevspace,
+  removedEngineWindowDevspace,
+  restoreAfterPrebuild,
+  windowDevspaceName,
+} from './windowDevspace';
 
 const ENTRY = { id: 'e1', containerName: 'devspaces-acme-api-x' } as Devspace;
 
@@ -191,5 +202,119 @@ describe('the name of the devspace of the window, for the names of its workers',
     expect(await windowDevspaceName(undefined, '', registry)).toBeUndefined();
     expect(registry.findByContainerName).not.toHaveBeenCalled();
     expect(await windowDevspaceName('other', '', registry)).toBeUndefined();
+  });
+});
+
+// After a lost registry on an engine with the removal mark, nothing is restored there; the labels of the container of
+// the window still give its devspace and owner, for the account rule.
+describe('the devspace of the window by the labels of its container', () => {
+  const ID = '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d';
+  const CONTAINER = 'devspaces-acme-api-3f2a9c1e';
+  const LABELS = {
+    'nimblescape.devspaces.id': ID,
+    'nimblescape.devspaces.repository': 'acme/api',
+    'nimblescape.devspaces.owner-id': '1001',
+    'nimblescape.devspaces.config-path': '.devcontainer/python/devcontainer.json',
+    'devcontainer.local_folder': '/tmp/x',
+  };
+  const answer = (result: Partial<RunResult>): RunResult => ({ exitCode: 0, stdout: '', stderr: '', timedOut: false, ...result });
+  const labelsOf = (labels: unknown) => ({ run: vi.fn(async () => answer({ stdout: `${JSON.stringify(labels)}\n` })) });
+  const NOW = '2026-10-16T08:00:00.000Z';
+
+  it('makes an entry of the labels, on the host of the call, with one plain inspect', async () => {
+    const docker = labelsOf(LABELS);
+    expect(await containerDevspace(CONTAINER, { docker, host: 'build-box', now: NOW })).toEqual({
+      kind: 'devspace',
+      devspace: {
+        id: ID,
+        repository: 'acme/api',
+        configPath: '.devcontainer/python/devcontainer.json',
+        volumeName: CONTAINER,
+        containerName: CONTAINER,
+        createdAt: NOW,
+        lastUsedAt: NOW,
+        owner: { id: '1001', login: '' },
+        dockerHost: 'build-box',
+      },
+    });
+    expect(docker.run.mock.calls).toEqual([[['container', 'inspect', '--format', '{{json .Config.Labels}}', CONTAINER], { timeoutMs: 60_000 }]]);
+    // The local Docker has no host field; a configuration path that is not valid is the default one.
+    const local = await containerDevspace(CONTAINER, { docker: labelsOf({ ...LABELS, 'nimblescape.devspaces.config-path': '../x.json' }), host: '', now: NOW, timeoutMs: 5 });
+    expect(local).toEqual({ kind: 'devspace', devspace: expect.objectContaining({ configPath: '.devcontainer/devcontainer.json' }) });
+    expect(local.kind === 'devspace' && 'dockerHost' in local.devspace).toBe(false);
+  });
+
+  it('is none for a container that the engine does not have, one of no devspace, and another container of a Compose devspace', async () => {
+    const missing = { run: vi.fn(async () => answer({ exitCode: 1, stderr: `Error: No such container: ${CONTAINER}\n` })) };
+    expect(await containerDevspace(CONTAINER, { docker: missing, host: '', now: NOW })).toEqual({ kind: 'none' });
+    expect(await containerDevspace(CONTAINER, { docker: labelsOf({ 'devcontainer.local_folder': '/tmp/x' }), host: '', now: NOW })).toEqual({ kind: 'none' });
+    expect(await containerDevspace(CONTAINER, { docker: labelsOf(null), host: '', now: NOW })).toEqual({ kind: 'none' });
+    expect(await containerDevspace(CONTAINER, { docker: labelsOf({ ...LABELS, 'nimblescape.devspaces.compose-service': 'db' }), host: '', now: NOW })).toEqual({ kind: 'none' });
+  });
+
+  it('cannot read the owner when the inspect fails or a label is missing or not valid; it names the devspace when it can', async () => {
+    const failed = { run: vi.fn(async () => answer({ exitCode: 1, stderr: 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock.\n' })) };
+    expect(await containerDevspace(CONTAINER, { docker: failed, host: '', now: NOW })).toEqual({
+      kind: 'unreadable',
+      reason: 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock.',
+    });
+    const late = { run: vi.fn(async () => answer({ exitCode: -1, timedOut: true })) };
+    expect(await containerDevspace(CONTAINER, { docker: late, host: '', now: NOW })).toEqual({ kind: 'unreadable', reason: 'Docker did not answer in time' });
+    const thrown = { run: vi.fn(async () => Promise.reject(new Error('spawn docker ENOENT'))) };
+    expect(await containerDevspace(CONTAINER, { docker: thrown, host: '', now: NOW })).toEqual({ kind: 'unreadable', reason: 'spawn docker ENOENT' });
+    expect(await containerDevspace(CONTAINER, { docker: { run: async () => answer({ stdout: 'not json' }) }, host: '', now: NOW })).toMatchObject({ kind: 'unreadable' });
+    expect(await containerDevspace(CONTAINER, { docker: labelsOf({ ...LABELS, 'nimblescape.devspaces.id': '../x' }), host: '', now: NOW })).toEqual({
+      kind: 'unreadable',
+      reason: 'its label nimblescape.devspaces.id is not valid',
+    });
+    const { 'nimblescape.devspaces.owner-id': _owner, ...ownerless } = LABELS;
+    expect(await containerDevspace(CONTAINER, { docker: labelsOf(ownerless), host: '', now: NOW })).toEqual({
+      kind: 'unreadable',
+      devspaceId: ID,
+      reason: 'it has no valid label nimblescape.devspaces.owner-id',
+    });
+    expect(await containerDevspace(CONTAINER, { docker: labelsOf({ ...LABELS, 'nimblescape.devspaces.repository': 'not a repository' }), host: '', now: NOW })).toEqual({
+      kind: 'unreadable',
+      devspaceId: ID,
+      reason: 'it has no valid label nimblescape.devspaces.repository',
+    });
+  });
+
+  // Mutation: the activation without this read leaves the window of another account on an engine with the mark
+  // connected (role C).
+  it('the activation reads them only for a lost registry on an engine with the mark, on that engine, within the time limit of the activation', async () => {
+    const remote = dockerTargetOf('ssh://build-box', 'devspaces-build-box');
+    const lines: string[] = [];
+    const engines: unknown[] = [];
+    const run = vi.fn(async () => {
+      engines.push(operationDockerTarget());
+      return answer({ stdout: JSON.stringify(LABELS) });
+    });
+    const all = (options: { lost?: boolean; removed?: boolean; installed?: boolean } = {}) => ({
+      needsRestore: async () => options.lost ?? true,
+      docker: { isInstalled: () => options.installed ?? true, run },
+      current: async () => remote,
+      removed: vi.fn(async () => options.removed ?? true),
+      now: () => NOW,
+      logger: { ...silentLogger, info: (line: string) => void lines.push(line) },
+    });
+    const found = await removedEngineWindowDevspace(CONTAINER, all());
+    expect(found).toEqual({ kind: 'devspace', devspace: expect.objectContaining({ id: ID, owner: { id: '1001', login: '' }, dockerHost: 'build-box' }) });
+    expect(engines).toEqual([remote]);
+    expect(run).toHaveBeenCalledWith(['container', 'inspect', '--format', '{{json .Config.Labels}}', CONTAINER], { timeoutMs: WINDOW_RESTORE_TIMEOUT_MS });
+    expect(lines).toEqual([
+      `The devspaces are not restored from build-box: Devspaces was removed from it. The labels of the container ${CONTAINER} are read for its devspace and its owner.`,
+    ]);
+    // A registry that did not lose its content, an engine without the mark (the restore ran there), no Docker CLI.
+    run.mockClear();
+    expect(await removedEngineWindowDevspace(CONTAINER, all({ lost: false }))).toEqual({ kind: 'none' });
+    expect(await removedEngineWindowDevspace(CONTAINER, all({ removed: false }))).toEqual({ kind: 'none' });
+    expect(await removedEngineWindowDevspace(CONTAINER, all({ installed: false }))).toEqual({ kind: 'none' });
+    expect(run).not.toHaveBeenCalled();
+    // A registry that cannot be read: nothing (logged).
+    const unreadable = { ...all(), needsRestore: async () => Promise.reject(new Error('EACCES')) };
+    const warnings: string[] = [];
+    expect(await removedEngineWindowDevspace(CONTAINER, { ...unreadable, logger: { ...silentLogger, warn: (line: string) => void warnings.push(line) } })).toEqual({ kind: 'none' });
+    expect(warnings).toEqual([`The labels of the container ${CONTAINER} could not be read: EACCES`]);
   });
 });

@@ -121,6 +121,12 @@ export const ControllerTexts = {
   // Accounts. A named devspace of another account: Messages.otherAccount.
   signedOutConnection: (repository: string) =>
     `Nobody is signed in to GitHub. This window closes its connection to the devspace of ${repository}. Sign in with GitHub to use it again.`,
+  /**
+   * The window of a devspace container on an engine with the removal mark, after the registry lost its content: the
+   * labels of the container do not say which account owns it (Controller.leaveUnknownOwner).
+   */
+  unknownOwnerConnection: (containerName: string) =>
+    `Devspaces cannot tell which GitHub account owns the container ${containerName}. This window closes its connection to it.`,
   /** The window kept its connection after it left a devspace that it must not use (for example Cancel on unsaved files). */
   stillConnected: (repository: string) =>
     `This window is still connected to the devspace of ${repository}, which it must not use. Save your files: the window closes its connection again.`,

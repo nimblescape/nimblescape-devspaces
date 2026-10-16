@@ -560,6 +560,23 @@ export class Controller implements vscode.Disposable {
     this.inform(ControllerTexts.windowOnRemovedEngine(engine));
   }
 
+  /**
+   * Role A on an engine with the removal mark after the registry lost its content (nothing is restored there), when the
+   * labels of the container of this window do not say whose devspace it is (removedEngineWindowDevspace): the account
+   * rule cannot be checked, so the window closes its remote connection, as for the devspace of another account. When
+   * the labels name the devspace, the token of its owner leaves the container first, through the worker of the engine
+   * (leaveDevspace); without its ID, nothing can find the container's token.
+   */
+  async leaveUnknownOwner(containerName: string, unknown: { devspaceId?: string; reason: string }): Promise<void> {
+    // Nor does a restore of the registry adopt the devspace for this window.
+    this.attaching = true;
+    this.logger.info(`The window closes its remote connection: the owner of the devspace of the container ${containerName} cannot be read (${unknown.reason}).`);
+    await this.leaveDevspace(
+      ControllerTexts.unknownOwnerConnection(containerName),
+      unknown.devspaceId === undefined ? undefined : { devspaceId: unknown.devspaceId, containerName, repository: containerName, reason: 'account' },
+    );
+  }
+
   private async openAttachedDevspace(
     devspace: Devspace,
     containerName: string,
@@ -2134,6 +2151,13 @@ export class Controller implements vscode.Disposable {
     const restored = await this.deps.registry.findByContainerName(containerName);
     if (!restored || this.attaching || this.adopted) return;
     this.adopted = true;
+    // On an engine with the removal mark (a Refresh of the user restores there and keeps the mark), the window works
+    // without Devspaces, as one that started there (workWithoutDevspaces): its heartbeats would set Devspaces up there
+    // again. The account rule comes first there too.
+    if (await this.hasRemovalMark(dockerHostOf(restored))) {
+      if (!this.current) await this.workWithoutDevspaces(restored, containerName);
+      return;
+    }
     const devspace = await this.ownWindowDevspace(restored, containerName);
     if (!devspace || this.current) return;
     // No pipeline runs here, so a container of an older version is not made again: the window leaves it, and so it does
