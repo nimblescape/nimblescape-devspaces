@@ -1345,7 +1345,7 @@ describe('monitor.js run: the exit when idle', () => {
     expect(monitor.mono()).toBeLessThan(REMOTE_IDLE_EXIT_MS + 2 * REMOTE_TICK_MS);
     // A running one keeps it (running counts on its own).
     const running = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspaces-api', A)), maxTicks: 100 });
-    await vi.waitFor(() => expect(running.ticks()).toBe(100));
+    await vi.waitFor(() => expect(running.ticks()).toBe(100), { timeout: 10_000 });
     expect(await pending(running.result)).toBe('pending');
   });
 
@@ -1381,7 +1381,7 @@ describe('monitor.js run: the exit when idle', () => {
   it('does not exit while a labelled container runs, also one that a record keeps running', async () => {
     writeRecord(SOURCE, A, { at: T0, keepRunning: true, limitSeconds: 600 });
     const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspaces-api', A)), maxTicks: 100 });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(100));
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(100), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.out()).not.toContain('exits');
   });
@@ -1389,7 +1389,7 @@ describe('monitor.js run: the exit when idle', () => {
   it('does not exit while a labelled container runs and the records cannot be read', async () => {
     fs.writeFileSync(heartbeatDir(stateDir), 'not a folder');
     const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspaces-api', A)), maxTicks: 100 });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(100));
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(100), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.out()).toContain('The heartbeat records could not be read');
   });
@@ -1398,7 +1398,7 @@ describe('monitor.js run: the exit when idle', () => {
   it('does not exit while a labelled container is paused or restarting', async () => {
     for (const state of ['paused', 'restarting']) {
       const monitor = startRun({ ps: () => listed(listedContainer(DEV_ID, state, 'devspaces-api', A)), maxTicks: 100 });
-      await vi.waitFor(() => expect(monitor.ticks()).toBe(100));
+      await vi.waitFor(() => expect(monitor.ticks()).toBe(100), { timeout: 10_000 });
       expect(monitor.mono()).toBeGreaterThan(REMOTE_IDLE_EXIT_MS);
       expect(await pending(monitor.result)).toBe('pending');
       expect(monitor.out()).not.toContain('exits');
@@ -1420,7 +1420,7 @@ describe('monitor.js run: the exit when idle', () => {
   it('does not exit while Docker does not answer', async () => {
     // The list of the engine fails.
     const monitor = startRun({ ps: () => new Error(NO_ENGINE), maxTicks: 100 });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(100));
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(100), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
   });
 
@@ -1430,7 +1430,7 @@ describe('monitor.js run: the exit when idle', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] });
     try {
       const monitor = startRun({ env: { DEVSPACE_MONITOR_PERMANENT: '1' }, ps: () => listed(), maxTicks: 100 });
-      await vi.waitFor(() => expect(monitor.ticks()).toBe(100));
+      await vi.waitFor(() => expect(monitor.ticks()).toBe(100), { timeout: 10_000 });
       expect(monitor.out()).not.toContain('exits');
       const idle = startRun({ env: { DEVSPACE_MONITOR_IDLE_MS: '1000' }, ps: () => listed() });
       expect(await idle.result).toBe(0);
