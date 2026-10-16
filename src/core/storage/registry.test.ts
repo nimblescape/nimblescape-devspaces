@@ -757,6 +757,51 @@ describe('DevspaceRegistry changes', () => {
     await expect(first.get(ID_A)).resolves.toMatchObject({ lastBuildNumber: 11 });
   });
 
+  it('stops a holder that stalled past the stale time from writing and from removing the new lock, and runs its change again', async () => {
+    // The heartbeat of the first registry runs every 15 seconds only, so its lock folder gets old as that of a process
+    // whose event loop stalls. The second registry takes a lock folder older than 100 ms for stale.
+    const logger = recordingLogger();
+    const first = new DevspaceRegistry(paths, undefined, { lockStaleMs: 60_000, lockTimeoutMs: 5_000, logger });
+    const second = new DevspaceRegistry(paths, undefined, { lockStaleMs: 100, lockTimeoutMs: 5_000 });
+    await first.add(devspace(ID_A, 'o/a', { lastBuildNumber: 0 }));
+    const until = async (condition: () => boolean) => {
+      while (!condition()) await new Promise((resolve) => setTimeout(resolve, 10));
+    };
+    let firstRuns = 0;
+    let firstDone = false;
+    let releaseFirst = false;
+    const stalled = first.update(async (file) => {
+      firstRuns++;
+      const value = file.devspaces[0].lastBuildNumber ?? 0;
+      if (firstRuns === 1) await until(() => releaseFirst);
+      file.devspaces[0].lastBuildNumber = value + 1;
+      firstDone = true;
+    });
+    await until(() => firstRuns === 1);
+    let secondHolds = false;
+    let releaseSecond = false;
+    const takeover = second.update(async (file) => {
+      secondHolds = true;
+      const value = file.devspaces[0].lastBuildNumber ?? 0;
+      await until(() => releaseSecond);
+      file.devspaces[0].lastBuildNumber = value + 10;
+    });
+    await until(() => secondHolds);
+    // The first registry ends its change while the second one holds the lock.
+    releaseFirst = true;
+    await until(() => firstDone);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(fs.existsSync(paths.registryLock)).toBe(true);
+    await expect(first.get(ID_A)).resolves.toMatchObject({ lastBuildNumber: 0 });
+    releaseSecond = true;
+    await Promise.all([stalled, takeover]);
+    // The change of the first registry ran again after the second one: no change is lost.
+    expect(firstRuns).toBe(2);
+    await expect(first.get(ID_A)).resolves.toMatchObject({ lastBuildNumber: 11 });
+    expect(logger.warnings).toEqual([expect.stringContaining('Another process took over the lock')]);
+    expect(fs.readdirSync(root).filter((name) => name.includes('lock'))).toEqual([]);
+  });
+
   it('lets a reader without the lock see complete content during many writes', async () => {
     const registry = new DevspaceRegistry(paths);
     await registry.add(devspace(ID_A, 'o/a', { lastBuildNumber: 0 }));

@@ -5,10 +5,11 @@
 // The lock folder of a file in the global storage folder that several VS Code windows change: registry.json
 // (registry.lock) and docker-engines.json (docker-engines.lock). A read-modify-write runs while its window holds the
 // folder; a read needs no lock, because every write is atomic (temporary file, then rename). No `vscode`.
+import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { sleep } from '../ports';
-import { errorCode, isTransientFsError, retryTransient } from './paths';
+import { errorCode, isTransientFsError, readTextFile, retryTransient } from './paths';
 
 /** A lock folder older than 10 seconds counts as stale. */
 export const DEFAULT_LOCK_STALE_MS = 10_000;
@@ -19,6 +20,8 @@ const LOCK_RETRY_MS = 20;
 // On Windows, a lock folder that its last holder is still removing cannot be created again for a moment (EPERM). On
 // macOS and Linux these errors are permanent, so they are thrown after about one second instead of a lock timeout.
 const MAX_TRANSIENT_LOCK_ERRORS = 50;
+// The file in the lock folder that holds the token of its holder (see withLockFolder).
+const LOCK_OWNER_FILE = 'owner';
 
 export interface LockTimings {
   /** A lock folder older than this counts as stale (its holder crashed). */
@@ -27,37 +30,52 @@ export interface LockTimings {
   timeoutMs: number;
 }
 
+/** Thrown before a write when another process took over the lock folder meanwhile (see `withLockFolder`). */
+export class LockLostError extends Error {
+  constructor(lockDir: string) {
+    super(`Another process took over the lock ${lockDir} while this process held it. Nothing was written.`);
+    this.name = 'LockLostError';
+  }
+}
+
 /**
  * Runs `fn` while holding the lock folder `lockDir` (created with mkdir, removed after `fn`, stale when older than
  * `staleMs`). Beyond a plain mkdir lock:
  * - two waiters that both see a stale folder must not both get the lock. With a plain "remove, then mkdir", the slower
  *   one removes the fresh lock of the faster one, and one of the two changes is lost;
  * - the holder refreshes the folder time while `fn` runs, so a slow `fn` is not taken for stale;
+ * - the holder writes a random token into the folder. When its event loop stalls longer than `staleMs` (a blocked
+ *   process, a computer that slept), another process takes the folder over as stale. `fn` gets `held`, which is true
+ *   while the folder still has the own token, and checks it before its write. The folder is removed only while it has
+ *   the own token, so the lock of the other process stays;
  * - transient errors of Windows are tried again instead of failing the change.
  */
-export async function withLockFolder<T>(lockDir: string, fn: () => Promise<T>, timings: LockTimings): Promise<T> {
-  await acquireLockFolder(lockDir, timings);
+export async function withLockFolder<T>(lockDir: string, fn: (held: () => Promise<boolean>) => Promise<T>, timings: LockTimings): Promise<T> {
+  const token = await acquireLockFolder(lockDir, timings);
+  const held = async () => (await readTextFile(path.join(lockDir, LOCK_OWNER_FILE)).catch(() => undefined)) === token;
   const heartbeat = setInterval(() => {
     const now = new Date();
     fs.promises.utimes(lockDir, now, now).catch(() => {});
   }, Math.max(10, Math.floor(timings.staleMs / 4)));
   heartbeat.unref();
   try {
-    return await fn();
+    return await fn(held);
   } finally {
     clearInterval(heartbeat);
-    await removeFolder(lockDir);
+    if (await held()) await removeFolder(lockDir);
   }
 }
 
-async function acquireLockFolder(lockDir: string, { staleMs, timeoutMs }: LockTimings): Promise<void> {
+/** Creates the lock folder and writes a new token into it. Returns the token. */
+async function acquireLockFolder(lockDir: string, { staleMs, timeoutMs }: LockTimings): Promise<string> {
   const start = Date.now();
+  const token = randomUUID();
   await retryTransient(() => fs.promises.mkdir(path.dirname(lockDir), { recursive: true }));
   let transientErrors = 0;
   for (;;) {
     try {
       await fs.promises.mkdir(lockDir);
-      return;
+      if (await writeLockToken(lockDir, token)) return token;
     } catch (error) {
       if (errorCode(error) === 'EEXIST') {
         if (await removeStaleLockFolder(lockDir, staleMs)) continue;
@@ -67,6 +85,23 @@ async function acquireLockFolder(lockDir: string, { staleMs, timeoutMs }: LockTi
     }
     if (Date.now() - start > timeoutMs) throw new Error(`Timeout while waiting for the lock ${lockDir}.`);
     await sleep(LOCK_RETRY_MS);
+  }
+}
+
+/**
+ * Writes `token` into the lock folder that the caller just created. False if another process took the folder over
+ * first (it removed the folder as stale, or wrote its own token): the caller waits as for any held lock.
+ */
+async function writeLockToken(lockDir: string, token: string): Promise<boolean> {
+  try {
+    await retryTransient(() => fs.promises.writeFile(path.join(lockDir, LOCK_OWNER_FILE), token, { flag: 'wx' }));
+    return true;
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === 'EEXIST' || code === 'ENOENT') return false;
+    // A folder without a token blocks every other process until it is stale.
+    await removeFolder(lockDir);
+    throw error;
   }
 }
 
