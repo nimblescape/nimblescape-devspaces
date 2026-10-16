@@ -11,6 +11,7 @@ import type { Logger } from '../core/ports';
 import type { ExtensionSettings } from '../core/types';
 import { DEFAULT_CACHE_UPDATE_SCHEDULE, normalizeCacheSchedule } from '../core/remoteMonitor/cacheSettings';
 import { parseImageReference } from '../core/remoteMonitor/protocol';
+import { Commands } from './commands';
 import { showWarningMessage } from './notifications';
 import { normalizeListOpenMode, type ListOpenMode } from './rowActivation';
 
@@ -113,17 +114,40 @@ export function openSetting(key: string): Thenable<unknown> {
   return vscode.commands.executeCommand('workbench.action.openSettings', `@id:${SETTINGS_SECTION}.${key}`);
 }
 
+/** The button of a warning about a setting: its label, and what a click on it opens. */
+interface SettingWarningButton {
+  label: string;
+  open: () => Thenable<unknown>;
+}
+
 /**
- * A warning about the value of the setting `devspaces.<key>`, with the button Open Settings, which opens that setting.
- * A failure is logged. The caller shows each warning once per window session.
+ * A warning about the value of the setting `devspaces.<key>`, with a button that opens the place to change it: by
+ * default Open Settings, which opens that setting in the Settings editor. A failure is logged. The caller decides when
+ * a warning shows again.
  */
-export function showSettingWarning(logger: Logger, key: string, message: string): void {
-  Promise.resolve(showWarningMessage(message, Actions.openSettings))
+export function showSettingWarning(
+  logger: Logger,
+  key: string,
+  message: string,
+  button: SettingWarningButton = { label: Actions.openSettings, open: () => openSetting(key) },
+): void {
+  Promise.resolve(showWarningMessage(message, button.label))
     .then(
-      (choice) => (choice === Actions.openSettings ? openSetting(key) : undefined),
+      (choice) => (choice === button.label ? button.open() : undefined),
       (error: unknown) => logger.warn(`The warning about the setting ${key} could not be shown: ${errorMessage(error)}`),
     )
     .then(undefined, (error: unknown) => logger.warn(`The setting ${key} could not be opened: ${errorMessage(error)}`));
+}
+
+/**
+ * A warning about the setting repositoryGroups, with the button Edit Repository Groups…, which runs that command: the
+ * editor of the setting, with a preview. For this list, the Settings editor offers only "Edit in settings.json".
+ */
+export function showRepositoryGroupsWarning(logger: Logger, message: string): void {
+  showSettingWarning(logger, 'repositoryGroups', message, {
+    label: Actions.editRepositoryGroups,
+    open: () => vscode.commands.executeCommand(Commands.editRepositoryGroups),
+  });
 }
 
 /**

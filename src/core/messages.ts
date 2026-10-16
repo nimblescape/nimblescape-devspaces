@@ -446,6 +446,11 @@ export const Actions = {
   turnOffChecks: 'Turn Off Checks',
   /** The button of a warning about the value of a setting: opens the Settings editor at that setting. */
   openSettings: 'Open Settings',
+  /**
+   * The button of a warning about the setting repositoryGroups: the title of the command devspaces.editRepositoryGroups,
+   * which opens the editor of the setting with its preview.
+   */
+  editRepositoryGroups: 'Edit Repository Groups…',
 } as const;
 
 export const StateTexts = {
