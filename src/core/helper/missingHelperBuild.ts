@@ -11,7 +11,7 @@
 // Dockerfile, tag and privileges, and the window's shared build of HelperImages, which a Start at the same time joins);
 // it runs only when the engine answers (`engineAnswers`, as for the background prebuild: Docker is never started, and a
 // remote host gets the SSH check without questions first). After a build, `onBuilt` (the refresh of the sidebar).
-// No `vscode`.
+// "Remove Devspaces from This Docker Engine…" stops the build on its engine (`stop`). No `vscode`.
 import { engineKey } from '../session/windowHeartbeats';
 import type { DockerTarget } from '../docker/dockerHost';
 import { errorMessage } from '../errors';
@@ -28,7 +28,7 @@ export const MISSING_HELPER_RETRY_MS = 10 * 60_000;
 /**
  * What a background build did. `built`: the helper image is on the engine now (built, or found built by another window
  * or operation); `unreachable`: the engine did not answer, so nothing was built; `failed`: the build failed (the wait
- * MISSING_HELPER_RETRY_MS starts); `cancelled`: the window closed.
+ * MISSING_HELPER_RETRY_MS starts); `cancelled`: the window closed, or a removal of Devspaces from the engine stopped it.
  */
 export type MissingHelperBuildOutcome = 'built' | 'unreachable' | 'failed' | 'cancelled';
 
@@ -62,8 +62,8 @@ function engineName(target: DockerTarget): string {
 }
 
 export class MissingHelperBuild {
-  /** Engine key → the background build that runs there, and its target. */
-  private readonly running = new Map<string, { target: DockerTarget; job: Promise<MissingHelperBuildOutcome> }>();
+  /** Engine key → the background build that runs there, its target, and what stops it (stop). */
+  private readonly running = new Map<string, { target: DockerTarget; job: Promise<MissingHelperBuildOutcome>; stop: AbortController }>();
   /** Engine key → when the last background build there ended (MISSING_HELPER_RETRY_MS), its target, and whether it failed. */
   private readonly ended = new Map<string, { target: DockerTarget; at: number; failed: boolean }>();
   private readonly disposal = new AbortController();
@@ -84,10 +84,22 @@ export class MissingHelperBuild {
     if (this.running.has(key)) return undefined;
     const last = this.ended.get(key);
     if (last !== undefined && this.within(last.at)) return undefined;
-    const job = this.run(target, key);
-    this.running.set(key, { target, job });
+    const stop = new AbortController();
+    const job = this.run(target, key, stop.signal);
+    this.running.set(key, { target, job, stop });
     this.changed();
     return job;
+  }
+
+  /**
+   * "Remove Devspaces from This Docker Engine…" on the Docker host of `target`: a background build that runs there is
+   * cancelled, and the call waits for its end, so that it does not build the helper image again after its removal. It
+   * counts as cancelled: no wait starts, and the sidebar shows the engine without it.
+   */
+  async stop(target: Pick<DockerTarget, 'host'>): Promise<void> {
+    const stopping = [...this.running.values()].filter((entry) => entry.target.host === target.host);
+    for (const entry of stopping) entry.stop.abort(abortError());
+    await Promise.all(stopping.map((entry) => entry.job));
   }
 
   /** The status of the Docker host `dockerHost` ('' for the local Docker); `undefined` when neither applies. */
@@ -111,12 +123,12 @@ export class MissingHelperBuild {
     this.disposal.abort(abortError());
   }
 
-  private async run(target: DockerTarget, key: string): Promise<MissingHelperBuildOutcome> {
+  private async run(target: DockerTarget, key: string, stopped: AbortSignal): Promise<MissingHelperBuildOutcome> {
     const name = engineName(target);
     const limit = new AbortController();
     const timer = setTimeout(() => limit.abort(abortError()), this.deps.timeoutMs ?? HELPER_PREBUILD_TIMEOUT_MS);
     (timer as { unref?: () => void }).unref?.();
-    const signal = AbortSignal.any([this.disposal.signal, limit.signal]);
+    const signal = AbortSignal.any([this.disposal.signal, limit.signal, stopped]);
     let outcome: MissingHelperBuildOutcome;
     try {
       // The job starts after request() recorded it, so a request at the same time finds it.
@@ -133,7 +145,10 @@ export class MissingHelperBuild {
       }
     } catch (error) {
       if (this.disposal.signal.aborted) outcome = 'cancelled';
-      else {
+      else if (stopped.aborted) {
+        this.deps.logger.info(`The background build of the workspace helper image on ${name} was stopped: Devspaces is being removed from there.`);
+        outcome = 'cancelled';
+      } else {
         const why = limit.signal.aborted ? 'its time limit ended' : isAbortError(error) ? 'it was cancelled' : errorMessage(error);
         this.deps.logger.warn(
           `The workspace helper image could not be built in the background on ${name}: ${why}. It is tried again in ${Math.round((this.deps.retryAfterFailureMs ?? MISSING_HELPER_RETRY_MS) / 60_000)} minutes at the earliest, or by the next Start, Stop or Delete.`,
@@ -146,7 +161,11 @@ export class MissingHelperBuild {
     this.running.delete(key);
     // An engine that did not answer starts no wait (nothing was built; the next refresh that finds no image asks again).
     if (outcome === 'failed' || outcome === 'built') this.ended.set(key, { target, at: this.clock.now(), failed: outcome === 'failed' });
-    if (outcome === 'cancelled') return outcome;
+    if (outcome === 'cancelled') {
+      // A stop leaves the window open: the sidebar no longer shows the build.
+      if (!this.disposal.signal.aborted) this.changed();
+      return outcome;
+    }
     // After a build, the refresh shows the states (and its render the status); otherwise only the status changed.
     try {
       if (outcome === 'built') this.deps.onBuilt(target);

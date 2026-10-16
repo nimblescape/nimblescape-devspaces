@@ -217,6 +217,12 @@ export interface EngineRemovalDeps {
   docker: Pick<BootstrapDocker, 'run' | 'listImagesByLabel'>;
   /** Ends the worker of this window on the engine of `target` (HelperChannels.close). */
   closeWorker(target: DockerTarget): void;
+  /**
+   * Stops the background builds of the helper image of this window on the Docker host of `target` (the prebuild at the
+   * start, HelperPrebuild, and the build of a missing image, MissingHelperBuild), and waits for their end, so that
+   * neither builds the image again after the removal. Never rejects.
+   */
+  stopHelperBuilds?(target: DockerTarget): Promise<void>;
   /** The ID of this computer (computer.id), which a permanent Monitor of this computer names as its owner. */
   computerId(): string;
 }
@@ -1232,8 +1238,8 @@ export class Controller implements vscode.Disposable {
   /**
    * The removal itself, in the progress of the command: the devspaces `devspaces` one after the other in the worker
    * (each with all its volumes; a delete is never stopped half-way, Cancel ends the removal before the next one), then
-   * the end of this window's worker on the engine, then what Devspaces keeps there (removeEngineInfrastructure). A
-   * failure of a devspace is logged, and the removal goes on.
+   * the end of the background builds of the helper image and of this window's worker on the engine, then what Devspaces
+   * keeps there (removeEngineInfrastructure). A failure of a devspace is logged, and the removal goes on.
    */
   private async removeFromEngine(
     removal: EngineRemovalDeps,
@@ -1280,6 +1286,8 @@ export class Controller implements vscode.Disposable {
       }
     }
     if (signal.aborted) return cancelled();
+    // A background build of the helper image in this window would make the image again after its removal.
+    await removal.stopHelperBuilds?.(target);
     // The worker of this window holds the volumes of the engine; it ends before its container is removed.
     removal.closeWorker(target);
     const result = await removeEngineInfrastructure(removal.docker, {
