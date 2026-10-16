@@ -29,7 +29,7 @@ Devspaces lists the GitHub repositories that you can access and that contain a D
 ## Requirements
 
 - VS Code 1.125 or later (the Microsoft build).
-- Docker: Docker Desktop (macOS, Windows with WSL 2, Linux) or Docker Engine (Linux), locally or on a computer that you reach over SSH.
+- Docker: Docker Desktop (macOS, Windows with WSL 2, Linux) or Docker Engine (Linux), locally or on a computer that you reach over SSH. Podman is not supported, also not through the package podman-docker.
 - A GitHub account.
 - The Dev Containers extension. VS Code installs it with Devspaces.
 
