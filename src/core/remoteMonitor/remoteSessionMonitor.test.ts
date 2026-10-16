@@ -12,6 +12,7 @@
 import * as esbuild from 'esbuild';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sharedBundleOptions, workerBundleOptions } from '../../../scripts/bundleOptions.mjs';
+import { setUserAgentVersion } from '../http';
 import { MAX_BUNDLE_LINE_LENGTH, PIPE_LOADER, bundleHash, encodeBundle } from '../loader/pipeLoader';
 import { abortError, type Logger } from '../ports';
 import { EngineError, type DockerEngine, type MonitorCreated, type MonitorRunSpec } from '../worker/dockerEngine';
@@ -844,6 +845,40 @@ describe('RemoteSessionMonitor: images', () => {
     expect(JSON.stringify(spec).includes(script)).toBe(false);
     const short = plain.runSpec(TAG, SOCKET, LABEL, SCRIPT, IMAGES);
     expect(JSON.stringify(short).length).toBe(JSON.stringify(spec).length);
+  });
+});
+
+// The version of Devspaces of the program that creates the Monitor (the worker: the version of the extension that
+// started it) is a variable of the container (DEVSPACES_VERSION), for the header User-Agent of the Monitor and of its
+// prepares, and never part of the label: a new version without a change of the script keeps the running Monitor.
+describe('RemoteSessionMonitor: the version of Devspaces', () => {
+  afterEach(() => {
+    setUserAgentVersion(undefined);
+  });
+
+  it('gives a new container the version of this program; none without one, and the label is the same', async () => {
+    const labels: string[] = [];
+    const envs: Array<Record<string, string>> = [];
+    for (const version of [undefined, '1.20.3', '1.20.4']) {
+      setUserAgentVersion(version);
+      const docker = new FakeDocker(missingThenCreated);
+      const created = new RemoteSessionMonitor({ engine: engineMonitor(docker.engine), logger: new Log(), script: async () => SCRIPT });
+      expect(await created.ensure(TAG, SOCKET)).toBe('created');
+      const spec = docker.spec(docker.commands().indexOf('run'));
+      labels.push(spec.labels[LABEL_MONITOR]);
+      const { DEVSPACE_MONITOR_CREATE_ID: _nonce, ...env } = spec.env;
+      envs.push(env);
+    }
+    expect(envs).toEqual([{}, { DEVSPACES_VERSION: '1.20.3' }, { DEVSPACES_VERSION: '1.20.4' }]);
+    expect(labels).toEqual([LABEL, LABEL, LABEL]);
+  });
+
+  it('keeps the running Monitor that a window of another version created from the same script', async () => {
+    setUserAgentVersion('1.20.4');
+    const docker = new FakeDocker((args) => (args[0] === 'inspect' ? inspected(true, LABEL) : undefined));
+    const current = new RemoteSessionMonitor({ engine: engineMonitor(docker.engine), logger: new Log(), script: async () => SCRIPT });
+    expect(await current.ensure(TAG, SOCKET)).toBe('running');
+    expect(docker.commands()).toEqual(['inspect']);
   });
 });
 

@@ -2,11 +2,12 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { dockerTargetOf, remoteContextNames, LOCAL_DOCKER_TARGET, type DockerTarget } from '../docker/dockerHost';
 import { operationDockerTarget } from '../docker/dockerTargets';
 import { abortError, silentLogger, type Logger, type StartedProcess } from '../ports';
 import { UserFacingError } from '../errors';
+import { setUserAgentVersion } from '../http';
 import { HelperChannel, HelperChannelError } from './helperChannel';
 import {
   CHANNEL_PASSIVE_OPEN_WAIT_MS,
@@ -408,6 +409,14 @@ describe('channelRunArgs and openHelperChannel', () => {
     // Neither a restart policy nor -d: the container lives only as long as its connection.
     expect(args).not.toContain('--restart');
     expect(args).not.toContain('-d');
+    // Its only variable: the version of Devspaces, for the header User-Agent of the worker; none without a version
+    // x.y.z.
+    expect(args).not.toContain('--env');
+    const withVersion = (version: string) =>
+      channelRunArgs({ tag: 't', socketPath: '/s', stateVolume: 'v', vscodeVolume: 'w', containerName: 'n', label: 'l', scriptHash: hash, version });
+    expect(withVersion('1.20.3').slice(-9, -6)).toEqual(['--env', 'DEVSPACES_VERSION=1.20.3', 't']);
+    expect(withVersion('1.20.3').filter((arg) => arg === '--env')).toHaveLength(1);
+    for (const version of ['1.20', '1.20.3 --privileged', '']) expect(withVersion(version)).not.toContain('--env');
     expect(() => channelRunArgs({ tag: 't', socketPath: '/a,b', stateVolume: 'v', vscodeVolume: 'w', containerName: 'n', label: 'l', scriptHash: hash })).toThrow(HelperChannelError);
     // A volume name that could change the mount (CSV) or be an option is refused.
     for (const stateVolume of ['a,b', '-v', 'a"b', '', 'a=b']) {
@@ -418,6 +427,9 @@ describe('channelRunArgs and openHelperChannel', () => {
   });
 
   it('starts the container with the Docker context of the target and checks the engine with probe', async () => {
+    // The version that the extension set at its start (activate).
+    setUserAgentVersion('1.20.3');
+    onTestFinished(() => void setUserAgentVersion(undefined));
     let started: { args: readonly string[]; context: string | undefined } | undefined;
     let stdout: ((text: string) => void) | undefined;
     const written: string[] = [];
@@ -462,6 +474,8 @@ describe('channelRunArgs and openHelperChannel', () => {
     );
     expect(started?.context).toBe(REMOTE.context);
     expect(started?.args).toContain('devspaces-worker:abc');
+    // The worker gets the version of the extension.
+    expect(started?.args.slice(-9, -6)).toEqual(['--env', 'DEVSPACES_VERSION=1.20.3', 'devspaces-worker:abc']);
     // The worker is named by its window (workerNameStart).
     expect(started?.args[started.args.indexOf('--name') + 1]).toBe('devspaces-api-worker1');
     expect(channel.isOpen).toBe(true);

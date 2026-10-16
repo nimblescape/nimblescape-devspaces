@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as https from 'https';
 import { pipeline } from 'stream/promises';
-import { USER_AGENT } from '../http';
+import { userAgent } from '../http';
 import { abortError } from '../ports';
 import { isOfficialDownloadUrl } from './dockerSetup';
 
@@ -28,7 +28,7 @@ export type HttpGet = (url: string, signal: AbortSignal) => Promise<DownloadResp
  */
 export const nodeHttpsGet: HttpGet = (url, signal) =>
   new Promise((resolve, reject) => {
-    const request = https.get(url, { signal, headers: { 'User-Agent': USER_AGENT } }, (response) => {
+    const request = https.get(url, { signal, headers: { 'User-Agent': userAgent() } }, (response) => {
       resolve({ statusCode: response.statusCode ?? 0, headers: response.headers, body: response });
     });
     request.on('error', reject);

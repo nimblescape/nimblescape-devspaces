@@ -28,7 +28,7 @@ import { HelperImages, helperDockerSocket } from '../core/helper/helperImages';
 import { HelperChannels, openHelperChannel } from '../core/helperChannel/helperChannels';
 import { HelperChannelError } from '../core/helperChannel/helperChannel';
 import { Messages } from '../core/messages';
-import { nodeHttpsTransport } from '../core/http';
+import { nodeHttpsTransport, takeUserAgentVersion } from '../core/http';
 import { DockerCredentialStore, withGitHubPackagesFallback } from '../core/imageCheck/credentials';
 import { RegistryClient } from '../core/imageCheck/registryClient';
 import { isoTime, systemClock } from '../core/ports';
@@ -111,6 +111,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const logger = new OutputChannelLogger();
   // The release of deactivate() still logs.
   context.subscriptions.push(closingWork.deferred(logger));
+  // The version of the manifest for the header User-Agent of the HTTPS requests, before any request; the worker gets
+  // it at its start (channelRunArgs). No bundle holds the version.
+  const manifestVersion: unknown = context.extension.packageJSON?.version;
+  const invalidVersion = takeUserAgentVersion(manifestVersion, 'The version in the manifest of Devspaces');
+  if (invalidVersion !== undefined) logger.warn(invalidVersion);
   try {
     await activateExtension(context, logger, activatedAt);
   } catch (error) {

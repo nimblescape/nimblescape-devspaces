@@ -4,8 +4,11 @@
 
 // The bundles of the package are readable JavaScript: not minified, with the names of the source (`keepNames`), and
 // with source maps only in a development build (scripts/bundleOptions.mjs, from which esbuild.mjs builds them). The
-// worker's bundle holds the Monitor as readable code. No bundle holds the path of the folder that it was built in.
+// worker's bundle holds the Monitor as readable code. No bundle holds the path of the folder that it was built in, or
+// the version of package.json: a new version without a change of the code builds the same files, so rule 3 of the
+// release checks (scripts/release-checks.mjs) still finds a release without a change.
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as esbuild from 'esbuild';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -70,4 +73,49 @@ describe('the bundles of the package', () => {
       expect(text.includes(ROOT.split(path.sep).join('/')), file).toBe(false);
     }
   });
+});
+
+/** changedFiles of scripts/release-checks.mjs (a script without types): the files of rule 3 that differ. */
+type ChangedFiles = (previous: Map<string, Buffer>, next: Map<string, Buffer>) => string[];
+
+/**
+ * A copy of the sources in `dir` with `version` in its package.json, and the files of its package that depend on the
+ * build: package.json and the bundles of a production build of that copy (its own scripts/bundleOptions.mjs reads its
+ * own package.json), by their path below extension/ in the package.
+ */
+async function buildCopy(dir: string, version: string): Promise<Map<string, Buffer>> {
+  fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true, filter: (source) => !source.endsWith('.test.ts') });
+  fs.cpSync(path.join(ROOT, 'scripts'), path.join(dir, 'scripts'), { recursive: true });
+  fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as Record<string, unknown>;
+  const packageJson = Buffer.from(`${JSON.stringify({ ...manifest, version }, null, 2)}\n`);
+  fs.writeFileSync(path.join(dir, 'package.json'), packageJson);
+  const copy = (await import(path.join(dir, 'scripts', 'bundleOptions.mjs'))) as typeof import('../scripts/bundleOptions.mjs');
+  const files = new Map<string, Buffer>([['package.json', packageJson]]);
+  for (const options of copy.packageBundleOptions(copy.sharedBundleOptions({ production: true }))) {
+    const result = await esbuild.build({ ...options, absWorkingDir: dir, write: false, logLevel: 'silent' });
+    expect(result.outputFiles).toHaveLength(1);
+    files.set(options.outfile, Buffer.from(result.outputFiles[0].contents));
+  }
+  return files;
+}
+
+describe('a new version without a change of the code', () => {
+  it('builds the same bundles, so that the release checks see no change (rule 3)', async () => {
+    const { changedFiles } = (await import(path.join(ROOT, 'scripts', 'release-checks.mjs'))) as { changedFiles: ChangedFiles };
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-version-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'a'));
+      fs.mkdirSync(path.join(dir, 'b'));
+      const previous = await buildCopy(path.join(dir, 'a'), '97.531.8642');
+      const next = await buildCopy(path.join(dir, 'b'), '97.531.8643');
+      expect([...next.keys()]).toEqual(['package.json', ...OUTFILES]);
+      // Only the version of package.json differs, which the check leaves out.
+      expect(previous.get('package.json')!.equals(next.get('package.json')!)).toBe(false);
+      expect(changedFiles(previous, next)).toEqual([]);
+      for (const file of OUTFILES) expect(next.get(file)!.includes('97.531.'), file).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

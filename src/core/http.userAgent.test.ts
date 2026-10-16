@@ -2,16 +2,17 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The header User-Agent of the HTTPS requests of Devspaces: `nimblescape-devspaces/<version>`, with the version of
-// package.json that the build puts into the code (scripts/buildDefines.mjs). It goes out with each request and each
-// streamed download of httpsRequest and httpsStream, through the transport of the extension (nodeHttpsTransport) and the
-// transport of the worker and the Monitor (proxiedHttpsTransport), and with the download of Docker Desktop. A request
-// that names a User-Agent of its own keeps it.
+// The header User-Agent of the HTTPS requests of Devspaces: `nimblescape-devspaces/<version>`, with the version that
+// each program sets at its start (setUserAgentVersion): the extension the version of its manifest, the programs in
+// containers the value of DEVSPACES_VERSION. No bundle holds the version. Without a version x.y.z, the header is
+// `nimblescape-devspaces`. It goes out with each request and each streamed download of httpsRequest and httpsStream,
+// through the transport of the extension (nodeHttpsTransport) and the transport of the worker and the Monitor
+// (proxiedHttpsTransport), and with the download of Docker Desktop. A request that names a User-Agent of its own keeps
+// it.
 import * as fs from 'fs';
 import * as http from 'http';
 import type * as https from 'https';
 import * as net from 'net';
-import * as os from 'os';
 import * as path from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -28,19 +29,29 @@ vi.mock('https', async (original) => {
   return { ...actual, request: spy('request'), get: spy('get') };
 });
 
-import { buildDefines, devspacesVersion } from '../../scripts/buildDefines.mjs';
-import { devcontainerCliVersion } from '../../scripts/cliVersion.mjs';
 import { nodeHttpsGet } from './docker/dockerDownload';
-import { USER_AGENT, httpsRequest, httpsStream, nodeHttpsTransport } from './http';
+import {
+  VERSION_ENV,
+  httpsRequest,
+  httpsStream,
+  isDevspacesVersion,
+  nodeHttpsTransport,
+  setUserAgentVersion,
+  takeUserAgentVersion,
+  userAgent,
+  userAgentVersion,
+} from './http';
 import { proxiedHttpsTransport } from './proxyTransport';
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const VERSION = (JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { version: string }).version;
+/** The version that the requests below name. */
+const VERSION = '1.20.3';
 const EXPECTED = `nimblescape-devspaces/${VERSION}`;
 
 const closers: Array<() => Promise<void>> = [];
 afterEach(async () => {
   calls.length = 0;
+  setUserAgentVersion(undefined);
   for (const close of closers.splice(0)) await close();
 });
 
@@ -79,35 +90,45 @@ function sentAgents(): string[] {
 }
 
 describe('the User-Agent of Devspaces', () => {
-  it('is nimblescape-devspaces/<version of package.json>, which the build puts into the code', () => {
-    expect(USER_AGENT).toBe(EXPECTED);
-    expect(devspacesVersion()).toBe(VERSION);
-    expect(buildDefines()).toEqual({
-      __DEVCONTAINER_CLI_VERSION__: JSON.stringify(devcontainerCliVersion()),
-      __DEVSPACES_VERSION__: JSON.stringify(VERSION),
-    });
+  it('is nimblescape-devspaces until the program sets its version, then nimblescape-devspaces/<version>', () => {
+    expect(userAgent()).toBe('nimblescape-devspaces');
+    expect(userAgentVersion()).toBeUndefined();
+    expect(setUserAgentVersion(VERSION)).toBe(true);
+    expect(userAgent()).toBe(EXPECTED);
+    expect(userAgentVersion()).toBe(VERSION);
+    expect(VERSION_ENV).toBe('DEVSPACES_VERSION');
   });
 
-  it('takes only a version x.y.z of package.json', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-version-'));
-    try {
-      const manifest = (fields: Record<string, unknown>) => {
-        const file = path.join(dir, `package-${Math.random().toString(16).slice(2)}.json`);
-        fs.writeFileSync(file, JSON.stringify({ name: 'x', devDependencies: { '@devcontainers/cli': '0.89.0' }, ...fields }));
-        return file;
-      };
-      expect(devspacesVersion(manifest({ version: '1.20.3' }))).toBe('1.20.3');
-      expect(buildDefines(manifest({ version: '1.20.3' }))).toEqual({ __DEVCONTAINER_CLI_VERSION__: '"0.89.0"', __DEVSPACES_VERSION__: '"1.20.3"' });
-      expect(() => devspacesVersion(manifest({}))).toThrow(/"version" must be a version x\.y\.z.*it is missing/);
-      for (const version of ['0.6', '0.6.0-beta.1', 'v0.6.0', '06.0.0', '0.6.0\r\nX-Other: 1', 6]) {
-        expect(() => devspacesVersion(manifest({ version }))).toThrow(`found ${JSON.stringify(version)}`);
-      }
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+  it('takes only a version x.y.z; any other value leaves the header without a version', () => {
+    for (const version of ['0.6.0', '1.20.3', '10.0.11']) expect(isDevspacesVersion(version), version).toBe(true);
+    for (const version of ['0.6', '0.6.0-beta.1', 'v0.6.0', '06.0.0', '0.6.0\r\nX-Other: 1', ' 0.6.0', '', 6, undefined, null, { major: 0 }]) {
+      expect(isDevspacesVersion(version), JSON.stringify(version)).toBe(false);
+      setUserAgentVersion(VERSION);
+      expect(setUserAgentVersion(version), JSON.stringify(version)).toBe(false);
+      expect(userAgent()).toBe('nimblescape-devspaces');
+      expect(userAgentVersion()).toBeUndefined();
     }
   });
 
+  it('the version of package.json is a version x.y.z, which the extension takes from its manifest', () => {
+    const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { version: unknown };
+    expect(isDevspacesVersion(version)).toBe(true);
+  });
+
+  it('a program with a log says once that its version is missing or invalid', () => {
+    expect(takeUserAgentVersion(VERSION, 'The version')).toBeUndefined();
+    expect(userAgent()).toBe(EXPECTED);
+    expect(takeUserAgentVersion(undefined, 'The version (DEVSPACES_VERSION)')).toBe(
+      'The version (DEVSPACES_VERSION) is missing, so the HTTPS requests send the User-Agent nimblescape-devspaces without a version.',
+    );
+    expect(userAgent()).toBe('nimblescape-devspaces');
+    expect(takeUserAgentVersion('0.6', 'The version of the manifest')).toBe(
+      'The version of the manifest is not a version x.y.z ("0.6"), so the HTTPS requests send the User-Agent nimblescape-devspaces without a version.',
+    );
+  });
+
   it('goes out with each request and each streamed GET; a request with a User-Agent of its own keeps it', async () => {
+    setUserAgentVersion(VERSION);
     const server = await recorder();
     const options = { createConnection: server.connect };
     expect((await httpsRequest({ method: 'GET', url: 'https://update.code.visualstudio.com/api/x', headers: { Accept: 'application/json' } }, undefined, options)).status).toBe(200);
@@ -124,6 +145,7 @@ describe('the User-Agent of Devspaces', () => {
   });
 
   it('goes out through the transport of the extension (nodeHttpsTransport)', async () => {
+    setUserAgentVersion(VERSION);
     const url = await closingUrl();
     await expect(nodeHttpsTransport.request({ method: 'GET', url, headers: { Accept: 'application/json' } })).rejects.toThrow();
     expect(calls.map(({ fn }) => fn)).toEqual(['request']);
@@ -132,6 +154,7 @@ describe('the User-Agent of Devspaces', () => {
   });
 
   it('goes out through the transport of the worker and the Monitor (proxiedHttpsTransport), with its requests and its downloads', async () => {
+    setUserAgentVersion(VERSION);
     const url = await closingUrl();
     // Without a proxy: the connection goes to the host of the URL, the request is the same.
     const transport = proxiedHttpsTransport(async () => ({}));
@@ -142,9 +165,18 @@ describe('the User-Agent of Devspaces', () => {
   });
 
   it('goes out with the download of Docker Desktop (nodeHttpsGet)', async () => {
+    setUserAgentVersion(VERSION);
     const url = await closingUrl();
     await expect(nodeHttpsGet(url, new AbortController().signal)).rejects.toThrow();
     expect(calls.map(({ fn }) => fn)).toEqual(['get']);
     expect(sentAgents()).toEqual([EXPECTED]);
+  });
+
+  it('is read at each request: a request before the version is set has no version', async () => {
+    const url = await closingUrl();
+    await expect(nodeHttpsTransport.request({ method: 'GET', url })).rejects.toThrow();
+    setUserAgentVersion(VERSION);
+    await expect(nodeHttpsTransport.request({ method: 'GET', url })).rejects.toThrow();
+    expect(sentAgents()).toEqual(['nimblescape-devspaces', EXPECTED]);
   });
 });

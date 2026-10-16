@@ -15,6 +15,7 @@ import type { HelperMaintenance } from '../helper/helperImages';
 import { bundleHash, loaderCommand } from '../loader/pipeLoader';
 import { HELPER_DOCKER_SOCKET, LABEL_HELPER_CHANNEL, LABEL_HELPER_RUN, VSCODE_STORE_DIR, freeWorkerNumber, workerName, workerNameStart } from '../names';
 import { errorMessage, isUserFacingError } from '../errors';
+import { VERSION_ENV, isDevspacesVersion, userAgentVersion } from '../http';
 import { abortError, isAbortError, type Logger, type RunOptions, type RunResult, type StartedProcess } from '../ports';
 import { HelperChannel, HelperChannelError } from './helperChannel';
 import {
@@ -60,9 +61,11 @@ export const CHANNEL_PASSIVE_OPEN_WAIT_MS = 30_000;
  * `docker run` arguments of a channel container: `--rm -i`, never a pull (the helper image is built by the open
  * pipeline, or made ready by HelperChannelsOptions.prepare; without it the start fails), the labels, outbound network
  * only, no capability, no new privileges, only the Docker socket of the engine, the volume of the lock files
- * (`stateVolume`), and the shared VS Code server store (`vscodeVolume`) at VSCODE_STORE_DIR. The command is the pipe
- * loader with CHANNEL_SCRIPT_PATH, the hash of the script (`scriptHash`, bundleHash), and CHANNEL_ENTRY; the script
- * itself comes as the first line of the input (HelperChannel.open), never on the command line.
+ * (`stateVolume`), and the shared VS Code server store (`vscodeVolume`) at VSCODE_STORE_DIR. Its only variable is
+ * VERSION_ENV with the version of Devspaces (`version`, when it is a version x.y.z), for the header User-Agent of its
+ * HTTPS requests. The command is the pipe loader with CHANNEL_SCRIPT_PATH, the hash of the script (`scriptHash`,
+ * bundleHash), and CHANNEL_ENTRY; the script itself comes as the first line of the input (HelperChannel.open), never on
+ * the command line.
  */
 export function channelRunArgs(p: {
   tag: string;
@@ -73,6 +76,7 @@ export function channelRunArgs(p: {
   label: string;
   scriptHash: string;
   network?: 'bridge' | 'none';
+  version?: string;
 }): string[] {
   // --mount is CSV: a path with a comma or a quote would change the mount.
   if (/[",]/.test(p.socketPath)) throw new HelperChannelError('open', `The Docker socket path ${p.socketPath} cannot be mounted.`);
@@ -113,6 +117,7 @@ export function channelRunArgs(p: {
     // content comes only from ensureServer, never from an image.
     '--mount',
     `type=volume,source=${p.vscodeVolume},target=${VSCODE_STORE_DIR},volume-nocopy`,
+    ...(isDevspacesVersion(p.version) ? ['--env', `${VERSION_ENV}=${p.version}`] : []),
     p.tag,
     ...loaderCommand({ path: CHANNEL_SCRIPT_PATH, hash: p.scriptHash, entry: CHANNEL_ENTRY }),
   ];
@@ -201,7 +206,9 @@ export async function openHelperChannel(deps: ChannelOpenDeps, target: DockerTar
   const label = channelLabelValue(script);
   const scriptHash = bundleHash(script);
   const startNamed = async (network: 'bridge' | 'none', containerName: string): Promise<HelperChannel> => {
-    const args = channelRunArgs({ tag, socketPath, stateVolume: deps.stateVolume, vscodeVolume: deps.vscodeVolume, containerName, label, scriptHash, network });
+    // The version of this extension (activate), which the worker names in the header User-Agent and passes on.
+    const version = userAgentVersion();
+    const args = channelRunArgs({ tag, socketPath, stateVolume: deps.stateVolume, vscodeVolume: deps.vscodeVolume, containerName, label, scriptHash, network, version });
     const process = await runWithDockerTarget(target, async () => deps.start(args));
     if (process === undefined) throw new HelperChannelError('open', 'The Docker CLI cannot be started.');
     return HelperChannel.open(process, script, { logger: deps.logger, name });

@@ -7,11 +7,13 @@
 // the image, runs `up` and the lifecycle commands in its batch helper, writes the token, makes sure that the Session
 // Monitor runs, and records the open through the requests of the operation. The window would connect with the answer.
 // The test makes sure of the Monitor of the engine (devspaces-monitor); it is skipped where one exists
-// before the tests (a monitor of the user is never touched), and removes the one it made.
+// before the tests (a monitor of the user is never touched), and removes the one it made. The window has a version, as
+// activate sets it from the manifest: the worker gets it at its start and gives it to the Monitor that it creates.
 import * as fs from 'fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // The Docker CLI of the extension (BootstrapDocker).
 import { BootstrapDocker } from '../../src/core/docker/bootstrapDocker';
+import { setUserAgentVersion } from '../../src/core/http';
 import { GITHUB_TOKEN_FILE, LABEL_DEVSPACE_ID, LABEL_REPOSITORY, newDevspaceId, resourceName } from '../../src/core/names';
 import { isoTime, systemClock } from '../../src/core/ports';
 import { NodeProcessRunner } from '../../src/core/process';
@@ -32,6 +34,8 @@ const FOLDER = '/workspaces/worker-open';
 const CONFIG_PATH = '.devcontainer/devcontainer.json';
 const REMOTE_USER = 'dev';
 const CREATED_LOG = '/tmp/devspace-post-create';
+/** The version of Devspaces of the window (activate: the version of the manifest). */
+const VERSION = '1.20.3';
 
 /** Creates the repository in the volume as the helper creates a clone: as root, on the branch main, with one commit. */
 const SEED_SCRIPT = `set -eu
@@ -71,6 +75,8 @@ describe('the open through a real worker', () => {
     }
     // The helper image through the harness.
     await testHelperImage(docker, log, env);
+    // Before the first worker starts.
+    setUserAgentVersion(VERSION);
     // The real monitor of the opens runs no background run during the tests.
     await seedTestMonitorRun(docker, { run });
     paths.ensureDirectoriesSync();
@@ -95,6 +101,7 @@ describe('the open through a real worker', () => {
   });
 
   afterAll(async () => {
+    setUserAgentVersion(undefined);
     const leftovers = await window.dispose();
     removeRunObjects(cli, run.runId);
     // The Monitor that the open made sure of, its state volume and its tag (nothing when the engine had one
@@ -123,8 +130,10 @@ describe('the open through a real worker', () => {
     expect(cli.container(containerName)?.State.Running).toBe(true);
     expect(execIn(REMOTE_USER, `cat ${CREATED_LOG}`).out).toBe('created');
     expect(execIn('root', `cat ${GITHUB_TOKEN_FILE}`).out).not.toBe('');
-    // The Monitor of the engine runs (the open made sure of it).
+    // The Monitor of the engine runs (the open made sure of it), with the version of the window, which the worker
+    // passed on.
     expect(cli.container(REMOTE_MONITOR_CONTAINER)?.State.Running).toBe(true);
+    expect(cli.container(REMOTE_MONITOR_CONTAINER)?.Config.Env).toContain(`DEVSPACES_VERSION=${VERSION}`);
     // The token never reached the log of the window unmasked.
     expect(fs.readFileSync(log.file, 'utf8')).not.toContain('dummy-token-of-the-docker-tests');
   });
