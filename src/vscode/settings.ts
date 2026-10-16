@@ -127,23 +127,36 @@ export function showSettingWarning(logger: Logger, key: string, message: string)
 }
 
 /**
- * Logs `message` and shows it as a warning about the setting `devspaces.<key>`, once per window session: `warned`
- * holds the messages that this window showed.
+ * `message`: the warning about the invalid value of the setting `devspaces.<key>`, or undefined for a valid or empty
+ * value. The check of a setting runs only at the start and when the setting changes, so each invalid value that it
+ * finds is a line in the log. The warning shows once per window session for each invalid value: `warned` holds the
+ * warnings about this setting that this window showed since the setting last had a valid value (one set per setting).
+ * A valid value clears it, so the same invalid value entered again is shown again.
  */
-function warnOnce(logger: Logger, warned: Set<string>, key: string, message: string): void {
+function warnOnce(logger: Logger, warned: Set<string>, key: string, message: string | undefined): void {
+  if (message === undefined) {
+    warned.clear();
+    return;
+  }
+  logger.warn(message);
   if (warned.has(message)) return;
   warned.add(message);
-  logger.warn(message);
   showSettingWarning(logger, key, message);
 }
 
+/** True at the start (`change` undefined), and for a change of the setting `devspaces.<key>`. */
+function checksSetting(key: string, change: vscode.ConfigurationChangeEvent | undefined): boolean {
+  return change === undefined || change.affectsConfiguration(`${SETTINGS_SECTION}.${key}`);
+}
+
 /**
- * One warning (a message and a log line) that names the invalid value of devspaces.defaultImage, which is ignored (no
- * default image). `warned`: the warnings that this window showed; the same value is not named again in this window.
+ * The check of devspaces.defaultImage at the start, and when `change` changes it: an invalid value is ignored (no
+ * default image), and named in the log and in a warning (warnOnce).
  */
-export function warnInvalidDefaultImage(logger: Logger, warned: Set<string>): void {
+export function warnInvalidDefaultImage(logger: Logger, warned: Set<string>, change?: vscode.ConfigurationChangeEvent): void {
+  if (!checksSetting('defaultImage', change)) return;
   const invalid = invalidDefaultImageValue();
-  if (invalid !== '') warnOnce(logger, warned, 'defaultImage', Messages.defaultImageInvalid(invalid));
+  warnOnce(logger, warned, 'defaultImage', invalid === '' ? undefined : Messages.defaultImageInvalid(invalid));
 }
 
 /**
@@ -163,12 +176,13 @@ export function invalidHostAccessChecksOffEntries(): string[] {
 }
 
 /**
- * One warning (a message and a log line) that names the invalid entries of devspaces.hostAccessChecksOff, which
- * are ignored. `warned`: the warnings that this window showed; the same entries are not named again in this window.
+ * The check of devspaces.hostAccessChecksOff at the start, and when `change` changes it: its invalid entries are
+ * ignored, and named in the log and in a warning (warnOnce).
  */
-export function warnInvalidHostAccessChecksOff(logger: Logger, warned: Set<string>): void {
+export function warnInvalidHostAccessChecksOff(logger: Logger, warned: Set<string>, change?: vscode.ConfigurationChangeEvent): void {
+  if (!checksSetting(HOST_ACCESS_CHECKS_OFF_SETTING, change)) return;
   const invalid = invalidHostAccessChecksOffEntries().join(', ');
-  if (invalid !== '') warnOnce(logger, warned, 'hostAccessChecksOff', Messages.hostAccessChecksOffInvalid(invalid));
+  warnOnce(logger, warned, HOST_ACCESS_CHECKS_OFF_SETTING, invalid === '' ? undefined : Messages.hostAccessChecksOffInvalid(invalid));
 }
 
 /**
