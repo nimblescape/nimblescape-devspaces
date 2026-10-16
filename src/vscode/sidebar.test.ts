@@ -927,6 +927,76 @@ describe('Sidebar progressive display', () => {
     }
   });
 
+  describe('one refresh after a rate limit', () => {
+    const limitedUntil = (resetAt: number) =>
+      new GitHubRateLimitError('GitHub refused the request for its rate limit: API rate limit exceeded', 200, resetAt);
+    const shownTime = (limitResetAt: number) => {
+      const date = new Date(limitResetAt + RATE_LIMIT_MARGIN_MS);
+      return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    };
+    const warnings = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call[0]);
+    const resetAt = NOW + 30 * 60_000;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('plans no second one when its time comes while another refresh runs that GitHub refuses too', async () => {
+      let fail: (error: unknown) => void = () => undefined;
+      const answeredLater = () => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject));
+      h.discovery.refresh
+        .mockImplementationOnce(answeredLater)
+        .mockImplementationOnce(answeredLater)
+        .mockRejectedValue(limitedUntil(resetAt));
+      await h.sidebar.initialize();
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
+      fail(limitedUntil(resetAt));
+      await h.sidebar.refreshDiscovery();
+      // Another refresh, for example of the Refresh command, still waits for GitHub when that time comes.
+      const other = h.sidebar.refreshDiscovery({ again: true });
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(resetAt + RATE_LIMIT_MARGIN_MS - NOW);
+      fail(limitedUntil(resetAt));
+      await other;
+      // The refresh of that time runs after it, and GitHub refuses it too.
+      await vi.waitFor(() => expect(h.logger.warn).toHaveBeenCalledWith(expect.stringContaining('Refresh can work again')));
+      await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
+      expect(warnings()).toEqual([
+        Messages.gitHubRateLimited(shownTime(resetAt), true),
+        Messages.gitHubRateLimited(shownTime(resetAt), false),
+      ]);
+    });
+
+    it('keeps its time when the Refresh command meets the rate limit before that time', async () => {
+      const later = resetAt + 15 * 60_000;
+      let fail: (error: unknown) => void = () => undefined;
+      h.discovery.refresh
+        .mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)))
+        .mockRejectedValue(limitedUntil(later));
+      await h.sidebar.initialize();
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
+      fail(limitedUntil(resetAt));
+      await h.sidebar.refreshDiscovery();
+      await h.sidebar.refreshDiscovery({ again: true });
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(2);
+      expect(warnings()).toEqual([
+        Messages.gitHubRateLimited(shownTime(resetAt), true),
+        Messages.gitHubRateLimited(shownTime(resetAt), true),
+      ]);
+      await vi.advanceTimersByTimeAsync(resetAt + RATE_LIMIT_MARGIN_MS - NOW);
+      await vi.waitFor(() => expect(warnings()).toHaveLength(3));
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
+      expect(warnings()[2]).toBe(Messages.gitHubRateLimited(shownTime(later), false));
+      await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
+      expect(h.discovery.refresh).toHaveBeenCalledTimes(3);
+    });
+  });
+
   it('ignores a part of another account, of another scope, and after the refresh', async () => {
     let finish: (value: DiscoveryData) => void = () => undefined;
     h.discovery.refresh.mockImplementation(() => new Promise<DiscoveryData>((resolve) => (finish = resolve)));
