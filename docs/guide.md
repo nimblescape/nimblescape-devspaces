@@ -202,7 +202,7 @@ The first time that you start a devspace on a Docker engine with **Start** or **
 
 Devspaces asks once per engine, and only when you start something: the reopen at startup and a window that VS Code restores never ask. It does not ask while `devspaces.stopMonitorWhenIdle` is on. Until you answer, also when you close the question, the monitor of that engine ends when idle. You can change your answer at any time with the setting. After **Remove Devspaces from This Docker Engine…** (see [Uninstall](#uninstall)), Devspaces asks again on that engine.
 
-A monitor that keeps running ends itself after 30 days in which no devspace was used on its engine: no window was connected to a devspace there, no devspace was started or deleted there, and **Update All Images Now** did not run there. Once it found the 30 days, it starts no scheduled background run. Docker does not start it again, and the next start of a devspace there creates it again.
+A monitor that keeps running ends itself after 30 days in which no devspace was used on its engine: no window was connected to a devspace there, no devspace was started or deleted there, and **Update All Images Now** did not run there. Once it found the 30 days, it starts no scheduled background run until a devspace is used there again. When it ended, Docker does not start it again, and the next start of a devspace there creates it again.
 
 **Devspaces: Update All Images Now** (Command Palette, or the **…** menu of the view) runs the same work at once on the current Docker engine, for example after a new image was pushed. The run starts within a minute, and the command does not wait for it: the message says "The Monitor on <engine> updates the images now."
 
