@@ -5796,6 +5796,17 @@ describe('Start in a new window', () => {
     expect(h.connection.openInNewWindow).not.toHaveBeenCalled();
   });
 
+  it('binds a key to Switch Devspace… only on macOS (package.json)', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      contributes: { keybindings: Array<Record<string, string>> };
+    };
+    // On many Windows keyboards, Ctrl+Alt+E is AltGr+E, which types a character such as €. Without "key", VS Code
+    // binds no key on Windows and Linux.
+    expect(manifest.contributes.keybindings.filter((binding) => binding.command === Commands.switchDevspace)).toEqual([
+      { command: Commands.switchDevspace, mac: 'cmd+alt+e' },
+    ]);
+  });
+
   it('role A in the new window: the pending connection file of the window that ran the pipeline means no second pipeline', async () => {
     const env = devspace();
     await h.registry.add(env);

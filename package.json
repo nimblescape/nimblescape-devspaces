@@ -647,7 +647,6 @@
     "keybindings": [
       {
         "command": "devspaces.switchDevspace",
-        "key": "ctrl+alt+e",
         "mac": "cmd+alt+e"
       }
     ],
