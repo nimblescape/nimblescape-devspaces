@@ -15,4 +15,11 @@ describe('the gates of extension.ts on an engine with the removal mark', () => {
   it('a heartbeat prepares no worker there: heartbeatWiring gets the mark', () => {
     expect(source).toMatch(/const heartbeats = heartbeatWiring\(\{[^}]*\n\s*engineRemoved,\n/);
   });
+
+  // The removal stops both background builds of the helper image on its engine before it removes the images
+  // (HelperPrebuild.stop and MissingHelperBuild.stop, tested in src/core/helper).
+  it('the removal stops the background prebuild and the build of a missing helper image on its engine', () => {
+    expect(source).toMatch(/stopHelperBuilds: async \(target\) => \{\s*await Promise\.all\(\[backgroundPrebuild\?\.stop\(target\), helperBuilds\.stop\(target\)\]\);\s*\}/);
+    expect(source).toMatch(/const helperPrebuild = new HelperPrebuild\(\{[\s\S]*?\n  context\.subscriptions\.push\(helperPrebuild\);\n  backgroundPrebuild = helperPrebuild;\n/);
+  });
 });

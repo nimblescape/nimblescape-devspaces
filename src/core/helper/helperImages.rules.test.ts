@@ -1045,6 +1045,37 @@ describe('HelperImages.prebuildImage and HelperPrebuild (background prebuild)', 
     expect(logger.lines.join('\n')).toContain('The workspace helper image could not be prepared in the background');
   });
 
+  // "Remove Devspaces from This Docker Engine…" stops the prebuild on its engine before it removes the helper images.
+  // Mutation: a stop that does not cancel the prebuild waits for the whole build (the test times out).
+  it('HelperPrebuild stops at a removal on its host and waits for its end; a removal on another host leaves it', async () => {
+    const helper = {
+      engineKey: vi.fn(async () => 'build-box'),
+      prebuildImage: vi.fn(
+        (options: { signal: AbortSignal }) =>
+          new Promise<HelperImageUse>((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(abortError()), { once: true });
+          }),
+      ),
+      refreshDue: vi.fn(async () => false),
+    };
+    const task = prebuild(stateHelper(), { helper });
+    const box: DockerTarget = { kind: 'remote', host: 'build-box', endpoint: 'ssh://build-box', context: 'devspaces-build-box' };
+    const outcome = task.start(box);
+    await vi.waitFor(() => expect(helper.prebuildImage).toHaveBeenCalled());
+    const signal = helper.prebuildImage.mock.calls[0][0].signal;
+    await task.stop({ host: 'other-box' });
+    expect(signal.aborted).toBe(false);
+    await task.stop({ host: 'build-box' });
+    expect(signal.aborted).toBe(true);
+    expect(await outcome).toBe('cancelled');
+    expect(logger.lines).toContain('info The background preparation of the workspace helper image on build-box stops: Devspaces is being removed from there.');
+    expect(logger.lines.join('\n')).not.toContain('could not be prepared in the background');
+    // After its end, a stop does nothing.
+    const lines = logger.lines.length;
+    await task.stop({ host: 'build-box' });
+    expect(logger.lines).toHaveLength(lines);
+  });
+
   it('HelperPrebuild disposed while it reads helper.json asks Docker nothing', async () => {
     const helper = {
       // The prebuild reads the state file of the engine.

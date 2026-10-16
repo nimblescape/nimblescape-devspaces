@@ -54,6 +54,36 @@ function buildSignal(h: ReturnType<typeof harness>): AbortSignal {
 }
 
 describe('MissingHelperBuild', () => {
+  // "Remove Devspaces from This Docker Engine…" stops the build on its engine before it removes the helper images.
+  // Mutation: a stop that does not cancel the build waits for it to end (the test times out).
+  it('stop cancels the build on that host and waits for its end; no wait starts, and the build on another host goes on', async () => {
+    const h = harness({
+      build: vi.fn(
+        (_target: DockerTarget, signal: AbortSignal) =>
+          new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
+      ),
+    });
+    const remote = h.helper.request(REMOTE);
+    const other = h.helper.request(OTHER);
+    await vi.waitFor(() => expect(h.deps.build).toHaveBeenCalledTimes(2));
+    const changes = h.deps.onChange.mock.calls.length;
+    await h.helper.stop({ host: 'devspace' });
+    expect(await remote).toBe('cancelled');
+    expect(h.helper.status('devspace')).toBeUndefined();
+    // The sidebar shows the engine without the build.
+    expect(h.deps.onChange.mock.calls.length).toBe(changes + 1);
+    expect(h.deps.logger.info).toHaveBeenCalledWith('The background build of the workspace helper image on devspace was stopped: Devspaces is being removed from there.');
+    expect(h.deps.logger.warn).not.toHaveBeenCalled();
+    expect(h.deps.onBuilt).not.toHaveBeenCalled();
+    expect(h.helper.status('build-box')).toBe('building');
+    // No wait starts there (the removal mark keeps the refresh from asking again).
+    expect(h.helper.request(REMOTE)).toBeDefined();
+    // Nothing runs on that host: the stop ends at once.
+    await h.helper.stop({ host: 'nowhere' });
+    h.helper.dispose();
+    expect(await other).toBe('cancelled');
+  });
+
   it('builds a missing helper image once, shows it in the status bar, then refreshes', async () => {
     const h = harness();
     const job = h.helper.request(REMOTE);

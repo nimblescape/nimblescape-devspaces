@@ -12,7 +12,7 @@
 // for, the weekly check of the base image), and its maintaining ensure then also runs the daily cleanup when that is due;
 // the cleanup alone never makes it run.
 import * as fs from 'fs';
-import { LOCAL_DOCKER_TARGET, type DockerTarget } from '../docker/dockerHost';
+import { LOCAL_DOCKER_TARGET, describeDockerHost, type DockerTarget } from '../docker/dockerHost';
 import { runWithDockerTarget } from '../docker/dockerTargets';
 import { REMOTE_INFO_TIMEOUT_MS, checkSshLogin, type SshCheckDeps } from '../docker/remoteDocker';
 import { errorMessage } from '../errors';
@@ -108,7 +108,7 @@ export async function dockerEngineAnswers(target: DockerTarget, deps: DockerEngi
 
 /**
  * The background prebuild. `start` runs it once (never rejects, never blocks: the caller does not await it); `dispose`
- * cancels it (the build of the Docker CLI is ended).
+ * cancels it (the build of the Docker CLI is ended), and so does `stop` for the engine of a removal of Devspaces.
  *
  * It runs when the helper state file of the engine has no record of the current helper tag (after an update that
  * changed the tag, a first installation, or a tag that the cleanup removed), or, with the setting
@@ -133,6 +133,8 @@ export class HelperPrebuild {
   private readonly controller = new AbortController();
   private readonly limit = new AbortController();
   private run: Promise<HelperPrebuildOutcome> | undefined;
+  /** The target of the prebuild that `start` began, while it runs. */
+  private running: DockerTarget | undefined;
 
   constructor(private readonly deps: HelperPrebuildDeps) {}
 
@@ -141,21 +143,39 @@ export class HelperPrebuild {
    * promise. Never rejects.
    */
   start(target: DockerTarget = LOCAL_DOCKER_TARGET): Promise<HelperPrebuildOutcome> {
-    this.run ??= runWithDockerTarget(target, () => this.prebuild(target)).catch((error: unknown) => {
-      if (this.limit.signal.aborted && !this.controller.signal.aborted) {
-        this.deps.logger.warn('The workspace helper image was not ready within the time limit of the background preparation; the next open prepares it.');
+    if (this.run !== undefined) return this.run;
+    this.running = target;
+    this.run = runWithDockerTarget(target, () => this.prebuild(target))
+      .catch((error: unknown) => {
+        if (this.limit.signal.aborted && !this.controller.signal.aborted) {
+          this.deps.logger.warn('The workspace helper image was not ready within the time limit of the background preparation; the next open prepares it.');
+          return 'failed' as const;
+        }
+        if (this.controller.signal.aborted || isAbortError(error)) return 'cancelled' as const;
+        this.deps.logger.warn(`The workspace helper image could not be prepared in the background: ${errorMessage(error)}`);
         return 'failed' as const;
-      }
-      if (this.controller.signal.aborted || isAbortError(error)) return 'cancelled' as const;
-      this.deps.logger.warn(`The workspace helper image could not be prepared in the background: ${errorMessage(error)}`);
-      return 'failed' as const;
-    });
+      })
+      .finally(() => {
+        this.running = undefined;
+      });
     return this.run;
   }
 
   /** Cancels a prebuild that runs (on deactivation). */
   dispose(): void {
     this.controller.abort();
+  }
+
+  /**
+   * "Remove Devspaces from This Docker Engine…" on the Docker host of `target`: a prebuild that runs there is cancelled
+   * (as by dispose), and the call waits for its end, so that it does not build the helper image again after its
+   * removal. Nothing when the prebuild runs on another host or did not start.
+   */
+  async stop(target: Pick<DockerTarget, 'host'>): Promise<void> {
+    if (this.run === undefined || this.running?.host !== target.host) return;
+    this.deps.logger.info(`The background preparation of the workspace helper image on ${describeDockerHost(target.host)} stops: Devspaces is being removed from there.`);
+    this.controller.abort();
+    await this.run;
   }
 
   private async prebuild(target: DockerTarget): Promise<HelperPrebuildOutcome> {

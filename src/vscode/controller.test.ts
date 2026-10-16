@@ -2859,6 +2859,7 @@ function removalFake(options: { answers?: boolean; engine?: Partial<RemovalEngin
     engineAnswers: vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => options.answers ?? true),
     docker: { run, listImagesByLabel: vi.fn(async () => engine.images.map((image) => ({ ...image, tags: [...image.tags] }))) },
     closeWorker: vi.fn((target: DockerTarget) => void order.push(`close the worker on ${target.host || 'the local Docker'}`)),
+    stopHelperBuilds: vi.fn(async (target: DockerTarget) => void order.push(`stop the helper builds on ${target.host || 'the local Docker'}`)),
     computerId: () => 'c'.repeat(32),
   };
   return { engine, order, deps };
@@ -2933,8 +2934,10 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     // Each with all its volumes; never the devspace of the other account, never the one of another engine.
     expect(h.service.deleteInWorker).toHaveBeenCalledTimes(1);
     expect(h.service.deleteInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ additionalVolumesToRemove: ['acme-api-data'] }));
+    // The background builds of the helper image stop before the images are removed.
     expect(changing(fake)).toEqual([
       `delete ${ENV_ID}`,
+      'stop the helper builds on build-box',
       'close the worker on build-box',
       'docker rm -f m1',
       'docker rm -f w1',
@@ -2964,7 +2967,7 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove).mockResolvedValueOnce(ControllerTexts.keepDevspaces);
     await run('removeFromDockerEngine');
     expect(h.service.deleteInWorker).not.toHaveBeenCalled();
-    expect(changing(kept)[0]).toBe('close the worker on build-box');
+    expect(changing(kept).slice(0, 2)).toEqual(['stop the helper builds on build-box', 'close the worker on build-box']);
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(
       'Devspaces was removed from build-box. The volume devspaces-vscode stays because devspaces still use it.',
     );

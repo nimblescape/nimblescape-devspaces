@@ -153,6 +153,9 @@ async function activateExtension(
   // afterwards; both set below.
   let missingHelperBuild: MissingHelperBuild | undefined;
   let sidebarOfBuild: Sidebar | undefined;
+  // The background prebuild of the helper image at the start, set below; "Remove Devspaces from This Docker Engine…"
+  // stops it on its engine.
+  let backgroundPrebuild: HelperPrebuild | undefined;
   let daemonRunning = false;
   const adapterOptions = dockerAdapterOptions(() => dockerSetup);
   // Docker Desktop installed, updated, uninstalled or moved while VS Code runs is found or lost without a reload. The
@@ -712,6 +715,10 @@ async function activateExtension(
         ),
       docker,
       closeWorker: (target) => channels.close(target),
+      // Neither background build of the helper image makes it again after its removal.
+      stopHelperBuilds: async (target) => {
+        await Promise.all([backgroundPrebuild?.stop(target), helperBuilds.stop(target)]);
+      },
       computerId,
     },
   });
@@ -848,6 +855,7 @@ async function activateExtension(
     logger,
   });
   context.subscriptions.push(helperPrebuild);
+  backgroundPrebuild = helperPrebuild;
   background(
     startEngine.then(async (target) => {
       if (target === undefined) return;
