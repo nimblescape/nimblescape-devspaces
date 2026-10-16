@@ -35,8 +35,9 @@ function wired(stored: Record<string, HostRegistryLogin | (() => Promise<HostReg
   const handler = hostSideHandler(host, logger, ['secret registry'], { repository: 'acme/api', dockerHost: '' });
   const signal = new AbortController().signal;
   const ask = (...args: unknown[]) => handler('secret', { call: 'registry', args }, signal);
+  const send = (payload: unknown) => handler('secret', payload, signal);
   const refusals = () => lines.filter((line) => line.startsWith('warn The worker asked for a registry login that is refused: '));
-  return { ask, asked, lines, refusals };
+  return { ask, send, asked, lines, refusals };
 }
 
 const login = (password: string, from: 'docker' | 'github' = 'docker'): HostRegistryLogin => ({ username: 'octo', serveraddress: 'ghcr.io', password, from });
@@ -104,6 +105,15 @@ describe('the registry logins of an operation', () => {
     expect(refusals()).toHaveLength(requests.length);
     expect(refusals()[0]).toBe('warn The worker asked for a registry login that is refused: the request does not name a registry and a repository.');
     expect(refusals()[3]).toBe('warn The worker asked for a registry login that is refused: "GHCR.io" and "acme/app" are not the registry and the repository of an image.');
+  });
+
+  it('refuses a request that is not a call with arguments, and logs it', async () => {
+    const { send, asked, lines } = wired({ 'ghcr.io': login('p') });
+    for (const payload of ['ghcr.io', null, ['registry', 'ghcr.io'], { call: 'registry', args: 'ghcr.io' }, { call: 'registry' }, { args: ['ghcr.io', 'acme/app'] }]) {
+      await expect(send(payload), JSON.stringify(payload)).rejects.toMatchObject({ code: 'invalid' });
+    }
+    expect(asked).toEqual([]);
+    expect(lines).toEqual(Array.from({ length: 6 }, () => 'warn The worker sent a request of the kind secret that is invalid.'));
   });
 
   it('names a refused request in quotes on one line of the log, and at most 100 characters of each text', async () => {
