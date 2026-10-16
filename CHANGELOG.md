@@ -39,6 +39,8 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Delete in the ⋯ menu:** a row of the sidebar no longer has a Delete button next to Stop. Delete is now the last item of the ⋯ button of the row, and it stays in the context menu. Before, a running devspace had four buttons, and Delete was next to Stop.
 
+**Icon of the view:** the view Devspaces now has the icon of Devspaces also when you move it into the Panel or the secondary side bar; before, it had no icon of its own there.
+
 **Keyboard and screen readers:** `Enter` on a repository row in the sidebar now starts its devspace, as a double-click does. Before, `Enter` only selected the row. On an owner, a group or a repository with child rows, `Enter` still opens or closes it. The status bar item of Devspaces now tells a screen reader its state and what a selection does; before, a screen reader read the name of its icon.
 
 **Filter buttons and workspace settings:** Select Organizations…, Show Only Devspaces and Show All Repositories now change the settings devspaces.owners and devspaces.showOnlyDevspaces in the workspace settings when these have a value for the setting, and otherwise in your user settings. Before, they always changed your user settings, so in a workspace with its own value the button had no effect.
