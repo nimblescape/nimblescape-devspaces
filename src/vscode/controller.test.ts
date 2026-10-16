@@ -6647,12 +6647,14 @@ describe('Double-click on a repository row', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { keybindings: Array<Record<string, string>> };
     };
-    // An owner, a group or a repository with child rows keeps Enter of VS Code: it opens or closes the node.
+    // An owner, a group or a repository with child rows keeps Enter of VS Code: it opens or closes the node. So does a
+    // sticky header row at the top of the view (an owner) while it has the keyboard focus: Enter reveals that row, as in
+    // the keybinding of list.select in VS Code, and never starts the repository row below it.
     expect(manifest.contributes.keybindings.filter((binding) => binding.command === Commands.rowEnter)).toEqual([
       {
         command: Commands.rowEnter,
         key: 'enter',
-        when: 'focusedView == devspaces.repositories && listFocus && !inputFocus && !treeElementCanExpand && !treeElementCanCollapse',
+        when: 'focusedView == devspaces.repositories && listFocus && !inputFocus && !treestickyScrollFocused && !treeElementCanExpand && !treeElementCanCollapse',
       },
     ]);
   });
