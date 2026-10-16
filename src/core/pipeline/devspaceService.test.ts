@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BUSY_MARK_MAX_AGE_MS } from '../busy';
 import { devContainersSettings } from '../devContainers';
+import { RemovedEngineError } from '../docker/engineRemoval';
 import { CommandError, UserFacingError } from '../errors';
 import { GIT_BRANCH_SCRIPT, OWNERSHIP_FIX_SCRIPT } from '../git/gitSummary';
 import { HOME_GIT_CONFIG_SCRIPT } from '../helper/containerGit';
@@ -4159,6 +4160,33 @@ describe('refreshStates', () => {
       'The state of the devspaces could not be read: The Devspaces worker on the Docker host could not be prepared (no helper image)',
     );
     expect(h.logger.warnings.join('\n')).not.toContain('read directly');
+  });
+
+  // Mutation: a warning at each refresh, or none after the mark came back, fails it.
+  it('an engine with the removal mark: the log says it once per engine in the window, again after a refresh there worked', async () => {
+    let removed = true;
+    const workerRefresh = vi.fn(async (): Promise<DevspaceStates> => {
+      if (removed) throw new RemovedEngineError('');
+      return { runtime: new Map(), branches: new Map() };
+    });
+    h = recreate({ workerRefresh });
+    await seedTwo(h);
+    const said = () => h.logger.warnings.filter((line) => line.includes('Devspaces was removed from the local Docker.')).length;
+    for (let refresh = 0; refresh < 3; refresh += 1) {
+      expect(await h.operations.refreshStates(new Set([ENV_ID]))).toEqual({ runtime: undefined, branches: new Map() });
+    }
+    expect(workerRefresh).toHaveBeenCalledTimes(3);
+    expect(said()).toBe(1);
+    expect(h.logger.warnings).toContain(
+      'The state of the devspaces could not be read: Devspaces was removed from the local Docker. Nothing runs there by itself until a Start, a Rebuild or "Update All Images Now" there.',
+    );
+    // A Start there cleared the mark, and a later removal set it again.
+    removed = false;
+    await h.operations.refreshStates(new Set([ENV_ID]));
+    removed = true;
+    await h.operations.refreshStates(new Set([ENV_ID]));
+    await h.operations.refreshStates(new Set([ENV_ID]));
+    expect(said()).toBe(2);
   });
 
   it('does not ask the worker when Docker does not run', async () => {

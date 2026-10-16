@@ -9,6 +9,7 @@
 import { registryBusyMarks, type DevspaceBusyMarks } from './busyMarks';
 import { type DeleteDecision } from './deleteCheck';
 import { devspacesOfHost } from '../docker/dockerHost';
+import { RemovedEngineError } from '../docker/engineRemoval';
 import { UserFacingError, errorMessage } from '../errors';
 import {
   LOCK_BUSY_CODE,
@@ -173,6 +174,9 @@ function openedSource(params: Pick<OpenParams, 'source' | 'target'>): DevspaceSo
 
 /** The operations of a window, sent to the worker (see the module comment). */
 export class DevspaceOperations extends OperationBase {
+  /** The engines with the removal mark whose unread states the log named already (refreshStates). */
+  private readonly removedEnginesSaid = new Set<string>();
+
   constructor(protected override readonly deps: DevspaceOperationsDeps) {
     super(deps, deps.startDocker, (view) => ({
       busyMarks: deps.busyMarks ?? registryBusyMarks(deps.registry, view),
@@ -624,9 +628,17 @@ export class DevspaceOperations extends OperationBase {
       if (devspaces.length === 0) return { runtime: new Map(), branches: new Map() };
       if (!(await this.deps.dockerRunning())) return { runtime: undefined, branches: new Map() };
       // A failure of the worker refresh fails the refresh (below); only through the worker.
-      return await this.deps.workerRefresh(devspaces);
+      const states = await this.deps.workerRefresh(devspaces);
+      this.removedEnginesSaid.delete(readable);
+      return states;
     } catch (error) {
-      this.logger.warn(`The state of the devspaces could not be read: ${errorMessage(error)}`);
+      // An engine with the removal mark: the states stay unknown there until a Start of the user; said once per engine
+      // in this window, not at each refresh.
+      const removed = error instanceof RemovedEngineError ? error.host : undefined;
+      if (removed === undefined || !this.removedEnginesSaid.has(removed)) {
+        this.logger.warn(`The state of the devspaces could not be read: ${errorMessage(error)}`);
+      }
+      if (removed !== undefined) this.removedEnginesSaid.add(removed);
       return { runtime: undefined, branches: new Map() };
     }
   }

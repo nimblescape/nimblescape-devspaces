@@ -13,7 +13,7 @@ import { attachDiagnostics } from '../core/docker/attachDiagnostics';
 import { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import { dockerProcessEnv, findDockerCli, findExecutable } from '../core/docker/dockerCli';
 import { describeDockerHost, dockerHostOf, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
-import { removedEngineImageNote, removedEngineNote } from '../core/docker/engineRemoval';
+import { RemovedEngineError, removedEngineImageNote, removedEngineNote } from '../core/docker/engineRemoval';
 import { ensureDockerRunning } from '../core/docker/dockerStart';
 import { DockerTargets, operationDockerTarget, outsideOperation, runWithDockerTarget } from '../core/docker/dockerTargets';
 import { SshLoginCache, findRemoteContext, startDockerFor, type RemoteReachabilityDeps } from '../core/docker/remoteDocker';
@@ -528,7 +528,7 @@ async function activateExtension(
       // Always through the worker, of the target of the operation or else the current one; never on an engine that
       // Devspaces was removed from (the states stay unknown there).
       const target = operationDockerTarget() ?? (await targets.current());
-      if (await engineRemoved(target)) throw new Error(removedEngineNote(describeDockerHost(target.host)));
+      if (await engineRemoved(target)) throw new RemovedEngineError(target.host);
       try {
         return await channels.refresh(target, devspaces);
       } catch (error) {
