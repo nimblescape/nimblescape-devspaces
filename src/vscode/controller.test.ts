@@ -2696,6 +2696,54 @@ describe('the question about the Monitor of the engine', () => {
     expect(asked()).toEqual(['build-box']);
   });
 
+  // The newest request wins (connect): a Start of the user takes its connect request before its question, so the
+  // automatic reopen, whose pipeline ends while the question is open, does not take the window. Mutation: a Start that
+  // takes its request only after the question fails it.
+  it('the automatic reopen does not connect while the question of a newer Start of the user is open', async () => {
+    const web = devspace({ id: OTHER_ENV_ID, repository: 'acme/web', containerName: 'web', volumeName: 'web', remoteWorkspaceFolder: '/workspaces/web' });
+    await h.registry.add(devspace());
+    await h.registry.add(web);
+    h.sessionFiles.writeReopenSync({ devspaceId: ENV_ID, closedAt: iso(NOW - 60_000) });
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    const reopenPipeline = deferred<OpenResult>();
+    h.service.openDevspaceInWorker.mockImplementation(async (id: string) => (id === ENV_ID ? reopenPipeline.promise : openResult(web)));
+    const answer = deferred<string>();
+    h.monitorQuestion.askIfNeeded.mockReturnValueOnce(answer.promise);
+    const reopen = h.controller.runEmptyWindowTasks();
+    await settle(() => h.service.openDevspaceInWorker.mock.calls.length === 1, 'the pipeline of the reopen');
+    const start = run('start', row('acme/web', web));
+    await settle(() => asked().length === 1, 'the question');
+    reopenPipeline.resolve(openResult(devspace()));
+    await reopen;
+    expect(h.connection.open).not.toHaveBeenCalled();
+    expect(h.logger.info).toHaveBeenCalledWith('acme/api is not connected: another devspace is opening in this window.');
+    answer.resolve('keepRunning');
+    await start;
+    expect(h.connection.open.mock.calls).toEqual([['web', '/workspaces/web']]);
+  });
+
+  // The reopen rule runs a few seconds after the start of the window: a Start of the user in that time, also while its
+  // question is open, is not overtaken by the reopen. Mutation: a reopen that does not look at the requests fails it.
+  it('the automatic reopen does not start while a Start of the user in this window asks or runs', async () => {
+    const web = devspace({ id: OTHER_ENV_ID, repository: 'acme/web', containerName: 'web', volumeName: 'web', remoteWorkspaceFolder: '/workspaces/web' });
+    await h.registry.add(devspace());
+    await h.registry.add(web);
+    h.sessionFiles.writeReopenSync({ devspaceId: ENV_ID, closedAt: iso(NOW - 60_000) });
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    h.service.openDevspaceInWorker.mockImplementation(async () => openResult(web));
+    const answer = deferred<string>();
+    h.monitorQuestion.askIfNeeded.mockReturnValueOnce(answer.promise);
+    const start = run('start', row('acme/web', web));
+    await settle(() => asked().length === 1, 'the question');
+    await h.controller.runEmptyWindowTasks();
+    expect(h.logger.info).toHaveBeenCalledWith('The last devspace is not opened: another devspace is opening in this window.');
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    answer.resolve('keepRunning');
+    await start;
+    expect(h.service.openDevspaceInWorker.mock.calls.map(([id]) => id)).toEqual([OTHER_ENV_ID]);
+    expect(h.connection.open.mock.calls).toEqual([['web', '/workspaces/web']]);
+  });
+
   it('the reopen at startup asks nothing; its Try again is a Start of the user', async () => {
     await h.registry.add(devspace());
     h.sessionFiles.writeReopenSync({ devspaceId: ENV_ID, closedAt: iso(NOW - 60_000) });

@@ -750,6 +750,11 @@ export class Controller implements vscode.Disposable {
       this.logger.info(`The last devspace is not opened: Devspaces was removed from ${describeDockerHost(dockerHost)}. A Start there sets it up again.`);
       return;
     }
+    // A Start of the user in this window (also one that still asks about the Monitor) is not overtaken.
+    if (this.activeConnectRequests.size > 0) {
+      this.logger.info('The last devspace is not opened: another devspace is opening in this window.');
+      return;
+    }
     this.logger.info(`Opening the last used devspace ${devspace.repository}.`);
     // The progress notification "Opening owner/name…" has Cancel: the user can stay in the empty window. The user did
     // not start it, so it asks nothing about the Monitor of the engine.
@@ -1562,49 +1567,61 @@ export class Controller implements vscode.Disposable {
         );
       }
     }
-    // A Start of the user asks about the Monitor of the engine before its open makes sure of it; the reopen at startup
-    // asks nothing.
-    if (options.automatic !== true) await this.beforeUserFlow(devspace);
     const newWindow = this.opensNewWindow(options.window ?? 'default', reconnecting);
-    const started = await this.operation(
-      key,
-      'Start',
-      () =>
-        runWithProgress({
-          title: Messages.opening(shown),
-          repository: shown,
-          cancellable: true,
-          task: (progress, signal) =>
-            this.connectingFlow(newWindow, async (request) => {
-              let result: OpenResult;
-              if (devspace && recheck !== undefined) {
-                const again = await service.windowStateInWorker(devspace, recheck, { signal });
-                if (signal.aborted) throw new UserFacingError('cancelled', PipelineTexts.cancelled);
-                if (again === undefined) throw new UserFacingError('helperFailed', ControllerTexts.containerStateUnreadable(repository));
-                if (again.state === 'running') {
-                  found = again;
-                  return;
-                }
-              }
-              if (devspace) {
-                result = await service.openDevspaceInWorker(devspace.id, { progress, signal, source });
-              } else {
-                const trusted = await this.firstOpenTrust(repository);
-                result = await service.openInWorker(repositoryTarget(repository, target.info, trusted), { progress, signal, source });
-              }
-              await this.connect(result, progress, request, signal);
-            }),
-        }),
-      // Try again is a Start: a repository takes the account of a session with a working token, as at the first try; it
-      // opens in the same kind of window as the first try.
-      {
-        retry:
-          retry ??
-          (async () =>
-            this.startTarget(await this.refreshedTarget(target, 'token'), { window: options.window, source: options.source })),
-        refused: () => (refused = true),
-      },
-    );
+    // A Start in this window takes its connect request now, before the question below: a flow that connects this window
+    // meanwhile (the automatic reopen) is then older, and does not connect over it (connect: the newest request wins).
+    const reserved = newWindow ? undefined : this.reserveConnectRequest();
+    let started: boolean;
+    try {
+      // A Start of the user asks about the Monitor of the engine before its open makes sure of it; the reopen at
+      // startup asks nothing.
+      if (options.automatic !== true) await this.beforeUserFlow(devspace);
+      started = await this.operation(
+        key,
+        'Start',
+        () =>
+          runWithProgress({
+            title: Messages.opening(shown),
+            repository: shown,
+            cancellable: true,
+            task: (progress, signal) =>
+              this.connectingFlow(
+                newWindow,
+                async (request) => {
+                  let result: OpenResult;
+                  if (devspace && recheck !== undefined) {
+                    const again = await service.windowStateInWorker(devspace, recheck, { signal });
+                    if (signal.aborted) throw new UserFacingError('cancelled', PipelineTexts.cancelled);
+                    if (again === undefined) throw new UserFacingError('helperFailed', ControllerTexts.containerStateUnreadable(repository));
+                    if (again.state === 'running') {
+                      found = again;
+                      return;
+                    }
+                  }
+                  if (devspace) {
+                    result = await service.openDevspaceInWorker(devspace.id, { progress, signal, source });
+                  } else {
+                    const trusted = await this.firstOpenTrust(repository);
+                    result = await service.openInWorker(repositoryTarget(repository, target.info, trusted), { progress, signal, source });
+                  }
+                  await this.connect(result, progress, request, signal);
+                },
+                reserved,
+              ),
+          }),
+        // Try again is a Start: a repository takes the account of a session with a working token, as at the first try;
+        // it opens in the same kind of window as the first try.
+        {
+          retry:
+            retry ??
+            (async () =>
+              this.startTarget(await this.refreshedTarget(target, 'token'), { window: options.window, source: options.source })),
+          refused: () => (refused = true),
+        },
+      );
+    } finally {
+      if (reserved !== undefined) this.activeConnectRequests.delete(reserved);
+    }
     if (started && found !== undefined && devspace && this.current?.devspace.id === devspace.id) {
       // The container runs after all: as for a Start whose first read found it running.
       const containerName = recheck ?? devspace.containerName;
@@ -1661,19 +1678,29 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * Runs a flow that ends by connecting this window, with its number for `connect`. A flow that connects a new window
-   * (`newWindow`) leaves this window as it is: it is not one of the connecting flows of this window, so it neither skips
-   * nor is skipped by them.
+   * Runs a flow that ends by connecting this window, with its number for `connect`: `reserved` (reserveConnectRequest),
+   * or a new one. A flow that connects a new window (`newWindow`) leaves this window as it is: it is not one of the
+   * connecting flows of this window, so it neither skips nor is skipped by them.
    */
-  private async connectingFlow<T>(newWindow: boolean, fn: (request: ConnectRequest) => Promise<T>): Promise<T> {
+  private async connectingFlow<T>(newWindow: boolean, fn: (request: ConnectRequest) => Promise<T>, reserved?: number): Promise<T> {
     if (newWindow) return fn({ newWindow: true });
-    const request = ++this.connectRequests;
+    const request = reserved ?? this.reserveConnectRequest();
     this.activeConnectRequests.add(request);
     try {
       return await fn({ newWindow: false, number: request });
     } finally {
       this.activeConnectRequests.delete(request);
     }
+  }
+
+  /**
+   * The number of a new request to connect this window, active from now on (a connecting flow that runs, or a Start
+   * that still asks before its flow; `connect`). The caller removes it from activeConnectRequests at its end.
+   */
+  private reserveConnectRequest(): number {
+    const request = ++this.connectRequests;
+    this.activeConnectRequests.add(request);
+    return request;
   }
 
   /**
