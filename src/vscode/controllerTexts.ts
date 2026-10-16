@@ -57,6 +57,11 @@ export const ControllerTexts = {
     `${operation} of ${repository} is still running. Try again after it ends. Nothing was removed.`,
   /** An operation of this window while Devspaces is being removed from an engine. */
   removalRunning: (engine: string) => `Devspaces is being removed from ${engine}. Try again after that.`,
+  /**
+   * A Start, a Rebuild, "Update All Images Now" or a second removal while another window removes Devspaces from the
+   * engine.
+   */
+  removalRunningElsewhere: (engine: string) => `Devspaces is being removed from ${engine} in another window. Try again after that.`,
   removeNothingFound: (engine: string) => `Devspaces has nothing on ${engine} to remove.`,
   removeQuestion: (engine: string) => `Remove Devspaces from ${engine}?`,
   removeDetail:

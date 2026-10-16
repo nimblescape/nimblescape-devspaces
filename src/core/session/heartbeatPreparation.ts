@@ -67,6 +67,11 @@ export class HeartbeatPreparation {
     return this.heartbeat.run(true, fn);
   }
 
+  /** True within `scope`: the caller runs as the work of a heartbeat. */
+  inScope(): boolean {
+    return this.heartbeat.getStore() === true;
+  }
+
   /**
    * A preparation. In the scope of a heartbeat, `work` gets the long signal (ended after `timeoutMs`, aborted by
    * dispose) and is waited for until `wait` aborts (then an AbortError, while `work` goes on); with `engine`, it waits
@@ -79,7 +84,7 @@ export class HeartbeatPreparation {
     engine?: DockerTarget,
     present?: PresenceCheck<T>,
   ): Promise<T> {
-    if (this.heartbeat.getStore() !== true) {
+    if (!this.inScope()) {
       return work(wait, () => undefined).then((value) => {
         if (engine !== undefined) this.clear(engine);
         return value;

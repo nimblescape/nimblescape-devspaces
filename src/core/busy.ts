@@ -58,12 +58,19 @@ export interface BusyMarkLivenessInput {
 }
 
 /**
+ * What the liveness of a busy mark reads: its window, the process of that window, and its start (an ISO time). Also the
+ * entry of a removal of Devspaces from an engine that runs in a window (EngineRemoval of docker-engines.json), which
+ * follows the same rule.
+ */
+export type WindowMark = Pick<BusyMark, 'windowId' | 'pid' | 'since'>;
+
+/**
  * True if the busy mark still protects its devspace: its owner process exists, and the mark is younger than
  * BUSY_MARK_MAX_AGE_MS (a `since` that cannot be parsed does not end the mark). With `windowStatuses`, the owner window
  * must also have a recent status file of the same process (see BusyMarkLivenessInput; `ignoreOwnerStatusAge` drops only
  * the "recent").
  */
-export function isBusyMarkLive(mark: BusyMark, input: BusyMarkLivenessInput): boolean {
+export function isBusyMarkLive(mark: WindowMark, input: BusyMarkLivenessInput): boolean {
   if (!input.isAlive(mark.pid)) return false;
   const since = Date.parse(mark.since);
   if (Number.isFinite(since) && input.now - since > BUSY_MARK_MAX_AGE_MS) return false;
@@ -82,7 +89,7 @@ export function isBusyMarkLive(mark: BusyMark, input: BusyMarkLivenessInput): bo
  * another process. A mark of the same process (this window, or an earlier activation of it) never blocks.
  */
 export function isBlockingBusyMark(
-  mark: BusyMark,
+  mark: WindowMark,
   owner: { windowId: string; pid: number },
   input: BusyMarkLivenessInput,
 ): boolean {

@@ -184,6 +184,107 @@ describe('DockerEngineRecords: the removal mark ("Remove Devspaces from This Doc
   });
 });
 
+describe('DockerEngineRecords: the removal that runs (the entry removing)', () => {
+  const REMOVAL = { windowId: 'window-a', pid: 4100, since: '2026-10-16T08:00:00.000Z' };
+  const OTHER = { windowId: 'window-b', pid: 4200, since: '2026-10-16T07:59:00.000Z' };
+  const runs = () => true;
+  const ended = () => false;
+  /** The file of the records: each write replaces it (writeJsonAtomic renames a new file over it). */
+  const inode = (): number => fs.statSync(records.file).ino;
+
+  it('starts with the mark and the entry in one change, and ends with the mark kept', async () => {
+    await records.recordMonitorAnswer('build-box', NOW - 5);
+    await records.recordMonitorAnswer('', NOW - 5);
+    const start = await records.startRemoval('build-box', REMOVAL, NOW, runs);
+    expect(start).toEqual({ started: true, before: { host: 'build-box', monitorAnsweredAt: NOW - 5 } });
+    // The mark forgets the answer, as setRemoved does; the other engine keeps its record.
+    expect(await records.record('build-box')).toEqual({ host: 'build-box', removedAt: NOW, removing: REMOVAL });
+    expect(await records.removing('build-box')).toEqual(REMOVAL);
+    expect(await records.record('')).toEqual({ host: '', monitorAnsweredAt: NOW - 5 });
+    await records.endRemoval('build-box', REMOVAL);
+    expect(await records.record('build-box')).toEqual({ host: 'build-box', removedAt: NOW });
+    expect(await records.removing('build-box')).toBeUndefined();
+    expect(fs.existsSync(records.lockDir)).toBe(false);
+  });
+
+  it('a removal that stopped before it removed anything brings back the record from before', async () => {
+    await records.recordMonitorAnswer('build-box', NOW - 5);
+    const start = await records.startRemoval('build-box', REMOVAL, NOW, runs);
+    if (!start.started) throw new Error('not started');
+    await records.endRemoval('build-box', REMOVAL, start.before);
+    expect(await records.read()).toEqual([{ host: 'build-box', monitorAnsweredAt: NOW - 5 }]);
+    // An engine that had the mark keeps the mark from before, and a newer answer stays.
+    await records.setRemoved('', NOW - 9);
+    const again = await records.startRemoval('', REMOVAL, NOW, runs);
+    if (!again.started) throw new Error('not started');
+    await records.recordMonitorAnswer('', NOW + 1);
+    await records.endRemoval('', REMOVAL, again.before);
+    expect(await records.record('')).toEqual({ host: '', removedAt: NOW - 9, monitorAnsweredAt: NOW + 1 });
+    // Without an earlier record nothing is left.
+    const fresh = await records.startRemoval('fresh', REMOVAL, NOW, runs);
+    if (!fresh.started) throw new Error('not started');
+    await records.endRemoval('fresh', REMOVAL, fresh.before);
+    expect(await records.record('fresh')).toBeUndefined();
+  });
+
+  it('a second removal is refused while the first one runs, and takes over the entry of one that does not run anymore', async () => {
+    await records.startRemoval('build-box', OTHER, NOW - 60_000, runs);
+    const before = inode();
+    expect(await records.startRemoval('build-box', REMOVAL, NOW, runs)).toEqual({ started: false, other: OTHER });
+    expect(inode()).toBe(before);
+    // The end of another removal writes nothing.
+    await records.endRemoval('build-box', REMOVAL);
+    expect(inode()).toBe(before);
+    expect(await records.removing('build-box')).toEqual(OTHER);
+    // Its window ended (the liveness rule of the busy marks says so): the new removal starts.
+    expect(await records.startRemoval('build-box', REMOVAL, NOW, ended)).toEqual({ started: true, before: { host: 'build-box', removedAt: NOW - 60_000, removing: OTHER } });
+    expect(await records.removing('build-box')).toEqual(REMOVAL);
+    // A mark set meanwhile keeps the entry of the removal that runs.
+    await records.setRemoved('build-box', NOW + 1);
+    expect(await records.record('build-box')).toEqual({ host: 'build-box', removedAt: NOW + 1, removing: REMOVAL });
+  });
+
+  it('a flow of the user clears the mark only while no removal runs, and clears the entry of one that ended', async () => {
+    await records.startRemoval('build-box', OTHER, NOW, runs);
+    const before = inode();
+    expect(await records.clearRemoved('build-box', runs)).toEqual({ cleared: false, other: OTHER });
+    expect(inode()).toBe(before);
+    expect(await records.removed('build-box')).toBe(true);
+    // The window of that removal crashed: the mark and its entry go.
+    expect(await records.clearRemoved('build-box', ended)).toEqual({ cleared: true });
+    expect(await records.record('build-box')).toBeUndefined();
+    // Without a mark nothing is written; an answer stays.
+    await records.recordMonitorAnswer('', NOW);
+    const written = inode();
+    expect(await records.clearRemoved('', runs)).toEqual({ cleared: false });
+    expect(inode()).toBe(written);
+    expect(await records.record('')).toEqual({ host: '', monitorAnsweredAt: NOW });
+  });
+
+  it('an entry that is not valid counts as none; a valid one alone is kept', async () => {
+    fs.writeFileSync(
+      records.file,
+      JSON.stringify({
+        engines: [
+          { host: 'a', removedAt: NOW, removing: { windowId: '', pid: 1, since: 'x' } },
+          { host: 'b', removedAt: NOW, removing: { windowId: 'w', pid: 0, since: 'x' } },
+          { host: 'c', removedAt: NOW, removing: { windowId: 'w', pid: 1.5, since: 'x' } },
+          { host: 'd', removedAt: NOW, removing: { windowId: 'w', pid: 7 } },
+          { host: 'e', removing: 'window-a' },
+          { host: 'f', removing: REMOVAL },
+        ],
+      }),
+    );
+    expect(await records.read()).toEqual([
+      { host: 'a', removedAt: NOW },
+      { host: 'b', removedAt: NOW },
+      { host: 'c', removedAt: NOW },
+      { host: 'd', removedAt: NOW },
+      { host: 'f', removing: REMOVAL },
+    ]);
+  });
+});
+
 describe('DockerEngineRecords: the lock folder docker-engines.lock (several windows)', () => {
   it('keeps the change of every window when two windows change the file at once, and removes the lock folder after', async () => {
     const otherWindow = new DockerEngineRecords(records.file);

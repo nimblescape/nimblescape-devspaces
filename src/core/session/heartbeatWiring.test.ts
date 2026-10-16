@@ -31,8 +31,11 @@ const unexpectedEnsureImageUse = async (): Promise<HelperImageUse> => {
   throw new Error('ensureImageUse is only for the preparation of an open');
 };
 
-/** The wiring with a helper whose tag is missing and whose builds fail (or succeed), with the targets of its builds. */
-function setup() {
+/**
+ * The wiring with a helper whose tag is missing and whose builds fail (or succeed), with the targets of its builds.
+ * `removed`: the engines with the removal mark (by their host).
+ */
+function setup(options: { removed?: readonly string[] } = {}) {
   const now = { value: T0 };
   const preparation = new HeartbeatPreparation(HELPER_PREBUILD_TIMEOUT_MS, { now: () => now.value });
   // `hang` makes a build that never ends.
@@ -62,6 +65,7 @@ function setup() {
     onOutput: () => {},
     operationTarget: () => state.operation,
     subscriptions: { push: (disposable) => disposables.push(disposable) },
+    ...(options.removed !== undefined ? { engineRemoved: async (target: DockerTarget) => options.removed?.includes(target.host) === true } : {}),
   });
   /** A failed build of a heartbeat's worker on `target`: its engine waits. */
   const failOn = async (target: DockerTarget): Promise<void> => {
@@ -98,6 +102,27 @@ describe('heartbeatWiring', () => {
     wiring.imageBuilt();
     expect(await waits(LOCAL)).toBe(false);
     expect(await waits(REMOTE)).toBe(false);
+    preparation.dispose();
+  });
+
+  // After "Remove Devspaces from This Docker Engine…" (also while it runs), a heartbeat that finds no worker there must
+  // not build the helper image again, nor start a worker that creates the volumes it mounts. Mutation: without the
+  // check of the mark, the heartbeat builds on build-box.
+  it('a heartbeat prepares no worker on an engine with the removal mark; an operation of the user there does', async () => {
+    const { preparation, state, builds, wiring } = setup({ removed: ['build-box'] });
+    state.buildFails = false;
+    await expect(preparation.scope(() => wiring.prepareWorker(REMOTE, undefined))).rejects.toThrow(
+      'Devspaces was removed from build-box. Nothing runs there by itself until a Start, a Rebuild or "Update All Images Now" there.',
+    );
+    expect(builds).toEqual([]);
+    // Also the repair of the Monitor there, whose worker is prepared in the scope of the heartbeat.
+    const repair = wiring.repair(async (target, signal) => wiring.prepareWorker(target, signal));
+    await expect(repair(REMOTE, new AbortController().signal)).rejects.toThrow('Devspaces was removed from build-box.');
+    expect(builds).toEqual([]);
+    // A heartbeat on another engine, and a Stop or a Delete of the user on build-box, prepare their worker.
+    await preparation.scope(() => wiring.prepareWorker(OTHER, undefined));
+    await wiring.prepareWorker(REMOTE, new AbortController().signal);
+    expect(builds).toEqual([OTHER, REMOTE]);
     preparation.dispose();
   });
 

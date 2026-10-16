@@ -250,6 +250,8 @@ async function activateExtension(
     inTarget: runWithDockerTarget,
     onOutput: (text) => logger.output(text),
     operationTarget: operationDockerTarget,
+    // A heartbeat prepares no worker on an engine with the removal mark (also while the removal runs there).
+    engineRemoved,
     // The preparation is disposed only after the release of deactivate(), which may need to open the worker again.
     subscriptions: closingWork.deferredSubscriptions(context.subscriptions),
   });
