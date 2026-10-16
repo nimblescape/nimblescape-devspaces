@@ -24,7 +24,7 @@ export const StatusBarTexts = {
   // The window shows that the state of its container could not be read.
   stateUnknownTooltip: (repository: string) =>
     `Connected to ${repository}. The state of its container could not be read; details are in the log. Select to switch the devspace.`,
-  notConnectedTooltip: 'Select to open a devspace in this window.',
+  notConnectedTooltip: 'Select to open a devspace.',
   connectionLostTooltip: (repository: string) => `The connection to ${repository} was lost. Select to reconnect.`,
   // The texts that a screen reader reads for the item (accessibilityInformation): the name, the state, and what a
   // selection does. The text of the item starts with an icon, which a screen reader would read by its name.
@@ -32,7 +32,7 @@ export const StatusBarTexts = {
     `Devspaces: connected to ${repository}${branch === undefined ? '' : `, branch ${branch}`}.${
       stateUnknown ? ' The state of its container could not be read; details are in the log.' : ''
     } Select to switch the devspace.`,
-  notConnectedLabel: 'Devspaces: this window has no devspace. Select to open a devspace in this window.',
+  notConnectedLabel: 'Devspaces: this window has no devspace. Select to open a devspace.',
   updatingLabel: (repository: string) => `Devspaces: updating ${repository}. Select to show the details.`,
   connectionLostLabel: (repository: string) => `Devspaces: the connection to ${repository} was lost. Select to reconnect.`,
 } as const;
