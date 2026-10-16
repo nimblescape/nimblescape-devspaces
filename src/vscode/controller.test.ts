@@ -3381,6 +3381,25 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(removalRuns?.({ ...OTHER_REMOVAL, windowId: 'window-that-closed' })).toBe(false);
   });
 
+  // The end of a removal keeps its mark. Mutation: without a second clear after the question, the Start runs and the
+  // mark stays, so this computer does no Docker work there by itself after a Start of the user.
+  it('a removal that another window began and ended while the question about the Monitor was open: the Start clears its mark and runs', async () => {
+    const fake = removalFake();
+    onBuildBox(fake);
+    const env = ownRemote();
+    await h.registry.add(env);
+    h.monitorQuestion.askIfNeeded.mockImplementationOnce(async () => {
+      await otherWindowRemoves();
+      await h.engineRecords.endRemoval('build-box', OTHER_REMOVAL);
+      return 'answered';
+    });
+    await run('start', row('acme/api', env));
+    expect(infoMessages()).not.toContain(ControllerTexts.removalRunningElsewhere('build-box'));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
+    expect(await h.engineRecords.record('build-box')).toBeUndefined();
+    expect(h.logger.info).toHaveBeenCalledWith('Devspaces is set up on build-box again: the removal mark is cleared.');
+  });
+
   // Mutation: a removal that does not check the entry under the lock removes Devspaces at the same time as window 2.
   it('a removal that another window began while the questions were open is not started a second time', async () => {
     const fake = removalFake();
