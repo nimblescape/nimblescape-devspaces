@@ -59,6 +59,9 @@ export const Commands = {
   // The command of a repository row (TreeItem.command, hidden in the Command Palette): a double-click runs Start
   // (rowActivation.ts).
   rowActivated: 'devspaces.rowActivated',
+  // Enter on a row without children in the view (a keybinding, hidden in the Command Palette): the activation of the
+  // row that follows runs Start at once (rowActivation.ts).
+  rowEnter: 'devspaces.rowEnter',
   // The Monitor of the current Docker engine runs its background run at once (the images in use, the VS Code
   // server and the extensions), for example after a new image was pushed (Command Palette, the "…" menu of the view).
   updateImagesNow: 'devspaces.updateImagesNow',

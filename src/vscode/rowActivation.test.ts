@@ -50,6 +50,29 @@ describe('RowActivationTracker (double-click on a repository row)', () => {
     expect(rows.activate('repo:acme/api', 400)).toBe(true);
   });
 
+  it('counts the activation right after Enter at once, and only that one', () => {
+    let time = 0;
+    const rows = new RowActivationTracker({ now: () => time });
+    rows.enter();
+    time = 50;
+    expect(rows.activate('repo:acme/api', 'singleClick')).toBe(true);
+    // The next click is a single click again.
+    time = 100;
+    expect(rows.activate('repo:acme/api', 'singleClick')).toBe(false);
+  });
+
+  it('forgets an Enter after the interval, or when the clock went back', () => {
+    let time = 1000;
+    const rows = new RowActivationTracker({ now: () => time });
+    rows.enter();
+    time = 1001 + DOUBLE_CLICK_INTERVAL_MS;
+    expect(rows.activate('repo:acme/api', 'singleClick')).toBe(false);
+    time = 5000;
+    rows.enter();
+    time = 4000;
+    expect(rows.activate('repo:acme/web', 'singleClick')).toBe(false);
+  });
+
   it('counts every activation in the mode doubleClick, where VS Code sends only double-clicks and Enter', () => {
     const rows = new RowActivationTracker({ now: () => 0 });
     expect(rows.activate('repo:acme/api', 'doubleClick')).toBe(true);

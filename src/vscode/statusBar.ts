@@ -26,6 +26,15 @@ export const StatusBarTexts = {
     `Connected to ${repository}. The state of its container could not be read; details are in the log. Select to switch the devspace.`,
   notConnectedTooltip: 'Select to open a devspace in this window.',
   connectionLostTooltip: (repository: string) => `The connection to ${repository} was lost. Select to reconnect.`,
+  // The texts that a screen reader reads for the item (accessibilityInformation): the name, the state, and what a
+  // selection does. The text of the item starts with an icon, which a screen reader would read by its name.
+  connectedLabel: (repository: string, branch: string | undefined, stateUnknown: boolean) =>
+    `Devspaces: connected to ${repository}${branch === undefined ? '' : `, branch ${branch}`}.${
+      stateUnknown ? ' The state of its container could not be read; details are in the log.' : ''
+    } Select to switch the devspace.`,
+  notConnectedLabel: 'Devspaces: this window has no devspace. Select to open a devspace in this window.',
+  updatingLabel: (repository: string) => `Devspaces: updating ${repository}. Select to show the details.`,
+  connectionLostLabel: (repository: string) => `Devspaces: the connection to ${repository} was lost. Select to reconnect.`,
 } as const;
 
 type BaseState =
@@ -101,6 +110,7 @@ export class DevspaceStatusBar implements vscode.Disposable {
       // The monitor with the clock.
       item.text = `$(${MonitorIcons.updating}) ${StatusBarTexts.updating(this.busyRepository)}`;
       item.tooltip = Actions.showDetails;
+      item.accessibilityInformation = { label: StatusBarTexts.updatingLabel(this.busyRepository) };
       item.command = SHOW_LOG_COMMAND;
       return;
     }
@@ -112,16 +122,19 @@ export class DevspaceStatusBar implements vscode.Disposable {
           ? `$(${MonitorIcons.connected}) ${state.repository} · ${state.branch}`
           : `$(${MonitorIcons.connected}) ${state.repository}`;
         item.tooltip = this.stateUnknown ? StatusBarTexts.stateUnknownTooltip(state.repository) : StatusBarTexts.connectedTooltip(state.repository);
+        item.accessibilityInformation = { label: StatusBarTexts.connectedLabel(state.repository, state.branch, this.stateUnknown) };
         item.command = SWITCH_DEVSPACE_COMMAND;
         return;
       case 'notConnected':
         item.text = `$(${MonitorIcons.off}) ${StatusBarTexts.openDevspace}`;
         item.tooltip = StatusBarTexts.notConnectedTooltip;
+        item.accessibilityInformation = { label: StatusBarTexts.notConnectedLabel };
         item.command = SWITCH_DEVSPACE_COMMAND;
         return;
       case 'connectionLost':
         item.text = `$(warning) ${StatusBarTexts.reconnect(state.repository)}`;
         item.tooltip = StatusBarTexts.connectionLostTooltip(state.repository);
+        item.accessibilityInformation = { label: StatusBarTexts.connectionLostLabel(state.repository) };
         item.command = {
           command: START_COMMAND,
           title: StatusBarTexts.reconnect(state.repository),
