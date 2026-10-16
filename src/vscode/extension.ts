@@ -733,8 +733,9 @@ async function activateExtension(
     ? await findWindowDevspace(containerName, { registry, needsRestore, docker, service, logger, mayRestore: startWork })
     : undefined;
   // A window of a devspace that the user kept on an engine with the removal mark ("Remove Devspaces from This Docker
-  // Engine…") does not use it: its heartbeats and its open would set Devspaces up there again. Its session starts
-  // without the devspace, and the window closes its connection (Controller.leaveRemovedEngine).
+  // Engine…") works without Devspaces: its heartbeats and its open would set Devspaces up there again. Its session
+  // starts without the devspace, and the window stays connected as a plain container window
+  // (Controller.workWithoutDevspaces).
   const onRemovedEngine = currentDevspace !== undefined && (await engineRemoved({ host: dockerHostOf(currentDevspace) }));
   // Writes the window status file and cleans up the storage folder. Its result is the pending connection file of this
   // window's devspace, which the first status write removes (role A).
@@ -868,7 +869,7 @@ async function activateExtension(
     // The stored list first, so that the progress and the status bar name the devspace as the sidebar shows it (with
     // the word of its source when the repository has several sources).
     await listed.catch(() => undefined);
-    if (onRemovedEngine) await controller.leaveRemovedEngine(currentDevspace);
+    if (onRemovedEngine) controller.workWithoutDevspaces(currentDevspace);
     else await controller.openAttachedWindow(currentDevspace, containerName, pending);
     return;
   }

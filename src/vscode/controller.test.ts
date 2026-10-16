@@ -3064,17 +3064,30 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.anything());
   });
 
-  it('a window of a kept devspace on an engine with the mark closes its connection, says why, and opens nothing', async () => {
+  // A user who kept the devspaces may attach to one to save the changes that are not pushed.
+  it('a window of a kept devspace on an engine with the mark stays connected without Devspaces, says so once, and runs nothing', async () => {
     const env = devspace();
     await h.registry.add(env);
-    await h.controller.leaveRemovedEngine(env);
-    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close');
-    expect(warningMessages()).toEqual([
-      'Devspaces was removed from the local Docker, so this window does not connect to acme/api. Start acme/api again to set up Devspaces there.',
+    h.controller.workWithoutDevspaces(env);
+    h.controller.workWithoutDevspaces(env);
+    expect(fakeVscode.window.showInformationMessage.mock.calls).toEqual([
+      [
+        'Devspaces was removed from the local Docker, so this window works without it: no background updates and no stop on close. A Start of this devspace sets Devspaces up again there.',
+      ],
     ]);
-    expect(h.logger.info).toHaveBeenCalledWith('This window does not connect to acme/api: Devspaces was removed from the local Docker. A Start there sets it up again.');
-    expect(h.coordinator.setDevspace).toHaveBeenCalledWith(null);
+    expect(warningMessages()).toEqual([]);
+    expect(h.logger.info.mock.calls.filter(([line]) => String(line).startsWith('This window of acme/api'))).toEqual([
+      [
+        'This window of acme/api works without Devspaces: Devspaces was removed from the local Docker. No background updates and no stop on close; a Start of acme/api sets Devspaces up there again.',
+      ],
+    ]);
+    // The connection stays, and nothing runs for the devspace.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.connection.closeRemoteConnection).not.toHaveBeenCalled();
+    expect(h.coordinator.setDevspace).not.toHaveBeenCalled();
     expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    expect(h.flow).not.toHaveBeenCalled();
+    expect(h.docker.findContainer).not.toHaveBeenCalled();
     expect(h.connection.open).not.toHaveBeenCalled();
     // Nor does the window take the devspace after a restore of the registry.
     h.connection.currentContainerName.mockReturnValue(CONTAINER);

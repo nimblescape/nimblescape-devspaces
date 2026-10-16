@@ -367,7 +367,7 @@ describe('nothing before the first use of Devspaces', () => {
     );
   }, 20_000);
 
-  it('the window of a devspace kept on an engine with the mark sends no heartbeat, runs no open, and closes its connection', async () => {
+  it('the window of a devspace kept on an engine with the mark stays connected: no heartbeat, no open, no Docker work, one message', async () => {
     const kept = {
       id: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d',
       repository: 'acme/api',
@@ -382,12 +382,19 @@ describe('nothing before the first use of Devspaces', () => {
         fs.writeFileSync(path.join(storage, 'docker-engines.json'), '{"engines":[{"host":"","removedAt":1760000000000}]}');
       },
       async (_storage, docker, log) => {
-        await waitFor(() => fakeVscode.commands.executeCommand.mock.calls.some(([command]) => command === CLOSE_REMOTE_COMMAND), 'the close of the connection');
+        await waitFor(() => log().includes('This window of acme/api works without Devspaces'), 'the log of the window');
         await new Promise((resolve) => setTimeout(resolve, 500));
-        expect(log()).toContain('This window does not connect to acme/api: Devspaces was removed from the local Docker. A Start there sets it up again.');
-        expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(
-          'Devspaces was removed from the local Docker, so this window does not connect to acme/api. Start acme/api again to set up Devspaces there.',
+        expect(log()).toContain(
+          'This window of acme/api works without Devspaces: Devspaces was removed from the local Docker. No background updates and no stop on close; a Start of acme/api sets Devspaces up there again.',
         );
+        expect(fakeVscode.window.showInformationMessage.mock.calls).toEqual([
+          [
+            'Devspaces was removed from the local Docker, so this window works without it: no background updates and no stop on close. A Start of this devspace sets Devspaces up again there.',
+          ],
+        ]);
+        expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
+        // The connection stays.
+        expect(fakeVscode.commands.executeCommand.mock.calls.filter(([command]) => command === CLOSE_REMOTE_COMMAND)).toEqual([]);
         // Only `docker info`, before the sidebar reads the states, which starts no worker there. No heartbeat (whose
         // repair would start the Monitor), no worker, no open pipeline.
         expect(spawned.filter(([command, sub]) => !(command === docker && (sub === 'context' || sub === 'info')))).toEqual([]);
