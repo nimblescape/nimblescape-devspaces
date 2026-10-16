@@ -303,7 +303,20 @@ export class Sidebar implements vscode.Disposable {
     this.timer = undefined;
     if (this.disposed) return;
     const minutes = this.deps.settings().refreshIntervalMinutes;
-    this.timer = setInterval(() => void this.refreshDiscovery(), minutes * 60_000);
+    this.timer = setInterval(() => this.backgroundRefresh(), minutes * 60_000);
+  }
+
+  /**
+   * The refresh of refreshIntervalMinutes. None while the refresh after a rate limit of GitHub waits (onRateLimited),
+   * because GitHub would refuse it too; that refresh, and a Refresh that the user chooses, still run.
+   */
+  private backgroundRefresh(): void {
+    const waiting = this.rateLimitRetry;
+    if (waiting) {
+      this.deps.logger.info(`The background update of the repository list waits for the refresh at ${new Date(waiting.at).toISOString()}, after the rate limit of GitHub.`);
+      return;
+    }
+    void this.refreshDiscovery();
   }
 
   /** GitHub data of a repository: from the discovery (or the part of the first load), or from a single lookup. */
@@ -641,10 +654,11 @@ export class Sidebar implements vscode.Disposable {
   /**
    * GitHub refused the refresh for its rate limit: a message says when the list loads again, and one refresh runs at
    * that time. The refresh at that time gets no second one: after it, the message says from when Refresh works again,
-   * and the refresh of refreshIntervalMinutes goes on as before. While that one refresh is planned, a refused refresh
-   * plans no other: while its timer waits, the timer moves to a later time that GitHub names (never to an earlier one),
-   * and the message names the time of the timer; after the timer fired, while that refresh waits for this one to end,
-   * only the log says it, and the message comes from that refresh.
+   * and the refresh of refreshIntervalMinutes goes on as before; while the timer waits, that refresh does not run
+   * (backgroundRefresh). While that one refresh is planned, a refused refresh plans no other: while its timer waits, the
+   * timer moves to a later time that GitHub names (never to an earlier one), and only a new or later time gets a
+   * message, any other refusal only a line in the log; after the timer fired, while that refresh waits for this one to
+   * end, only the log says it, and the message comes from that refresh.
    */
   private onRateLimited(error: GitHubRateLimitError, afterRateLimit: boolean): void {
     if (!afterRateLimit && this.retryingAfterRateLimit) {
@@ -653,9 +667,12 @@ export class Sidebar implements vscode.Disposable {
     }
     const now = this.clock.now();
     let at = Math.max(error.resetAt ?? now + RATE_LIMIT_WAIT_MS, now) + RATE_LIMIT_MARGIN_MS;
+    // A message only for a new time: the time of a timer that waits was named already.
+    let newTime = true;
     if (!afterRateLimit) {
       if (this.rateLimitRetry && this.rateLimitRetry.at >= at) {
         at = this.rateLimitRetry.at;
+        newTime = false;
       } else {
         this.clearRateLimitRetry();
         const timer = setTimeout(() => {
@@ -668,6 +685,7 @@ export class Sidebar implements vscode.Disposable {
     }
     const next = afterRateLimit ? 'Refresh can work again' : 'The list is loaded again';
     this.deps.logger.warn(`GitHub refused the update of the repository list for its rate limit. ${next} at ${new Date(at).toISOString()}.`);
+    if (!newTime) return;
     showWarningMessage(Messages.gitHubRateLimited(localClockTime(at), !afterRateLimit)).then(undefined, (reason: unknown) =>
       this.deps.logger.error('Could not show the message.', reason),
     );
