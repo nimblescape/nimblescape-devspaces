@@ -39,7 +39,7 @@ export const ControllerTexts = {
     'If you keep it running, it also runs while VS Code is closed, and Docker starts it again after a restart. ' +
     'It ends itself after 30 days in which no devspace was used on this Docker engine. ' +
     'If it stops when idle, it ends 5 minutes after the last devspace stops, and this work runs only while a devspace runs. ' +
-    'Keep Running applies to this Docker engine only. If you choose Stop When Idle, this applies to all Docker engines, each from the next start of a devspace there. ' +
+    'Keep Running applies to this Docker engine only. If you choose Stop When Idle, this applies to all Docker engines, each from the next start of a devspace or "Update All Images Now" there. ' +
     'You can change your answer with the setting "Devspaces: Stop Monitor When Idle". ' +
     'The command "Devspaces: Remove Devspaces from This Docker Engine…" removes the container.',
   keepMonitorRunning: 'Keep Running',

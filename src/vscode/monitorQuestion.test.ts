@@ -88,8 +88,8 @@ describe('the question about the Monitor of an engine', () => {
     const detail = ControllerTexts.monitorQuestionDetail;
     // Keep Running records this engine only: the next engine asks again (see the test above).
     expect(detail).toContain('Keep Running applies to this Docker engine only. If you choose Stop When Idle, this applies to all Docker engines');
-    // A running Monitor keeps its mode until the next ensure on its engine.
-    expect(detail).toContain('each from the next start of a devspace there.');
+    // A running Monitor keeps its mode until the next ensure on its engine: a start of a devspace, or Update All Images Now.
+    expect(detail).toContain('each from the next start of a devspace or "Update All Images Now" there.');
     expect(detail).not.toContain('Your answer applies to all Docker engines');
     // The prepares of the background run.
     expect(detail).toContain('it also builds the next image of that devspace');
