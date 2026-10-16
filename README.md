@@ -39,7 +39,7 @@ Devspaces lists the GitHub repositories that you can access and that contain a D
 2. Select **Sign in with GitHub**. Your repositories with a Dev Container configuration appear, grouped by owner (with a default image, also those without one).
 3. Select **Start** on a repository, or double-click it. A repository with several sources (several configurations, or a configuration and a default image) has a child row per source, each its own devspace. The first start takes a few minutes; later starts take seconds.
 
-Switch between devspaces with **Devspaces: Switch Devspace…** (`Ctrl+Alt+E`, on macOS `Cmd+Alt+E`) or the status bar.
+Switch between devspaces with **Devspaces: Switch Devspace…** or the status bar. On macOS, the key of the command is `Cmd+Alt+E`. On Windows and Linux, the command has no key, because on many Windows keyboards `Ctrl+Alt+E` types a character such as `€`. To set a key, open **Keyboard Shortcuts** (`Ctrl+K Ctrl+S`), search for `Devspaces: Switch Devspace`, select the row, press `Enter`, press your keys, and press `Enter` again.
 
 ## Main settings
 

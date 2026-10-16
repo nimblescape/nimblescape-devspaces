@@ -51,7 +51,7 @@ All computers that use one Docker engine need the same version: an older version
 
 The first start of a repository that belongs neither to you nor to one of your organizations asks for a confirmation, because it runs code from that repository.
 
-To go to another devspace, use **Devspaces: Switch Devspace…** (`Ctrl+Alt+E`, on macOS `Cmd+Alt+E`) or select the Devspaces item in the status bar.
+To go to another devspace, use **Devspaces: Switch Devspace…** (on macOS `Cmd+Alt+E`; on Windows and Linux, [set a key](#status-bar-and-switcher)) or select the Devspaces item in the status bar.
 
 ## The sidebar
 
@@ -125,6 +125,8 @@ The status bar shows the devspace of the window (`owner/name · branch`), **Open
 
 **Switch Devspace…** lists your recent devspaces with their state and, under **Open repository…**, every repository of the list. The selected devspace opens in the current window. **Switch Devspace in New Window…** opens it in a new window. With `devspaces.openInNewWindow` on, the two commands swap their roles.
 
+On macOS, the key of **Switch Devspace…** is `Cmd+Alt+E`. On Windows and Linux, the command has no key, because on many Windows keyboards `Ctrl+Alt+E` is `AltGr+E` and types a character such as `€`. To set a key, open **Keyboard Shortcuts** (`Ctrl+K Ctrl+S`, on macOS `Cmd+K Cmd+S`), search for `Devspaces: Switch Devspace`, select the row, press `Enter`, press your keys, and press `Enter` again. In `keybindings.json`, the ID of the command is `devspaces.switchDevspace`.
+
 ## Commands
 
 All commands are in the category **Devspaces** of the Command Palette. A command that acts on one devspace asks which one when you run it from the Command Palette, and a start of a repository with several sources asks which source.
@@ -135,7 +137,7 @@ All commands are in the category **Devspaces** of the Command Palette. A command
 | Stop, Delete, Rebuild, Show on GitHub | The actions of a row. |
 | Keep Running When Closed, Stop When Closed | Whether a devspace keeps running when no window uses it. |
 | Close and Keep Running | Closes this window; its devspace keeps running this time. Only in a connected window. |
-| Switch Devspace… (`Ctrl+Alt+E` / `Cmd+Alt+E`), Switch Devspace in New Window…, Switch Devspace in Current Window… | The switcher. |
+| Switch Devspace… (`Cmd+Alt+E` on macOS), Switch Devspace in New Window…, Switch Devspace in Current Window… | The switcher. |
 | Refresh, Search | Update or search the repository list. |
 | Expand All | Opens every owner, every group and every repository with several sources of the view. |
 | Select Organizations… | Limits the list to some organizations and accounts. Select none to see all again. |
