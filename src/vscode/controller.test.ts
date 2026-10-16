@@ -45,6 +45,7 @@ import { DOUBLE_CLICK_INTERVAL_MS, type ListOpenMode } from './rowActivation';
 import { DEFAULT_SETTINGS, SETTINGS_SECTION } from './settings';
 import { LOADED_CONTEXT_KEY, LOAD_FAILED_CONTEXT_KEY } from './sidebar';
 import { DEVSPACES_ONLY_CONTEXT_KEY } from './devspacesOnly';
+import { SwitcherTexts } from './switcher';
 import { contextValue as treeContextValue, REPOSITORY_NODE_CONTEXT, rowActions, type OwnerGroup } from './treeModel';
 import type { RemoteDockerCommands } from './remoteDockerCommands';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
@@ -1230,6 +1231,32 @@ describe('Start', () => {
     fakeVscode.window.showQuickPick.mockImplementationOnce(async (items: Array<{ repository: RepositoryInfo }>) => items[0]);
     await run('start');
     expect(h.service.openInWorker.mock.calls[0][0].repository).toBe('acme/web');
+    expect(fakeVscode.window.showQuickPick.mock.calls[0][1]).toMatchObject({ placeHolder: SwitcherTexts.repositoryPlaceholder });
+  });
+
+  it('names the window that the Start uses in the Quick Pick of the repository, as the switcher does', async () => {
+    h.sidebar.infos.set('acme/web', repositoryInfo('acme/web'));
+    const placeholders: unknown[] = [];
+    fakeVscode.window.showQuickPick.mockImplementation(async (_items: unknown, options: { placeHolder?: string }) => {
+      placeholders.push(options.placeHolder);
+      return undefined;
+    });
+    await run('startInNewWindow');
+    h.settings.openInNewWindow = true;
+    await run('start');
+    await run('search');
+    await run('startInCurrentWindow');
+    // An empty window has nothing to keep, so a plain Start uses it.
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    await run('start');
+    expect(placeholders).toEqual([
+      SwitcherTexts.newWindowRepositoryPlaceholder,
+      SwitcherTexts.newWindowRepositoryPlaceholder,
+      SwitcherTexts.newWindowRepositoryPlaceholder,
+      SwitcherTexts.repositoryPlaceholder,
+      SwitcherTexts.repositoryPlaceholder,
+    ]);
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
   });
 });
 

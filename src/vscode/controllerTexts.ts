@@ -164,7 +164,6 @@ export const ControllerTexts = {
   // Buttons.
   stop: 'Stop',
   // Quick Picks.
-  selectRepositoryToStart: 'Select a repository to open in this window',
   selectDevspaceToStop: 'Select a devspace to stop',
   selectDevspaceToKeepRunning: 'Select a devspace to keep running when closed',
   selectDevspaceToStopWhenClosed: 'Select a devspace to stop when closed',
