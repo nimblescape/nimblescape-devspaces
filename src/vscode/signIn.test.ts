@@ -154,7 +154,7 @@ describe('Sign in with GitHub replaces a token that GitHub rejected', () => {
     expect(manifest.contributes.commands.find((command) => command.command === 'devspaces.signIn')?.title).toBe('Sign in with GitHub');
     const text =
       'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n' +
-      'Devspaces asks for the scopes repo (read and change your repositories, also the private ones) and read:org (read your organization memberships). It works only with accounts on github.com.';
+      'Devspaces asks for the scopes repo (read and change the repositories that you can access, also the private ones) and read:org (read your organization memberships). It works only with accounts on github.com.';
     // The tooltip of the sign-in row is the text of the welcome view without its button.
     expect(manifest.contributes.viewsWelcome.find((welcome) => welcome.when === '!devspaces.signedIn')?.contents).toBe(
       `${text}\n[Sign in with GitHub](command:devspaces.signIn)`,
@@ -168,7 +168,7 @@ describe('Sign in with GitHub replaces a token that GitHub rejected', () => {
   it('names each scope of the sign-in with what it allows, as the README does, and github.com', () => {
     const readme = fs.readFileSync(path.join(__dirname, '..', '..', 'README.md'), 'utf8');
     const allows: Record<string, string> = {
-      repo: 'read and change your repositories, also the private ones',
+      repo: 'read and change the repositories that you can access, also the private ones',
       'read:org': 'read your organization memberships',
     };
     expect(Object.keys(allows)).toEqual([...GITHUB_SCOPES]);

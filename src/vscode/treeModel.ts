@@ -78,7 +78,7 @@ export const TreeTexts = {
   /** Tooltip of the sign-in row: the text of the sign-in in the welcome view (package.json viewsWelcome), without its button. */
   signInTooltip:
     'Sign in with GitHub to see your repositories that have a Dev Container configuration.\n' +
-    'Devspaces asks for the scopes repo (read and change your repositories, also the private ones) and read:org (read your organization memberships). It works only with accounts on github.com.',
+    'Devspaces asks for the scopes repo (read and change the repositories that you can access, also the private ones) and read:org (read your organization memberships). It works only with accounts on github.com.',
 } as const;
 
 /** Container and volume state of one devspace, as Docker reports it. */
