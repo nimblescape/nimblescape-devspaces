@@ -68,7 +68,7 @@ describe('DevspaceStatusBar', () => {
 
   it('gives a screen reader the state and the action, not the name of the icon', () => {
     const { bar, item } = create();
-    expect(item.accessibilityInformation).toEqual({ label: 'Devspaces: this window has no devspace. Select to open a devspace in this window.' });
+    expect(item.accessibilityInformation).toEqual({ label: 'Devspaces: this window has no devspace. Select to open a devspace.' });
     bar.showConnected('acme-university/api', 'main');
     expect(item.accessibilityInformation).toEqual({ label: 'Devspaces: connected to acme-university/api, branch main. Select to switch the devspace.' });
     bar.showStateUnknown(true);
