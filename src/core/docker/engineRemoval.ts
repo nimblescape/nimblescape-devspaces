@@ -390,12 +390,18 @@ export async function removeEngineInfrastructure(docker: Pick<BootstrapDocker, '
 /** The result; for a removal that ended early, the log names the commands that remove the rest. */
 function finish(run: RemovalRun, options: RemovalOptions): RemovalResult {
   const result = run.result();
-  if (result.ended !== undefined) {
-    options.logger.warn(
-      `${result.ended === 'cancelled' ? 'The removal was cancelled.' : 'The removal ended: Docker does not answer anymore.'} The rest can be removed with these commands (the error "requires at least 1 argument" means there is nothing to remove):\n${uninstallCommands(options.context).join('\n')}`,
-    );
-  }
+  if (result.ended !== undefined) options.logger.warn(removalEndedNote(result.ended, options.context));
   return result;
+}
+
+/**
+ * The log line of a removal that ended early (`ended`): why, and the commands that remove the rest
+ * (uninstallCommands, with the Docker context `context` of a remote engine). Also for a removal that the user
+ * cancelled while it deleted the devspaces, before anything else was removed (Controller.removeFromEngine).
+ */
+export function removalEndedNote(ended: NonNullable<RemovalResult['ended']>, context?: string): string {
+  const why = ended === 'cancelled' ? 'The removal was cancelled.' : 'The removal ended: Docker does not answer anymore.';
+  return `${why} The rest can be removed with these commands (the error "requires at least 1 argument" means there is nothing to remove):\n${uninstallCommands(context).join('\n')}`;
 }
 
 /**

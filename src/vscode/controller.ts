@@ -11,7 +11,7 @@ import { isBlockingBusyMark } from '../core/busy';
 import { attachDiagnostics } from '../core/docker/attachDiagnostics';
 import { LOCAL_DOCKER_TARGET, describeDockerHost, dockerHostOf, devspacesOfHost, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
 import { dockerEndpointUnsupported, ensureRemoteContext } from '../core/docker/remoteDocker';
-import { engineInventory, inventoryIsEmpty, removeEngineInfrastructure, type EngineInventory, type RemovalResult } from '../core/docker/engineRemoval';
+import { engineInventory, inventoryIsEmpty, removalEndedNote, removeEngineInfrastructure, type EngineInventory, type RemovalResult } from '../core/docker/engineRemoval';
 import { operationDockerTarget, outsideOperation, type DockerTargets } from '../core/docker/dockerTargets';
 import type { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import type { DiscoveryService } from '../core/discovery/discoveryService';
@@ -1103,6 +1103,19 @@ export class Controller implements vscode.Disposable {
       this.warn(ControllerTexts.removeWhileOperation(running.operation, running.repository));
       return;
     }
+    // From here on, also while it looks for what Devspaces has there and asks, a second run and the operations of the
+    // window are refused (refusedWhileRemoving).
+    this.removingFrom = engine;
+    try {
+      await this.removeFromCheckedEngine(removal, target, known, here);
+    } finally {
+      this.removingFrom = undefined;
+    }
+  }
+
+  /** removeFromDockerEngineNow after its refusal checks, while `removingFrom` names the engine of `target`. */
+  private async removeFromCheckedEngine(removal: EngineRemovalDeps, target: DockerTarget, known: readonly Devspace[], here: readonly Devspace[]): Promise<void> {
+    const engine = describeDockerHost(target.host);
     let inventory: EngineInventory | undefined;
     try {
       inventory = await runWithProgress({
@@ -1129,8 +1142,10 @@ export class Controller implements vscode.Disposable {
     const others = here.filter((devspace) => !own.includes(devspace));
     if (inventoryIsEmpty(inventory) && own.length === 0) {
       // Nothing to remove; the mark still keeps the background work of this computer away from the engine.
-      await this.markRemoved(target.host);
-      this.inform(ControllerTexts.removeNothingFound(engine));
+      const marked = await this.markRemoved(target.host);
+      const message = ControllerTexts.removeNothingFound(engine);
+      if (marked) this.inform(message);
+      else this.warnWithLog(`${message} ${ControllerTexts.removalNotRecorded(engine)}`);
       return;
     }
     const detail = [ControllerTexts.removeDetail];
@@ -1153,8 +1168,9 @@ export class Controller implements vscode.Disposable {
       deleteOwn = choice === ControllerTexts.deleteDevspacesToo;
     }
     this.logger.info(`Removing Devspaces from ${engine}${own.length > 0 ? (deleteOwn ? ', with the devspaces of the signed-in account there' : '; the devspaces stay') : ''}.`);
-    await this.markRemoved(target.host);
-    this.removingFrom = engine;
+    const marked = await this.markRemoved(target.host);
+    // Without the mark, the background work of this computer can set Devspaces up there again: the message says so.
+    const unmarked = (message: string): string => (marked ? message : `${message} ${ControllerTexts.removalNotRecorded(engine)}`);
     let removed: { result: RemovalResult; failedDevspaces: number };
     try {
       removed = await runWithProgress({
@@ -1163,7 +1179,6 @@ export class Controller implements vscode.Disposable {
         task: (progress, signal) => this.removeFromEngine(removal, target, deleteOwn ? own : [], progress, signal),
       });
     } finally {
-      this.removingFrom = undefined;
       if (!this.disposed) this.background(this.deps.sidebar.refreshStates(), 'update the sidebar');
     }
     const { result, failedDevspaces } = removed;
@@ -1172,16 +1187,18 @@ export class Controller implements vscode.Disposable {
     const keptStore = (item: RemovalResult['items'][number]): boolean => devspacesStay && item.kind === 'volume' && item.name === VSCODE_STORE_VOLUME && item.outcome === 'inUse';
     const left = result.items.filter((item) => (item.outcome === 'inUse' || item.outcome === 'failed') && !keptStore(item)).length + failedDevspaces;
     if (result.ended !== undefined) {
-      this.warnWithLog(ControllerTexts.removalEnded(engine));
+      this.warnWithLog(unmarked(ControllerTexts.removalEnded(engine)));
       return;
     }
     if (left > 0) {
-      this.warnWithLog(ControllerTexts.removalLeftItems(left, engine));
+      this.warnWithLog(unmarked(ControllerTexts.removalLeftItems(left, engine)));
       return;
     }
     this.logger.info(`Devspaces was removed from ${engine}.`);
     const message = ControllerTexts.removedFromEngine(engine);
-    this.inform(result.items.some(keptStore) ? `${message} ${ControllerTexts.vscodeVolumeKept}` : message);
+    const done = result.items.some(keptStore) ? `${message} ${ControllerTexts.vscodeVolumeKept}` : message;
+    if (marked) this.inform(done);
+    else this.warnWithLog(unmarked(done));
   }
 
   /**
@@ -1198,10 +1215,17 @@ export class Controller implements vscode.Disposable {
     signal: AbortSignal,
   ): Promise<{ result: RemovalResult; failedDevspaces: number }> {
     let failedDevspaces = 0;
+    // Cancel while the devspaces are deleted: nothing else was removed yet, so the log names the commands that remove
+    // the rest (removalEndedNote, as for a removal that ended later), as the message says (removalEnded).
+    const context = target.kind === 'remote' ? target.context : undefined;
+    const cancelled = (): { result: RemovalResult; failedDevspaces: number } => {
+      this.logger.warn(removalEndedNote('cancelled', context));
+      return { result: { items: [], ended: 'cancelled' }, failedDevspaces };
+    };
     for (const devspace of devspaces) {
       if (signal.aborted) {
         this.logger.info('The removal was cancelled before all devspaces were deleted.');
-        return { result: { items: [], ended: 'cancelled' }, failedDevspaces };
+        return cancelled();
       }
       const devspaceTarget = this.devspaceTarget(devspace);
       const name = this.shownName(devspaceTarget);
@@ -1220,13 +1244,13 @@ export class Controller implements vscode.Disposable {
         this.logger.warn(`The devspace of ${name} could not be deleted: ${errorMessage(error)} Delete it later with "Devspaces: Delete Devspace".`);
       }
     }
-    if (signal.aborted) return { result: { items: [], ended: 'cancelled' }, failedDevspaces };
+    if (signal.aborted) return cancelled();
     // The worker of this window holds the volumes of the engine; it ends before its container is removed.
     removal.closeWorker(target);
     const result = await removeEngineInfrastructure(removal.docker, {
       answers: (answerSignal) => removal.engineAnswers(target, answerSignal ?? signal),
       logger: this.logger,
-      ...(target.kind === 'remote' && target.context !== undefined ? { context: target.context } : {}),
+      ...(context !== undefined ? { context } : {}),
       onItem: (item) => progress.detail(ControllerTexts.removingItem(item)),
       signal,
     });
@@ -1276,15 +1300,20 @@ export class Controller implements vscode.Disposable {
     return undefined;
   }
 
-  /** Sets the removal mark of the engine `host`. A failure is logged; the removal goes on. */
-  private async markRemoved(host: string): Promise<void> {
+  /**
+   * Sets the removal mark of the engine `host`. A failure is logged, and the removal goes on; false then, so that its
+   * last message says so.
+   */
+  private async markRemoved(host: string): Promise<boolean> {
     const records = this.deps.engineRecords;
-    if (records === undefined) return;
+    if (records === undefined) return true;
     try {
       await records.setRemoved(host, this.clock.now());
       this.logger.info(`This computer does no Docker work on ${describeDockerHost(host)} by itself until a Start, a Rebuild or "Update All Images Now" there.`);
+      return true;
     } catch (error) {
       this.logger.warn(`The removal from ${describeDockerHost(host)} could not be recorded, so this computer may set Devspaces up there again by itself: ${errorMessage(error)}`);
+      return false;
     }
   }
 

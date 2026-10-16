@@ -18,6 +18,7 @@ import type { TokenRemoveValue, WindowStateValue } from '../core/helperChannel/p
 import { DockerContextKeys } from '../core/docker/dockerSetup';
 import { UserFacingError } from '../core/errors';
 import { Actions, Messages } from '../core/messages';
+import { removalEndedNote } from '../core/docker/engineRemoval';
 import { CONTAINER_VERSION, HOST_ACCESS_UNRESTRICTED, LABEL_CONTAINER_VERSION, LABEL_HOST_ACCESS } from '../core/names';
 import { OP_TOKEN_REMOVE } from '../core/helperChannel/protocol';
 import type { OpenOptions, OpenResult, OperationOptions, RepositoryTarget } from '../core/pipeline/operationBase';
@@ -3038,6 +3039,97 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(warnings.some((line) => line.startsWith('The devspace of acme/api could not be deleted: The worker could not be reached.'))).toBe(true);
     expect(warnings).toContain(
       'The volume devspaces-worker-cache is in use and was not removed (Error response from daemon: remove devspaces-worker-cache: volume is in use - [d1]). Remove it later with: docker --context devspaces-build-box volume rm devspaces-worker-cache',
+    );
+  });
+
+  // The message of a removal that stopped early says that the log names the commands that remove the rest; a Cancel
+  // while the devspaces are deleted removed nothing else yet. Mutation: the early returns without the commands fail it.
+  it('Cancel while the devspaces are deleted: the log names the commands that remove the rest, and the mark stays', async () => {
+    const note = removalEndedNote('cancelled', 'devspaces-build-box');
+    expect(note).toContain('docker --context devspaces-build-box rm -f $(docker --context devspaces-build-box ps -aq --filter label=nimblescape.devspaces.monitor)');
+    expect(note).toContain('docker --context devspaces-build-box volume rm devspaces-monitor devspaces-worker-cache devspaces-vscode');
+    // One devspace: Cancel during its delete; two: Cancel before the second one.
+    for (const count of [1, 2]) {
+      const fake = removalFake();
+      onBuildBox(fake);
+      const progress = cancellableProgress();
+      await h.registry.add(ownRemote());
+      if (count === 2) await h.registry.add(devspace({ id: OTHER_ENV_ID, repository: 'acme/web', containerName: 'devspaces-acme-web-7c1d2e3f', volumeName: 'devspaces-acme-web-7c1d2e3f', dockerHost: 'build-box' }));
+      h.service.deleteInWorker.mockImplementation(async (id: string) => {
+        fake.order.push(`delete ${id}`);
+        progress.cancel();
+        await h.registry.remove(id);
+      });
+      fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove).mockResolvedValueOnce(ControllerTexts.deleteDevspacesToo);
+      await run('removeFromDockerEngine');
+      expect(changing(fake), `${count}`).toEqual([`delete ${ENV_ID}`]);
+      expect(fakeVscode.window.showWarningMessage).toHaveBeenLastCalledWith(ControllerTexts.removalEnded('build-box'), Actions.showDetails);
+      expect(h.logger.warn.mock.calls.map((call) => String(call[0])), `${count}`).toContain(note);
+      expect(await h.engineRecords.removed('build-box')).toBe(true);
+    }
+  });
+
+  // Mutation: removingFrom set only around the removal itself fails it.
+  it('refuses a second run and a Start while it looks for Devspaces on the engine and asks', async () => {
+    const fake = removalFake();
+    onBuildBox(fake);
+    const env = ownRemote();
+    await h.registry.add(env);
+    const answers = deferred<boolean>();
+    fake.deps.engineAnswers.mockReturnValueOnce(answers.promise);
+    const removing = run('removeFromDockerEngine');
+    await settle(() => fake.deps.engineAnswers.mock.calls.length === 1, 'the look at the engine');
+    await run('removeFromDockerEngine');
+    await run('start', row('acme/api', env));
+    expect(fakeVscode.window.showInformationMessage.mock.calls).toEqual([[ControllerTexts.removalRunning('build-box')], [ControllerTexts.removalRunning('build-box')]]);
+    expect(fake.deps.engineAnswers).toHaveBeenCalledTimes(1);
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    // While the question is open, too.
+    const question = deferred<string | undefined>();
+    fakeVscode.window.showWarningMessage.mockReturnValueOnce(question.promise);
+    answers.resolve(true);
+    await settle(() => modals().length === 1, 'the question');
+    await run('start', row('acme/api', env));
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledTimes(3);
+    question.resolve(undefined);
+    await removing;
+    // After the removal (here: cancelled at its question), a Start runs again.
+    await run('start', row('acme/api', env));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it('says in its last message when the removal mark could not be written: background work may come back there', async () => {
+    const fake = removalFake();
+    onBuildBox(fake);
+    vi.spyOn(h.engineRecords, 'setRemoved').mockRejectedValue(new Error('EACCES: permission denied'));
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove);
+    await run('removeFromDockerEngine');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenLastCalledWith(
+      'Devspaces was removed from build-box. This computer could not record the removal, so its background work may set Devspaces up on build-box again.',
+      Actions.showDetails,
+    );
+    expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
+    expect(h.logger.warn).toHaveBeenCalledWith(
+      'The removal from build-box could not be recorded, so this computer may set Devspaces up there again by itself: EACCES: permission denied',
+    );
+    // Nothing to remove: the same.
+    const empty = removalFake({ engine: { containers: [], volumes: [], images: [] } });
+    onBuildBox(empty);
+    vi.spyOn(h.engineRecords, 'setRemoved').mockRejectedValue(new Error('EACCES: permission denied'));
+    await run('removeFromDockerEngine');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenLastCalledWith(
+      `${ControllerTexts.removeNothingFound('build-box')} ${ControllerTexts.removalNotRecorded('build-box')}`,
+      Actions.showDetails,
+    );
+    // Items left: the same sentence after the message.
+    const left = removalFake({ engine: { inUse: ['devspaces-worker-cache'] } });
+    onBuildBox(left);
+    vi.spyOn(h.engineRecords, 'setRemoved').mockRejectedValue(new Error('EACCES: permission denied'));
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove);
+    await run('removeFromDockerEngine');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenLastCalledWith(
+      `${ControllerTexts.removalLeftItems(1, 'build-box')} ${ControllerTexts.removalNotRecorded('build-box')}`,
+      Actions.showDetails,
     );
   });
 

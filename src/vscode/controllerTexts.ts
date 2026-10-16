@@ -89,6 +89,9 @@ export const ControllerTexts = {
     `${count} ${count === 1 ? 'item' : 'items'} of Devspaces could not be removed from ${engine}. The log names each one and the command to remove it.`,
   removalEnded: (engine: string) =>
     `The removal from ${engine} stopped before the end. The log names the commands that remove the rest.`,
+  /** After the last message of the removal, when the removal mark could not be written (docker-engines.json). */
+  removalNotRecorded: (engine: string) =>
+    `This computer could not record the removal, so its background work may set Devspaces up on ${engine} again.`,
   /** A window of a devspace that the user kept on an engine with the removal mark (Controller.workWithoutDevspaces). */
   windowOnRemovedEngine: (engine: string) =>
     `Devspaces was removed from ${engine}, so this window works without it: no background updates and no stop on close. A Start of this devspace sets Devspaces up again there.`,
