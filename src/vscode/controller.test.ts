@@ -3165,7 +3165,23 @@ describe('Remove Devspaces from This Docker Engine…', () => {
       'docker volume rm devspaces-worker-cache',
       'docker volume rm devspaces-vscode',
     ]);
-    expect(fakeVscode.window.showInformationMessage).toHaveBeenLastCalledWith(ControllerTexts.removedFromEngine('build-box'));
+    // The last message says what the removal did not wait for, as a warning. Mutation: the plain message of a removal
+    // that removed everything.
+    expect(infoMessages()).not.toContain(ControllerTexts.removedFromEngine('build-box'));
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenLastCalledWith(
+      'Devspaces was removed from build-box. The removal did not wait for the end of a background build of the helper image in this window; if that build makes the image again, run the command again.',
+      Actions.showDetails,
+    );
+    // So do the other last messages.
+    const left = removalFake({ engine: { inUse: ['devspaces-worker-cache'] } });
+    onBuildBox(left, BUILD_BOX, { helperBuildsStopWaitMs: 20 });
+    hangs(left);
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove);
+    await run('removeFromDockerEngine');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenLastCalledWith(
+      `${ControllerTexts.removalLeftItems(1, 'build-box')} ${ControllerTexts.helperBuildNotWaitedFor}`,
+      Actions.showDetails,
+    );
 
     // Cancel while it waits (the limit is 60 seconds here): the removal ends, and the log names the commands.
     const cancelled = removalFake();
@@ -3180,6 +3196,7 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove);
     await run('removeFromDockerEngine');
     expect(changing(cancelled)).toEqual(['stop the helper builds on build-box']);
+    // Cancel ended the wait: nothing was given up on.
     expect(fakeVscode.window.showWarningMessage).toHaveBeenLastCalledWith(ControllerTexts.removalEnded('build-box'), Actions.showDetails);
     expect(h.logger.warn).toHaveBeenCalledWith(removalEndedNote('cancelled', 'devspaces-build-box'));
     expect(h.logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('did not end after it was stopped'));

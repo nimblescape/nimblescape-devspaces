@@ -1236,13 +1236,14 @@ export class Controller implements vscode.Disposable {
    * The removal after the confirmations and the checks: the devspaces `own`, then what Devspaces keeps on the engine
    * (removeFromEngine), then the last message. `devspacesStay`: devspaces stay on the engine besides those that could
    * not be deleted, so the store of the VS Code Server stays while they use it. `marked`: the removal mark was written;
-   * when it was not, the last message says so.
+   * when it was not, the last message says so, and so it does when the removal did not wait for the end of a background
+   * build of the helper image (a warning then, also after a removal that removed everything).
    */
   private async removeConfirmed(removal: EngineRemovalDeps, target: DockerTarget, options: { own: readonly Devspace[]; devspacesStay: boolean; marked: boolean }): Promise<void> {
     const engine = describeDockerHost(target.host);
     const { marked } = options;
     const unmarked = (message: string): string => (marked ? message : `${message} ${ControllerTexts.removalNotRecorded(engine)}`);
-    let removed: { result: RemovalResult; failedDevspaces: number };
+    let removed: { result: RemovalResult; failedDevspaces: number; buildNotWaitedFor?: true };
     try {
       removed = await runWithProgress({
         title: ControllerTexts.removing(engine),
@@ -1253,23 +1254,24 @@ export class Controller implements vscode.Disposable {
       if (!this.disposed) this.background(this.deps.sidebar.refreshStates(), 'update the sidebar');
     }
     const { result, failedDevspaces } = removed;
+    const finish = (message: string): string => unmarked(removed.buildNotWaitedFor === true ? `${message} ${ControllerTexts.helperBuildNotWaitedFor}` : message);
     // The store of the VS Code Server stays while devspaces that stay on the engine use it.
     const devspacesStay = options.devspacesStay || failedDevspaces > 0;
     const keptStore = (item: RemovalResult['items'][number]): boolean => devspacesStay && item.kind === 'volume' && item.name === VSCODE_STORE_VOLUME && item.outcome === 'inUse';
     const left = result.items.filter((item) => (item.outcome === 'inUse' || item.outcome === 'failed') && !keptStore(item)).length + failedDevspaces;
     if (result.ended !== undefined) {
-      this.warnWithLog(unmarked(ControllerTexts.removalEnded(engine)));
+      this.warnWithLog(finish(ControllerTexts.removalEnded(engine)));
       return;
     }
     if (left > 0) {
-      this.warnWithLog(unmarked(ControllerTexts.removalLeftItems(left, engine)));
+      this.warnWithLog(finish(ControllerTexts.removalLeftItems(left, engine)));
       return;
     }
     this.logger.info(`Devspaces was removed from ${engine}.`);
     const message = ControllerTexts.removedFromEngine(engine);
     const done = result.items.some(keptStore) ? `${message} ${ControllerTexts.vscodeVolumeKept}` : message;
-    if (marked) this.inform(done);
-    else this.warnWithLog(unmarked(done));
+    if (marked && removed.buildNotWaitedFor !== true) this.inform(done);
+    else this.warnWithLog(finish(done));
   }
 
   /**
@@ -1284,7 +1286,7 @@ export class Controller implements vscode.Disposable {
     devspaces: readonly Devspace[],
     progress: ProgressReporter,
     signal: AbortSignal,
-  ): Promise<{ result: RemovalResult; failedDevspaces: number }> {
+  ): Promise<{ result: RemovalResult; failedDevspaces: number; buildNotWaitedFor?: true }> {
     let failedDevspaces = 0;
     // Cancel while the devspaces are deleted: nothing else was removed yet, so the log names the commands that remove
     // the rest (removalEndedNote, as for a removal that ended later), as the message says (removalEnded).
@@ -1328,7 +1330,8 @@ export class Controller implements vscode.Disposable {
     }
     if (signal.aborted) return cancelled();
     // A background build of the helper image in this window would make the image again after its removal.
-    if (!(await this.helperBuildsStopped(removal, target, signal))) return cancelled();
+    const builds = await this.helperBuildsStopped(removal, target, signal);
+    if (builds === 'cancelled') return cancelled();
     // The worker of this window holds the volumes of the engine; it ends before its container is removed.
     removal.closeWorker(target);
     const result = await removeEngineInfrastructure(removal.docker, {
@@ -1338,28 +1341,27 @@ export class Controller implements vscode.Disposable {
       onItem: (item) => progress.detail(ControllerTexts.removingItem(item)),
       signal,
     });
-    return { result, failedDevspaces };
+    return { result, failedDevspaces, ...(builds === 'notWaitedFor' ? { buildNotWaitedFor: true as const } : {}) };
   }
 
   /**
    * Stops the background builds of the helper image of this window on the engine of `target`, and waits for their end
-   * (EngineRemovalDeps.stopHelperBuilds) at most HELPER_BUILDS_STOP_WAIT_MS: after that, the log says that such a build
-   * may make the image again, and the removal goes on. False when Cancel (`signal`) ended the wait.
+   * (EngineRemovalDeps.stopHelperBuilds) at most HELPER_BUILDS_STOP_WAIT_MS: after that (`notWaitedFor`), the log says
+   * that such a build may make the image again, and the removal goes on. `cancelled`: Cancel (`signal`) ended the wait.
    */
-  private async helperBuildsStopped(removal: EngineRemovalDeps, target: DockerTarget, signal: AbortSignal): Promise<boolean> {
+  private async helperBuildsStopped(removal: EngineRemovalDeps, target: DockerTarget, signal: AbortSignal): Promise<'ended' | 'notWaitedFor' | 'cancelled'> {
     const stopping = removal.stopHelperBuilds?.(target);
-    if (stopping === undefined) return true;
+    if (stopping === undefined) return 'ended';
     const waited = new AbortController();
     const limit = this.delay(this.deps.timing?.helperBuildsStopWaitMs ?? HELPER_BUILDS_STOP_WAIT_MS, AbortSignal.any([waited.signal, signal])).then(() => false);
     const ended = await Promise.race([stopping.then(() => true, () => true), limit]);
     waited.abort();
-    if (signal.aborted) return false;
-    if (!ended) {
-      this.logger.warn(
-        `A background build of the helper image on ${describeDockerHost(target.host)} did not end after it was stopped. The removal goes on; that build may make the image again, and a new run of the command removes it.`,
-      );
-    }
-    return true;
+    if (signal.aborted) return 'cancelled';
+    if (ended) return 'ended';
+    this.logger.warn(
+      `A background build of the helper image on ${describeDockerHost(target.host)} did not end after it was stopped. The removal goes on; that build may make the image again, and a new run of the command removes it.`,
+    );
+    return 'notWaitedFor';
   }
 
   /**
