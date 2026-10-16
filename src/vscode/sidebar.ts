@@ -11,10 +11,10 @@ import type { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import type { DockerTargets } from '../core/docker/dockerTargets';
 import type { MissingHelperStatus } from '../core/helper/missingHelperBuild';
 import { DISCOVERY_CONCURRENCY, type DiscoveryService, type PartialDiscovery } from '../core/discovery/discoveryService';
-import { GitHubApiError } from '../core/discovery/githubApi';
+import { GitHubApiError, GitHubRateLimitError } from '../core/discovery/githubApi';
 import { sameScope } from '../core/discovery/scope';
 import { errorMessage } from '../core/errors';
-import { Actions } from '../core/messages';
+import { Actions, Messages } from '../core/messages';
 import { devspacesOfHost } from '../core/docker/dockerHost';
 import { availableDevspaces } from '../core/ownership';
 import { systemClock, type Clock, type Logger } from '../core/ports';
@@ -42,6 +42,14 @@ export const LOADED_CONTEXT_KEY = 'devspaces.loaded';
  * because the list could not be loaded, not because no repository has a configuration.
  */
 export const LOAD_FAILED_CONTEXT_KEY = 'devspaces.loadFailed';
+
+/**
+ * The refresh after a rate limit of GitHub (onRateLimited) runs this long after the time that GitHub names, so that a
+ * clock that is a little ahead does not ask too early; without a time, after RATE_LIMIT_WAIT_MS (GitHub asks to wait at
+ * least a minute).
+ */
+export const RATE_LIMIT_MARGIN_MS = 10_000;
+export const RATE_LIMIT_WAIT_MS = 60_000;
 
 export interface SidebarDeps {
   logger: Logger;
@@ -121,6 +129,10 @@ export class Sidebar implements vscode.Disposable {
   private progressiveAccountId: string | undefined;
   private partial: DiscoveryData | undefined;
   private timer: NodeJS.Timeout | undefined;
+  /** The one refresh after a rate limit of GitHub (onRateLimited); `undefined` while none waits. */
+  private rateLimitRetry: NodeJS.Timeout | undefined;
+  /** The next refresh is the one after a rate limit: it gets no second one. */
+  private retryingAfterRateLimit = false;
   private signInOffered = false;
   /** Counts the account changes of onSessionChanged: a refresh that read an older session does not use it. */
   private accountChanges = 0;
@@ -375,6 +387,7 @@ export class Sidebar implements vscode.Disposable {
     this.disposed = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    this.clearRateLimitRetry();
     this.statesEmitter.dispose();
     this.renderEmitter.dispose();
   }
@@ -562,6 +575,8 @@ export class Sidebar implements vscode.Disposable {
 
   private async refreshDiscoveryNow(): Promise<DiscoveryData | undefined> {
     if (this.disposed) return this.data;
+    const afterRateLimit = this.retryingAfterRateLimit;
+    this.retryingAfterRateLimit = false;
     // Token and account of one session: the list is stored for the account.
     const changes = this.accountChanges;
     const session = await this.readSession();
@@ -580,6 +595,7 @@ export class Sidebar implements vscode.Disposable {
     this.progressiveAccountId = this.data === undefined ? account.id : undefined;
     this.partial = undefined;
     this.refreshToken = token;
+    let rateLimited = false;
     try {
       const data = await vscode.window.withProgress({ location: viewProgressLocation(this.deps.view) }, () =>
         this.deps.discovery.refresh(token, account.id),
@@ -590,6 +606,7 @@ export class Sidebar implements vscode.Disposable {
       if (!this.isOfCurrentScope(data)) return this.data;
       this.data = data;
       this.setLoadFailed(false);
+      this.clearRateLimitRetry();
       // The complete list is shown at once. The repositories of devspaces that it lacks follow; until then their rows
       // show what the previous refresh found.
       this.endProgressiveDisplay();
@@ -599,6 +616,11 @@ export class Sidebar implements vscode.Disposable {
       if (this.account?.id === account.id) this.lookups = lookups;
     } catch (error) {
       if (error instanceof GitHubApiError && error.status === 401) this.offerSignInAgain();
+      // A rate limit of GitHub: the part of the first load that the view shows stays until the next refresh.
+      if (error instanceof GitHubRateLimitError) {
+        rateLimited = true;
+        this.onRateLimited(error, afterRateLimit);
+      }
       // Without internet access, the view shows the stored list and skips the update. Without a stored list, the view
       // says that the list could not be loaded (not that no repository was found).
       const shown = this.data ? 'The stored list is shown.' : 'No stored list exists.';
@@ -606,11 +628,39 @@ export class Sidebar implements vscode.Disposable {
       this.setLoadFailed(this.data === undefined);
     } finally {
       this.refreshToken = undefined;
-      this.endProgressiveDisplay();
+      if (!rateLimited) this.endProgressiveDisplay();
     }
     this.setLoaded();
     this.renderInBackground();
     return this.data;
+  }
+
+  /**
+   * GitHub refused the refresh for its rate limit: a message says when the list loads again, and one refresh runs at
+   * that time. The refresh at that time gets no second one: after it, the message says from when Refresh works again,
+   * and the refresh of refreshIntervalMinutes goes on as before.
+   */
+  private onRateLimited(error: GitHubRateLimitError, afterRateLimit: boolean): void {
+    const now = this.clock.now();
+    const at = Math.max(error.resetAt ?? now + RATE_LIMIT_WAIT_MS, now) + RATE_LIMIT_MARGIN_MS;
+    if (!afterRateLimit) {
+      this.clearRateLimitRetry();
+      this.rateLimitRetry = setTimeout(() => {
+        this.rateLimitRetry = undefined;
+        this.retryingAfterRateLimit = true;
+        void this.refreshDiscovery({ again: true });
+      }, at - now);
+    }
+    const next = afterRateLimit ? 'Refresh can work again' : 'The list is loaded again';
+    this.deps.logger.warn(`GitHub refused the update of the repository list for its rate limit. ${next} at ${new Date(at).toISOString()}.`);
+    showWarningMessage(Messages.gitHubRateLimited(localClockTime(at), !afterRateLimit)).then(undefined, (reason: unknown) =>
+      this.deps.logger.error('Could not show the message.', reason),
+    );
+  }
+
+  private clearRateLimitRetry(): void {
+    if (this.rateLimitRetry) clearTimeout(this.rateLimitRetry);
+    this.rateLimitRetry = undefined;
   }
 
   /** The refresh of the progressive display ended: the view shows no part of it anymore. */
@@ -753,4 +803,10 @@ function formatTime(isoTime: string): string {
   } catch {
     return date.toLocaleString();
   }
+}
+
+/** `time` (ms since 1970) as the hour and minute of the local time, for a message: 14:32. */
+function localClockTime(time: number): string {
+  const date = new Date(time);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }

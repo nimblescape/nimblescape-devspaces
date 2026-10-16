@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, it, expect } from 'vitest';
 import type { HttpRequest, HttpResponse, HttpTransport } from '../http';
 import type { Logger } from '../ports';
 import type { DiscoveryData, RepositoryInfo } from '../types';
-import { GitHubApi, GitHubApiError, type GraphQLError } from './githubApi';
+import { GitHubApi, GitHubApiError, GitHubRateLimitError, type GraphQLError } from './githubApi';
 import {
   BRANCH_CONFIGURATIONS_QUERY,
   classifyGraphQLError,
@@ -413,6 +413,8 @@ describe('DiscoveryService.refresh', () => {
     const transport = new FakeGitHub(() => ({ body: { data: null, errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }] } }));
     await expect(service(transport).refresh(TOKEN, ACCOUNT_ID)).rejects.toThrow(/API rate limit exceeded/);
     expect(transport.requests).toHaveLength(1);
+    // The sidebar tells the rate limit apart (GitHubRateLimitError), so that it says when it tries again.
+    await expect(service(transport).refresh(TOKEN, ACCOUNT_ID)).rejects.toBeInstanceOf(GitHubRateLimitError);
   });
 
   it('throws when the viewer has no login', async () => {

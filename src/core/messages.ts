@@ -28,6 +28,13 @@ export const Messages = {
   registrySignIn: (registry: string) => `The registry ${registry} requires a sign-in.`,
   organizationNotAuthorized: (organization: string) =>
     `Access to the organization ${organization} is not authorized.`,
+  /**
+   * GitHub refused the refresh of the repository list for its rate limit. `time`: the local time when Devspaces loads
+   * the list again (`retry`), or after which Refresh works again.
+   */
+  gitHubRateLimited: (time: string, retry: boolean) =>
+    'GitHub limits the requests of your account for now. The repository list may be incomplete or out of date. ' +
+    (retry ? `Devspaces loads it again at ${time}.` : `Choose Refresh after ${time}.`),
   /** An owner of the setting `owners` that GitHub does not return (unknown, or no access). */
   organizationNotFound: (organization: string) => `The organization ${organization} was not found or is not accessible.`,
   newerImage: 'A newer image is available. The devspace is updated. Your files are kept.',

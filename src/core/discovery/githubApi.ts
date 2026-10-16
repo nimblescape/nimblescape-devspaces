@@ -5,7 +5,7 @@
 // GitHub GraphQL API over an HttpTransport. The token is used only for the Authorization header: it never appears in a
 // log line or in an error message.
 import type { HttpResponse, HttpTransport } from '../http';
-import { abortError, isAbortError, silentLogger, type Logger } from '../ports';
+import { abortError, isAbortError, silentLogger, systemClock, type Clock, type Logger } from '../ports';
 import { isRecord } from '../valueChecks';
 
 export const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
@@ -33,6 +33,22 @@ export class GitHubApiError extends Error {
   }
 }
 
+/**
+ * GitHub refused the request for its rate limit: an answer with an error of the type RATE_LIMITED (the GraphQL API
+ * answers a primary rate limit with HTTP 200), or HTTP 429, or HTTP 403 for a rate limit (a secondary rate limit).
+ * `resetAt`: the time (ms since 1970) from which GitHub takes requests again, when the answer names it (rateLimitResetAt).
+ */
+export class GitHubRateLimitError extends GitHubApiError {
+  constructor(
+    message: string,
+    status: number,
+    readonly resetAt: number | undefined,
+  ) {
+    super(message, status);
+    this.name = 'GitHubRateLimitError';
+  }
+}
+
 /** GitHub did not answer within the time limit of the request. */
 export class GitHubTimeoutError extends Error {
   constructor(readonly timeoutMs: number) {
@@ -48,12 +64,15 @@ export interface GitHubApiOptions {
   onUnauthorized?: (token: string) => void;
   /** GitHub answered HTTP 200 for `token`. */
   onAuthorized?: (token: string) => void;
+  /** For the time of a rate limit that GitHub names in seconds from now (`retry-after`). */
+  clock?: Clock;
 }
 
 export class GitHubApi {
   private readonly timeoutMs: number;
   private readonly onUnauthorized: ((token: string) => void) | undefined;
   private readonly onAuthorized: ((token: string) => void) | undefined;
+  private readonly clock: Clock;
 
   constructor(
     private readonly transport: HttpTransport,
@@ -63,14 +82,15 @@ export class GitHubApi {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_GITHUB_TIMEOUT_MS;
     this.onUnauthorized = options.onUnauthorized;
     this.onAuthorized = options.onAuthorized;
+    this.clock = options.clock ?? systemClock;
   }
 
   /**
    * Runs a GraphQL query. Resolves with `data` and `errors` of the response: GitHub can return partial data together
    * with errors, for example for organizations with SAML single sign-on.
    * Throws `GitHubApiError` for an HTTP status other than 200 or a response that is not GraphQL,
-   * `GitHubTimeoutError` after the time limit, an `AbortError` when the signal aborts,
-   * and the error of the transport when the connection fails.
+   * `GitHubRateLimitError` (a GitHubApiError) for a rate limit, `GitHubTimeoutError` after the time limit, an
+   * `AbortError` when the signal aborts, and the error of the transport when the connection fails.
    */
   async graphql<T>(
     query: string,
@@ -83,10 +103,11 @@ export class GitHubApi {
     if (response.status === 401) this.notify(this.onUnauthorized, token);
     if (response.status === 200) this.notify(this.onAuthorized, token);
     if (response.status !== 200) {
-      throw new GitHubApiError(
-        `GitHub API request failed with HTTP status ${response.status}${describeBody(response.body)}.`,
-        response.status,
-      );
+      const message = `GitHub API request failed with HTTP status ${response.status}${describeBody(response.body)}.`;
+      if (isRateLimitStatus(response)) {
+        throw new GitHubRateLimitError(message, response.status, rateLimitResetAt(response.headers, this.clock.now()));
+      }
+      throw new GitHubApiError(message, response.status);
     }
     let body: unknown;
     try {
@@ -101,6 +122,14 @@ export class GitHubApi {
     const result: { data?: T; errors?: GraphQLError[] } = {};
     if (isRecord(body.data)) result.data = body.data as T;
     const errors = normalizeErrors(body.errors);
+    // A rate limit refuses the whole query: no request gets an answer before its reset.
+    if (errors.some(isRateLimitError)) {
+      throw new GitHubRateLimitError(
+        `GitHub refused the request for its rate limit: ${describeGraphQLErrors(errors)}`,
+        response.status,
+        rateLimitResetAt(response.headers, this.clock.now()),
+      );
+    }
     if (errors.length > 0) result.errors = errors;
     if (result.data === undefined && result.errors === undefined) {
       throw new GitHubApiError('GitHub API returned a response without data and without errors.', response.status);
@@ -172,6 +201,35 @@ function normalizeErrors(value: unknown): GraphQLError[] {
     errors.push(error);
   }
   return errors;
+}
+
+/** An error of the GraphQL API for a rate limit: of the type RATE_LIMITED, or a message about a secondary rate limit. */
+function isRateLimitError(error: GraphQLError): boolean {
+  return error.type === 'RATE_LIMITED' || /\brate limit\b/i.test(error.message);
+}
+
+/**
+ * An HTTP status of a rate limit: 429, or 403 with no request left (`x-ratelimit-remaining: 0`), a time to wait
+ * (`retry-after`), or a message about a rate limit (a secondary rate limit). Another 403 is no rate limit (for example
+ * an organization that restricts the access).
+ */
+function isRateLimitStatus(response: HttpResponse): boolean {
+  if (response.status === 429) return true;
+  if (response.status !== 403) return false;
+  return response.headers['x-ratelimit-remaining'] === '0' || response.headers['retry-after'] !== undefined || /\brate limit\b/i.test(response.body);
+}
+
+/**
+ * The time (ms since 1970) from which GitHub takes requests again after a rate limit, from the headers of its answer:
+ * `retry-after` (seconds from `now`), else `x-ratelimit-reset` (seconds since 1970) while `x-ratelimit-remaining` is 0.
+ * `undefined` when the answer names no time.
+ */
+function rateLimitResetAt(headers: Record<string, string>, now: number): number | undefined {
+  const retryAfter = Number(headers['retry-after'] ?? Number.NaN);
+  if (Number.isFinite(retryAfter) && retryAfter >= 0) return now + retryAfter * 1000;
+  const reset = Number(headers['x-ratelimit-reset'] ?? Number.NaN);
+  if (headers['x-ratelimit-remaining'] === '0' && Number.isFinite(reset) && reset > 0) return reset * 1000;
+  return undefined;
 }
 
 /** `: <message>` from a JSON error body of GitHub, for example `{"message":"Bad credentials"}`. */
