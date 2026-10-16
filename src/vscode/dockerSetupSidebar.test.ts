@@ -333,6 +333,21 @@ describe('nothing before the first use of Devspaces', () => {
       },
     );
   }, 20_000);
+
+  it('after "Remove Devspaces from This Docker Engine…" (its mark in docker-engines.json), the activation asks Docker only for its context', async () => {
+    await activateWithDocker(
+      (storage) => {
+        fs.writeFileSync(path.join(storage, 'registry.json'), '{"version":1,"devspaces":[]}');
+        fs.writeFileSync(path.join(storage, 'docker-engines.json'), '{"engines":[{"host":"","removedAt":1760000000000}]}');
+      },
+      async (_storage, docker, log) => {
+        await waitFor(() => log().includes('No Docker work in the background at the start: Devspaces was removed from the local Docker.'), 'the log of the mark');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        // No `docker info`: no preparation of the helper image and no reconcile of the registry.
+        expect(spawned.filter(([command, sub]) => !(command === docker && sub === 'context'))).toEqual([]);
+      },
+    );
+  }, 20_000);
 });
 
 describe('package.json without the walkthrough', () => {

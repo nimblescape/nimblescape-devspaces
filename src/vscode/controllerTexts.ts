@@ -37,11 +37,57 @@ export const ControllerTexts = {
     'The container devspaces-monitor updates the images of your devspaces, the VS Code Server and your extensions, by default once a day. ' +
     'If you keep it running, it also runs while VS Code is closed, and Docker starts it again after a restart. ' +
     'If it stops when idle, it ends 5 minutes after the last devspace stops, and the updates run only while a devspace runs. ' +
-    'Your answer applies to all Docker engines. You can change it with the setting "Devspaces: Stop Monitor When Idle".',
+    'Your answer applies to all Docker engines. You can change it with the setting "Devspaces: Stop Monitor When Idle". ' +
+    'The command "Devspaces: Remove Devspaces from This Docker Engine…" removes the container.',
   keepMonitorRunning: 'Keep Running',
   stopMonitorWhenIdle: 'Stop When Idle',
   /** The answer to the question about the Monitor could not be stored (the log names the cause). */
   monitorAnswerNotSaved: 'Your answer about the background container could not be saved. Details are in the log.',
+  // "Remove Devspaces from This Docker Engine…" (`engine`: describeDockerHost).
+  removeLooking: (engine: string) => `Looking for Devspaces on ${engine}…`,
+  removeEngineNotAnswering: (engine: string) => `Devspaces cannot reach ${engine}. Nothing was removed. Start Docker there, then try again.`,
+  removeListFailed: (engine: string) => `Devspaces could not list what it has on ${engine}. Nothing was removed. Details are in the log.`,
+  removeCloseWindowsFirst: (engine: string, repositories: string) =>
+    `Close the windows of your devspaces on ${engine} first: ${repositories}. Nothing was removed.`,
+  /** `operation`: the operation that runs, for example Rebuild. */
+  removeWhileOperation: (operation: string, repository: string) =>
+    `${operation} of ${repository} is still running. Try again after it ends. Nothing was removed.`,
+  /** An operation of this window while Devspaces is being removed from an engine. */
+  removalRunning: (engine: string) => `Devspaces is being removed from ${engine}. Try again after that.`,
+  removeNothingFound: (engine: string) => `Devspaces has nothing on ${engine} to remove.`,
+  removeQuestion: (engine: string) => `Remove Devspaces from ${engine}?`,
+  removeDetail:
+    'This removes the container devspaces-monitor, the helper containers and helper images of Devspaces, and the volumes devspaces-monitor, devspaces-worker-cache and devspaces-vscode. ' +
+    'Your settings and the files on this computer stay. The next Start on this engine creates them again.',
+  /** The engine has devspaces that this computer does not know (EngineInventory.unknownDevspaces). */
+  removeUnknownDevspaces:
+    'This engine also has devspaces that this computer does not know, for example from other computers. They stay, but operations that run for them now can fail.',
+  /** The engine has a Monitor that another computer keeps running, and no devspace that this computer does not know. */
+  removeOtherComputer: 'Another computer also uses Devspaces on this engine. Its operations that run now can fail.',
+  removeOtherAccounts: (repositories: string) => `The devspaces of other GitHub accounts stay: ${repositories}.`,
+  removeSignedOut: 'Your devspaces on this engine stay. To delete them too, sign in with GitHub first.',
+  remove: 'Remove',
+  removeDevspacesQuestion: (count: number, engine: string) =>
+    `Also delete your ${count === 1 ? 'devspace' : `${count} devspaces`} on ${engine}?`,
+  /** `changes`: the recorded changes of the devspaces (recordedChanges), or "none". */
+  removeDevspacesDetail: (changes: string) =>
+    'Each one is deleted with its container and all its volumes, also the clone of the repository. Changes that you did not push are lost. ' +
+    `Recorded changes: ${changes}. If you keep the devspaces, the volume devspaces-vscode stays while they use it.`,
+  /** In the recorded changes: a devspace without a recorded Git state. */
+  changesNotRecorded: 'not recorded',
+  noChanges: 'none',
+  deleteDevspacesToo: 'Delete Devspaces Too',
+  keepDevspaces: 'Keep Devspaces',
+  removing: (engine: string) => `Removing Devspaces from ${engine}…`,
+  /** The progress detail: `item` is, for example, "the container devspaces-monitor". */
+  removingItem: (item: string) => `Removing ${item}.`,
+  removedFromEngine: (engine: string) => `Devspaces was removed from ${engine}.`,
+  /** After removedFromEngine, when devspaces stay on the engine. */
+  vscodeVolumeKept: 'The volume devspaces-vscode stays because devspaces still use it.',
+  removalLeftItems: (count: number, engine: string) =>
+    `${count} ${count === 1 ? 'item' : 'items'} of Devspaces could not be removed from ${engine}. The log names each one and the command to remove it.`,
+  removalEnded: (engine: string) =>
+    `The removal from ${engine} stopped before the end. The log names the commands that remove the rest.`,
   // On every engine; for the local Docker (host '') the Monitor there is named.
   closeAndKeepRunningUnreachable: (host: string, minutes: number) =>
     `${host === '' ? 'The Monitor of the local Docker' : `The Docker host ${host}`} cannot be reached. The container would stop after ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} without contact. The window stays open.`,

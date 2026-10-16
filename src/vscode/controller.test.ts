@@ -23,6 +23,7 @@ import { OP_TOKEN_REMOVE } from '../core/helperChannel/protocol';
 import type { OpenOptions, OpenResult, OperationOptions, RepositoryTarget } from '../core/pipeline/operationBase';
 import { PipelineTexts } from '../core/pipeline/operationBase';
 import { removeTokenThroughWorker } from '../core/pipeline/devspaceOperations';
+import { DockerEngineRecords } from '../core/storage/dockerEngineRecords';
 import { StoragePaths } from '../core/storage/paths';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { SessionFiles } from '../core/storage/sessionFiles';
@@ -256,6 +257,8 @@ interface Harness {
   listOpenMode: { value: ListOpenMode };
   /** The question about the Monitor of an engine (MonitorQuestion); by default the engine has its answer. */
   monitorQuestion: { askIfNeeded: Mock<(host: string) => Promise<string>> };
+  /** docker-engines.json of the storage folder of the test (the removal mark). */
+  engineRecords: DockerEngineRecords;
 }
 
 function createHarness(
@@ -271,6 +274,8 @@ function createHarness(
     sessionMonitor?: ControllerDeps['sessionMonitor'];
     /** The pause between the checks of the container (default 0). */
     readyPollMs?: number;
+    /** "Remove Devspaces from This Docker Engine…". Default: none (the command does nothing). */
+    engineRemoval?: ControllerDeps['engineRemoval'];
   } = {},
 ): Harness {
   const monitorQuestion = { askIfNeeded: vi.fn(async (_host: string): Promise<string> => 'notNeeded') };
@@ -280,6 +285,7 @@ function createHarness(
   const paths = new StoragePaths(root);
   paths.ensureDirectoriesSync();
   const registry = new DevspaceRegistry(paths, clock);
+  const engineRecords = new DockerEngineRecords(paths.dockerEngines);
   const sessionFiles = new SessionFiles(paths, clock);
   const disconnectRequests = new DisconnectRequests(root);
   const alive = new Set<number>([process.pid]);
@@ -444,6 +450,8 @@ function createHarness(
     remoteDocker: options.remoteDocker,
     sessionMonitor: options.sessionMonitor,
     monitorQuestion,
+    engineRecords,
+    engineRemoval: options.engineRemoval,
     listOpenMode: () => listOpenMode.value,
     clock,
     isAlive: (pid: number) => alive.has(pid),
@@ -499,6 +507,7 @@ function createHarness(
     clock,
     listOpenMode,
     monitorQuestion,
+    engineRecords,
   };
 }
 
@@ -631,11 +640,12 @@ describe('Controller commands', () => {
     };
     const declared = manifest.contributes.commands.map((command) => command.command).sort();
     expect([...h.commands.keys()].sort()).toEqual(declared);
-    // 36 commands, among them hidden ones: Show Docker Setup (the action Install Docker… of an error: it looks for the
+    // 37 commands, among them hidden ones: Show Docker Setup (the action Install Docker… of an error: it looks for the
     // CLI, then shows the view), the command of a repository row (a double-click runs Start), the link Show details of
     // a progress notification (which also closes it), and the choice of the Docker host (the command of the first row
-    // of the view).
-    expect(declared).toHaveLength(36);
+    // of the view). The last one added: "Remove Devspaces from This Docker Engine…".
+    expect(declared).toHaveLength(37);
+    expect(declared).toContain(Commands.removeFromDockerEngine);
   });
 
   it('uses the settings and the context keys of package.json', () => {
@@ -2730,6 +2740,324 @@ describe('the question about the Monitor of the engine', () => {
     expect(h.service.stop).toHaveBeenCalled();
     expect(h.service.deleteInWorker).toHaveBeenCalledWith(ENV_ID, expect.anything());
     expect(asked()).toEqual([]);
+  });
+});
+
+/** The Docker engine that "Remove Devspaces from This Docker Engine…" sees through the Docker CLI of the extension. */
+interface RemovalEngine {
+  containers: Array<{ id: string; name: string; labels: string }>;
+  /** The shared volumes that exist. */
+  volumes: string[];
+  images: Array<{ id: string; tags: string[]; createdAt: string }>;
+  /** Volumes whose removal Docker refuses, as in use. */
+  inUse: string[];
+  /** The containers and volumes of devspaces (the label nimblescape.devspaces.id with its ID). */
+  devspaceVolumes: Array<{ name: string; id: string }>;
+}
+
+function removalFake(options: { answers?: boolean; engine?: Partial<RemovalEngine> } = {}) {
+  const engine: RemovalEngine = {
+    containers: [
+      { id: 'm1', name: 'devspaces-monitor', labels: 'nimblescape.devspaces.monitor=0123456789ab' },
+      { id: 'w1', name: 'devspaces-api-worker1', labels: 'nimblescape.devspaces.worker-run=true' },
+    ],
+    volumes: ['devspaces-monitor', 'devspaces-worker-cache', 'devspaces-vscode'],
+    images: [{ id: 'sha256:1', tags: ['devspaces-monitor:0123456789ab', 'devspaces-worker:0123456789ab'], createdAt: 'x' }],
+    inUse: [],
+    devspaceVolumes: [],
+    ...options.engine,
+  };
+  /** What happened, in order: the Docker calls that change something, the end of the worker, and the deletes. */
+  const order: string[] = [];
+  const result = (stdout: string, exitCode = 0, stderr = '') => ({ exitCode, stdout, stderr, timedOut: false });
+  const lines = (values: unknown[]) => values.map((value) => `${JSON.stringify(value)}\n`).join('');
+  const run = vi.fn(async (args: readonly string[]) => {
+    const filter = args[args.indexOf('--filter') + 1] ?? '';
+    if (args[0] === 'ps') {
+      const label = filter.replace(/^label=/, '');
+      return result(lines(engine.containers.filter((c) => c.labels.split(',').some((pair) => pair.split('=')[0] === label)).map((c) => ({ ID: c.id, Names: c.name, Labels: c.labels }))));
+    }
+    if (args[0] === 'volume' && args[1] === 'ls') {
+      if (filter.startsWith('label=')) return result(lines(engine.devspaceVolumes.map((v) => ({ Name: v.name, Labels: `nimblescape.devspaces.id=${v.id}` }))));
+      return result(lines(engine.volumes.map((name) => ({ Name: name, Labels: '' }))));
+    }
+    order.push(`docker ${args.join(' ')}`);
+    if (args[0] === 'rm') {
+      engine.containers = engine.containers.filter((c) => c.id !== args[2]);
+      return result('');
+    }
+    if (args[0] === 'image' && args[1] === 'rm') {
+      for (const image of engine.images) image.tags = image.tags.filter((tag) => tag !== args[2]);
+      engine.images = engine.images.filter((image) => image.tags.length > 0 && image.id !== args[2]);
+      return result('');
+    }
+    if (args[0] === 'volume' && args[1] === 'rm') {
+      if (engine.inUse.includes(args[2])) return result('', 1, `Error response from daemon: remove ${args[2]}: volume is in use - [d1]`);
+      if (!engine.volumes.includes(args[2])) return result('', 1, `Error response from daemon: get ${args[2]}: no such volume`);
+      engine.volumes = engine.volumes.filter((name) => name !== args[2]);
+      return result('');
+    }
+    return result('', 1, `unexpected call: docker ${args.join(' ')}`);
+  });
+  const deps = {
+    engineAnswers: vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => options.answers ?? true),
+    docker: { run, listImagesByLabel: vi.fn(async () => engine.images.map((image) => ({ ...image, tags: [...image.tags] }))) },
+    closeWorker: vi.fn((target: DockerTarget) => void order.push(`close the worker on ${target.host || 'the local Docker'}`)),
+    computerId: () => 'c'.repeat(32),
+  };
+  return { engine, order, deps };
+}
+
+describe('Remove Devspaces from This Docker Engine…', () => {
+  const BUILD_BOX = dockerTargetOf('ssh://build-box', 'devspaces-build-box');
+  /** A harness on the engine build-box with the removal `fake`. */
+  function onBuildBox(fake: ReturnType<typeof removalFake>, target: DockerTarget = BUILD_BOX): void {
+    recreateHarness({
+      dockerTargets: {
+        resolve: async () => target,
+        current: async () => operationDockerTarget() ?? target,
+        withOperation: <T,>(fn: () => Promise<T>) => runWithDockerTarget(target, fn),
+      } as unknown as ControllerDeps['dockerTargets'],
+      engineRemoval: fake.deps as unknown as ControllerDeps['engineRemoval'],
+    });
+    h.service.deleteInWorker.mockImplementation(async (id: string) => {
+      fake.order.push(`delete ${id}`);
+      await h.registry.remove(id);
+    });
+  }
+  /** The devspace of the signed-in account on build-box, with recorded changes and an additional volume. */
+  const ownRemote = (): Devspace =>
+    devspace({
+      dockerHost: 'build-box',
+      additionalVolumes: ['acme-api-data'],
+      gitSummary: { branch: 'main', uncommittedFiles: 2, unpushedCommits: 1, stashes: 0, recordedAt: iso(NOW - 3_600_000) },
+    });
+  const otherAccountRemote = (): Devspace =>
+    devspace({ id: OTHER_ENV_ID, repository: 'acme/web', containerName: 'devspaces-acme-web-7c1d2e3f', volumeName: 'devspaces-acme-web-7c1d2e3f', dockerHost: 'build-box', owner: OTHER_ACCOUNT });
+  const modals = () => fakeVscode.window.showWarningMessage.mock.calls.filter((call: unknown[]) => (call[1] as { modal?: boolean } | undefined)?.modal === true);
+  const changing = (fake: ReturnType<typeof removalFake>) => fake.order.filter((step) => !step.startsWith('docker ps') && !step.startsWith('docker volume ls'));
+
+  it('asks twice, then deletes the devspaces of the account, ends the worker, and removes the Monitor, the helpers and the volumes', async () => {
+    const fake = removalFake({ engine: { inUse: ['devspaces-vscode'] } });
+    onBuildBox(fake);
+    await h.registry.add(ownRemote());
+    await h.registry.add(otherAccountRemote());
+    // A devspace of the local Docker is not on this engine.
+    await h.registry.add(devspace({ id: '7c1d2e3f-0000-4000-8000-000000000003', repository: 'acme/local', containerName: 'devspaces-acme-local-1', volumeName: 'devspaces-acme-local-1' }));
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove).mockResolvedValueOnce(ControllerTexts.deleteDevspacesToo);
+    await run('removeFromDockerEngine');
+    expect(modals()).toEqual([
+      [
+        'Remove Devspaces from build-box?',
+        { modal: true, detail: `${ControllerTexts.removeDetail} The devspaces of other GitHub accounts stay: acme/web.` },
+        'Remove',
+      ],
+      [
+        'Also delete your devspace on build-box?',
+        {
+          modal: true,
+          detail:
+            'Each one is deleted with its container and all its volumes, also the clone of the repository. Changes that you did not push are lost. ' +
+            'Recorded changes: acme/api (2 uncommitted · 1 unpushed). If you keep the devspaces, the volume devspaces-vscode stays while they use it.',
+        },
+        'Delete Devspaces Too',
+        'Keep Devspaces',
+      ],
+    ]);
+    // Each with all its volumes; never the devspace of the other account, never the one of another engine.
+    expect(h.service.deleteInWorker).toHaveBeenCalledTimes(1);
+    expect(h.service.deleteInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ additionalVolumesToRemove: ['acme-api-data'] }));
+    expect(changing(fake)).toEqual([
+      `delete ${ENV_ID}`,
+      'close the worker on build-box',
+      'docker rm -f m1',
+      'docker rm -f w1',
+      'docker image rm devspaces-monitor:0123456789ab',
+      'docker image rm devspaces-worker:0123456789ab',
+      'docker volume rm devspaces-monitor',
+      'docker volume rm devspaces-worker-cache',
+      'docker volume rm devspaces-vscode',
+    ]);
+    expect(fake.deps.closeWorker).toHaveBeenCalledWith(BUILD_BOX);
+    // Docker was never started: only asked whether it answers, on this engine.
+    expect(fake.deps.engineAnswers).toHaveBeenCalledWith(BUILD_BOX, expect.any(AbortSignal));
+    expect(await h.engineRecords.removed('build-box')).toBe(true);
+    expect(await h.engineRecords.removed('')).toBe(false);
+    // The other account's devspace still uses the store of the VS Code Server.
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(
+      'Devspaces was removed from build-box. The volume devspaces-vscode stays because devspaces still use it.',
+    );
+    expect(h.progressTitles.some((title) => title.startsWith('Removing Devspaces from build-box…'))).toBe(true);
+    expect(h.progressTitles.some((title) => title.includes('Removing the container devspaces-monitor.'))).toBe(true);
+  });
+
+  it('Keep Devspaces deletes none; Cancel of either question removes nothing and sets no mark', async () => {
+    const kept = removalFake({ engine: { inUse: ['devspaces-vscode'] } });
+    onBuildBox(kept);
+    await h.registry.add(ownRemote());
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove).mockResolvedValueOnce(ControllerTexts.keepDevspaces);
+    await run('removeFromDockerEngine');
+    expect(h.service.deleteInWorker).not.toHaveBeenCalled();
+    expect(changing(kept)[0]).toBe('close the worker on build-box');
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(
+      'Devspaces was removed from build-box. The volume devspaces-vscode stays because devspaces still use it.',
+    );
+
+    for (const answers of [[undefined], [ControllerTexts.remove, undefined]]) {
+      const cancelled = removalFake();
+      onBuildBox(cancelled);
+      await h.registry.add(ownRemote());
+      for (const answer of answers) fakeVscode.window.showWarningMessage.mockResolvedValueOnce(answer);
+      await run('removeFromDockerEngine');
+      expect(modals()).toHaveLength(answers.length);
+      expect(changing(cancelled)).toEqual([]);
+      expect(h.service.deleteInWorker).not.toHaveBeenCalled();
+      expect(await h.engineRecords.removed('build-box')).toBe(false);
+    }
+  });
+
+  it('warns on a shared engine (devspaces that this computer does not know), and without a sign-in keeps the devspaces', async () => {
+    const fake = removalFake({ engine: { devspaceVolumes: [{ name: 'devspaces-other-1', id: '99999999-0000-4000-8000-000000000009' }] } });
+    onBuildBox(fake);
+    await h.registry.add(ownRemote());
+    h.auth.getAccount.mockResolvedValue(undefined);
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove);
+    await run('removeFromDockerEngine');
+    expect(modals()).toEqual([
+      [
+        'Remove Devspaces from build-box?',
+        { modal: true, detail: `${ControllerTexts.removeDetail} ${ControllerTexts.removeUnknownDevspaces} ${ControllerTexts.removeSignedOut}` },
+        'Remove',
+      ],
+    ]);
+    expect(h.service.deleteInWorker).not.toHaveBeenCalled();
+    expect(changing(fake)).toContain('docker rm -f m1');
+  });
+
+  it('refuses while a window is connected to a devspace on the engine, or an operation runs, and asks Docker nothing then', async () => {
+    const fake = removalFake();
+    onBuildBox(fake);
+    const env = ownRemote();
+    await h.registry.add(env);
+    otherWindowConnected(ENV_ID);
+    await run('removeFromDockerEngine');
+    expect(warningMessages()).toEqual(['Close the windows of your devspaces on build-box first: acme/api. Nothing was removed.']);
+    h.coordinator.otherActiveWindows.mockResolvedValue([]);
+
+    await otherWindowBusy(env);
+    await run('removeFromDockerEngine');
+    expect(warningMessages().at(-1)).toBe('Update of acme/api is still running. Try again after it ends. Nothing was removed.');
+    await h.registry.updateDevspace(ENV_ID, (entry) => {
+      delete entry.busy;
+    });
+
+    // An operation of this window: the check of a Delete that waits.
+    const check = deferred<DeleteDecision>();
+    h.service.deleteCheckInWorker.mockReturnValueOnce(check.promise);
+    const deleting = run('delete', row('acme/api', env));
+    await settle(() => h.service.deleteCheckInWorker.mock.calls.length === 1, 'the check of the Delete');
+    await run('removeFromDockerEngine');
+    expect(warningMessages().at(-1)).toBe('Delete of acme/api is still running. Try again after it ends. Nothing was removed.');
+    check.resolve({ decision: 'cancel' });
+    await deleting;
+    expect(fake.deps.engineAnswers).not.toHaveBeenCalled();
+    expect(fake.order).toEqual([]);
+    expect(await h.engineRecords.removed('build-box')).toBe(false);
+  });
+
+  it('refuses an engine that does not answer and an unsupported endpoint; with nothing to remove it only sets the mark', async () => {
+    const silent = removalFake({ answers: false });
+    onBuildBox(silent);
+    await run('removeFromDockerEngine');
+    expect(warningMessages()).toEqual(['Devspaces cannot reach build-box. Nothing was removed. Start Docker there, then try again.']);
+    expect(silent.order).toEqual([]);
+    expect(await h.engineRecords.removed('build-box')).toBe(false);
+
+    const tcp = removalFake();
+    onBuildBox(tcp, dockerTargetOf('tcp://build-box:2375', 'tcp-box'));
+    await run('removeFromDockerEngine');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(Messages.dockerEndpointUnsupported('tcp://build-box:2375'), Actions.showDetails);
+    expect(tcp.deps.engineAnswers).not.toHaveBeenCalled();
+
+    const empty = removalFake({ engine: { containers: [], volumes: [], images: [] } });
+    onBuildBox(empty);
+    await run('removeFromDockerEngine');
+    expect(modals()).toEqual([]);
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('Devspaces has nothing on build-box to remove.');
+    expect(empty.order).toEqual([]);
+    expect(await h.engineRecords.removed('build-box')).toBe(true);
+  });
+
+  it('warns with Show details when items are left, or a devspace could not be deleted', async () => {
+    const fake = removalFake({ engine: { inUse: ['devspaces-worker-cache'] } });
+    onBuildBox(fake);
+    await h.registry.add(ownRemote());
+    h.service.deleteInWorker.mockRejectedValueOnce(new UserFacingError('helperFailed', 'The worker could not be reached.'));
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove).mockResolvedValueOnce(ControllerTexts.deleteDevspacesToo);
+    await run('removeFromDockerEngine');
+    // The cache of the worker in use, and the devspace: the store of the VS Code Server stays for that devspace.
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenLastCalledWith(
+      '2 items of Devspaces could not be removed from build-box. The log names each one and the command to remove it.',
+      Actions.showDetails,
+    );
+    const warnings = h.logger.warn.mock.calls.map((call) => String(call[0]));
+    expect(warnings.some((line) => line.startsWith('The devspace of acme/api could not be deleted: The worker could not be reached.'))).toBe(true);
+    expect(warnings).toContain(
+      'The volume devspaces-worker-cache is in use and was not removed (Error response from daemon: remove devspaces-worker-cache: volume is in use - [d1]). Remove it later with: docker --context devspaces-build-box volume rm devspaces-worker-cache',
+    );
+  });
+
+  it('a Start of the user clears the mark of its engine; while the removal runs, the operations of the window are refused', async () => {
+    const fake = removalFake();
+    onBuildBox(fake);
+    const env = ownRemote();
+    await h.registry.add(env);
+    await h.engineRecords.setRemoved('build-box', NOW - 1000);
+    await run('start', row('acme/api', env));
+    expect(await h.engineRecords.removed('build-box')).toBe(false);
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
+
+    // When the worker of the removal has ended, the user presses Start and Stop: both are refused, and the mark stays.
+    // The removal goes on once both refusals were shown.
+    const refusals = () => fakeVscode.window.showInformationMessage.mock.calls.filter((call: unknown[]) => call[0] === ControllerTexts.removalRunning('build-box')).length;
+    let pressed: Promise<unknown> = Promise.resolve();
+    fake.deps.closeWorker.mockImplementationOnce(() => {
+      pressed = Promise.all([run('start', row('acme/api', env)), run('stop', row('acme/api', env))]);
+    });
+    const removeContainer = fake.deps.docker.run.getMockImplementation()!;
+    fake.deps.docker.run.mockImplementation(async (args: readonly string[]) => {
+      if (args[0] === 'rm') await settle(() => refusals() === 2, 'the refusals');
+      return removeContainer(args);
+    });
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove).mockResolvedValueOnce(ControllerTexts.keepDevspaces);
+    await run('removeFromDockerEngine');
+    await pressed;
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
+    expect(h.service.stop).not.toHaveBeenCalled();
+    expect(await h.engineRecords.removed('build-box')).toBe(true);
+    expect(h.monitorQuestion.askIfNeeded).toHaveBeenCalledTimes(1);
+    expect(h.logger.info).toHaveBeenCalledWith('Start did not run: Devspaces is being removed from build-box.');
+    // After the removal, a Start runs again.
+    await run('start', row('acme/api', env));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(2);
+    expect(await h.engineRecords.removed('build-box')).toBe(false);
+  });
+
+  it('is a command of package.json, in the Command Palette and in the "…" menu of the view', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      contributes: { commands: Array<{ command: string; title: string; category: string }>; menus: Record<string, Array<{ command: string; when?: string; group?: string }>> };
+    };
+    expect(manifest.contributes.commands.find((entry) => entry.command === Commands.removeFromDockerEngine)).toEqual({
+      command: 'devspaces.removeFromDockerEngine',
+      title: 'Remove Devspaces from This Docker Engine…',
+      category: 'Devspaces',
+    });
+    expect(manifest.contributes.menus.commandPalette.some((entry) => entry.command === Commands.removeFromDockerEngine)).toBe(false);
+    expect(manifest.contributes.menus['view/title'].find((entry) => entry.command === Commands.removeFromDockerEngine)).toEqual({
+      command: Commands.removeFromDockerEngine,
+      when: 'view == devspaces.repositories',
+      group: '2_maintenance@2',
+    });
   });
 });
 

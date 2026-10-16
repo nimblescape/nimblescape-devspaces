@@ -7,8 +7,10 @@
 // rebuild and the cleanup, in the extension's preparation of the worker for an operation `open` and in the background
 // prebuild), the start of the worker (`docker run -i`), the Docker contexts, the test of a new remote host, and the
 // attach diagnostics (what the Dev Containers extension sees through the local CLI). Every other Docker action runs in
-// the worker. A call that does not only read is logged with its
-// command (directCommandName), never its arguments. Output is read as JSON, never as a table. No `vscode`.
+// the worker, except "Remove Devspaces from This Docker Engine…", which ends the worker and removes what Devspaces
+// keeps on the engine with `run` of this CLI (engineRemoval.ts; it adds no member here). A call that does not only read
+// is logged with its command (directCommandName), never its arguments. Output is read as JSON, never as a table. No
+// `vscode`.
 import * as crypto from 'crypto';
 import { CommandError, errorMessage, UserFacingError } from '../errors';
 import { Messages } from '../messages';

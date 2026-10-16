@@ -65,9 +65,59 @@ describe('DockerEngineRecords: the answer to the question about the Monitor', ()
     ]);
   });
 
-  it('a folder in place of the file counts as no answer, and a write there fails', async () => {
+  it('a folder in place of the file counts as no answer and no mark, and a write there fails', async () => {
     fs.mkdirSync(records.file);
     expect(await records.monitorAnswered('')).toBe(false);
+    expect(await records.removed('')).toBe(false);
     await expect(records.recordMonitorAnswer('', NOW)).rejects.toThrow();
+    await expect(records.setRemoved('', NOW)).rejects.toThrow();
+  });
+});
+
+describe('DockerEngineRecords: the removal mark ("Remove Devspaces from This Docker Engine…")', () => {
+  it('sets the mark per engine, forgets the answer of that engine with it, and clears it again', async () => {
+    await records.recordMonitorAnswer('', NOW);
+    await records.recordMonitorAnswer('build-box', NOW);
+    expect(await records.removed('build-box')).toBe(false);
+    await records.setRemoved('build-box', NOW + 10);
+    expect(await records.removed('build-box')).toBe(true);
+    // The next user-started flow on that engine asks about its Monitor again.
+    expect(await records.monitorAnswered('build-box')).toBe(false);
+    // The other engine keeps its answer and has no mark.
+    expect(await records.removed('')).toBe(false);
+    expect(await records.monitorAnswered('')).toBe(true);
+    expect(await records.read()).toEqual([
+      { host: '', monitorAnsweredAt: NOW },
+      { host: 'build-box', removedAt: NOW + 10 },
+    ]);
+    // Cleared, the engine has nothing left to record.
+    await records.setRemoved('build-box', undefined);
+    expect(await records.removed('build-box')).toBe(false);
+    expect(await records.read()).toEqual([{ host: '', monitorAnsweredAt: NOW }]);
+  });
+
+  it('clearing keeps an answer given after the mark; a mark of an engine without a record is written', async () => {
+    await records.setRemoved('', NOW);
+    await records.recordMonitorAnswer('', NOW + 1);
+    expect(await records.read()).toEqual([{ host: '', removedAt: NOW, monitorAnsweredAt: NOW + 1 }]);
+    await records.setRemoved('', undefined);
+    expect(await records.read()).toEqual([{ host: '', monitorAnsweredAt: NOW + 1 }]);
+    // Clearing an engine without a mark changes nothing.
+    await records.setRemoved('other', undefined);
+    expect(await records.read()).toEqual([{ host: '', monitorAnsweredAt: NOW + 1 }]);
+  });
+
+  it('an invalid mark counts as none, next to a valid answer', async () => {
+    fs.writeFileSync(
+      records.file,
+      JSON.stringify({ engines: [{ host: 'a', removedAt: -5, monitorAnsweredAt: NOW }, { host: 'b', removedAt: 1.5 }, { host: 'c', removedAt: NOW }] }),
+    );
+    expect(await records.read()).toEqual([
+      { host: 'a', monitorAnsweredAt: NOW },
+      { host: 'c', removedAt: NOW },
+    ]);
+    expect(await records.removed('a')).toBe(false);
+    expect(await records.removed('b')).toBe(false);
+    expect(await records.removed('c')).toBe(true);
   });
 });

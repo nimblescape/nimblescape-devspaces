@@ -315,6 +315,8 @@ interface Entry {
   failedAt?: number;
   /** Why the last open failed (for the refusal of a call). */
   failure?: string;
+  /** Closed by `close` while it was being opened: the channel of that open is closed at once. */
+  closed?: boolean;
 }
 
 export interface HelperChannelsOptions {
@@ -423,7 +425,7 @@ export class HelperChannels {
     current.opening = this.options.open(target).then(
       (channel) => {
         current.opening = undefined;
-        if (this.disposed) {
+        if (this.disposed || current.closed === true) {
           channel.close();
           return undefined;
         }
@@ -604,6 +606,24 @@ export class HelperChannels {
         channel.close();
       }
     }
+  }
+
+  /**
+   * Closes the channel to the engine of `target` ("Remove Devspaces from This Docker Engine…" removes the containers of
+   * the workers next): its input ends, so the worker ends what still runs and exits (HelperChannel.close). A channel that
+   * is being opened is closed once it is open. The next call that needs the worker opens a new one.
+   */
+  close(target: DockerTarget): void {
+    const key = keyOf(target);
+    const entry = this.entries.get(key);
+    if (entry === undefined) return;
+    this.entries.delete(key);
+    entry.closed = true;
+    const channel = entry.channel;
+    entry.channel = undefined;
+    if (channel === undefined) return;
+    this.options.logger.info(`The helper channel to ${engineName(target)} was closed.`);
+    channel.close();
   }
 
   /**

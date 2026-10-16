@@ -10,19 +10,21 @@ import * as vscode from 'vscode';
 import { isBlockingBusyMark } from '../core/busy';
 import { attachDiagnostics } from '../core/docker/attachDiagnostics';
 import { LOCAL_DOCKER_TARGET, describeDockerHost, dockerHostOf, devspacesOfHost, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
-import { ensureRemoteContext } from '../core/docker/remoteDocker';
+import { dockerEndpointUnsupported, ensureRemoteContext } from '../core/docker/remoteDocker';
+import { engineInventory, inventoryIsEmpty, removeEngineInfrastructure, type EngineInventory, type RemovalResult } from '../core/docker/engineRemoval';
 import { operationDockerTarget, outsideOperation, type DockerTargets } from '../core/docker/dockerTargets';
 import type { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import type { DiscoveryService } from '../core/discovery/discoveryService';
 import { UserFacingError, errorMessage } from '../core/errors';
-import { Actions, Messages } from '../core/messages';
+import { Actions, Messages, formatChanges, listSome } from '../core/messages';
 import type { WindowStateValue } from '../core/helperChannel/protocol';
 import { HOST_ACCESS_CHECKS_OFF_SETTING, hostAccessChecks, withHostAccessChecks, type HostAccessChecks } from '../core/policy/hostAccessChecks';
-import { repositoryFolder, splitRepository } from '../core/names';
+import { VSCODE_STORE_VOLUME, repositoryFolder, splitRepository } from '../core/names';
 import { availableDevspaces, isAvailableTo } from '../core/ownership';
 import { isoTime, systemClock, type Clock, type ProgressReporter } from '../core/ports';
 import type { DevspaceOperations } from '../core/pipeline/devspaceOperations';
 import { PipelineTexts, WINDOW_STATE_FLOW_TIMEOUT_MS, type OpenResult } from '../core/pipeline/operationBase';
+import type { DockerEngineRecords } from '../core/storage/dockerEngineRecords';
 import type { DevspaceRegistry } from '../core/storage/registry';
 import type { SessionFiles } from '../core/storage/sessionFiles';
 import type {
@@ -53,7 +55,7 @@ import {
 } from './disconnectRequests';
 import type { DockerSetup } from './dockerSetup';
 import type { MonitorQuestion } from './monitorQuestion';
-import { showError as presentError } from './errors';
+import { isCancellation, showError as presentError } from './errors';
 import type { OutputChannelLogger } from './logger';
 import { showErrorMessage, showInformationMessage, showWarningMessage } from './notifications';
 import { selectOwners } from './ownerSelector';
@@ -173,6 +175,13 @@ export interface ControllerDeps {
    * themselves never ask. Without it, nothing is asked.
    */
   monitorQuestion?: Pick<MonitorQuestion, 'askIfNeeded'>;
+  /**
+   * docker-engines.json: the removal mark of an engine ("Remove Devspaces from This Docker Engine…"), which a Start, a
+   * Rebuild and "Update All Images Now" of the user clear on their engine (beforeUserFlow).
+   */
+  engineRecords?: Pick<DockerEngineRecords, 'removed' | 'setRemoved'>;
+  /** "Remove Devspaces from This Docker Engine…" (removeFromDockerEngine). Without it, the command does nothing. */
+  engineRemoval?: EngineRemovalDeps;
   /** The VS Code setting `workbench.list.openMode` (double-click on a row, rowActivation.ts). Default: `readListOpenMode`. */
   listOpenMode?: () => ListOpenMode;
   /** True in an Extension Development Host (a debug run of this extension): the reopen rule is relaxed. */
@@ -195,6 +204,24 @@ export interface ControllerDeps {
     readyPollMs?: number;
   };
 }
+
+/** What "Remove Devspaces from This Docker Engine…" needs besides the operations of the devspaces. */
+export interface EngineRemovalDeps {
+  /**
+   * Whether the engine of `target` answers: Docker is never started for it, and a remote host gets the SSH check
+   * without questions first (dockerEngineAnswers). Rejects only with an AbortError.
+   */
+  engineAnswers(target: DockerTarget, signal: AbortSignal): Promise<boolean>;
+  /** The Docker CLI of the extension, for the inventory and the removal (engineRemoval.ts). */
+  docker: Pick<BootstrapDocker, 'run' | 'listImagesByLabel'>;
+  /** Ends the worker of this window on the engine of `target` (HelperChannels.close). */
+  closeWorker(target: DockerTarget): void;
+  /** The ID of this computer (computer.id), which a permanent Monitor of this computer names as its owner. */
+  computerId(): string;
+}
+
+/** The names of the operations of a busy mark of another window, in the texts of the user. */
+const BUSY_OPERATION_NAMES: Record<BusyOperation, string> = { create: 'Start', update: 'Update', rebuild: 'Rebuild', delete: 'Delete' };
 
 /** The checks of the container before the window connects (readyForWindow). */
 const READY_CHECKS = 5;
@@ -314,6 +341,11 @@ export class Controller implements vscode.Disposable {
   private connectedContext: boolean | undefined;
   /** Tells a double-click on a repository row from a single click (rowActivated). */
   private readonly rowActivations: RowActivationTracker;
+  /**
+   * The engine (describeDockerHost) that "Remove Devspaces from This Docker Engine…" removes Devspaces from now: no
+   * other operation of this window starts meanwhile.
+   */
+  private removingFrom: string | undefined;
 
   constructor(private readonly deps: ControllerDeps) {
     this.clock = deps.clock ?? systemClock;
@@ -354,6 +386,7 @@ export class Controller implements vscode.Disposable {
       switchDevspaceInCurrentWindow: () => this.switchDevspace('currentWindow'),
       refresh: () => this.refresh(),
       updateImagesNow: () => this.updateImagesNow(),
+      removeFromDockerEngine: () => this.removeFromDockerEngine(),
       search: () => this.search(),
       showLog: async () => this.logger.show(),
       signIn: () => this.signIn(),
@@ -954,6 +987,7 @@ export class Controller implements vscode.Disposable {
     const update = this.deps.updateImagesNow;
     if (!update) return;
     await this.ready;
+    if (this.refusedWhileRemoving('Update All Images Now')) return;
     const target = await this.operationTarget();
     const engine = describeDockerHost(target.host);
     // The question about the Monitor of the engine first, which the request makes sure of.
@@ -961,6 +995,235 @@ export class Controller implements vscode.Disposable {
     await runWithProgress({ title: ControllerTexts.requestingImageUpdate(engine), task: (_progress, signal) => update(target, signal) });
     this.logger.info(`The Monitor on ${engine} took the request of "Update All Images Now".`);
     this.inform(ControllerTexts.imagesUpdatingNow(engine));
+  }
+
+  /**
+   * "Remove Devspaces from This Docker Engine…" (the Command Palette and the "…" menu of the view), on the engine of the
+   * current Docker context: after a confirmation, the Monitor, the helper containers and images, and the shared volumes
+   * of Devspaces (engineRemoval.ts, with the Docker CLI of the extension once the worker of this window ended); and,
+   * after a second confirmation, first the devspaces of the signed-in account there (each as Delete does, in the
+   * worker, with all its volumes). Devspaces of other accounts and of other computers stay. Refused while a window of
+   * this computer is connected to a devspace there, or an operation runs; Docker is never started for it. The engine
+   * gets the removal mark before anything is removed (docker-engines.json): until a Start, a Rebuild or "Update All
+   * Images Now" of the user there (beforeUserFlow), this computer does no Docker work there by itself.
+   */
+  async removeFromDockerEngine(): Promise<void> {
+    const removal = this.deps.engineRemoval;
+    if (!removal) return;
+    await this.ready;
+    if (this.refusedWhileRemoving('Remove Devspaces')) return;
+    await this.withDockerTarget(() => this.removeFromDockerEngineNow(removal));
+  }
+
+  private async removeFromDockerEngineNow(removal: EngineRemovalDeps): Promise<void> {
+    const target = await this.operationTarget();
+    // Never an endpoint that is neither local nor SSH (every operation refuses it).
+    if (target.kind === 'unsupported') throw dockerEndpointUnsupported(target.endpoint || target.host);
+    const engine = describeDockerHost(target.host);
+    const known = await this.deps.registry.list();
+    const here = known.filter((devspace) => isOnDockerHost(devspace, target.host));
+    // A window that uses a devspace there would start the Monitor again with its next heartbeat.
+    const connected = await this.connectedDevspaces(here);
+    if (connected.length > 0) {
+      this.logger.info(`Devspaces is not removed from ${engine}: windows are connected to ${connected.join(', ')}.`);
+      this.warn(ControllerTexts.removeCloseWindowsFirst(engine, listSome(connected)));
+      return;
+    }
+    const running = await this.runningOperation(here);
+    if (running !== undefined) {
+      this.logger.info(`Devspaces is not removed from ${engine}: ${running.operation} of ${running.repository} is still running.`);
+      this.warn(ControllerTexts.removeWhileOperation(running.operation, running.repository));
+      return;
+    }
+    let inventory: EngineInventory | undefined;
+    try {
+      inventory = await runWithProgress({
+        title: ControllerTexts.removeLooking(engine),
+        cancellable: true,
+        task: async (_progress, signal) => {
+          if (!(await removal.engineAnswers(target, signal))) return undefined;
+          return engineInventory(removal.docker, { computerId: removal.computerId(), knownDevspaces: new Set(known.map((devspace) => devspace.id)), signal });
+        },
+      });
+    } catch (error) {
+      if (isCancellation(error)) throw error;
+      this.logger.warn(`What Devspaces has on ${engine} could not be listed: ${errorMessage(error)}`);
+      this.warnWithLog(ControllerTexts.removeListFailed(engine));
+      return;
+    }
+    if (inventory === undefined) {
+      this.warn(ControllerTexts.removeEngineNotAnswering(engine));
+      return;
+    }
+    // Only the devspaces of the signed-in account; without a sign-in, none.
+    const account = here.length > 0 ? await this.readAccount() : undefined;
+    const own = account === undefined ? [] : here.filter((devspace) => isAvailableTo(devspace, account));
+    const others = here.filter((devspace) => !own.includes(devspace));
+    if (inventoryIsEmpty(inventory) && own.length === 0) {
+      // Nothing to remove; the mark still keeps the background work of this computer away from the engine.
+      await this.markRemoved(target.host);
+      this.inform(ControllerTexts.removeNothingFound(engine));
+      return;
+    }
+    const detail = [ControllerTexts.removeDetail];
+    if (inventory.unknownDevspaces.length > 0) detail.push(ControllerTexts.removeUnknownDevspaces);
+    else if (inventory.otherComputerMonitor) detail.push(ControllerTexts.removeOtherComputer);
+    if (account === undefined && here.length > 0) detail.push(ControllerTexts.removeSignedOut);
+    else if (others.length > 0) detail.push(ControllerTexts.removeOtherAccounts(listSome(others.map((devspace) => this.shownName(this.devspaceTarget(devspace))))));
+    const confirmed = await showWarningMessage(ControllerTexts.removeQuestion(engine), { modal: true, detail: detail.join(' ') }, ControllerTexts.remove);
+    if (confirmed !== ControllerTexts.remove) return;
+    let deleteOwn = false;
+    if (own.length > 0) {
+      const choice = await showWarningMessage(
+        ControllerTexts.removeDevspacesQuestion(own.length, engine),
+        { modal: true, detail: ControllerTexts.removeDevspacesDetail(this.recordedChanges(own)) },
+        ControllerTexts.deleteDevspacesToo,
+        ControllerTexts.keepDevspaces,
+      );
+      // Cancel removes nothing.
+      if (choice === undefined) return;
+      deleteOwn = choice === ControllerTexts.deleteDevspacesToo;
+    }
+    this.logger.info(`Removing Devspaces from ${engine}${own.length > 0 ? (deleteOwn ? ', with the devspaces of the signed-in account there' : '; the devspaces stay') : ''}.`);
+    await this.markRemoved(target.host);
+    this.removingFrom = engine;
+    let removed: { result: RemovalResult; failedDevspaces: number };
+    try {
+      removed = await runWithProgress({
+        title: ControllerTexts.removing(engine),
+        cancellable: true,
+        task: (progress, signal) => this.removeFromEngine(removal, target, deleteOwn ? own : [], progress, signal),
+      });
+    } finally {
+      this.removingFrom = undefined;
+      if (!this.disposed) this.background(this.deps.sidebar.refreshStates(), 'update the sidebar');
+    }
+    const { result, failedDevspaces } = removed;
+    // The store of the VS Code Server stays while devspaces that stay on the engine use it.
+    const devspacesStay = (!deleteOwn && own.length > 0) || others.length > 0 || inventory.unknownDevspaces.length > 0 || failedDevspaces > 0;
+    const keptStore = (item: RemovalResult['items'][number]): boolean => devspacesStay && item.kind === 'volume' && item.name === VSCODE_STORE_VOLUME && item.outcome === 'inUse';
+    const left = result.items.filter((item) => (item.outcome === 'inUse' || item.outcome === 'failed') && !keptStore(item)).length + failedDevspaces;
+    if (result.ended !== undefined) {
+      this.warnWithLog(ControllerTexts.removalEnded(engine));
+      return;
+    }
+    if (left > 0) {
+      this.warnWithLog(ControllerTexts.removalLeftItems(left, engine));
+      return;
+    }
+    this.logger.info(`Devspaces was removed from ${engine}.`);
+    const message = ControllerTexts.removedFromEngine(engine);
+    this.inform(result.items.some(keptStore) ? `${message} ${ControllerTexts.vscodeVolumeKept}` : message);
+  }
+
+  /**
+   * The removal itself, in the progress of the command: the devspaces `devspaces` one after the other in the worker
+   * (each with all its volumes; a delete is never stopped half-way, Cancel ends the removal before the next one), then
+   * the end of this window's worker on the engine, then what Devspaces keeps there (removeEngineInfrastructure). A
+   * failure of a devspace is logged, and the removal goes on.
+   */
+  private async removeFromEngine(
+    removal: EngineRemovalDeps,
+    target: DockerTarget,
+    devspaces: readonly Devspace[],
+    progress: ProgressReporter,
+    signal: AbortSignal,
+  ): Promise<{ result: RemovalResult; failedDevspaces: number }> {
+    let failedDevspaces = 0;
+    for (const devspace of devspaces) {
+      if (signal.aborted) {
+        this.logger.info('The removal was cancelled before all devspaces were deleted.');
+        return { result: { items: [], ended: 'cancelled' }, failedDevspaces };
+      }
+      const devspaceTarget = this.devspaceTarget(devspace);
+      const name = this.shownName(devspaceTarget);
+      progress.detail(ControllerTexts.deleting(name));
+      try {
+        // The gate of the devspace, as the Delete command; not cancellable (deleteWithProgress).
+        const outcome = await this.gate.run(this.operationKey(devspaceTarget), 'Delete', () =>
+          this.deps.service.deleteInWorker(devspace.id, { progress, additionalVolumesToRemove: devspace.additionalVolumes ?? [] }),
+        );
+        if (!outcome.started) {
+          failedDevspaces++;
+          this.logger.warn(`The devspace of ${name} was not deleted: ${outcome.running} of it is still running. Delete it later with "Devspaces: Delete Devspace".`);
+        }
+      } catch (error) {
+        failedDevspaces++;
+        this.logger.warn(`The devspace of ${name} could not be deleted: ${errorMessage(error)} Delete it later with "Devspaces: Delete Devspace".`);
+      }
+    }
+    if (signal.aborted) return { result: { items: [], ended: 'cancelled' }, failedDevspaces };
+    // The worker of this window holds the volumes of the engine; it ends before its container is removed.
+    removal.closeWorker(target);
+    const result = await removeEngineInfrastructure(removal.docker, {
+      answers: (answerSignal) => removal.engineAnswers(target, answerSignal ?? signal),
+      logger: this.logger,
+      ...(target.kind === 'remote' && target.context !== undefined ? { context: target.context } : {}),
+      onItem: (item) => progress.detail(ControllerTexts.removingItem(item)),
+      signal,
+    });
+    return { result, failedDevspaces };
+  }
+
+  /**
+   * The recorded changes of `devspaces` for the confirmation of their delete: each one with changes (formatChanges),
+   * and each one without a recorded Git state; "none" when no devspace has either.
+   */
+  private recordedChanges(devspaces: readonly Devspace[]): string {
+    const named = devspaces.flatMap((devspace) => {
+      const name = this.shownName(this.devspaceTarget(devspace));
+      if (devspace.gitSummary === undefined) return [`${name} (${ControllerTexts.changesNotRecorded})`];
+      const changes = formatChanges(devspace.gitSummary);
+      return changes === '' ? [] : [`${name} (${changes})`];
+    });
+    return named.length > 0 ? listSome(named) : ControllerTexts.noChanges;
+  }
+
+  /** The names of the devspaces of `devspaces` that a window of this computer is connected to (this one or another). */
+  private async connectedDevspaces(devspaces: readonly Devspace[]): Promise<string[]> {
+    const others = await this.otherActiveWindowsKnown();
+    return devspaces
+      .filter((devspace) => this.isConnectedHere(devspace) || others.some((window) => window.devspaceId === devspace.id))
+      .map((devspace) => this.shownName(this.devspaceTarget(devspace)));
+  }
+
+  /**
+   * An operation that runs: any operation of this window (its gate), or one of another live window on a devspace of
+   * `devspaces` (its busy mark). The name of the operation and of its repository; undefined when none runs.
+   */
+  private async runningOperation(devspaces: readonly Devspace[]): Promise<{ operation: string; repository: string } | undefined> {
+    for (const key of this.gate.keys()) {
+      const label = this.gate.runningFor(key);
+      if (label === undefined) continue;
+      const devspace = devspaces.find((candidate) => this.operationKey(this.devspaceTarget(candidate)).toLowerCase() === key);
+      return { operation: label, repository: devspace !== undefined ? this.shownName(this.devspaceTarget(devspace)) : key.split('#')[0] };
+    }
+    for (const devspace of devspaces) {
+      const mark = await this.otherWindowMark(devspace.id);
+      if (mark !== undefined) return { operation: BUSY_OPERATION_NAMES[mark.operation], repository: this.shownName(this.devspaceTarget(devspace)) };
+    }
+    return undefined;
+  }
+
+  /** Sets the removal mark of the engine `host`. A failure is logged; the removal goes on. */
+  private async markRemoved(host: string): Promise<void> {
+    const records = this.deps.engineRecords;
+    if (records === undefined) return;
+    try {
+      await records.setRemoved(host, this.clock.now());
+      this.logger.info(`This computer does no Docker work on ${describeDockerHost(host)} by itself until a Start, a Rebuild or "Update All Images Now" there.`);
+    } catch (error) {
+      this.logger.warn(`The removal from ${describeDockerHost(host)} could not be recorded, so this computer may set Devspaces up there again by itself: ${errorMessage(error)}`);
+    }
+  }
+
+  /** While "Remove Devspaces from This Docker Engine…" runs, `operation` is not started (logged and told). */
+  private refusedWhileRemoving(operation: string): boolean {
+    const engine = this.removingFrom;
+    if (engine === undefined) return false;
+    this.logger.info(`${operation} did not run: Devspaces is being removed from ${engine}.`);
+    this.inform(ControllerTexts.removalRunning(engine));
+    return true;
   }
 
   /** Search: all repositories with a text search, then Start. */
@@ -1385,6 +1648,8 @@ export class Controller implements vscode.Disposable {
    * (usually faster), and "<owner/name> stopped." at its end. The reopen record of the devspace goes (forgetReopen).
    */
   private async stopNow(target: Target, devspace: Devspace): Promise<void> {
+    // Not even the Monitor is told while Devspaces is being removed from an engine (its channel would start a worker).
+    if (this.refusedWhileRemoving('Stop')) return;
     const repository = this.shownName(target);
     await this.stopThroughMonitor(repository, devspace);
     await this.forgetReopen(devspace.id);
@@ -2495,6 +2760,9 @@ export class Controller implements vscode.Disposable {
     options: { retry?: () => Promise<void>; refused?: () => void } = {},
   ): Promise<boolean> {
     await this.ready;
+    // While Devspaces is being removed from an engine, no operation of this window starts (the removal deletes the
+    // devspaces in its own gate).
+    if (this.refusedWhileRemoving(label)) return false;
     try {
       const outcome = await this.gate.run(key, label, () => this.withDockerTarget(fn));
       if (!outcome.started) {
@@ -2528,9 +2796,29 @@ export class Controller implements vscode.Disposable {
    * `devspace` of another Docker host (its open is refused). Never throws.
    */
   private async beforeUserFlow(devspace?: Devspace): Promise<void> {
+    // While Devspaces is being removed from an engine, the operation is refused (operation); the mark stays.
+    if (this.removingFrom !== undefined) return;
     const target = await this.operationTarget();
     if (target.kind === 'unsupported' || (devspace !== undefined && !isOnDockerHost(devspace, target.host))) return;
+    await this.clearRemovalMark(target.host);
     await this.deps.monitorQuestion?.askIfNeeded(target.host);
+  }
+
+  /**
+   * A flow of the user on the engine `host` after "Remove Devspaces from This Docker Engine…" there: the removal mark
+   * goes, so the background work of this computer runs there again (and the question about its Monitor comes again:
+   * the mark forgot the answer). Never throws.
+   */
+  private async clearRemovalMark(host: string): Promise<void> {
+    const records = this.deps.engineRecords;
+    if (records === undefined) return;
+    try {
+      if (!(await records.removed(host))) return;
+      await records.setRemoved(host, undefined);
+      this.logger.info(`Devspaces is set up on ${describeDockerHost(host)} again: the removal mark is cleared.`);
+    } catch (error) {
+      this.logger.warn(`The removal mark of ${describeDockerHost(host)} could not be cleared: ${errorMessage(error)}`);
+    }
   }
 
   /** The Docker host of the operation ('' = the local Docker). */
@@ -2584,6 +2872,16 @@ export class Controller implements vscode.Disposable {
   private warn(message: string): void {
     showWarningMessage(message)
       .then(undefined, (error: unknown) => this.logger.error('Could not show the message.', error));
+  }
+
+  /** A warning with "Show details", which shows the log. */
+  private warnWithLog(message: string): void {
+    showWarningMessage(message, Actions.showDetails).then(
+      (choice) => {
+        if (choice === Actions.showDetails) this.logger.show();
+      },
+      (error: unknown) => this.logger.error('Could not show the message.', error),
+    );
   }
 
   private background(promise: Promise<unknown>, what: string): void {
