@@ -441,8 +441,9 @@ export class Controller implements vscode.Disposable {
     };
     // Each command is one operation on the Docker host that is current when it starts; the two commands that change the
     // host read it themselves. A click or Enter on a row is no operation: only the Start of a double-click or of Enter
-    // is one.
-    const ownTarget = new Set<CommandName>(['useRemoteDockerHost', 'useLocalDocker', 'chooseDockerHost', 'askAgainDockerHost', 'rowActivated', 'rowEnter']);
+    // is one. Show Log reads no Docker host, so the log opens at once also while the Docker CLI does not answer (the
+    // link Show details of a running operation).
+    const ownTarget = new Set<CommandName>(['useRemoteDockerHost', 'useLocalDocker', 'chooseDockerHost', 'askAgainDockerHost', 'rowActivated', 'rowEnter', 'showLog']);
     const run = async (name: CommandName, argument: unknown): Promise<void> => {
       // Enter on a row whose command is another command of Devspaces (the Sign in row, the Docker host row) ends with
       // that command: a click on a repository row right after it only selects that row (rowActivation.ts).
