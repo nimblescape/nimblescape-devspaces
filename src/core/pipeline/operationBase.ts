@@ -9,7 +9,7 @@
 // pipeline, so the extension's bundle holds none of it, and no window operation can bypass the worker. No `vscode`.
 import type { VscodeServerLink } from '../helperChannel/protocol';
 import { type BusyMarkView, type DevspaceBusyMarks } from './busyMarks';
-import { dockerHostOf, isOnDockerHost, unsupportedTargetReason, type DockerTarget } from '../docker/dockerHost';
+import { dockerHostOf, isOnDockerHost, isUnreadableDockerTarget, unsupportedTargetReason, type DockerTarget } from '../docker/dockerHost';
 import { dockerEndpointUnsupported, unsupportedTargetMessage } from '../docker/remoteDocker';
 import { BatchHelperUnavailableError, UserFacingError, errorMessage, isUserFacingError } from '../errors';
 import { type FlowRefusal } from '../helperChannel/protocol';
@@ -370,8 +370,8 @@ export abstract class OperationBase {
   protected readonly lifecycleMemory: LifecycleMemory;
   /** Whether a process of this computer runs (OperationBaseDeps.processAlive). */
   protected readonly processAlive: (pid: number) => Promise<boolean>;
-  /** The endpoints (neither local nor SSH) whose refusal the reads showed already: once each. */
-  private readonly refusedEndpoints = new Set<string>();
+  /** The messages of refused targets (an endpoint that is neither local nor SSH, or Podman) that the reads showed: once each. */
+  private readonly shownRefusals = new Set<string>();
   protected readonly isAlive: (pid: number) => boolean;
   protected readonly busyMarks: DevspaceBusyMarks;
   /** The owner, clock, and view of the windows with which this window decides busy marks. */
@@ -456,18 +456,25 @@ export abstract class OperationBase {
   }
 
   /**
-   * The Docker host for the reads of the view and the restore (states, branch, volumes): undefined on an endpoint that
-   * is neither local nor SSH, and the reads do nothing then. The message is shown once per endpoint.
+   * The Docker host for the reads of the view and the restore (states, branch, volumes): undefined for a target that is
+   * not supported, and the reads do nothing then. An endpoint that is neither local nor SSH, and Podman, do not change
+   * by themselves: their message is shown once. A current context that could not be read may be so for a moment only
+   * (for example a time-out of `docker context inspect` during a refresh in the background): the reads only log it.
+   * The sidebar names it, and an operation of the user shows its message (currentDockerHost).
    */
   protected async readableDockerHost(): Promise<string | undefined> {
     const target = await this.dockerTarget();
     if (target.kind !== 'unsupported') return target.host;
-    // A context that could not be read has no endpoint; its message is shown once too.
-    const endpoint = target.endpoint;
-    if (!this.refusedEndpoints.has(endpoint)) {
-      this.refusedEndpoints.add(endpoint);
-      this.logger.warn(`${unsupportedTargetReason(target)} Its containers and volumes are not read.`);
-      this.deps.ui.warn(unsupportedTargetMessage(target));
+    const reason = `${unsupportedTargetReason(target)} Its containers and volumes are not read.`;
+    if (isUnreadableDockerTarget(target)) {
+      this.logger.info(reason);
+      return undefined;
+    }
+    const message = unsupportedTargetMessage(target);
+    if (!this.shownRefusals.has(message)) {
+      this.shownRefusals.add(message);
+      this.logger.warn(reason);
+      this.deps.ui.warn(message);
     }
     return undefined;
   }
