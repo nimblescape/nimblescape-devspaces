@@ -17,7 +17,8 @@ const read = (file: string) => fs.readFileSync(path.join(ROOT, file), 'utf8');
 function withoutCode(markdown: string): string {
   let fence: string | undefined;
   const lines = markdown.split('\n').map((line) => {
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    // A fence of backticks has no backtick after them; a fence of tildes may have anything.
+    const marker = /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})/.exec(line)?.[1];
     if (fence === undefined) {
       fence = marker;
       return marker ? '' : line;
@@ -25,11 +26,12 @@ function withoutCode(markdown: string): string {
     if (marker && marker[0] === fence[0] && marker.length >= fence.length && /^ {0,3}[`~]+\s*$/.test(line)) fence = undefined;
     return '';
   });
-  // A code span ends at the next run of as many backticks in the same paragraph.
+  // A code span starts at a run of backticks without a backslash before it (an even number of backslashes escape each
+  // other), and ends at the next run of as many backticks in the same paragraph.
   return lines
     .join('\n')
     .split(/(\n[ \t]*\n)/)
-    .map((part) => part.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, (span) => span.replace(/[^\n]/g, '')))
+    .map((part) => part.replace(/(?<=(?:^|[^\\`])(?:\\\\)*)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, (span) => span.replace(/[^\n]/g, '')))
     .join('');
 }
 
@@ -42,6 +44,7 @@ const normalLabel = (label: string) => label.trim().replace(/\s+/g, ' ').toLower
 /** The problem of the source of an image, if any: vsce takes only an image from an HTTPS source, and no SVG. */
 function imageProblem(source: string): string | undefined {
   if (!/^https:\/\//i.test(source)) return `image not from an HTTPS source ${source}`;
+  if (!URL.canParse(source)) return `image with an invalid URL ${source}`;
   if (/\.svg$/i.test(new URL(source).pathname)) return `SVG image ${source}`;
   return undefined;
 }
@@ -112,6 +115,18 @@ describe('the checks of a Markdown page', () => {
     ]);
   });
 
+  // As in CommonMark: a fenced code block ends only at its closing fence, also after a blank line; backticks with a
+  // backtick after them open no fence; a backtick after a backslash starts no code span.
+  it('finds a raw tag after fenced code with a blank line, after backticks that open no fence, and after an escaped backtick', () => {
+    expect(problems('```\n<a>\n\n<b>\n```\nafter <c>')).toEqual(['6: raw tag <c>']);
+    expect(problems('```x``` and <owner>\n<next>')).toEqual(['1: raw tag <owner>', '2: raw tag <next>']);
+    expect(problems('An escaped \\` and <owner> and `code`.')).toEqual(['1: raw tag <owner>']);
+  });
+
+  it('names an image whose HTTPS URL is not valid', () => {
+    expect(problems('![Broken](https://)')).toEqual(['1: image with an invalid URL https://']);
+  });
+
   it('accepts absolute links, anchors, autolinks, code and text that is no tag', () => {
     const page = [
       'See [Security](https://github.com/acme/repo/blob/main/docs/security.md#top), [Usage](#usage), <https://example.com>,',
@@ -119,6 +134,7 @@ describe('the checks of a Markdown page', () => {
       '![Shot][shot], ![Shot][] and ![shot] by reference.',
       '[Shot]: https://example.com/shot.png',
       'A worker is devspace-worker-<12 characters>; 1 < 2 and \\<owner> stay text; `` a ` <b> `` is code.',
+      'After an escaped backslash, \\\\`<b>` is code.',
       '```',
       'docker run --name <worker name> [x](relative.md)',
       '```',
