@@ -33,6 +33,8 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Show details in a progress notification:** the link Show details now opens the log and keeps the notification open, with its Cancel button. Before, the link also closed the notification, and then nothing could cancel the operation.
 
+**The pick of a repository to start:** when a Start from the Command Palette or Search asks for the repository, the text in the field now says whether the devspace opens in this window or in a new window, as in Switch Devspace…. Before, it always said "in this window", also when the Start opened a new window.
+
 ## 0.5.0
 
 **Docker names, without migration:** the image of the worker is now `devspaces-worker:<hash>` (was `devspaces-helper:<hash>`), its cache volume devspaces-worker-cache (was devspaces-helper-cache), and its labels nimblescape.devspaces.worker, nimblescape.devspaces.worker-run and nimblescape.devspaces.worker-channel (were nimblescape.devspaces.helper...). The new image is built at the first use. After the update, remove the old devspaces-helper images and the devspaces-helper-cache volume on each Docker engine by hand; the steps are in the user guide, section [Update from version 0.4.0 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-040-or-older).

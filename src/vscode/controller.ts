@@ -68,7 +68,7 @@ import { RowActivationTracker, activatedRow, type ListOpenMode } from './rowActi
 import { SETTINGS_SECTION, hostAccessChecksOffValue, readListOpenMode } from './settings';
 import type { Sidebar } from './sidebar';
 import type { DevspaceStatusBar } from './statusBar';
-import { pickRepository, showSwitcher } from './switcher';
+import { pickRepository, showSwitcher, SwitcherTexts } from './switcher';
 import { CoalescingTask, OperationGate } from './tasks';
 import { parseCommandArgument, repositoryTarget, sourceChoices, type CommandArgument } from './targets';
 import { TreeTexts, devspaceName, recentDevspaces, repositoryRows, stateIcon } from './treeModel';
@@ -835,7 +835,7 @@ export class Controller implements vscode.Disposable {
    * Start. `window`: Start in New Window or Start in Current Window; plain Start follows the setting openInNewWindow.
    */
   async start(argument: CommandArgument, window: WindowRequest = 'default'): Promise<void> {
-    const target = await this.resolveTarget(argument, 'open', ControllerTexts.selectRepositoryToStart);
+    const target = await this.resolveTarget(argument, 'open', this.repositoryPlaceholder(window));
     if (target) await this.startTarget(target, { window });
   }
 
@@ -1566,7 +1566,7 @@ export class Controller implements vscode.Disposable {
       this.inform(ControllerTexts.noRepositories);
       return;
     }
-    const info = await pickRepository(repositories, ControllerTexts.selectRepositoryToStart);
+    const info = await pickRepository(repositories, this.repositoryPlaceholder('default'));
     if (!info) return;
     const target = await this.pickedRepositoryTarget(info.nameWithOwner, 'token');
     if (target) await this.startTarget(target);
@@ -1932,6 +1932,11 @@ export class Controller implements vscode.Disposable {
       emptyWindow: this.deps.connection.isEmptyWindow(),
       reconnecting,
     });
+  }
+
+  /** The placeholder of the pick of a repository to start: the window that the Start uses, as in the switcher. */
+  private repositoryPlaceholder(request: WindowRequest): string {
+    return this.opensNewWindow(request) ? SwitcherTexts.newWindowRepositoryPlaceholder : SwitcherTexts.repositoryPlaceholder;
   }
 
   /**
