@@ -566,7 +566,7 @@ export class Controller implements vscode.Disposable {
     await this.onSessionChanged();
     if (this.withoutDevspaces?.devspace.id !== devspace.id) return;
     // The status file names it apart from the devspace of the window, so that the removal and the Stop, Rebuild and
-    // Delete of other windows see this window (connectedDevspaces, connectedInOtherWindow).
+    // Delete of other windows see this window (devspacesInUse, connectedInOtherWindow).
     await this.deps.coordinator
       .setPlainDevspace(devspace.id)
       .catch((error: unknown) => this.logger.warn(`The window status could not be written: ${errorMessage(error)}`));
@@ -1379,16 +1379,17 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
-   * The names of the devspaces of `devspaces` that a window of this computer is connected to (this one or another),
-   * also one that works without Devspaces (isAttachedHere, WindowStatus.plainDevspaceId), or is opening
-   * (connectingDevspaces).
+   * The names of the devspaces of `devspaces` that a window of this computer uses: `connected`, those that a window is
+   * connected to (this one or another), also one that works without Devspaces (isAttachedHere,
+   * WindowStatus.plainDevspaceId); `opening`, the others that a window is opening (connectingDevspaces).
    */
-  private async connectedDevspaces(devspaces: readonly Devspace[]): Promise<string[]> {
+  private async devspacesInUse(devspaces: readonly Devspace[]): Promise<{ connected: string[]; opening: string[] }> {
     const others = await this.otherActiveWindowsKnown();
     const connecting = await this.connectingDevspaces();
-    return devspaces
-      .filter((devspace) => this.isAttachedHere(devspace) || others.some((window) => usesDevspace(window, devspace.id)) || connecting.has(devspace.id))
-      .map((devspace) => this.shownName(this.devspaceTarget(devspace)));
+    const name = (devspace: Devspace): string => this.shownName(this.devspaceTarget(devspace));
+    const connected = devspaces.filter((devspace) => this.isAttachedHere(devspace) || others.some((window) => usesDevspace(window, devspace.id)));
+    const opening = devspaces.filter((devspace) => !connected.includes(devspace) && connecting.has(devspace.id));
+    return { connected: connected.map(name), opening: opening.map(name) };
   }
 
   /**
@@ -1430,16 +1431,22 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Whether the removal from `engine` must not run now (told, and logged): a window of this computer is connected to a
-   * devspace of `here`, or is opening one (connectedDevspaces), or an operation runs (runningOperation). Throws
+   * devspace of `here`, or is opening one (devspacesInUse), or an operation runs (runningOperation). Throws
    * UserFacingError when the window status files or the pending connection files cannot be read (otherWindowsUnknown,
    * connectingWindowsUnknown).
    */
   private async removalRefusedByUse(engine: string, here: readonly Devspace[]): Promise<boolean> {
     // A window that uses a devspace there would start the Monitor again with its next heartbeat.
-    const connected = await this.connectedDevspaces(here);
+    const { connected, opening } = await this.devspacesInUse(here);
     if (connected.length > 0) {
-      this.logger.info(`Devspaces is not removed from ${engine}: windows are connected to or opening ${connected.join(', ')}.`);
+      this.logger.info(`Devspaces is not removed from ${engine}: windows are connected to ${connected.join(', ')}.`);
       this.warn(ControllerTexts.removeCloseWindowsFirst(engine, listSome(connected)));
+      return true;
+    }
+    // No window to close yet: the open of this window that still runs, or a new window that did not connect (yet).
+    if (opening.length > 0) {
+      this.logger.info(`Devspaces is not removed from ${engine}: a window is opening ${opening.join(', ')}.`);
+      this.warn(ControllerTexts.removeWhileOpening(engine, listSome(opening)));
       return true;
     }
     const running = await this.runningOperation(here);

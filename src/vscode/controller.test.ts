@@ -3410,12 +3410,22 @@ describe('Remove Devspaces from This Docker Engine…', () => {
       // Another window opens it, or this window opened it in a new window.
       await h.sessionFiles.writePending(ENV_ID, opener);
       await run('removeFromDockerEngine');
-      expect(warningMessages(), opener).toEqual(['Close the windows of your devspaces on build-box first: acme/api. Nothing was removed.']);
-      expect(h.logger.info, opener).toHaveBeenCalledWith('Devspaces is not removed from build-box: windows are connected to or opening acme/api.');
+      // No window to close yet. Mutation: the text of a connected window.
+      expect(ControllerTexts.removeWhileOpening('build-box', 'acme/api')).toBe('A devspace is being opened on build-box: acme/api. Try again after that. Nothing was removed.');
+      expect(warningMessages(), opener).toEqual([ControllerTexts.removeWhileOpening('build-box', 'acme/api')]);
+      expect(h.logger.info, opener).toHaveBeenCalledWith('Devspaces is not removed from build-box: a window is opening acme/api.');
       expect(modals(), opener).toEqual([]);
       expect(changing(opening), opener).toEqual([]);
       expect(await h.engineRecords.read(), opener).toEqual([]);
     }
+
+    // A window that is connected to it already: the text says to close it.
+    onBuildBox(removalFake());
+    await h.registry.add(env);
+    await h.sessionFiles.writePending(ENV_ID, OTHER_WINDOW_ID);
+    otherWindowConnected(ENV_ID);
+    await run('removeFromDockerEngine');
+    expect(warningMessages()).toEqual(['Close the windows of your devspaces on build-box first: acme/api. Nothing was removed.']);
 
     // A file older than 2 minutes counts as none: no window connects anymore.
     const old = removalFake();
@@ -3434,6 +3444,10 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     await h.registry.add(env);
     vi.spyOn(h.sessionFiles, 'readPendings').mockRejectedValueOnce(new Error('EACCES: permission denied'));
     await run('removeFromDockerEngine');
+    // The text fits the removal from an engine as well as the delete of one devspace.
+    expect(ControllerTexts.connectingWindowsUnknown).toBe(
+      'It could not be checked whether a window is opening a devspace: the pending connection files could not be read. Nothing was changed; see the Devspaces output.',
+    );
     expect(fakeVscode.window.showErrorMessage).toHaveBeenCalledWith(ControllerTexts.connectingWindowsUnknown, Actions.showDetails);
     expect(h.logger.warn).toHaveBeenCalledWith('The pending connection files could not be read, so nothing is changed: EACCES: permission denied');
     expect(modals()).toEqual([]);
