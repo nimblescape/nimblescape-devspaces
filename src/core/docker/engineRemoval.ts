@@ -404,3 +404,11 @@ function finish(run: RemovalRun, options: RemovalOptions): RemovalResult {
 export function removedEngineNote(engine: string): string {
   return `Devspaces was removed from ${engine}. Nothing runs there by itself until a Start, a Rebuild or "Update All Images Now" there.`;
 }
+
+/**
+ * The log line when an operation that keeps the removal mark (a Stop or a Delete of a devspace that the user kept)
+ * built the helper image on the engine `engine` (describeDockerHost) again.
+ */
+export function removedEngineImageNote(engine: string): string {
+  return `The helper image was built again on ${engine}, which Devspaces was removed from. Nothing runs there by itself; "Remove Devspaces from This Docker Engine…" removes it again.`;
+}
