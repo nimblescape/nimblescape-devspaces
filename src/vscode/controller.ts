@@ -7,7 +7,7 @@
 // and the Connection Adapter.
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { isBlockingBusyMark, statusNamesDevspace, type WindowMark } from '../core/busy';
+import { isBlockingBusyMark, isFreshPending, statusNamesDevspace, type WindowMark } from '../core/busy';
 import { attachDiagnostics } from '../core/docker/attachDiagnostics';
 import { LOCAL_DOCKER_TARGET, describeDockerHost, dockerHostOf, devspacesOfHost, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
 import { dockerEndpointUnsupported, ensureRemoteContext } from '../core/docker/remoteDocker';
@@ -1269,11 +1269,15 @@ export class Controller implements vscode.Disposable {
       const devspaceTarget = this.devspaceTarget(devspace);
       const name = this.shownName(devspaceTarget);
       try {
-        // A window that connected to it after the checks keeps it: its container would be deleted under that window.
-        // When the other windows cannot be read, it is not deleted either.
-        if (this.isAttachedHere(devspace) || (await this.connectedInOtherWindow(devspace.id))) {
+        // A window that connected to it after the checks keeps it, and so does a window that is opening it (its fresh
+        // pending connection file): its container would be deleted under that window. When the files of the windows
+        // cannot be read, it is not deleted either.
+        let use: string | undefined;
+        if (this.isAttachedHere(devspace) || (await this.connectedInOtherWindow(devspace.id))) use = 'connected to';
+        else if ((await this.connectingDevspaces()).has(devspace.id)) use = 'opening';
+        if (use !== undefined) {
           failedDevspaces++;
-          this.logger.warn(`The devspace of ${name} was not deleted: a window is connected to it. Delete it later with "Devspaces: Delete Devspace".`);
+          this.logger.warn(`The devspace of ${name} was not deleted: a window is ${use} it. Delete it later with "Devspaces: Delete Devspace".`);
           continue;
         }
         progress.detail(ControllerTexts.deleting(name));
@@ -1321,13 +1325,34 @@ export class Controller implements vscode.Disposable {
 
   /**
    * The names of the devspaces of `devspaces` that a window of this computer is connected to (this one or another),
-   * also one that works without Devspaces (isAttachedHere, WindowStatus.plainDevspaceId).
+   * also one that works without Devspaces (isAttachedHere, WindowStatus.plainDevspaceId), or is opening
+   * (connectingDevspaces).
    */
   private async connectedDevspaces(devspaces: readonly Devspace[]): Promise<string[]> {
     const others = await this.otherActiveWindowsKnown();
+    const connecting = await this.connectingDevspaces();
     return devspaces
-      .filter((devspace) => this.isAttachedHere(devspace) || others.some((window) => usesDevspace(window, devspace.id)))
+      .filter((devspace) => this.isAttachedHere(devspace) || others.some((window) => usesDevspace(window, devspace.id)) || connecting.has(devspace.id))
       .map((devspace) => this.shownName(this.devspaceTarget(devspace)));
+  }
+
+  /**
+   * The IDs of the devspaces that a window of this computer is opening now: their fresh pending connection files
+   * (isFreshPending), which the window that ran the open writes before the window connects, and which that window
+   * removes when it writes its status file. Also those of this window: one that it opened in a new window. Between
+   * the end of the open (its busy mark) and the status file of the window, only this file shows the use. When the files
+   * cannot be read, it is not known, so nothing is changed (UserFacingError, connectingWindowsUnknown); never "none".
+   */
+  private async connectingDevspaces(): Promise<Set<string>> {
+    let pendings: PendingConnection[];
+    try {
+      pendings = await this.deps.sessionFiles.readPendings();
+    } catch (error) {
+      this.logger.warn(`The pending connection files could not be read, so nothing is changed: ${errorMessage(error)}`);
+      throw new UserFacingError('startFailed', ControllerTexts.connectingWindowsUnknown, errorMessage(error));
+    }
+    const now = this.clock.now();
+    return new Set(pendings.filter((pending) => isFreshPending(pending, now)).map((pending) => pending.devspaceId));
   }
 
   /**
@@ -1350,14 +1375,15 @@ export class Controller implements vscode.Disposable {
 
   /**
    * Whether the removal from `engine` must not run now (told, and logged): a window of this computer is connected to a
-   * devspace of `here` (connectedDevspaces), or an operation runs (runningOperation). Throws UserFacingError when the
-   * window status files cannot be read (otherWindowsUnknown).
+   * devspace of `here`, or is opening one (connectedDevspaces), or an operation runs (runningOperation). Throws
+   * UserFacingError when the window status files or the pending connection files cannot be read (otherWindowsUnknown,
+   * connectingWindowsUnknown).
    */
   private async removalRefusedByUse(engine: string, here: readonly Devspace[]): Promise<boolean> {
     // A window that uses a devspace there would start the Monitor again with its next heartbeat.
     const connected = await this.connectedDevspaces(here);
     if (connected.length > 0) {
-      this.logger.info(`Devspaces is not removed from ${engine}: windows are connected to ${connected.join(', ')}.`);
+      this.logger.info(`Devspaces is not removed from ${engine}: windows are connected to or opening ${connected.join(', ')}.`);
       this.warn(ControllerTexts.removeCloseWindowsFirst(engine, listSome(connected)));
       return true;
     }

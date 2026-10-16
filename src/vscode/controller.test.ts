@@ -29,6 +29,7 @@ import { StoragePaths } from '../core/storage/paths';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { SessionFiles } from '../core/storage/sessionFiles';
 import { isHandedOffStop } from '../core/session/windowRelease';
+import { PENDING_MAX_AGE_MS } from '../core/busy';
 import { availableDevspaces } from '../core/ownership';
 import { dockerTargetOf, ownContextDescription, remoteContextNames, type DockerTarget } from '../core/docker/dockerHost';
 import { DockerTargets, operationDockerTarget, runWithDockerTarget } from '../core/docker/dockerTargets';
@@ -3206,6 +3207,8 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     await run('start', row('acme/api', env));
     expect(await h.engineRecords.removed('build-box')).toBe(false);
     expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
+    // The window that connects removes the pending connection file of the open with its status file.
+    await h.sessionFiles.removePending(ENV_ID);
 
     // When the worker of the removal has ended, the user presses Start and Stop: both are refused, and the mark stays.
     // The removal goes on once both refusals were shown.
@@ -3325,6 +3328,67 @@ describe('Remove Devspaces from This Docker Engine…', () => {
       expect(warningMessages().at(-1), where).toBe('1 item of Devspaces could not be removed from build-box. The log names each one and the command to remove it.');
       expect(changing(fake), where).toContain('docker rm -f m1');
     }
+  });
+
+  // Between the end of an open (its busy mark) and the status file of the window that connects, only the pending
+  // connection file shows that a window uses the devspace. Mutations: without it, the removal starts, or deletes the
+  // devspace under the window that connects; a file of this window, or an old file, counts the other way.
+  it('a window that is opening a devspace there (its pending connection file) stops the removal, or keeps that devspace', async () => {
+    const env = ownRemote();
+    for (const opener of [OTHER_WINDOW_ID, WINDOW_ID]) {
+      const opening = removalFake();
+      onBuildBox(opening);
+      await h.registry.add(env);
+      // Another window opens it, or this window opened it in a new window.
+      await h.sessionFiles.writePending(ENV_ID, opener);
+      await run('removeFromDockerEngine');
+      expect(warningMessages(), opener).toEqual(['Close the windows of your devspaces on build-box first: acme/api. Nothing was removed.']);
+      expect(h.logger.info, opener).toHaveBeenCalledWith('Devspaces is not removed from build-box: windows are connected to or opening acme/api.');
+      expect(modals(), opener).toEqual([]);
+      expect(changing(opening), opener).toEqual([]);
+      expect(await h.engineRecords.read(), opener).toEqual([]);
+    }
+
+    // A file older than 2 minutes counts as none: no window connects anymore.
+    const old = removalFake();
+    onBuildBox(old);
+    await h.registry.add(env);
+    h.clock.now = () => NOW - PENDING_MAX_AGE_MS - 1;
+    await h.sessionFiles.writePending(ENV_ID, OTHER_WINDOW_ID);
+    h.clock.now = () => NOW;
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove).mockResolvedValueOnce(ControllerTexts.keepDevspaces);
+    await run('removeFromDockerEngine');
+    expect(changing(old)).toContain('docker rm -f m1');
+
+    // When the files cannot be read, it is not known: nothing is removed.
+    const unknown = removalFake();
+    onBuildBox(unknown);
+    await h.registry.add(env);
+    vi.spyOn(h.sessionFiles, 'readPendings').mockRejectedValueOnce(new Error('EACCES: permission denied'));
+    await run('removeFromDockerEngine');
+    expect(fakeVscode.window.showErrorMessage).toHaveBeenCalledWith(ControllerTexts.connectingWindowsUnknown, Actions.showDetails);
+    expect(h.logger.warn).toHaveBeenCalledWith('The pending connection files could not be read, so nothing is changed: EACCES: permission denied');
+    expect(modals()).toEqual([]);
+    expect(changing(unknown)).toEqual([]);
+
+    // A window begins to open the second devspace while the first one is deleted: it is kept, and counts as left.
+    const web = (): Devspace => devspace({ id: OTHER_ENV_ID, repository: 'acme/web', containerName: 'devspaces-acme-web-7c1d2e3f', volumeName: 'devspaces-acme-web-7c1d2e3f', dockerHost: 'build-box' });
+    const deleting = removalFake();
+    onBuildBox(deleting);
+    await h.registry.add(env);
+    await h.registry.add(web());
+    h.service.deleteInWorker.mockImplementation(async (id: string) => {
+      deleting.order.push(`delete ${id}`);
+      await h.registry.remove(id);
+      await h.sessionFiles.writePending(OTHER_ENV_ID, OTHER_WINDOW_ID);
+    });
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove).mockResolvedValueOnce(ControllerTexts.deleteDevspacesToo);
+    await run('removeFromDockerEngine');
+    expect(h.service.deleteInWorker).toHaveBeenCalledTimes(1);
+    expect(h.service.deleteInWorker).toHaveBeenCalledWith(ENV_ID, expect.anything());
+    expect(await h.registry.get(OTHER_ENV_ID)).toBeDefined();
+    expect(h.logger.warn).toHaveBeenCalledWith('The devspace of acme/web was not deleted: a window is opening it. Delete it later with "Devspaces: Delete Devspace".');
+    expect(warningMessages().at(-1)).toBe('1 item of Devspaces could not be removed from build-box. The log names each one and the command to remove it.');
   });
 
   // Another window would clear the mark of the removal that runs, and set Devspaces up there again while it is removed.

@@ -120,6 +120,12 @@ export const ControllerTexts = {
    */
   otherWindowsUnknown:
     'It could not be checked whether another window uses this devspace: the window status files could not be read. Nothing was changed; see the Devspaces output.',
+  /**
+   * The pending connection files could not be read, so it is not known whether a window opens the devspace; the removal
+   * from its engine does not delete it, or does not start.
+   */
+  connectingWindowsUnknown:
+    'It could not be checked whether a window is opening this devspace: the pending connection files could not be read. Nothing was changed; see the Devspaces output.',
   /** A pending operation (a Stop, Rebuild or Delete handed over by a window) could not be read. */
   pendingOperationsUnreadable: (cause: string) =>
     `A pending operation could not be read and was not run (${cause}). Run it again if it is still needed; see the Devspaces output.`,

@@ -115,6 +115,14 @@ function isFreshTime(time: string, now: number, maxAgeMs: number): boolean {
 }
 
 /**
+ * The pending connection file `pending` is at most PENDING_MAX_AGE_MS old: a window opens its devspace now (the window
+ * that connects removes the file when it writes its status file).
+ */
+export function isFreshPending(pending: Pick<PendingConnection, 'createdAt'>, now: number): boolean {
+  return isFreshTime(pending.createdAt, now, PENDING_MAX_AGE_MS);
+}
+
+/**
  * Whether the status file `status` names the devspace `devspaceId`: the window is connected to it, or works without
  * Devspaces on it on an engine with the removal mark (WindowStatus.plainDevspaceId).
  */
@@ -144,7 +152,7 @@ export function otherWindowUsesDevspace(
   );
   if (window !== undefined) return { window };
   const pending = (input.pendings ?? []).find(
-    (entry) => entry.windowId !== ownWindowId && entry.devspaceId === devspaceId && isFreshTime(entry.createdAt, input.now, PENDING_MAX_AGE_MS),
+    (entry) => entry.windowId !== ownWindowId && entry.devspaceId === devspaceId && isFreshPending(entry, input.now),
   );
   return pending !== undefined ? { pending } : undefined;
 }
