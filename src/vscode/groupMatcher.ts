@@ -12,7 +12,7 @@
 import { Worker } from 'worker_threads';
 import { matchRepositoryGroup, parseRepositoryGroups } from './repositoryGroups';
 
-/** Time limit of one job: from the moment the worker runs the first regular expression. */
+/** Time limit of each entry of a job: from the moment the worker starts to run its regular expression on the names. */
 export const GROUP_MATCH_TIME_LIMIT_MS = 1000;
 /** Time limit of the start of a new worker and of the compilation of the entries, before the first regular expression runs. */
 export const GROUP_MATCH_START_LIMIT_MS = 10_000;
@@ -134,8 +134,8 @@ export class GroupMatchWorkerRunner implements GroupMatcher {
       }
       this.worker = worker;
       const id = ++this.nextId;
-      let slowEntry: number | undefined;
-      let running = false;
+      /** The entry that runs on the names now (from its probe); undefined before the first probe. */
+      let runningEntry: number | undefined;
       let done = false;
       const finish = (result: GroupMatchRun) => {
         if (done) return;
@@ -151,21 +151,21 @@ export class GroupMatchWorkerRunner implements GroupMatcher {
         void worker.terminate();
         finish(result);
       };
-      // A message that the worker posted before the limit may still wait in the queue of the extension host (a busy
-      // start of VS Code): the limit ends the job only after the messages that are already there (setImmediate runs
-      // after them).
-      const onLimit = (result: () => GroupMatchRun) => () => setImmediate(() => !done && stop(result()));
-      let timer = setTimeout(onLimit(() => ({ failed: true })), this.startLimitMs);
+      // A message that the worker posted before a limit may still wait in the queue of the extension host (a busy
+      // start of VS Code). A limit ends the job only after the messages that are already there (setImmediate runs after
+      // them), and only when its phase did not end: the start limit while no entry runs, the time limit of an entry
+      // while this entry still runs.
+      const onLimit = (stillSlow: () => boolean, result: GroupMatchRun) => () =>
+        setImmediate(() => !done && stillSlow() && stop(result));
+      let timer = setTimeout(onLimit(() => runningEntry === undefined, { failed: true }), this.startLimitMs);
       const onMessage = (message: GroupMatchMessage) => {
         if (done || message.id !== id) return;
         if (message.type === 'probe') {
-          slowEntry = message.entryIndex;
-          if (!running) {
-            // The first regular expression runs: the time limit of the job starts.
-            running = true;
-            clearTimeout(timer);
-            timer = setTimeout(onLimit(() => ({ tooSlow: true, ...(slowEntry !== undefined ? { slowEntry } : {}) })), this.timeLimitMs);
-          }
+          // An entry starts to run on the names: its own time limit starts.
+          const entry = message.entryIndex;
+          runningEntry = entry;
+          clearTimeout(timer);
+          timer = setTimeout(onLimit(() => runningEntry === entry, { tooSlow: true, slowEntry: entry }), this.timeLimitMs);
           return;
         }
         finish({ places: new Map(message.places), failures: new Map(message.failures) });

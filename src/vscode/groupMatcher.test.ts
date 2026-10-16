@@ -43,6 +43,25 @@ afterAll(() => {
   fs.rmSync(outDir, { recursive: true, force: true });
 });
 
+/**
+ * A worker script in the test folder that answers each job with `answer`: JavaScript with `job`, `post(message)` and
+ * `sleep(ms)` (blocks the worker thread).
+ */
+function scriptWorker(name: string, answer: string): string {
+  const file = path.join(outDir, name);
+  fs.writeFileSync(
+    file,
+    [
+      "const { parentPort } = require('worker_threads');",
+      'const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);',
+      'const post = (message) => parentPort.postMessage(message);',
+      `parentPort.on('message', (job) => { ${answer} });`,
+      '',
+    ].join('\n'),
+  );
+  return file;
+}
+
 /** 2^n steps for a name of n word characters that does not match: seconds for about 27 characters. */
 const SLOW = String.raw`^(\w+)+$`;
 const SLOW_NAME = `${'a'.repeat(32)}-`;
@@ -107,7 +126,8 @@ describe('GroupMatchWorkerRunner', () => {
     runner = new GroupMatchWorkerRunner(bundle, 300);
     const started = Date.now();
     expect(await runner.run(['^x-', SLOW], [SLOW_NAME])).toEqual({ tooSlow: true, slowEntry: 1 });
-    expect(Date.now() - started).toBeLessThan(GROUP_MATCH_TIME_LIMIT_MS + 1000);
+    // Without the limit, the expression would take minutes for this name.
+    expect(Date.now() - started).toBeLessThan(5000);
     expect(await runner.run(['^(a+)-$'], [SLOW_NAME])).toMatchObject({ places: new Map([[SLOW_NAME, { index: 0, levels: [], label: 'a'.repeat(32) }]]) });
   });
 
@@ -121,12 +141,46 @@ describe('GroupMatchWorkerRunner', () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(250);
   });
 
+  it('gives each entry its own time limit, so a job with many entries can take longer than one limit', async () => {
+    // Five entries of 250 ms each: 1250 ms for the job, but each entry stays below the limit of 1000 ms.
+    const steady = scriptWorker(
+      'steady.js',
+      "for (const entryIndex of [0, 1, 2, 3, 4]) { post({ type: 'probe', id: job.id, entryIndex }); sleep(250); }" +
+        " post({ type: 'places', id: job.id, places: job.names.map((name) => [name, null]), failures: [] });",
+    );
+    runner = new GroupMatchWorkerRunner(steady, 1000);
+    const started = Date.now();
+    expect(await runner.run(['^a$', '^b$', '^c$', '^d$', '^e$'], ['x'])).toEqual({ places: new Map([['x', null]]), failures: new Map() });
+    expect(Date.now() - started).toBeGreaterThan(1000);
+  });
+
+  it('does not end a job at the start limit when its first entry already runs', async () => {
+    // The extension host is busy beyond the start limit while the worker already runs the first entry: the probe still
+    // waits in the queue when the start limit is due.
+    const late = scriptWorker(
+      'late.js',
+      "if (job.names.length > 0) { post({ type: 'probe', id: job.id, entryIndex: 0 }); sleep(1000); }" +
+        " post({ type: 'places', id: job.id, places: [], failures: [] });",
+    );
+    const current = new GroupMatchWorkerRunner(late, 5000, 500);
+    runner = current;
+    // The worker runs after this job.
+    expect(await current.run(['^a$'], [])).toEqual({ places: new Map(), failures: new Map() });
+    const job = current.run(['^a$'], ['a']);
+    // The job is posted; then the extension host is busy for longer than the start limit.
+    await new Promise((resolve) => setImmediate(resolve));
+    const busyUntil = Date.now() + 800;
+    while (Date.now() < busyUntil);
+    expect(await job).toEqual({ places: new Map(), failures: new Map() });
+  });
+
   it('ends the running job and the queued jobs at dispose, and runs none after it', async () => {
     const current = new GroupMatchWorkerRunner(bundle, 5000);
     runner = current;
     const slow = current.run([SLOW], [SLOW_NAME]);
     const queued = current.run(['^a$'], ['a']);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Time for the worker to start and to run the slow expression.
+    await new Promise((resolve) => setTimeout(resolve, 500));
     const started = Date.now();
     current.dispose();
     expect(await slow).toEqual({ failed: true });
