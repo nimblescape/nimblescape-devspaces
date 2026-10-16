@@ -61,7 +61,10 @@ export class StoragePaths {
   readonly helperState: string;
   /** Remote Docker hosts: the context before the switch, and the rootless sockets (RemoteDockerState). */
   readonly remoteDocker: string;
-  /** The Docker engines: the answer to the question about the Monitor of each (DockerEngineRecords). */
+  /**
+   * The Docker engines (DockerEngineRecords): the answer to the question about the Monitor of each, and the removal mark
+   * of "Remove Devspaces from This Docker Engine…". Changed under the lock folder `docker-engines.lock` next to it.
+   */
   readonly dockerEngines: string;
   /** The random id of this installation for the heartbeats to the Monitor on a remote host. */
   readonly computerId: string;

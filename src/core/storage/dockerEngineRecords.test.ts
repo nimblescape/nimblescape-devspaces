@@ -121,3 +121,53 @@ describe('DockerEngineRecords: the removal mark ("Remove Devspaces from This Doc
     expect(await records.removed('c')).toBe(true);
   });
 });
+
+describe('DockerEngineRecords: the lock folder docker-engines.lock (several windows)', () => {
+  it('keeps the change of every window when two windows change the file at once, and removes the lock folder after', async () => {
+    const otherWindow = new DockerEngineRecords(records.file);
+    const hosts = Array.from({ length: 12 }, (_, index) => `host-${index}`);
+    await Promise.all(
+      hosts.map((host, index) =>
+        index % 2 === 0 ? records.setRemoved(host, NOW + index) : otherWindow.recordMonitorAnswer(host, NOW + index),
+      ),
+    );
+    const read = await records.read();
+    expect(read.map((record) => record.host).sort()).toEqual([...hosts].sort());
+    // The removal marks are all there.
+    for (const [index, host] of hosts.entries()) expect(await otherWindow.removed(host), host).toBe(index % 2 === 0);
+    expect(records.lockDir).toBe(path.join(dir, 'docker-engines.lock'));
+    expect(fs.existsSync(records.lockDir)).toBe(false);
+  });
+
+  it('waits while another window holds the lock, and takes over the lock of a window that crashed', async () => {
+    fs.mkdirSync(records.lockDir);
+    let written = false;
+    const change = records.setRemoved('', NOW).then(() => {
+      written = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(written).toBe(false);
+    expect(await records.removed('')).toBe(false);
+    // The other window ends its change.
+    fs.rmdirSync(records.lockDir);
+    await change;
+    expect(await records.removed('')).toBe(true);
+    expect(fs.existsSync(records.lockDir)).toBe(false);
+    // A lock folder older than the stale time is the lock of a window that crashed: the change takes it over.
+    fs.mkdirSync(records.lockDir);
+    const past = new Date(Date.now() - 60_000);
+    fs.utimesSync(records.lockDir, past, past);
+    await records.setRemoved('', undefined);
+    expect(await records.removed('')).toBe(false);
+    expect(fs.existsSync(records.lockDir)).toBe(false);
+  });
+
+  it('a change fails, and writes nothing, when the lock stays held longer than the wait', async () => {
+    const quick = new DockerEngineRecords(records.file, { lockTimeoutMs: 100 });
+    fs.mkdirSync(quick.lockDir);
+    await expect(quick.setRemoved('', NOW)).rejects.toThrow(/Timeout while waiting for the lock/);
+    expect(fs.existsSync(records.file)).toBe(false);
+    // The lock of the other window stays.
+    expect(fs.existsSync(quick.lockDir)).toBe(true);
+  });
+});

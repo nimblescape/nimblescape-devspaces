@@ -161,7 +161,7 @@ The monitor stops the dev container first, then the other containers of the devs
 - **Prepare lock**: `/state/locks/<devspace id>.prepare.lock`, held by a prepare.
 - **Store locks**: `devspaces-vscode/locks/`, one per server version and per extension package, so that two windows and the monitor never download the same file twice.
 - **Records lock**: `/state/.heartbeats.lock` for the heartbeat records.
-- **Local registry lock**: the read-modify-write of `registry.json` runs under a lock folder created with `mkdir`; a lock older than 10 seconds counts as stale.
+- **Local registry lock**: the read-modify-write of `registry.json` runs under a lock folder created with `mkdir` (`registry.lock`); a lock older than 10 seconds counts as stale. A change of `docker-engines.json` runs under its own lock folder of the same kind (`docker-engines.lock`, `src/core/storage/lockFolder.ts`), so that two windows never lose a removal mark or an answer of each other.
 
 ### The local records
 
