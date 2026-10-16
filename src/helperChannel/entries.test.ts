@@ -24,9 +24,10 @@ import { CHANNEL_ENTRY } from '../core/helperChannel/protocol';
 import { REMOTE_MONITOR_ENTRY } from '../core/remoteMonitor/protocol';
 
 /**
- * Loads the bundle (the first argument) with `require` and prints its exported functions and every call of a function
- * of I/O while it loaded: of `fs` (but the reads of the bundle itself by the loader of Node.js), `child_process`, `net`,
- * `http`, `https`, `dgram`, the timers, `fetch` and `Worker`.
+ * Loads the bundle (the first argument) with `require` and prints its exported functions, every call of a function of
+ * I/O while it loaded: of `fs` (but the reads of the bundle itself by the loader of Node.js), `child_process`, `net`,
+ * `http`, `https`, `dgram`, the timers, `fetch` and `Worker`, and the listeners of the process and of its standard
+ * input before and after the load (the number of each event).
  */
 const LOAD_PROBE = `
 const file = process.argv[1];
@@ -57,11 +58,17 @@ threads.Worker = class extends OriginalWorker {
     super(...args);
   }
 };
+const listeners = () => {
+  const count = (emitter) => Object.fromEntries(emitter.eventNames().map((name) => [String(name), emitter.listenerCount(name)]));
+  return { process: count(process), stdin: count(process.stdin) };
+};
+const before = listeners();
 loading = true;
 const exported = require(file);
 loading = false;
+const after = listeners();
 const functions = Object.keys(exported).filter((name) => typeof exported[name] === 'function');
-process.stdout.write(JSON.stringify({ calls, functions }));
+process.stdout.write(JSON.stringify({ calls, functions, listeners: { before, after } }));
 `;
 
 /** A job of the analysis whose result says something. */
@@ -115,8 +122,10 @@ describe("the entries of the worker's bundle", () => {
     const { code, stdout, stderr } = await node(['-e', LOAD_PROBE, bundle]);
     expect(stderr).toBe('');
     expect(code).toBe(0);
-    const loaded = JSON.parse(stdout) as { calls: string[]; functions: string[] };
+    const loaded = JSON.parse(stdout) as { calls: string[]; functions: string[]; listeners: { before: unknown; after: unknown } };
     expect(loaded.calls).toEqual([]);
+    // No listener of a signal, of an error or of the standard input.
+    expect(loaded.listeners.after).toEqual(loaded.listeners.before);
     expect(loaded.functions).toEqual(expect.arrayContaining([CHANNEL_ENTRY, BATCH_ENTRY, REMOTE_MONITOR_ENTRY]));
     expect([CHANNEL_ENTRY, BATCH_ENTRY, REMOTE_MONITOR_ENTRY]).toEqual(['startChannel', 'startBatchHelper', 'startMonitor']);
   });
