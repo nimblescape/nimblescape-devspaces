@@ -22,6 +22,8 @@ interface Harness {
   deps: OwnerSelectorDeps;
   settings: ExtensionSettings;
   update: ReturnType<typeof vi.fn>;
+  /** The value of `owners` in the workspace settings, as `inspect` gives it. */
+  workspaceOwners: { value: unknown };
   signedIn: { value: boolean };
   viewerOrganizations: ReturnType<typeof vi.fn>;
   signIn: ReturnType<typeof vi.fn>;
@@ -35,9 +37,10 @@ function listOf(viewerLogin: string, organizations: string[]): DiscoveryData {
 function harness(): Harness {
   const settings: ExtensionSettings = { ...DEFAULT_SETTINGS, owners: [] };
   const update = vi.fn(async () => undefined);
+  const workspaceOwners: { value: unknown } = { value: undefined };
   fakeVscode.workspace.getConfiguration.mockImplementation((section: string) => {
     expect(section).toBe(SETTINGS_SECTION);
-    return { get: vi.fn(), update };
+    return { get: vi.fn(), update, inspect: (key: string) => (key === 'owners' ? { key, workspaceValue: workspaceOwners.value } : undefined) };
   });
   const signedIn = { value: true };
   const data = { value: listOf('octo', ['beta', 'acme']) as DiscoveryData | undefined };
@@ -55,7 +58,7 @@ function harness(): Harness {
     signIn,
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() },
   };
-  return { deps, settings, update, signedIn, viewerOrganizations, signIn, data };
+  return { deps, settings, update, workspaceOwners, signedIn, viewerOrganizations, signIn, data };
 }
 
 interface PickItem {
@@ -110,6 +113,14 @@ describe('selectOwners (Select Organizations…)', () => {
     fakeVscode.window.showQuickPick.mockImplementation(async (items: PickItem[]) => items.filter((item) => item.label !== 'beta'));
     await selectOwners(h.deps);
     expect(h.update).toHaveBeenCalledWith('owners', ['octo', 'acme'], fakeVscode.ConfigurationTarget.Global);
+  });
+
+  it('writes the selection to the workspace settings when they hold the value of owners, which wins there', async () => {
+    h.workspaceOwners.value = ['acme'];
+    h.settings.owners = ['acme'];
+    fakeVscode.window.showQuickPick.mockImplementation(async (items: PickItem[]) => items.filter((item) => item.label === 'octo'));
+    await selectOwners(h.deps);
+    expect(h.update).toHaveBeenCalledWith('owners', ['octo'], fakeVscode.ConfigurationTarget.Workspace);
   });
 
   it('writes an empty list for an empty selection: all repositories', async () => {

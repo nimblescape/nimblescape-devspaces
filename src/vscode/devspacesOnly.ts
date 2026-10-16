@@ -8,14 +8,15 @@
 import * as vscode from 'vscode';
 import { errorMessage } from '../core/errors';
 import type { Logger } from '../core/ports';
-import { SETTINGS_SECTION } from './settings';
+import { SETTINGS_SECTION, settingTarget } from './settings';
 
 /** Context key of the view title bar (package.json): the setting `showOnlyDevspaces` is on. */
 export const DEVSPACES_ONLY_CONTEXT_KEY = 'devspaces.devspacesOnly';
 
-/** Writes the setting `showOnlyDevspaces` to the user settings. */
+/** Writes the setting `showOnlyDevspaces` where its value applies: the workspace or the user settings (settingTarget). */
 export async function setShowOnlyDevspaces(on: boolean): Promise<void> {
-  await vscode.workspace.getConfiguration(SETTINGS_SECTION).update('showOnlyDevspaces', on, vscode.ConfigurationTarget.Global);
+  const configuration = vscode.workspace.getConfiguration(SETTINGS_SECTION);
+  await configuration.update('showOnlyDevspaces', on, settingTarget(configuration, 'showOnlyDevspaces'));
 }
 
 /** Sets the context key of the title bar icon from the setting `showOnlyDevspaces`. */

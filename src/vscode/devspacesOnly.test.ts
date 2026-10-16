@@ -2,8 +2,8 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Show Only Devspaces / Show All Repositories: the setting showOnlyDevspaces in the user settings, the context key of
-// the view title bar, and the entries of package.json.
+// Show Only Devspaces / Show All Repositories: the setting showOnlyDevspaces in the user or workspace settings, the
+// context key of the view title bar, and the entries of package.json.
 import * as fs from 'fs';
 import * as path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,17 +20,24 @@ beforeEach(() => {
 });
 
 describe('Show Only Devspaces', () => {
-  it('writes the setting showOnlyDevspaces to the user settings', async () => {
+  it('writes the setting showOnlyDevspaces to the user settings, or to the workspace settings when they hold it', async () => {
     const update = vi.fn(async () => undefined);
+    let workspaceValue: unknown;
+    const inspect = vi.fn(() => ({ key: 'devspaces.showOnlyDevspaces', globalValue: true, workspaceValue }));
     fakeVscode.workspace.getConfiguration.mockImplementation((section: string) => {
       expect(section).toBe(SETTINGS_SECTION);
-      return { get: vi.fn(), update };
+      return { get: vi.fn(), update, inspect };
     });
     await setShowOnlyDevspaces(true);
     await setShowOnlyDevspaces(false);
+    // A value in the workspace settings wins over the user settings: the button changes that value.
+    workspaceValue = false;
+    await setShowOnlyDevspaces(true);
+    expect(inspect).toHaveBeenCalledWith('showOnlyDevspaces');
     expect(update.mock.calls).toEqual([
       ['showOnlyDevspaces', true, fakeVscode.ConfigurationTarget.Global],
       ['showOnlyDevspaces', false, fakeVscode.ConfigurationTarget.Global],
+      ['showOnlyDevspaces', true, fakeVscode.ConfigurationTarget.Workspace],
     ]);
   });
 

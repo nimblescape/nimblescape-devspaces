@@ -70,6 +70,15 @@ export function readSettings(): ExtensionSettings {
 }
 
 /**
+ * Where a button of the view writes a setting of the scope `window`, for example `owners`: the workspace settings when
+ * they hold a value for it, because that value wins over the user settings; else the user settings. In Restricted Mode,
+ * VS Code ignores the workspace values of these settings (restrictedConfigurations), and `inspect` does not return them.
+ */
+export function settingTarget(configuration: Pick<vscode.WorkspaceConfiguration, 'inspect'>, key: string): vscode.ConfigurationTarget {
+  return configuration.inspect<unknown>(key)?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+}
+
+/**
  * The raw value of devspaces.hostAccessChecksOff in the user settings (scope `application`). A value of a workspace or
  * folder, which a repository could bring along, never turns a check off: VS Code ignores such values of an application
  * setting, and this reads the user value only, to be sure.
