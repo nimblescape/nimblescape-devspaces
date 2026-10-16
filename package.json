@@ -674,7 +674,7 @@
           "type": "string",
           "scope": "application",
           "default": "",
-          "markdownDescription": "An image that a devspace can be created from in place of the Dev Container configuration of the repository, for example `ghcr.io/majikmate/devcontainer-base:latest`.\n\nWith a default image, every listed repository with a configuration gets a `default` row in the sidebar next to the rows of its configurations (child rows under the repository name), and each row has its own devspace: the default-image devspace and the configuration devspace of a repository can run at the same time. A repository without a Dev Container configuration is listed too and starts from the default image alone.\n\nThe `default` devspace is created from this image alone: the `devcontainer.json` of the repository (its Dockerfile, Features, lifecycle commands, mounts, ports and extensions) is not read; the metadata of the image applies. The repository is cloned as usual. A devspace keeps the image it was created from; a changed setting asks **Rebuild now** or **Later** on its next start.\n\nEmpty: every devspace uses a configuration of the repository, and only repositories with one are listed."
+          "markdownDescription": "An image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that a devspace can start from instead of the Dev Container configuration of the repository: each listed repository gets a `default` row with its own devspace. Empty: no default image.\n\n[Default image in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#default-image)"
         },
         "devspaces.startWithDefaultImage": {
           "type": "boolean",
@@ -708,13 +708,13 @@
             "7 */6 * * *",
             "60"
           ],
-          "markdownDescription": "When the Monitor on each Docker engine does its background work:\n\n- updates the images that your devspaces use\n- downloads the newest VS Code server and the extensions your devspaces use into the engine's shared store, so opens need no downloads\n- cleans up that store (at most once a day)\n\nValue: a cron expression in your time zone (minute hour day month weekday), or minutes between runs (5 to 1440). Invalid: the default. A time that was missed (engine off, computer asleep) runs once when the monitor runs again. **Devspaces: Update All Images Now** runs it at once.\n\nExamples: `7 6 * * *` daily at 06:07 (default) · `7 6 * * 1-5` weekdays at 06:07 · `7 */6 * * *` every six hours · `60` hourly"
+          "markdownDescription": "When the Monitor on each Docker engine updates the images, the VS Code server and the extensions of your devspaces: a cron expression in your time zone, for example `7 6 * * *` (daily at 06:07, the default), or the minutes between two runs (5 to 1440).\n\n[The background run in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#the-background-run)"
         },
         "devspaces.stopMonitorWhenIdle": {
           "type": "boolean",
           "scope": "application",
           "default": false,
-          "markdownDescription": "End the Monitor container of a Docker engine, local or remote, when no devspace has run for 5 minutes (the next open starts it again).\n\nOff (the default): the first Start or Rebuild on an engine, or **Update All Images Now** there, asks whether its Monitor keeps running there. After your answer, it keeps running, so its background work (**Cache Update Schedule**) and its retries also run while no devspace runs. It ends itself after 30 days in which no devspace was used on that engine. Until you answer, it ends when idle. The answer **Keep Running** keeps this setting off (the question only comes while it is off), and **Stop When Idle** turns it on. A change applies on each engine at the next start of a devspace or **Update All Images Now** there. Until then, a Monitor that keeps running goes on; **Devspaces: Remove Devspaces from This Docker Engine…** removes it at once. On an engine that several computers use, a permanent Monitor that another computer created stays; the computer that created it replaces it when it turns this setting on."
+          "markdownDescription": "End the Monitor container of a Docker engine, local or remote, when no devspace has run there for 5 minutes; the next start starts it again. Off: the first Start or Rebuild on an engine, or **Update All Images Now** there, asks whether the Monitor keeps running there; until you answer, it ends when idle.\n\n[The background run in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#the-background-run)"
         },
         "devspaces.updateImagesOnConnect": {
           "type": "boolean",
@@ -729,7 +729,11 @@
             "ask"
           ],
           "default": "notify",
-          "markdownDescription": "What an open does when a newer image is available for the devspace's existing container (the update creates it again; your workspace files are kept).\n\n- `notify`: say that the container is updated now; **Cancel** leaves the window as it is\n- `ask`: ask; **Later** uses the existing container without the update"
+          "markdownDescription": "What a start does when a newer image is available for the existing container of a devspace. The update creates the container again; your files in the workspace are kept.\n\n[The update at a start in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#the-update-at-a-start)",
+          "enumDescriptions": [
+            "Say that the container is updated now, with Continue or Cancel. Cancel leaves the devspace closed.",
+            "Ask first, with Update Now or Later. Later opens the current container without the update."
+          ]
         },
         "devspaces.respectShutdownActionNone": {
           "type": "boolean",
@@ -812,7 +816,7 @@
               }
             ]
           },
-          "markdownDescription": "Filter and group the repositories in the sidebar by regular expressions on the repository name (without the owner). **[Edit Repository Groups…](command:devspaces.editRepositoryGroups)** opens an editor with a preview.\n\n- An owner with a match shows only the matching repositories (and those with a devspace)\n- Each capturing group becomes a tree level; the last one is the label\n- The first matching entry wins; an entry with a `name` gets its own node\n\nExample: `^(\\d{4}-[^-]+-[^-]+)-([^-]+-[^-]+)-(.+)$` turns `2026-web-1a-module-html-css` into `2026-web-1a` › `module-html` › `css`"
+          "markdownDescription": "Regular expressions on the repository name, without the owner, that filter the repositories of each owner in the sidebar and group them in levels. **[Edit Repository Groups…](command:devspaces.editRepositoryGroups)** opens an editor with a preview.\n\n[Repository groups in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#settings)"
         }
       }
     }
