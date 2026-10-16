@@ -23,7 +23,7 @@ import { VSCODE_STORE_VOLUME, repositoryFolder, splitRepository } from '../core/
 import { availableDevspaces, isAvailableTo } from '../core/ownership';
 import { isoTime, systemClock, type Clock, type ProgressReporter } from '../core/ports';
 import type { DevspaceOperations } from '../core/pipeline/devspaceOperations';
-import { PipelineTexts, WINDOW_STATE_FLOW_TIMEOUT_MS, type OpenResult } from '../core/pipeline/operationBase';
+import { PipelineTexts, WINDOW_STATE_FLOW_TIMEOUT_MS, type DockerStarter, type OpenResult } from '../core/pipeline/operationBase';
 import type { DockerEngineRecord, DockerEngineRecords, EngineRemoval } from '../core/storage/dockerEngineRecords';
 import type { DevspaceRegistry } from '../core/storage/registry';
 import type { SessionFiles } from '../core/storage/sessionFiles';
@@ -175,6 +175,13 @@ export interface ControllerDeps {
    * the request. Without it, the command does nothing.
    */
   updateImagesNow?: (target: DockerTarget, signal: AbortSignal) => Promise<void>;
+  /**
+   * The step "Docker start" of an operation, the function that DevspaceOperations gets (startDockerFor with
+   * ensureDockerRunning), on the target of the running operation: a local Docker that does not run is started, Podman
+   * is refused, and an SSH host gets the reachability check. "Update All Images Now" runs it before it asks the
+   * Monitor. Default: nothing.
+   */
+  startDocker?: DockerStarter;
   /**
    * The question about the Monitor of an engine (MonitorQuestion; once per engine, never rejects), which a Start, a
    * Rebuild and "Update All Images Now" of the user ask before they run there (beforeUserFlow). The flows that run by
@@ -1124,6 +1131,8 @@ export class Controller implements vscode.Disposable {
    * supported (an endpoint that is neither local nor SSH, a context that cannot be read, or Podman) is refused with its
    * message, before the question about the Monitor (beforeUserFlow) and before any progress. Before all of this, the
    * flow is refused while this window removes Devspaces from an engine (refusedWhileRemoving), as Start is.
+   * In the progress, the step "Docker start" of Start runs first (startDocker): a local Docker that does not run is
+   * started, a Podman engine behind the Docker CLI is refused, and an SSH host is checked.
    */
   async updateImagesNow(): Promise<void> {
     const update = this.deps.updateImagesNow;
@@ -1136,7 +1145,14 @@ export class Controller implements vscode.Disposable {
     // The question about the Monitor of the engine, which the request makes sure of; it reads only local records.
     if (!(await this.beforeUserFlow('Update All Images Now'))) return;
     const engine = describeDockerHost(target.host);
-    await runWithProgress({ title: ControllerTexts.requestingImageUpdate(engine), task: (_progress, signal) => update(target, signal) });
+    const startDocker = this.deps.startDocker;
+    await runWithProgress({
+      title: ControllerTexts.requestingImageUpdate(engine),
+      task: async (progress, signal) => {
+        await startDocker?.({ onStarting: () => progress.step('startingDocker'), signal });
+        await update(target, signal);
+      },
+    });
     this.logger.info(`The Monitor on ${engine} took the request of "Update All Images Now".`);
     this.inform(ControllerTexts.imagesUpdatingNow(engine));
   }

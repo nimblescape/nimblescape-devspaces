@@ -2,22 +2,25 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The command "Update All Images Now": the controller asks the Monitor of the Docker engine of the operation
-// (the sidebar's) through the worker (`monitorRunNow`), with a progress until the monitor took the request, then the
-// message; the window's call to the worker (workerMonitor.monitorRunNow) with the monitor settings of this computer,
-// its time limit, and a strict answer; and the command and its menu in package.json.
+// The command "Update All Images Now": the controller runs the step "Docker start" of Start, then asks the Monitor of
+// the Docker engine of the operation (the sidebar's) through the worker (`monitorRunNow`), with a progress until the
+// monitor took the request, then the message; the window's call to the worker (workerMonitor.monitorRunNow) with the
+// monitor settings of this computer, its time limit, and a strict answer; and the command and its menu in package.json.
 import * as fs from 'fs';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
+import { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import { dockerTargetOf, type DockerTarget } from '../core/docker/dockerHost';
+import { ensureDockerRunning } from '../core/docker/dockerStart';
 import { UNREADABLE_DOCKER_TARGET, podmanDockerTarget } from '../core/docker/dockerTargets';
+import { startDockerFor, type RemoteReachabilityDeps } from '../core/docker/remoteDocker';
 import { OP_MONITOR_RUN_NOW } from '../core/helperChannel/protocol';
-import { Messages } from '../core/messages';
-import { MONITOR_ENSURE_FLOW_TIMEOUT_MS, MONITOR_RUN_NOW_FLOW_TIMEOUT_MS } from '../core/pipeline/operationBase';
-import { silentLogger } from '../core/ports';
+import { Messages, Steps } from '../core/messages';
+import { MONITOR_ENSURE_FLOW_TIMEOUT_MS, MONITOR_RUN_NOW_FLOW_TIMEOUT_MS, type DockerStarter } from '../core/pipeline/operationBase';
+import { silentLogger, type ProcessRunner, type RunResult } from '../core/ports';
 import { Commands } from './commands';
 import { Controller, type ControllerDeps } from './controller';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
@@ -36,13 +39,19 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function controllerWith(target: DockerTarget, update?: ControllerDeps['updateImagesNow'], monitorQuestion?: ControllerDeps['monitorQuestion']) {
+function controllerWith(
+  target: DockerTarget,
+  update?: ControllerDeps['updateImagesNow'],
+  startDocker?: DockerStarter,
+  monitorQuestion?: ControllerDeps['monitorQuestion'],
+) {
   const infos: string[] = [];
   const logger = { info: vi.fn((text: string) => void infos.push(text)), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), show: vi.fn() };
   const deps = {
     logger,
     dockerTargets: { current: async () => target, resolve: async () => target, withOperation: <T>(fn: () => Promise<T>) => fn() },
     ...(update !== undefined ? { updateImagesNow: update } : {}),
+    ...(startDocker !== undefined ? { startDocker } : {}),
     ...(monitorQuestion !== undefined ? { monitorQuestion } : {}),
   } as unknown as ControllerDeps;
   return { controller: new Controller(deps), infos };
@@ -68,7 +77,7 @@ describe('the command Update All Images Now', () => {
       order.push(`ask ${host}`);
       return 'closed' as const;
     });
-    await controllerWith(REMOTE, update, { askIfNeeded }).controller.updateImagesNow();
+    await controllerWith(REMOTE, update, undefined, { askIfNeeded }).controller.updateImagesNow();
     expect(order).toEqual(['ask build-box', 'update']);
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on build-box updates the images now.');
   });
@@ -77,6 +86,63 @@ describe('the command Update All Images Now', () => {
     const { controller } = controllerWith(LOCAL, async () => {});
     await controller.updateImagesNow();
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on the local Docker updates the images now.');
+  });
+
+  it('runs the step "Docker start" of Start in the progress before it asks the Monitor', async () => {
+    const order: string[] = [];
+    const messages: string[] = [];
+    fakeVscode.window.withProgress.mockImplementation(async (_options: unknown, task: (progress: unknown, token: unknown) => Promise<unknown>) =>
+      task({ report: (value: { message: string }) => void messages.push(value.message) }, { onCancellationRequested: () => ({ dispose: () => {} }) }),
+    );
+    // A local Docker that does not run: the step starts it, and the progress says so.
+    const startDocker = vi.fn<DockerStarter>(async ({ onStarting }) => {
+      order.push('start');
+      onStarting();
+    });
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => void order.push('update'));
+    const { controller } = controllerWith(LOCAL, update, startDocker);
+    await controller.updateImagesNow();
+    expect(order).toEqual(['start', 'update']);
+    expect(startDocker.mock.calls[0][0].signal).toBe(update.mock.calls[0][1]);
+    expect(messages.some((message) => message.includes(`${Steps.startingDocker}.`))).toBe(true);
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith('The Monitor on the local Docker updates the images now.');
+  });
+
+  // The Docker CLI with the Docker-compatible API of Podman (for example with
+  // DOCKER_HOST=unix:///run/user/1000/podman/podman.sock) is a local target: only the step "Docker start" finds Podman
+  // (BootstrapDocker.podmanInUse).
+  it('refuses a Podman engine behind the Docker CLI with the message of Start, without the Monitor', async () => {
+    const ok = (stdout: string): RunResult => ({ exitCode: 0, stdout, stderr: '', timedOut: false });
+    const answers: Record<string, RunResult> = {
+      info: ok('"5.2.2"\n'),
+      '--version': ok('Docker version 29.8.0, build 3f2a5b1\n'),
+      version: ok(`${JSON.stringify({ Components: [{ Name: 'Podman Engine', Version: '5.2.2' }], Version: '5.2.2' })}\n`),
+    };
+    const runner: ProcessRunner = {
+      run: async (_file, args) => {
+        const answer = answers[args[0]];
+        if (answer === undefined) throw new Error(`Unexpected call: docker ${args.join(' ')}`);
+        return answer;
+      },
+    };
+    const docker = new BootstrapDocker(runner, '/usr/bin/docker', { PATH: '/usr/bin' }, silentLogger, 'linux', { fileIdentity: async () => 'docker 29.8.0' });
+    // The step of the operations (extension.ts); a local target needs no remote dependency.
+    const startDocker: DockerStarter = async ({ onStarting, signal }) =>
+      startDockerFor(
+        LOCAL,
+        () => ensureDockerRunning(docker, runner, silentLogger, { platform: 'linux', onStarting, signal }),
+        { logger: silentLogger } as RemoteReachabilityDeps,
+        signal,
+      );
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    const { controller } = controllerWith(LOCAL, update, startDocker);
+    await expect(controller.updateImagesNow()).rejects.toMatchObject({
+      code: 'dockerEndpointUnsupported',
+      message: Messages.podmanNotSupported,
+      detail: 'docker version: the engine is Podman Engine 5.2.2.',
+    });
+    expect(update).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
   });
 
   it('a failure rejects (the command shows it) and says nothing of an update', async () => {
