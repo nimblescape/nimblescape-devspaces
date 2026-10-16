@@ -143,6 +143,14 @@ function attachConfiguration(kind, index) {
     const pending = path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'globalStorage', `${manifest.publisher}.${manifest.name}`, 'pending');
     for (const name of fs.existsSync(pending) ? fs.readdirSync(pending) : []) fs.rmSync(path.join(pending, name), { force: true });
   }
+  // `plain` starts as after the first use of Devspaces (the empty marker `used`, src/core/storage/firstUse.ts), so that
+  // the window of a container that is no devspace restores the devspaces from the volumes while it activates, as the
+  // tests of test/vscode/attach/plain.test.ts expect; with a fresh user data folder alone, it would restore nothing.
+  if (kind === 'plain' && !listsOnly) {
+    const storage = path.join(base.env.DEVSPACE_TEST_USER_DATA_DIR, 'User', 'globalStorage', `${manifest.publisher}.${manifest.name}`);
+    fs.mkdirSync(storage, { recursive: true });
+    fs.writeFileSync(path.join(storage, 'used'), '');
+  }
   const extensionDevelopmentPath = [update ? fileURLToPath(new URL('test/vscode/host', import.meta.url)) : checkout, fileURLToPath(new URL('test/vscode/github', import.meta.url))];
   // `stopped` starts with a local folder; its tests start a second VS Code in the window of the devspace
   // (test/vscode/attach/stopped.test.ts): with an empty user data folder of its own (VS Code puts its socket there, so

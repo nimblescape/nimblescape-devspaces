@@ -30,6 +30,19 @@ vi.mock('child_process', async (importOriginal) => {
   }) as typeof actual.spawn;
   return { ...actual, spawn, default: { ...actual, spawn } };
 });
+// The wait of the activation for the first use of Devspaces (devspacesUsed): a test can do something while it waits.
+const whileFirstUseIsRead = vi.hoisted(() => ({ run: undefined as (() => void) | undefined }));
+vi.mock('../core/storage/firstUse', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core/storage/firstUse')>();
+  return {
+    ...actual,
+    devspacesUsed: async (...args: Parameters<typeof actual.devspacesUsed>) => {
+      const used = await actual.devspacesUsed(...args);
+      whileFirstUseIsRead.run?.();
+      return used;
+    },
+  };
+});
 
 import { DockerContextKeys } from '../core/docker/dockerSetup';
 import { Messages } from '../core/messages';
@@ -148,13 +161,17 @@ describe('no message at activation when Docker is missing', () => {
     vi.useRealTimers();
     const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-activation-test-'));
     const view = { visible: false, onDidChangeVisibility: new fakeVscode.EventEmitter<{ visible: boolean }>().event, dispose() {} };
-    // The view becomes visible after the setup looked at it, while the activation still waits: VS Code sends that event
-    // once, before the listener exists, so the listener never hears it.
+    // The view becomes visible while the activation waits for the first use (after the setup looked at the view):
+    // VS Code sends that event once, before the listener exists, so the listener never hears it.
+    let visibleAtInitialize: boolean | undefined;
     const initialize = DockerSetup.prototype.initialize;
     const initialized = vi.spyOn(DockerSetup.prototype, 'initialize').mockImplementation(function (this: DockerSetup) {
+      visibleAtInitialize = view.visible;
       initialize.call(this);
-      view.visible = true;
     });
+    whileFirstUseIsRead.run = () => {
+      view.visible = true;
+    };
     const shown = vi.spyOn(DockerSetup.prototype, 'onViewShown');
     const window = fakeVscode.window as unknown as Record<string, unknown>;
     window.createTreeView = vi.fn(() => view);
@@ -174,10 +191,11 @@ describe('no message at activation when Docker is missing', () => {
     try {
       const { activate } = await import('./extension');
       await activate(context as never);
-      expect(initialized).toHaveBeenCalledTimes(1);
+      expect(visibleAtInitialize).toBe(false);
       // On Windows without Docker, the setup runs `wsl --status` now, so that the step Install WSL 2 shows the state.
       expect(shown).toHaveBeenCalledTimes(1);
     } finally {
+      whileFirstUseIsRead.run = undefined;
       initialized.mockRestore();
       shown.mockRestore();
       for (const subscription of context.subscriptions) {

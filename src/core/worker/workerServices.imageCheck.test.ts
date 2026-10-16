@@ -156,7 +156,8 @@ describe("the worker's image check, probes", () => {
     expect(tokenLogins).toEqual([`Basic ${Buffer.from('octo:pw-1234').toString('base64')}`]);
     expect(events.slice(0, 2)).toEqual([`ask ${registry}`, `forget ${SECRET_REGISTRY}`]);
     expect(events).toContain(`warn The registry ${registry} rejected the login of this computer.`);
-  });
+    // Two checks of up to 4 seconds each: more than the default time limit of a test.
+  }, 15_000);
 
   it('the image check of workerServiceDeps is this one (the proxy of its engine, its forgetSecret)', async () => {
     const { registry, proxyPort, connects } = await registryBehindProxy();
