@@ -120,6 +120,23 @@ describe('the texts of the Monitor question and of the removal in the docs', () 
     expect(paragraph).toContain(`A Monitor of an older version on an engine that you do not open again keeps running; Devspaces: ${REMOVE_COMMAND} removes it.`);
   });
 
+  // The mode of a running Monitor changes only at the next ensure on its engine; the answer Keep Running writes the
+  // value that the setting has while the question comes.
+  it('the setting and the guide say when a changed answer reaches a running Monitor', () => {
+    const { contributes } = JSON.parse(read('package.json')) as { contributes: { configuration: { properties: Record<string, { markdownDescription?: string }> } } };
+    const setting = contributes.configuration.properties['devspaces.stopMonitorWhenIdle'];
+    const guide = read('docs/guide.md');
+    const changed = 'A change applies on each engine at the next start of a devspace there.';
+    for (const text of [setting?.markdownDescription ?? '', guide]) {
+      expect(text).toContain(changed);
+      expect(text).toContain(`removes it at once`);
+    }
+    expect(setting?.markdownDescription).toContain('the first Start or Rebuild on an engine, or **Update All Images Now** there, asks');
+    expect(setting?.markdownDescription).toContain('The answer **Keep Running** keeps this setting off (the question only comes while it is off)');
+    // A Stop sends a heartbeat: it is a use of the engine.
+    expect(guide).toContain('no devspace was started, stopped or deleted there');
+  });
+
   it('the guide says what the command removes, and removes the Monitor and the helper containers by hand first', () => {
     const text = section(read('docs/guide.md'), 'Uninstall');
     expect(text).toContain('It removes: the container `devspaces-monitor`, the helper containers, the helper images');

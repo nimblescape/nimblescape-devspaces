@@ -3,13 +3,15 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // The question about the Monitor of a Docker engine: keep its container devspaces-monitor running, also while VS Code
-// is closed, or let it stop when no devspace runs. It is asked once per engine, in a flow that the user started (a
-// Start, a Rebuild, "Update All Images Now"; the controller asks before the flow runs), and only while the setting
-// devspaces.stopMonitorWhenIdle is not on. The flows that run by themselves (the reopen at startup, an attached window,
-// a pending operation, the repair of the heartbeats) never ask: until the engine has an answer, its Monitor stops when
-// idle (monitorSettings.ts). The answer goes into the user setting devspaces.stopMonitorWhenIdle, which applies to every
-// engine, and then the engine is recorded as answered (DockerEngineRecords). A closed question stores nothing: the flow
-// goes on with a Monitor that stops when idle, and the next flow of the user asks again.
+// is closed, or let it stop when no devspace runs. It is asked once per engine (one question per engine at a time in
+// this window; two windows that start at the same moment can both ask, and the last answer counts), in a flow that the
+// user started (a Start, a Rebuild, "Update All Images Now"; the controller asks before the flow runs), and only while
+// the setting devspaces.stopMonitorWhenIdle is not on. The flows that run by themselves (the reopen at startup, an
+// attached window, a pending operation, the repair of the heartbeats) never ask: until the engine has an answer, its
+// Monitor stops when idle (monitorSettings.ts). The answer goes into the user setting devspaces.stopMonitorWhenIdle,
+// which applies to every engine from the next ensure of its Monitor (a running Monitor keeps its mode until then), and
+// then the engine is recorded as answered (DockerEngineRecords). A closed question stores nothing: the flow goes on
+// with a Monitor that stops when idle, and the next flow of the user asks again.
 import * as vscode from 'vscode';
 import { describeDockerHost } from '../core/docker/dockerHost';
 import { errorMessage } from '../core/errors';
