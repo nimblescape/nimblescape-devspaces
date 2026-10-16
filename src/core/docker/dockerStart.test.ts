@@ -61,7 +61,7 @@ interface Script {
   desktop?: (call: Call) => RunResult | Promise<RunResult>;
   open?: (call: Call) => RunResult | Promise<RunResult>;
   /** `docker --version`. Default: the Docker CLI. */
-  cliVersion?: RunResult;
+  cliVersion?: RunResult | Promise<RunResult>;
   /** `docker version --format '{{json .Server}}'`. Default: Docker Engine. */
   serverVersion?: RunResult;
 }
@@ -80,7 +80,9 @@ function setup(script: Script) {
     if (call.args[0] === 'version') return script.serverVersion ?? DOCKER_SERVER;
     throw new Error(`Unexpected call: ${call.file} ${call.args.join(' ')}`);
   });
-  const docker = new BootstrapDocker(runner, DOCKER, { PATH: '/usr/bin' }, silentLogger, 'darwin');
+  // The file at the path of the CLI (BootstrapDocker.podmanCli): another identity is another file there.
+  const cliFile = { identity: 'docker 29.8.0' as string | undefined };
+  const docker = new BootstrapDocker(runner, DOCKER, { PATH: '/usr/bin' }, silentLogger, 'darwin', { fileIdentity: async () => cliFile.identity });
   const time = fakeTime();
   const onStarting = vi.fn();
   const run = (options: Partial<DockerStarterOptions> & Pick<DockerStarterOptions, 'platform'>) =>
@@ -98,7 +100,7 @@ function setup(script: Script) {
   const desktopCalls = () => runner.calls.filter((call) => call.args[0] === 'desktop');
   const openCalls = () => runner.calls.filter((call) => call.file === '/usr/bin/open');
   const versionCalls = () => runner.calls.filter((call) => call.args[0] === '--version' || call.args[0] === 'version');
-  return { runner, docker, time, onStarting, run, infoCalls, desktopCalls, openCalls, versionCalls };
+  return { runner, docker, cliFile, time, onStarting, run, infoCalls, desktopCalls, openCalls, versionCalls };
 }
 
 async function rejection(promise: Promise<unknown>): Promise<unknown> {
@@ -145,11 +147,18 @@ describe('ensureDockerRunning', () => {
       expect(s.runner.calls.find((call) => call.args[0] === 'version')?.args).toEqual(['version', '--format', '{{json .Server}}']);
     });
 
-    it('asks the CLI once per path, the engine at each check, and takes a check that fails for Docker', async () => {
+    it('asks the CLI once per file of the CLI, the engine at each check, and takes a check that fails for Docker', async () => {
       const s = setup({ info: [READY] });
       await s.run({ platform: 'darwin' });
       await s.run({ platform: 'darwin' });
       expect(s.versionCalls().map((call) => call.args[0])).toEqual(['--version', 'version', 'version']);
+      // Another file at the path of the CLI (for example an update of Docker), or a file that cannot be read: asked again.
+      s.cliFile.identity = 'docker 29.9.0';
+      await s.run({ platform: 'darwin' });
+      s.cliFile.identity = undefined;
+      await s.run({ platform: 'darwin' });
+      await s.run({ platform: 'darwin' });
+      expect(s.versionCalls().map((call) => call.args[0])).toEqual(['--version', 'version', 'version', '--version', 'version', '--version', 'version', '--version', 'version']);
       // Docker that does not run is started as before; only the CLI is asked (the engine does not answer).
       const stopped = setup({ info: [NOT_READY, READY] });
       await stopped.run({ platform: 'darwin' });
@@ -159,6 +168,21 @@ describe('ensureDockerRunning', () => {
       const failing = setup({ info: [READY], cliVersion: fail('unknown flag: --version'), serverVersion: fail('error during connect') });
       await failing.run({ platform: 'darwin' });
       expect(failing.onStarting).not.toHaveBeenCalled();
+    });
+
+    it('runs one docker --version for callers that overlap; a caller that cancels ends only its own wait', async () => {
+      let answer: (result: RunResult) => void = () => undefined;
+      const s = setup({ info: [READY], cliVersion: new Promise<RunResult>((resolve) => (answer = resolve)) });
+      const cancel = new AbortController();
+      const first = s.docker.podmanCli(cancel.signal);
+      const second = s.docker.podmanCli();
+      await vi.waitFor(() => expect(s.versionCalls()).toHaveLength(1));
+      cancel.abort();
+      await expect(first).rejects.toMatchObject({ name: 'AbortError' });
+      answer(ok('podman version 5.2.2\n'));
+      await expect(second).resolves.toBe('docker --version: podman version 5.2.2');
+      await expect(s.docker.podmanCli()).resolves.toBe('docker --version: podman version 5.2.2');
+      expect(s.versionCalls()).toHaveLength(1);
     });
   });
 

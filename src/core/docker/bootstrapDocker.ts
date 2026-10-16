@@ -12,10 +12,11 @@
 // that does not only read is logged with its command (directCommandName), never its arguments. Output is read as JSON
 // (`docker --version` as its one line), never as a table. No `vscode`.
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import { CommandError, errorMessage, UserFacingError } from '../errors';
 import { Messages } from '../messages';
 import { LABEL_BUILD_ID } from '../names';
-import { isAbortError, sleep, systemClock, type Clock, type Logger, type ProcessRunner, type RunOptions, type RunResult, type StartedProcess } from '../ports';
+import { abortError, isAbortError, sleep, systemClock, type Clock, type Logger, type ProcessRunner, type RunOptions, type RunResult, type StartedProcess } from '../ports';
 import { dockerCommandWords, dockerProcessEnv, isReadOnlyDockerCall } from './dockerCli';
 import { isSshClosedBeforeLogin } from './dockerHost';
 import type { ImageInfo } from './dockerObjects';
@@ -163,6 +164,33 @@ export interface BootstrapDockerOptions {
   onCliLost?: () => void;
   /** Only for tests. Default: SSH_DROP_RETRY_DELAY_MS. */
   sshDropRetryDelayMs?: number;
+  /** Only for tests. Default: cliFileIdentity. */
+  fileIdentity?: (path: string) => Promise<string | undefined>;
+}
+
+/**
+ * The identity of the file at `path`: its inode, size and modification time (fs.stat, which follows a link). Another
+ * value means another file, for example Docker Engine installed after the package podman-docker was removed.
+ * Undefined when the file cannot be read.
+ */
+export async function cliFileIdentity(path: string): Promise<string | undefined> {
+  try {
+    const stat = await fs.promises.stat(path);
+    return `${stat.ino}:${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `promise`, or an AbortError as soon as `signal` aborts; the work of `promise` goes on for its other callers. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) return promise;
+  if (signal.aborted) return Promise.reject(abortError());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
 }
 
 /** The Docker CLI of the bootstrap (see the module comment). */
@@ -176,8 +204,12 @@ export class BootstrapDocker {
   private readonly onCliLost: BootstrapDockerOptions['onCliLost'];
   private readonly sshDropRetryDelayMs: number;
   private lookedUpAt: number | undefined;
-  /** The answer of `docker --version` for the CLI at `path` (podmanInUse): the detail of the Podman CLI, or none. */
-  private cliVersion: { path: string; podman: string | undefined } | undefined;
+  private readonly fileIdentity: (path: string) => Promise<string | undefined>;
+  /**
+   * The check of `docker --version` (podmanCli) for the CLI at `path`, whose file had `identity` when it started: its
+   * answer (the detail of the Podman CLI, or none), which overlapping callers share while it runs.
+   */
+  private cliCheck: { path: string; identity: string | undefined; answer: Promise<string | undefined>; done: boolean } | undefined;
 
   /**
    * @param dockerPath Full path of the Docker CLI (see `findDockerCli`), or `undefined` if Docker is not installed.
@@ -202,6 +234,7 @@ export class BootstrapDocker {
     this.onDaemonStatus = options.onDaemonStatus;
     this.onCliLost = options.onCliLost;
     this.sshDropRetryDelayMs = options.sshDropRetryDelayMs ?? SSH_DROP_RETRY_DELAY_MS;
+    this.fileIdentity = options.fileIdentity ?? cliFileIdentity;
     // The caller has just looked the CLI up.
     this.lookedUpAt = this.clock.now();
   }
@@ -394,7 +427,7 @@ export class BootstrapDocker {
   /**
    * Podman instead of Docker, which Devspaces does not support: the detail for the log, or undefined for Docker.
    * - The CLI is Podman: `docker --version` prints "podman version …" (PODMAN_CLI_VERSION). It needs no engine; the
-   *   answer is kept for the path of the CLI.
+   *   answer is kept for the file of the CLI (podmanCli).
    * - With `engineAnswers` (the engine answered `docker info`): the engine is Podman. `docker version` names the
    *   component "Podman Engine" (the Docker-compatible API of Podman behind the Docker CLI). Within an operation, this
    *   is the engine of the operation.
@@ -418,19 +451,39 @@ export class BootstrapDocker {
 
   /**
    * The CLI part of podmanInUse: the detail when `docker --version` prints "podman version …" (for example the package
-   * podman-docker), else undefined. The answer is kept for the path of the CLI; a call that fails counts as Docker and
-   * is not kept. DockerTargets asks it when the current context cannot be read. Rejects only with an AbortError.
+   * podman-docker), else undefined. The answer is kept for the file of the CLI (cliFileIdentity): another file at its
+   * path, or a file that cannot be read, is asked again, so a user who replaced podman-docker with Docker needs no
+   * reload. Callers that overlap share one call. A call that fails counts as Docker and is not kept. DockerTargets asks
+   * it when the current context cannot be read. Rejects only with an AbortError.
    */
   async podmanCli(signal?: AbortSignal): Promise<string | undefined> {
     const path = this.path;
     if (path === undefined) return undefined;
-    if (this.cliVersion?.path === path) return this.cliVersion.podman;
-    const result = await this.podmanCheckCall(['--version'], signal);
-    // Not kept when the call failed: it is asked again next time.
-    if (result === undefined || result.exitCode !== 0) return undefined;
-    const podman = PODMAN_CLI_VERSION.test(result.stdout) ? `docker --version: ${result.stdout.trim()}` : undefined;
-    this.cliVersion = { path, podman };
-    return podman;
+    const identity = await this.fileIdentity(path);
+    if (signal?.aborted) throw abortError();
+    const known = this.cliCheck;
+    if (known !== undefined && known.path === path && (!known.done || (identity !== undefined && known.identity === identity))) {
+      return untilAborted(known.answer, signal);
+    }
+    return untilAborted(this.checkCli(path, identity), signal);
+  }
+
+  /**
+   * Runs `docker --version` for podmanCli, without the signal of a caller (others may share it), and keeps the check.
+   * A call that fails is not kept: it is asked again next time.
+   */
+  private checkCli(path: string, identity: string | undefined): Promise<string | undefined> {
+    const check = { path, identity, answer: Promise.resolve<string | undefined>(undefined), done: false };
+    check.answer = this.podmanCheckCall(['--version'], undefined).then((result) => {
+      check.done = true;
+      if (result === undefined || result.exitCode !== 0) {
+        if (this.cliCheck === check) this.cliCheck = undefined;
+        return undefined;
+      }
+      return PODMAN_CLI_VERSION.test(result.stdout) ? `docker --version: ${result.stdout.trim()}` : undefined;
+    });
+    this.cliCheck = check;
+    return check.answer;
   }
 
   /** A call of podmanInUse: undefined when it could not run (logged). Rejects only with an AbortError. */

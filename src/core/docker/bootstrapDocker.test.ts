@@ -854,6 +854,7 @@ describe('BootstrapDocker: every call runs directly', () => {
       'queryDaemonStatus',
       // The calls of podmanInUse (DockerTargets asks podmanCli too).
       'podmanCli',
+      'checkCli',
       'podmanCheckCall',
       'isMissing',
       'commandError',
