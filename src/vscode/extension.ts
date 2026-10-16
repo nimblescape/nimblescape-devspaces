@@ -31,7 +31,7 @@ import { Messages } from '../core/messages';
 import { nodeHttpsTransport } from '../core/http';
 import { DockerCredentialStore, withGitHubPackagesFallback } from '../core/imageCheck/credentials';
 import { RegistryClient } from '../core/imageCheck/registryClient';
-import { systemClock } from '../core/ports';
+import { isoTime, systemClock } from '../core/ports';
 import { usableTimeZone } from '../core/remoteMonitor/cron';
 import { monitorSettingsOf } from './monitorSettings';
 import { REMOTE_MONITOR_VOLUME } from '../core/remoteMonitor/protocol';
@@ -51,7 +51,7 @@ import { ConfigCheckStore } from '../core/storage/configChecks';
 import { bundleHash } from '../core/loader/pipeLoader';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { showWarningMessage } from './notifications';
-import { backgroundEngineAtStart, backgroundWorkAtStart, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
+import { backgroundEngineAtStart, backgroundWorkAtStart, findWindowDevspace, removedEngineWindowDevspace, restoreAfterPrebuild, windowDevspaceName, type ContainerDevspace } from './windowDevspace';
 import { workerMonitor } from './workerMonitor';
 import { defaultExtensionEntries, windowVscodeServer } from './vscodeServer';
 import { HELPER_DOCKER_SOCKET, VSCODE_STORE_VOLUME } from '../core/names';
@@ -735,11 +735,19 @@ async function activateExtension(
   const currentDevspace = containerName
     ? await findWindowDevspace(containerName, { registry, needsRestore, docker, service, logger, mayRestore })
     : undefined;
+  // Nothing was restored from an engine with the removal mark: the labels of the container of this window still give its
+  // devspace and its owner (one plain `docker container inspect`, no worker), so that the account rule holds there too.
+  const labeled: ContainerDevspace =
+    containerName !== undefined && currentDevspace === undefined && startWork
+      ? await removedEngineWindowDevspace(containerName, { needsRestore, docker, current: () => targets.current(), removed: engineRemoved, now: () => isoTime(systemClock), logger })
+      : { kind: 'none' };
+  const windowDevspace = currentDevspace ?? (labeled.kind === 'devspace' ? labeled.devspace : undefined);
   // A window of a devspace that the user kept on an engine with the removal mark ("Remove Devspaces from This Docker
   // Engine…") works without Devspaces: its heartbeats and its open would set Devspaces up there again. Its session
   // starts without the devspace, and the window stays connected as a plain container window; the account rule still
-  // closes the window of a devspace that the signed-in account may not use (Controller.workWithoutDevspaces).
-  const onRemovedEngine = currentDevspace !== undefined && (await engineRemoved({ host: dockerHostOf(currentDevspace) }));
+  // closes the window of a devspace that the signed-in account may not use (Controller.workWithoutDevspaces), and the
+  // window of a container whose owner cannot be read (Controller.leaveUnknownOwner).
+  const onRemovedEngine = labeled.kind !== 'none' || (currentDevspace !== undefined && (await engineRemoved({ host: dockerHostOf(currentDevspace) })));
   // Writes the window status file and cleans up the storage folder. Its result is the pending connection file of this
   // window's devspace, which the first status write removes (role A).
   const started = sessionCoordinator.start(onRemovedEngine ? null : (currentDevspace?.id ?? null));
@@ -865,15 +873,20 @@ async function activateExtension(
     background(logDocker(), 'log the Docker of this window');
   }
 
-  if (currentDevspace && containerName) {
+  if (windowDevspace && containerName) {
     // Role A: the open pipeline runs before VS Code connects this window (awaited). Assumption
     // (ATTACHED_CONTAINER_ACTIVATION_EVENT): VS Code waits for activate() before it resolves the authority.
     const pending = await started;
     // The stored list first, so that the progress and the status bar name the devspace as the sidebar shows it (with
     // the word of its source when the repository has several sources).
     await listed.catch(() => undefined);
-    if (onRemovedEngine) await controller.workWithoutDevspaces(currentDevspace, containerName);
-    else await controller.openAttachedWindow(currentDevspace, containerName, pending);
+    if (onRemovedEngine) await controller.workWithoutDevspaces(windowDevspace, containerName);
+    else await controller.openAttachedWindow(windowDevspace, containerName, pending);
+    return;
+  }
+  if (labeled.kind === 'unreadable' && containerName) {
+    await started;
+    await controller.leaveUnknownOwner(containerName, labeled);
     return;
   }
   background(started, 'start the window session');

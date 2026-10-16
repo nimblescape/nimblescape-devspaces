@@ -3247,6 +3247,77 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(h.service.deleteInWorker).not.toHaveBeenCalled();
   });
 
+  // A Refresh of the user restores a lost registry also from an engine with the mark, and keeps the mark: the window of
+  // a devspace there works without Devspaces, as one that started there. Mutation: an adoption that takes the devspace
+  // (its heartbeats go to that engine) fails it.
+  it('a Refresh that restores the devspace of this window on an engine with the mark: the window works without Devspaces', async () => {
+    const env = devspace();
+    h.connection.currentContainerName.mockReturnValue(CONTAINER);
+    h.docker.findContainer.mockResolvedValue(containerInfo(String(CONTAINER_VERSION)));
+    await h.engineRecords.setRemoved('', NOW - 1000);
+    fs.rmSync(h.paths.registry, { force: true });
+    h.service.reconcileInWorker.mockImplementation(async () => {
+      await h.registry.add(env);
+      return 1;
+    });
+    await run('refresh');
+    expect(h.service.reconcileInWorker).toHaveBeenCalledWith({ passive: false });
+    expect(h.coordinator.setDevspace).not.toHaveBeenCalledWith(ENV_ID);
+    expect(h.coordinator.setPlainDevspace.mock.calls).toEqual([[ENV_ID]]);
+    expect(fakeVscode.window.showInformationMessage.mock.calls).toEqual([[ControllerTexts.windowOnRemovedEngine('the local Docker')]]);
+    expect(h.statusBar.showConnected).not.toHaveBeenCalled();
+    expect(await h.engineRecords.removed('')).toBe(true);
+    expect(h.connection.closeRemoteConnection).not.toHaveBeenCalled();
+    // A Stop there hands off as in a connected window.
+    await run('stop', row('acme/api', env));
+    expect(h.connection.closeRemoteConnection).toHaveBeenCalledTimes(1);
+    expect(h.service.stop).not.toHaveBeenCalled();
+
+    // The devspace of another account: the account rule comes first; the window closes after the token removal.
+    recreateHarness({});
+    h.connection.currentContainerName.mockReturnValue(CONTAINER);
+    await h.engineRecords.setRemoved('', NOW - 1000);
+    fs.rmSync(h.paths.registry, { force: true });
+    h.service.reconcileInWorker.mockImplementation(async () => {
+      await h.registry.add(devspace({ owner: OTHER_ACCOUNT }));
+      return 1;
+    });
+    await run('refresh');
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close of the connection');
+    expect(h.flow).toHaveBeenCalledWith(OP_TOKEN_REMOVE, { devspaceId: ENV_ID, containerName: CONTAINER }, { timeoutMs: 60_000 });
+    expect(warningMessages()).toEqual([Messages.otherAccountConnection('acme/api')]);
+    expect(h.coordinator.setDevspace).not.toHaveBeenCalledWith(ENV_ID);
+    expect(h.coordinator.setPlainDevspace).not.toHaveBeenCalled();
+  });
+
+  // After a lost registry on an engine with the mark, the activation reads the labels of the container of the window
+  // (removedEngineWindowDevspace); when they do not say whose devspace it is, the window closes as for another account.
+  it('a window whose container does not say its owner closes, after the token removal when the labels name the devspace', async () => {
+    const reason = 'it has no valid label nimblescape.devspaces.owner-id';
+    await h.controller.leaveUnknownOwner(CONTAINER, { devspaceId: ENV_ID, reason });
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close of the connection');
+    expect(h.flow).toHaveBeenCalledWith(OP_TOKEN_REMOVE, { devspaceId: ENV_ID, containerName: CONTAINER }, { timeoutMs: 60_000 });
+    expect(h.flow.mock.invocationCallOrder[0]).toBeLessThan(h.connection.closeRemoteConnection.mock.invocationCallOrder[0]);
+    expect(warningMessages()).toEqual([ControllerTexts.unknownOwnerConnection(CONTAINER)]);
+    expect(warningMessages()).toEqual([`Devspaces cannot tell which GitHub account owns the container ${CONTAINER}. This window closes its connection to it.`]);
+    expect(h.logger.info).toHaveBeenCalledWith(`The window closes its remote connection: the owner of the devspace of the container ${CONTAINER} cannot be read (${reason}).`);
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
+    // Nor does a later restore adopt a devspace for the window.
+    h.connection.currentContainerName.mockReturnValue(CONTAINER);
+    await h.registry.add(devspace());
+    await h.controller.reconcileIfRegistryLost({ passive: false, adopt: true });
+    expect(h.coordinator.setDevspace).not.toHaveBeenCalledWith(ENV_ID);
+    expect(h.coordinator.setPlainDevspace).not.toHaveBeenCalled();
+
+    // Without the ID of the devspace, nothing can find a token there: the window only closes.
+    recreateHarness({});
+    await h.controller.leaveUnknownOwner(CONTAINER, { reason: 'Docker did not answer in time' });
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close of the connection');
+    expect(h.flow).not.toHaveBeenCalled();
+    expect(warningMessages()).toEqual([ControllerTexts.unknownOwnerConnection(CONTAINER)]);
+  });
+
   it('is a command of package.json, in the Command Palette and in the "…" menu of the view', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { commands: Array<{ command: string; title: string; category: string }>; menus: Record<string, Array<{ command: string; when?: string; group?: string }>> };

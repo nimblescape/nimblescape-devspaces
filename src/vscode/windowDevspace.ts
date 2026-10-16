@@ -8,14 +8,22 @@ import type { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import type { HelperPrebuildOutcome } from '../core/helper/helperPrebuild';
 import type { DevspaceOperations } from '../core/pipeline/devspaceOperations';
 import type { Logger } from '../core/ports';
-import { describeDockerHost, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
+import { describeDockerHost, dockerHostField, isOnDockerHost, type DockerTarget } from '../core/docker/dockerHost';
+import { runWithDockerTarget } from '../core/docker/dockerTargets';
+import { DOCKER_QUERY_TIMEOUT_MS } from '../core/docker/dockerTimeouts';
 import { removedEngineNote } from '../core/docker/engineRemoval';
 import { errorMessage } from '../core/errors';
-import { RESOURCE_NAME_PREFIX } from '../core/names';
+import { LABEL_COMPOSE_SERVICE, LABEL_CONFIG_PATH, LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, RESOURCE_NAME_PREFIX, isConfigPathLabelValue } from '../core/names';
+import { DEFAULT_CONFIG_PATH, isRepositoryName } from '../core/pipeline/recordRules';
+import { isStorageId } from '../core/storage/paths';
 import type { DevspaceRegistry } from '../core/storage/registry';
 import type { Devspace } from '../core/types';
+import { isRecord } from '../core/valueChecks';
 
-/** The longest wait of the activation for the restore of a lost registry. */
+/**
+ * The longest wait of the activation for the restore of a lost registry, and for the labels of the container of the
+ * window when no restore runs on an engine with the removal mark (removedEngineWindowDevspace).
+ */
 export const WINDOW_RESTORE_TIMEOUT_MS = 30_000;
 
 /**
@@ -114,4 +122,110 @@ export async function findWindowDevspace(
  */
 export async function restoreAfterPrebuild(outcome: HelperPrebuildOutcome, restore: () => Promise<void>): Promise<void> {
   if (outcome === 'built' || outcome === 'present' || outcome === 'notDue') await restore();
+}
+
+/**
+ * What the labels of the container that a window is attached to say about its devspace (containerDevspace).
+ * `devspace`: an entry made of them; `unreadable`: the owner cannot be read, with the reason, and the ID of the
+ * devspace when the labels name a valid one; `none`: the container is no dev container of a devspace on that engine.
+ */
+export type ContainerDevspace =
+  | { kind: 'devspace'; devspace: Devspace }
+  | { kind: 'unreadable'; devspaceId?: string; reason: string }
+  | { kind: 'none' };
+
+/** stderr of an inspect of a container that the engine does not have (Docker: `No such container: <name>`; Podman too). */
+const NO_SUCH_CONTAINER = /no such container/i;
+
+/**
+ * The devspace of the container `containerName` by its labels, with one plain `docker container inspect` on the engine
+ * of the call (no worker, nothing that changes). The dev container has the label nimblescape.devspaces.id (the id label
+ * of the Dev Container CLI), and the devspace image gives it nimblescape.devspaces.repository and
+ * nimblescape.devspaces.owner-id (imageRecordLabels); nimblescape.devspaces.config-path names its configuration. The
+ * entry is on the Docker host `host`, at `now`, with the owner of the label (its login is not known), named after the
+ * container as a restored entry is (devspaceOfVolume). `none` for a container that the engine does not have, one
+ * without the first label, and the other containers of a Compose devspace (nimblescape.devspaces.compose-service: no
+ * token is ever in them); an inspect that fails otherwise, and a label that is missing or not valid, leave the owner
+ * unknown (`unreadable`). Never throws.
+ */
+export async function containerDevspace(
+  containerName: string,
+  deps: { docker: Pick<BootstrapDocker, 'run'>; host: string; now: string; timeoutMs?: number },
+): Promise<ContainerDevspace> {
+  let labels: Record<string, unknown>;
+  try {
+    const result = await deps.docker.run(['container', 'inspect', '--format', '{{json .Config.Labels}}', containerName], {
+      timeoutMs: deps.timeoutMs ?? DOCKER_QUERY_TIMEOUT_MS,
+    });
+    if (result.timedOut) return { kind: 'unreadable', reason: 'Docker did not answer in time' };
+    if (result.exitCode !== 0) {
+      const reason = result.stderr.trim();
+      if (NO_SUCH_CONTAINER.test(reason)) return { kind: 'none' };
+      return { kind: 'unreadable', reason: (reason || `docker container inspect ended with exit code ${result.exitCode}`).slice(-500) };
+    }
+    const value: unknown = JSON.parse(result.stdout.trim() || 'null');
+    labels = isRecord(value) ? value : {};
+  } catch (error) {
+    return { kind: 'unreadable', reason: errorMessage(error) };
+  }
+  const id = labels[LABEL_DEVSPACE_ID];
+  if (id === undefined || labels[LABEL_COMPOSE_SERVICE] !== undefined) return { kind: 'none' };
+  if (!isStorageId(id)) return { kind: 'unreadable', reason: `its label ${LABEL_DEVSPACE_ID} is not valid` };
+  const ownerId = labels[LABEL_OWNER_ID];
+  if (!isStorageId(ownerId)) return { kind: 'unreadable', devspaceId: id, reason: `it has no valid label ${LABEL_OWNER_ID}` };
+  const repository = labels[LABEL_REPOSITORY];
+  if (!isRepositoryName(repository)) return { kind: 'unreadable', devspaceId: id, reason: `it has no valid label ${LABEL_REPOSITORY}` };
+  const configPath = labels[LABEL_CONFIG_PATH];
+  return {
+    kind: 'devspace',
+    devspace: {
+      id,
+      repository,
+      configPath: typeof configPath === 'string' && isConfigPathLabelValue(configPath) ? configPath : DEFAULT_CONFIG_PATH,
+      volumeName: containerName,
+      containerName,
+      createdAt: deps.now,
+      lastUsedAt: deps.now,
+      owner: { id: ownerId, login: '' },
+      ...dockerHostField(deps.host),
+    },
+  };
+}
+
+/**
+ * The devspace of the window of the container `containerName` when findWindowDevspace found none because the registry
+ * lost its content and nothing was restored from the current engine, which has the removal mark (`mayRestore` of the
+ * activation): the labels of the container give it (containerDevspace, on that engine, within
+ * WINDOW_RESTORE_TIMEOUT_MS), so that the account rule holds for the window there too (Controller.workWithoutDevspaces,
+ * Controller.leaveUnknownOwner). `none` without a Docker CLI, for a registry that did not lose its content, and on an
+ * engine without the mark (the restore ran there). Never throws.
+ */
+export async function removedEngineWindowDevspace(
+  containerName: string,
+  deps: {
+    needsRestore: () => Promise<boolean>;
+    docker: Pick<BootstrapDocker, 'isInstalled' | 'run'>;
+    current: () => Promise<DockerTarget>;
+    removed: (target: DockerTarget) => Promise<boolean>;
+    now: () => string;
+    logger: Logger;
+  },
+): Promise<ContainerDevspace> {
+  try {
+    if (!deps.docker.isInstalled() || !(await deps.needsRestore())) return { kind: 'none' };
+    const target = await deps.current();
+    if (!(await deps.removed(target))) return { kind: 'none' };
+    const found = await runWithDockerTarget(target, () =>
+      containerDevspace(containerName, { docker: deps.docker, host: target.host, now: deps.now(), timeoutMs: WINDOW_RESTORE_TIMEOUT_MS }),
+    );
+    if (found.kind !== 'none') {
+      deps.logger.info(
+        `The devspaces are not restored from ${describeDockerHost(target.host)}: Devspaces was removed from it. The labels of the container ${containerName} are read for its devspace and its owner.`,
+      );
+    }
+    return found;
+  } catch (error) {
+    deps.logger.warn(`The labels of the container ${containerName} could not be read: ${errorMessage(error)}`);
+    return { kind: 'none' };
+  }
 }

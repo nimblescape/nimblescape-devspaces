@@ -248,17 +248,19 @@ describe('nothing before the first use of Devspaces', () => {
   /**
    * A Docker CLI (a script) whose `docker context inspect` names the local Docker and whose `docker info` fails as
    * without a running engine, so nothing goes further than `docker info` (no image, build, or worker). With `running`,
-   * `docker info` names an engine, and every other call fails.
+   * `docker info` names an engine, and every other call fails. With `labels`, `docker container inspect` answers them
+   * as the labels of the container.
    */
-  function fakeDockerCli(folder: string, running = false): string {
+  function fakeDockerCli(folder: string, running = false, labels?: Record<string, string>): string {
     const file = path.join(folder, 'docker');
     fs.writeFileSync(
       file,
       [
         '#!/bin/sh',
-        'case "$1" in',
-        `  context) echo '{"Name":"default","Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock"}}}' ;;`,
-        ...(running ? [`  info) echo '"27.3.1"' ;;`] : []),
+        'case "$1 $2" in',
+        `  context*) echo '{"Name":"default","Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock"}}}' ;;`,
+        ...(running ? [`  info*) echo '"27.3.1"' ;;`] : []),
+        ...(labels ? [`  'container inspect') echo '${JSON.stringify(labels)}' ;;`] : []),
         '  *) echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2; exit 1 ;;',
         'esac',
         '',
@@ -275,11 +277,11 @@ describe('nothing before the first use of Devspaces', () => {
   async function activateWithDocker(
     prepare: (storage: string) => void,
     check: (storage: string, docker: string, log: () => string) => Promise<void>,
-    options: { containerName?: string; running?: boolean } = {},
+    options: { containerName?: string; running?: boolean; labels?: Record<string, string> } = {},
   ): Promise<void> {
     vi.useRealTimers();
     const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-first-use-test-'));
-    const docker = fakeDockerCli(fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-first-use-cli-')), options.running);
+    const docker = fakeDockerCli(fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-first-use-cli-')), options.running, options.labels);
     // The Dockerfile of the helper image, as in the installed extension.
     const dockerfile = path.join(storage, 'extension', 'resources', 'helper', 'Dockerfile');
     fs.mkdirSync(path.dirname(dockerfile), { recursive: true });
@@ -447,18 +449,77 @@ describe('nothing before the first use of Devspaces', () => {
     );
   }, 20_000);
 
-  it('the window of a devspace container restores no lost registry from an engine with the mark', async () => {
+  /** registry.json is lost; the local Docker has the removal mark. */
+  function lostOnRemovedEngine(storage: string): void {
+    fs.writeFileSync(path.join(storage, 'docker-engines.json'), '{"engines":[{"host":"","removedAt":1760000000000}]}');
+  }
+  /** The labels of the dev container of `kept`: the id label of the Dev Container CLI, and those of the devspace image. */
+  const keptLabels = (ownerId: string): Record<string, string> => ({
+    'nimblescape.devspaces.id': kept.id,
+    'nimblescape.devspaces.repository': kept.repository,
+    'nimblescape.devspaces.owner-id': ownerId,
+  });
+  const inspect = (docker: string): string[] => [docker, 'container', 'inspect', '--format', '{{json .Config.Labels}}', kept.containerName];
+
+  // No restore there, so the labels of the container give the devspace and its owner. Mutation: the activation without
+  // that read (role C) fails it.
+  it('the window of a devspace container restores no lost registry from an engine with the mark; its owner cannot be read: it closes', async () => {
     await activateWithDocker(
-      // registry.json is lost.
-      (storage) => fs.writeFileSync(path.join(storage, 'docker-engines.json'), '{"engines":[{"host":"","removedAt":1760000000000}]}'),
+      lostOnRemovedEngine,
       async (_storage, docker, log) => {
-        await waitFor(() => log().includes('No Docker work in the background at the start: Devspaces was removed from the local Docker.'), 'the log of the mark');
+        await waitFor(() => fakeVscode.commands.executeCommand.mock.calls.some(([command]) => command === CLOSE_REMOTE_COMMAND), 'the close of the connection');
         await new Promise((resolve) => setTimeout(resolve, 500));
-        // Not even `docker info`: no restore is tried there.
-        expect(spawned.filter(([command, sub]) => !(command === docker && sub === 'context'))).toEqual([]);
+        // Not even `docker info`: no restore is tried there; only one plain inspect of the container (it fails here).
+        expect(spawned.filter(([command, sub]) => !(command === docker && sub === 'context'))).toEqual([inspect(docker)]);
         expect(log()).not.toContain('could not be restored from the volumes');
+        expect(log()).toContain(
+          `The window closes its remote connection: the owner of the devspace of the container ${kept.containerName} cannot be read (Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?).`,
+        );
+        expect(fakeVscode.window.showWarningMessage.mock.calls.map((call) => call[0])).toEqual([
+          `Devspaces cannot tell which GitHub account owns the container ${kept.containerName}. This window closes its connection to it.`,
+        ]);
       },
-      { containerName: 'devspaces-acme-api-3f2a9c1e', running: true },
+      { containerName: kept.containerName, running: true },
+    );
+  }, 20_000);
+
+  it('the window of a devspace container of the account on an engine with the mark and a lost registry works without Devspaces', async () => {
+    signIn('1001', 'octo');
+    await activateWithDocker(
+      lostOnRemovedEngine,
+      async (storage, docker, log) => {
+        await waitFor(() => log().includes('This window of acme/api works without Devspaces'), 'the log of the window');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        expect(log()).toContain(
+          `The devspaces are not restored from the local Docker: Devspaces was removed from it. The labels of the container ${kept.containerName} are read for its devspace and its owner.`,
+        );
+        const sessions = path.join(storage, 'sessions');
+        const statuses = fs.readdirSync(sessions).map((name) => JSON.parse(fs.readFileSync(path.join(sessions, name), 'utf8')) as unknown);
+        expect(statuses).toEqual([expect.objectContaining({ devspaceId: null, plainDevspaceId: kept.id, state: 'active' })]);
+        expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
+        expect(fakeVscode.commands.executeCommand.mock.calls.filter(([command]) => command === CLOSE_REMOTE_COMMAND)).toEqual([]);
+        // No restore, no heartbeat, no worker: only the inspect.
+        expect(spawned.filter(([command, sub]) => !(command === docker && sub === 'context'))).toEqual([inspect(docker)]);
+        expect(fs.existsSync(path.join(storage, 'registry.json'))).toBe(false);
+      },
+      { containerName: kept.containerName, running: true, labels: keptLabels('1001') },
+    );
+  }, 20_000);
+
+  it('the window of a devspace container of another account on an engine with the mark and a lost registry closes after the token removal', async () => {
+    signIn('2002', 'someone');
+    await activateWithDocker(
+      lostOnRemovedEngine,
+      async (_storage, docker, log) => {
+        await waitFor(() => fakeVscode.commands.executeCommand.mock.calls.some(([command]) => command === CLOSE_REMOTE_COMMAND), 'the close of the connection');
+        expect(log()).toContain('This window is attached to a devspace of another GitHub account. It closes its remote connection.');
+        expect(fakeVscode.window.showWarningMessage.mock.calls.map((call) => call[0])).toContain(Messages.otherAccountConnection('acme/api'));
+        expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
+        // The removal of the token ran through the worker of that engine, as for a registry that knows the devspace.
+        expect(spawned.some(([command, sub]) => command === docker && sub === 'image')).toBe(true);
+        expect(log()).toContain(`The GitHub token could not be removed from the container ${kept.containerName}`);
+      },
+      { containerName: kept.containerName, running: true, labels: keptLabels('1001') },
     );
   }, 20_000);
 });
