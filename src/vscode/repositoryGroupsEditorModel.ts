@@ -536,10 +536,13 @@ export interface PreviewRun {
   failed?: boolean;
 }
 
-/** The input of the sidebar for a worker message: without `formatTime`, which a structured clone cannot copy. */
+/**
+ * The input of the sidebar for a worker message: without `formatTime` and `groupMatch`, which a structured clone cannot
+ * copy.
+ */
 export function cloneableInput(input: TreeInput | undefined): TreeInput | undefined {
   if (!input) return undefined;
-  const { formatTime: _formatTime, ...rest } = input;
+  const { formatTime: _formatTime, groupMatch: _groupMatch, ...rest } = input;
   return rest;
 }
 

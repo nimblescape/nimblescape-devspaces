@@ -69,6 +69,7 @@ import { isProcessAlive } from '../core/session/sessionRules';
 import { extensionFlow, extensionHostSide } from './hostSide';
 import { VsCodePipelineUi } from './pipelineUi';
 import { onDidChangeBusy } from './progress';
+import { GroupMatchWorkerRunner } from './groupMatcher';
 import { PreviewWorkerRunner } from './groupsPreviewRunner';
 import { RemoteDockerCommands } from './remoteDockerCommands';
 import { RepositoryGroupsEditor } from './repositoryGroupsEditor';
@@ -576,6 +577,10 @@ async function activateExtension(
   });
   dockerSetup = setup;
   context.subscriptions.push(setup);
+  // The worker thread of the repository groups (the regular expressions of the setting run there, with a time limit).
+  const groupsWorkerScript = context.asAbsolutePath(path.join('dist', 'groupsPreviewWorker.js'));
+  const groupMatcher = new GroupMatchWorkerRunner(groupsWorkerScript);
+  context.subscriptions.push({ dispose: () => groupMatcher.dispose() });
   const sidebar = new Sidebar({
     logger,
     registry,
@@ -587,6 +592,7 @@ async function activateExtension(
     auth,
     tree,
     settings: getSettings,
+    groupMatcher,
     dockerSetupRequired: () => setup.setupRequired,
     dockerHost: () => targets.host(),
     dockerTargets: targets,
@@ -601,7 +607,7 @@ async function activateExtension(
     logger,
     groupingInput: () => sidebar.groupingInput(),
     onDidRender: sidebar.onDidRender,
-    previewRunner: new PreviewWorkerRunner(context.asAbsolutePath(path.join('dist', 'groupsPreviewWorker.js'))),
+    previewRunner: new PreviewWorkerRunner(groupsWorkerScript),
   });
   context.subscriptions.push(repositoryGroupsEditor);
   const controller = new Controller({

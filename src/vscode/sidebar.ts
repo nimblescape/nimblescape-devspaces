@@ -24,13 +24,14 @@ import type { SessionFiles } from '../core/storage/sessionFiles';
 import type { DiscoveryData, Devspace, ExtensionSettings, GitHubAccount, RepositoryInfo, WindowStatus } from '../core/types';
 import { isProcessAlive } from '../core/session/sessionRules';
 import { SIGN_IN_AGAIN_DETAIL, type VsCodeGitHubAuth } from './auth';
+import { GROUP_MATCH_TIME_LIMIT_MS, type GroupMatcher, type GroupMatchRun, type GroupPlace } from './groupMatcher';
 import { showWarningMessage } from './notifications';
 import { RepositoryGroupTexts, parseRepositoryGroups, type RepositoryGroupPattern } from './repositoryGroups';
 import type { SessionCoordinator } from './sessionCoordinator';
 import { dockerStoppedRuntime, devspaceIdsOf, liveBusyDevspaceIds } from './sidebarData';
 import { CoalescingTask, mapLimit } from './tasks';
 import { findRepositoryInfo, listedRepositories, ownerTrust, pickerRepositories, repositoriesToLookUp, repositoryKey } from './targets';
-import { buildTreeModel, type DevspaceRuntime, type OwnerGroup, type StatesUnknown, type TreeInput } from './treeModel';
+import { buildTreeModel, repositoryEntriesOf, type DevspaceRuntime, type OwnerGroup, type StatesUnknown, type TreeInput } from './treeModel';
 import { REPOSITORIES_VIEW_ID, type RepositoriesTreeProvider } from './treeView';
 
 /** Context key of the welcome views (package.json): a list was loaded, or the first refresh failed. */
@@ -40,9 +41,6 @@ export const LOADED_CONTEXT_KEY = 'devspaces.loaded';
  * because the list could not be loaded, not because no repository has a configuration.
  */
 export const LOAD_FAILED_CONTEXT_KEY = 'devspaces.loadFailed';
-
-/** Duration of one render with repository groups after which the view names the setting (warnIfGroupingIsSlow). */
-export const SLOW_GROUPING_MS = 200;
 
 export interface SidebarDeps {
   logger: Logger;
@@ -55,6 +53,11 @@ export interface SidebarDeps {
   auth: VsCodeGitHubAuth;
   tree: RepositoriesTreeProvider;
   settings: () => ExtensionSettings;
+  /**
+   * Runs the regular expressions of the setting repositoryGroups in a worker thread with a time limit
+   * (GroupMatchWorkerRunner), so that none runs on the extension host.
+   */
+  groupMatcher: GroupMatcher;
   /**
    * True while the view shows the Docker setup instead of the repositories (`dockerSetupRequired`). Default: false.
    */
@@ -125,7 +128,12 @@ export class Sidebar implements vscode.Disposable {
   private disposed = false;
   /** Problems of the setting repositoryGroups that were shown: each distinct one once per window session. */
   private readonly shownGroupProblems = new Set<string>();
-  private slowGroupingWarned = false;
+  /**
+   * The places of the repository names under the value of the setting repositoryGroups (`key`, its JSON) that the
+   * worker found; `off`: the worker took too long or failed for this value, so the view lists the repositories without
+   * groups until the setting changes.
+   */
+  private groupPlaces: { key: string; places: Map<string, GroupPlace | null>; off?: true } | undefined;
   private readonly renderTask = new CoalescingTask(() => this.renderNow());
   private readonly statesTask = new CoalescingTask(() => this.refreshStatesNow());
   private readonly discoveryTask = new CoalescingTask(() => this.refreshDiscoveryNow());
@@ -409,10 +417,9 @@ export class Sidebar implements vscode.Disposable {
       formatTime,
     };
     this.lastInput = input;
-    const started = this.clock.now();
-    const groups = buildTreeModel({ ...input, repositoryGroups });
-    this.warnIfGroupingIsSlow(repositoryGroups, this.clock.now() - started);
-    this.logGroupFailures(repositoryGroups);
+    const groups = await this.groupedModel(input, repositoryGroups);
+    if (this.disposed) return;
+    this.logGroupFailures(repositoryGroups.patterns);
     this.groups = groups;
     // When no remote Docker host is configured and the local Docker is not available, the repositories are not shown;
     // the sidebar shows the Docker setup instead. The view gets an empty model, so VS Code shows the welcome view with
@@ -424,11 +431,12 @@ export class Sidebar implements vscode.Disposable {
   }
 
   /**
-   * The valid entries of the setting repositoryGroups, compiled once for this model. An entry that is not valid is left
-   * out; its problem is logged and shown once per window session.
+   * The value of the setting repositoryGroups, and its valid entries, compiled once for this model. An entry that is not
+   * valid is left out; its problem is logged and shown once per window session.
    */
-  private repositoryGroups(): RepositoryGroupPattern[] {
-    const { patterns, problems } = parseRepositoryGroups(this.deps.settings().repositoryGroups);
+  private repositoryGroups(): { entries: readonly unknown[]; patterns: RepositoryGroupPattern[] } {
+    const entries = this.deps.settings().repositoryGroups ?? [];
+    const { patterns, problems } = parseRepositoryGroups(entries);
     for (const { message } of problems) {
       if (this.shownGroupProblems.has(message)) continue;
       this.shownGroupProblems.add(message);
@@ -437,7 +445,57 @@ export class Sidebar implements vscode.Disposable {
         this.deps.logger.warn(`A warning could not be shown: ${errorMessage(error)}`);
       });
     }
-    return patterns;
+    return { entries, patterns };
+  }
+
+  /**
+   * The model with the setting repositoryGroups. Its regular expressions run in the worker thread with a time limit
+   * (groupMatcher.ts), never on the extension host: a nested repetition such as `(a+)+` can take seconds for one name.
+   * The places of the names are kept until the setting changes, and only names without a place go to the worker. When
+   * the worker takes too long or fails, the view lists the repositories without groups until the setting changes, and
+   * says so once.
+   */
+  private async groupedModel(input: TreeInput, groups: { entries: readonly unknown[]; patterns: RepositoryGroupPattern[] }): Promise<OwnerGroup[]> {
+    const plain = buildTreeModel({ ...input, repositoryGroups: [] });
+    const { entries, patterns } = groups;
+    if (patterns.length === 0) return plain;
+    const key = JSON.stringify(entries);
+    if (this.groupPlaces?.key !== key) this.groupPlaces = { key, places: new Map() };
+    const state = this.groupPlaces;
+    // The names that buildTreeModel matches: one per repository entry (a row, or a node with its child rows).
+    const missing = [...new Set(repositoryEntriesOf(plain).map((entry) => entry.name))].filter((name) => !state.places.has(name));
+    if (!state.off && missing.length > 0) {
+      const run = await this.deps.groupMatcher.run(entries, missing);
+      if ('places' in run) {
+        for (const [name, place] of run.places) state.places.set(name, place);
+        for (const pattern of patterns) pattern.failure ??= run.failures.get(pattern.index);
+      } else if (this.groupPlaces === state) {
+        state.off = true;
+        this.warnGroupingOff(run, patterns);
+      }
+    }
+    if (state.off) return plain;
+    const byIndex = new Map(patterns.map((pattern) => [pattern.index, pattern]));
+    return buildTreeModel({
+      ...input,
+      repositoryGroups: patterns,
+      groupMatch: (name) => {
+        const place = state.places.get(name);
+        const pattern = place ? byIndex.get(place.index) : undefined;
+        return place && pattern ? { pattern, levels: place.levels, label: place.label } : undefined;
+      },
+    });
+  }
+
+  /** Names once, in the log and in a message, why the view lists the repositories without groups. */
+  private warnGroupingOff(run: Exclude<GroupMatchRun, { places: unknown }>, patterns: readonly RepositoryGroupPattern[]): void {
+    const slow = 'tooSlow' in run ? patterns.find((pattern) => pattern.index === run.slowEntry) : undefined;
+    const message =
+      'tooSlow' in run ? RepositoryGroupTexts.tooSlow(GROUP_MATCH_TIME_LIMIT_MS / 1000, slow?.source) : RepositoryGroupTexts.workerFailed;
+    this.deps.logger.warn(message);
+    showWarningMessage(message).then(undefined, (error: unknown) => {
+      this.deps.logger.warn(`A warning could not be shown: ${errorMessage(error)}`);
+    });
   }
 
   /** Logs once per window session each entry that threw while it was matched (matchRepositoryGroup skipped it). */
@@ -449,21 +507,6 @@ export class Sidebar implements vscode.Disposable {
       this.shownGroupProblems.add(message);
       this.deps.logger.warn(message);
     }
-  }
-
-  /**
-   * The patterns of repositoryGroups run synchronously at each render of the view; a pattern with a nested repetition such
-   * as `(a+)+` can take very long for some names. A render that takes SLOW_GROUPING_MS or more with patterns is named
-   * once per window session, so the user can find the cause.
-   */
-  private warnIfGroupingIsSlow(patterns: readonly RepositoryGroupPattern[], elapsedMs: number): void {
-    if (patterns.length === 0 || elapsedMs < SLOW_GROUPING_MS || this.slowGroupingWarned) return;
-    this.slowGroupingWarned = true;
-    const message = RepositoryGroupTexts.slow(Math.round(elapsedMs));
-    this.deps.logger.warn(message);
-    showWarningMessage(message).then(undefined, (error: unknown) => {
-      this.deps.logger.warn(`A warning could not be shown: ${errorMessage(error)}`);
-    });
   }
 
   private async refreshStatesNow(): Promise<void> {
