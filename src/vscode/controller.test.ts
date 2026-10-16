@@ -4007,7 +4007,7 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(h.connection.open).not.toHaveBeenCalled();
   });
 
-  it('is a command of package.json, in the Command Palette and in the "…" menu of the view', () => {
+  it('is a command of package.json, in the Command Palette and last in the "…" menu of the view, in a group of its own', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { commands: Array<{ command: string; title: string; category: string }>; menus: Record<string, Array<{ command: string; when?: string; group?: string }>> };
     };
@@ -4020,8 +4020,13 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(manifest.contributes.menus['view/title'].find((entry) => entry.command === Commands.removeFromDockerEngine)).toEqual({
       command: Commands.removeFromDockerEngine,
       when: 'view == devspaces.repositories',
-      group: '2_maintenance@2',
+      group: '3_remove@1',
     });
+    // As Delete in the ⋯ menu of a row: the last item, apart from the others. VS Code sorts the groups of the "…" menu
+    // by name; the items of the group navigation are the buttons of the title bar.
+    const more = manifest.contributes.menus['view/title'].filter((entry) => !entry.group?.startsWith('navigation'));
+    expect([...more].sort((a, b) => (a.group ?? '').localeCompare(b.group ?? '')).at(-1)?.command).toBe(Commands.removeFromDockerEngine);
+    expect(more.filter((entry) => entry.group?.startsWith('3_remove@')).map((entry) => entry.command)).toEqual([Commands.removeFromDockerEngine]);
   });
 });
 
@@ -5914,6 +5919,11 @@ describe('Start in a new window', () => {
       '1_actions@6 devspaces.stopWhenClosed',
       '1_actions@7 devspaces.closeAndKeepRunning',
     ]);
+    // The buttons of a row are Start, Stop and the ⋯ submenu; Delete is in the submenu (last, in its own group) and in
+    // the context menu, not next to Stop.
+    const inline = menus['view/item/context'].filter((item) => item.group?.startsWith('inline@')).map((item) => `${item.group} ${item.command ?? item.submenu}`);
+    expect(inline).toEqual(['inline@1 devspaces.start', 'inline@2 devspaces.stop', 'inline@4 devspaces.more']);
+    expect(menus['devspaces.more'].at(-1)).toEqual({ command: Commands.delete, when: 'viewItem =~ /canDelete/', group: '3_delete@1' });
     // The settings of the default image: the image, and the place of its row.
     expect(manifest.contributes.configuration.properties[`${SETTINGS_SECTION}.defaultImage`]).toMatchObject({ type: 'string', scope: 'application', default: '' });
     expect(manifest.contributes.configuration.properties[`${SETTINGS_SECTION}.startWithDefaultImage`]).toMatchObject({ type: 'boolean', scope: 'application', default: true });

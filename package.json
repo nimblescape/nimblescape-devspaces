@@ -502,7 +502,7 @@
         {
           "command": "devspaces.removeFromDockerEngine",
           "when": "view == devspaces.repositories",
-          "group": "2_maintenance@2"
+          "group": "3_remove@1"
         }
       ],
       "view/item/context": [
@@ -515,11 +515,6 @@
           "command": "devspaces.stop",
           "when": "view == devspaces.repositories && viewItem =~ /canStop/",
           "group": "inline@2"
-        },
-        {
-          "command": "devspaces.delete",
-          "when": "view == devspaces.repositories && viewItem =~ /canDelete/",
-          "group": "inline@3"
         },
         {
           "submenu": "devspaces.more",
@@ -632,6 +627,11 @@
           "command": "devspaces.turnOnHostAccessChecks",
           "when": "viewItem =~ /hostAccessUnrestricted/",
           "group": "2_hostAccess@1"
+        },
+        {
+          "command": "devspaces.delete",
+          "when": "viewItem =~ /canDelete/",
+          "group": "3_delete@1"
         }
       ]
     },
