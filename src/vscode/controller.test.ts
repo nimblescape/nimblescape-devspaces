@@ -2203,7 +2203,8 @@ describe('Sign in and Refresh', () => {
 
   it('refreshes the list, restores a lost registry while Docker runs, and reads the states', async () => {
     await run('refresh');
-    expect(h.sidebar.refreshDiscovery).toHaveBeenCalledWith({ again: true });
+    // As the Refresh of the user: a rate limit of GitHub that refuses it always gets a message.
+    expect(h.sidebar.refreshDiscovery).toHaveBeenCalledWith({ again: true, byUser: true });
     // By the worker, made ready in full (the user asked for the refresh).
     expect(h.service.reconcileInWorker).toHaveBeenCalledWith({ passive: false });
     expect(h.sidebar.refreshStates).toHaveBeenCalled();
@@ -3578,8 +3579,8 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(h.logger.info).toHaveBeenCalledWith(
       `The devspaces are not restored from the volumes on build-box: Devspaces is being removed from there in another window (process ${OTHER_PID}).`,
     );
-    // The rest of Refresh runs.
-    expect(h.sidebar.refreshDiscovery).toHaveBeenCalledWith({ again: true });
+    // The rest of Refresh runs (a Refresh of the user: a rate limit of GitHub that refuses it gets a message).
+    expect(h.sidebar.refreshDiscovery).toHaveBeenCalledWith({ again: true, byUser: true });
     expect(h.sidebar.refreshStates).toHaveBeenCalled();
     // A restore in the background is skipped too, and only logged.
     await h.controller.reconcileIfRegistryLost({ passive: false });

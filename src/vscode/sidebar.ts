@@ -133,6 +133,8 @@ export class Sidebar implements vscode.Disposable {
   private rateLimitRetry: { timer: NodeJS.Timeout; at: number } | undefined;
   /** The next refresh is the one after a rate limit: it gets no second one. */
   private retryingAfterRateLimit = false;
+  /** The next refresh is one of the Refresh command (refreshDiscovery `byUser`). */
+  private refreshByUser = false;
   private signInOffered = false;
   /** Counts the account changes of onSessionChanged: a refresh that read an older session does not use it. */
   private accountChanges = 0;
@@ -236,10 +238,13 @@ export class Sidebar implements vscode.Disposable {
 
   /**
    * Updates the repository list from GitHub, one refresh at a time: `again` starts one more refresh after a running one
-   * (for example after an account change); otherwise a running refresh is reused. Never rejects: a failed refresh keeps
-   * the stored list. Resolves with the current data.
+   * (for example after an account change); otherwise a running refresh is reused. `byUser` (with `again`): the refresh
+   * is one of the Refresh command, so a rate limit of GitHub that refuses it always gets a message (onRateLimited).
+   * Never rejects: a failed refresh keeps the stored list. Resolves with the current data.
    */
-  refreshDiscovery(options: { again?: boolean } = {}): Promise<DiscoveryData | undefined> {
+  refreshDiscovery(options: { again?: boolean; byUser?: boolean } = {}): Promise<DiscoveryData | undefined> {
+    // The refresh that request() starts reads the flag when it starts; a running refresh read it already.
+    if (options.again && options.byUser) this.refreshByUser = true;
     const task = options.again ? this.discoveryTask.request() : this.discoveryTask.join();
     return task.catch((error: unknown) => {
       this.deps.logger.error('The repository list could not be updated.', error);
@@ -590,6 +595,8 @@ export class Sidebar implements vscode.Disposable {
     if (this.disposed) return this.data;
     const afterRateLimit = this.retryingAfterRateLimit;
     this.retryingAfterRateLimit = false;
+    const byUser = this.refreshByUser;
+    this.refreshByUser = false;
     // Token and account of one session: the list is stored for the account.
     const changes = this.accountChanges;
     const session = await this.readSession();
@@ -635,7 +642,7 @@ export class Sidebar implements vscode.Disposable {
       // A rate limit of GitHub: the part of the first load that the view shows stays, also for the next refresh.
       if (error instanceof GitHubRateLimitError) {
         rateLimited = true;
-        this.onRateLimited(error, afterRateLimit);
+        this.onRateLimited(error, afterRateLimit, byUser);
       }
       // Without internet access, the view shows the stored list and skips the update. Without a stored list, the view
       // says that the list could not be loaded (not that no repository was found).
@@ -656,11 +663,11 @@ export class Sidebar implements vscode.Disposable {
    * that time. The refresh at that time gets no second one: after it, the message says from when Refresh works again,
    * and the refresh of refreshIntervalMinutes goes on as before; while the timer waits, that refresh does not run
    * (backgroundRefresh). While that one refresh is planned, a refused refresh plans no other: while its timer waits, the
-   * timer moves to a later time that GitHub names (never to an earlier one), and only a new or later time gets a
-   * message, any other refusal only a line in the log; after the timer fired, while that refresh waits for this one to
-   * end, only the log says it, and the message comes from that refresh.
+   * timer moves to a later time that GitHub names (never to an earlier one), and only a new or later time, or a refused
+   * Refresh of the user (`byUser`), gets a message, any other refusal only a line in the log; after the timer fired,
+   * while that refresh waits for this one to end, only the log says it, and the message comes from that refresh.
    */
-  private onRateLimited(error: GitHubRateLimitError, afterRateLimit: boolean): void {
+  private onRateLimited(error: GitHubRateLimitError, afterRateLimit: boolean, byUser: boolean): void {
     // A refresh that ends after the view was closed shows nothing and plans nothing.
     if (this.disposed) return;
     if (!afterRateLimit && this.retryingAfterRateLimit) {
@@ -669,7 +676,8 @@ export class Sidebar implements vscode.Disposable {
     }
     const now = this.clock.now();
     let at = Math.max(error.resetAt ?? now + RATE_LIMIT_WAIT_MS, now) + RATE_LIMIT_MARGIN_MS;
-    // A message only for a new time: the time of a timer that waits was named already.
+    // A message for a new time, and for each refused Refresh of the user, who would otherwise see no answer; for any
+    // other refusal, the time of the timer that waits was named already.
     let newTime = true;
     if (!afterRateLimit) {
       if (this.rateLimitRetry && this.rateLimitRetry.at >= at) {
@@ -687,7 +695,7 @@ export class Sidebar implements vscode.Disposable {
     }
     const next = afterRateLimit ? 'Refresh can work again' : 'The list is loaded again';
     this.deps.logger.warn(`GitHub refused the update of the repository list for its rate limit. ${next} at ${new Date(at).toISOString()}.`);
-    if (!newTime) return;
+    if (!newTime && !byUser) return;
     showWarningMessage(Messages.gitHubRateLimited(localClockTime(at), !afterRateLimit)).then(undefined, (reason: unknown) =>
       this.deps.logger.error('Could not show the message.', reason),
     );
