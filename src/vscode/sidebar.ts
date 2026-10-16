@@ -642,8 +642,9 @@ export class Sidebar implements vscode.Disposable {
    * GitHub refused the refresh for its rate limit: a message says when the list loads again, and one refresh runs at
    * that time. The refresh at that time gets no second one: after it, the message says from when Refresh works again,
    * and the refresh of refreshIntervalMinutes goes on as before. While that one refresh is planned, a refused refresh
-   * plans no other: while its timer waits, the message names its time; after the timer fired, while that refresh waits
-   * for this one to end, only the log says it, and the message comes from that refresh.
+   * plans no other: while its timer waits, the timer moves to a later time that GitHub names (never to an earlier one),
+   * and the message names the time of the timer; after the timer fired, while that refresh waits for this one to end,
+   * only the log says it, and the message comes from that refresh.
    */
   private onRateLimited(error: GitHubRateLimitError, afterRateLimit: boolean): void {
     if (!afterRateLimit && this.retryingAfterRateLimit) {
@@ -653,9 +654,10 @@ export class Sidebar implements vscode.Disposable {
     const now = this.clock.now();
     let at = Math.max(error.resetAt ?? now + RATE_LIMIT_WAIT_MS, now) + RATE_LIMIT_MARGIN_MS;
     if (!afterRateLimit) {
-      if (this.rateLimitRetry) {
+      if (this.rateLimitRetry && this.rateLimitRetry.at >= at) {
         at = this.rateLimitRetry.at;
       } else {
+        this.clearRateLimitRetry();
         const timer = setTimeout(() => {
           this.rateLimitRetry = undefined;
           this.retryingAfterRateLimit = true;
