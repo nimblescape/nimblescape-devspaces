@@ -8,8 +8,12 @@
 // stops when no devspace runs (src/vscode/monitorSettings.ts). While the removal mark is set, this computer does no
 // Docker work on the engine by itself (extension.ts); a Start, a Rebuild or "Update All Images Now" of the user there
 // clears it. An engine is named by its Docker host (DockerTarget.host): empty for the local Docker, the SSH host
-// otherwise. A file that is missing, cannot be read, or is not valid knows no engine. No `vscode`.
+// otherwise. A file that is missing, cannot be read, or is not valid knows no engine. Several windows change the file:
+// every change runs under the lock folder next to it (`docker-engines.lock`, as registry.json does), so no change of
+// another window is lost, such as the removal mark. No `vscode`.
+import * as path from 'path';
 import { readJson, writeJsonAtomic } from './atomicJson';
+import { DEFAULT_LOCK_STALE_MS, DEFAULT_LOCK_TIMEOUT_MS, withLockFolder, type LockTimings } from './lockFolder';
 
 export interface DockerEngineRecord {
   /** The Docker host of the engine: '' for the local Docker. */
@@ -24,8 +28,25 @@ export interface DockerEnginesFile {
   engines?: DockerEngineRecord[];
 }
 
+export interface DockerEngineRecordsOptions {
+  /** A lock folder older than this counts as stale (its holder crashed). Default: 10 seconds. */
+  lockStaleMs?: number;
+  /** Maximum wait for the lock. Default: 15 seconds. */
+  lockTimeoutMs?: number;
+}
+
 export class DockerEngineRecords {
-  constructor(readonly file: string) {}
+  /** The lock folder of the changes: `<name>.lock` next to the file (`docker-engines.lock`). */
+  readonly lockDir: string;
+  private readonly lockTimings: LockTimings;
+
+  constructor(readonly file: string, options: DockerEngineRecordsOptions = {}) {
+    this.lockDir = path.join(path.dirname(file), `${path.basename(file, '.json')}.lock`);
+    this.lockTimings = {
+      staleMs: options.lockStaleMs ?? DEFAULT_LOCK_STALE_MS,
+      timeoutMs: options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS,
+    };
+  }
 
   /**
    * The records of the file; an entry that is not valid, one that records nothing, and a second entry of a host are
@@ -65,14 +86,21 @@ export class DockerEngineRecords {
 
   /**
    * Writes the record of `host` that `update` makes of the current one (an empty record when there is none); a record
-   * with nothing but its host is left out.
+   * with nothing but its host is left out. The read and the write run under the lock folder `lockDir`, so a change of
+   * another window between them is not lost. Throws when the lock is not free within the wait.
    */
   private async change(host: string, update: (record: DockerEngineRecord) => DockerEngineRecord): Promise<void> {
-    const records = await this.read();
-    const others = records.filter((record) => record.host !== host);
-    const next = update(records.find((record) => record.host === host) ?? { host });
-    const engines = Object.keys(next).length > 1 ? [...others, next] : others;
-    await writeJsonAtomic(this.file, { engines } satisfies DockerEnginesFile);
+    await withLockFolder(
+      this.lockDir,
+      async () => {
+        const records = await this.read();
+        const others = records.filter((record) => record.host !== host);
+        const next = update(records.find((record) => record.host === host) ?? { host });
+        const engines = Object.keys(next).length > 1 ? [...others, next] : others;
+        await writeJsonAtomic(this.file, { engines } satisfies DockerEnginesFile);
+      },
+      this.lockTimings,
+    );
   }
 }
 
