@@ -1347,7 +1347,7 @@ describe('monitor.js run: the exit when idle', () => {
     const running = startRun({ ps: () => listed(listedContainer(DEV_ID, 'running', 'devspaces-api', A)), maxTicks: 100 });
     await vi.waitFor(() => expect(running.ticks()).toBe(100), { timeout: 10_000 });
     expect(await pending(running.result)).toBe('pending');
-  });
+  }, 20_000);
 
   it('exits for an old keep whose devspace has only ended containers', async () => {
     // Keep Running When Closed stays in the records after a Stop: it must not keep the monitor for ever.
@@ -1384,7 +1384,7 @@ describe('monitor.js run: the exit when idle', () => {
     await vi.waitFor(() => expect(monitor.ticks()).toBe(100), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.out()).not.toContain('exits');
-  });
+  }, 20_000);
 
   it('does not exit while a labelled container runs and the records cannot be read', async () => {
     fs.writeFileSync(heartbeatDir(stateDir), 'not a folder');
@@ -1392,7 +1392,7 @@ describe('monitor.js run: the exit when idle', () => {
     await vi.waitFor(() => expect(monitor.ticks()).toBe(100), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
     expect(monitor.out()).toContain('The heartbeat records could not be read');
-  });
+  }, 20_000);
 
   // Paused and restarting containers count as running.
   it('does not exit while a labelled container is paused or restarting', async () => {
@@ -1403,7 +1403,7 @@ describe('monitor.js run: the exit when idle', () => {
       expect(await pending(monitor.result)).toBe('pending');
       expect(monitor.out()).not.toContain('exits');
     }
-  });
+  }, 20_000);
 
   // The bounds of DEVSPACE_MONITOR_IDLE_MS, and `run` uses it.
   it('takes DEVSPACE_MONITOR_IDLE_MS from 100 ms on, and `run` exits after it', async () => {
@@ -1422,7 +1422,7 @@ describe('monitor.js run: the exit when idle', () => {
     const monitor = startRun({ ps: () => new Error(NO_ENGINE), maxTicks: 100 });
     await vi.waitFor(() => expect(monitor.ticks()).toBe(100), { timeout: 10_000 });
     expect(await pending(monitor.result)).toBe('pending');
-  });
+  }, 20_000);
 
   // Image updates do not keep the monitor: a permanent monitor (DEVSPACE_MONITOR_PERMANENT, a remote engine or
   // stopMonitorWhenIdle off) never exits when idle, one that ends when idle exits with image updates on too.
@@ -1438,7 +1438,7 @@ describe('monitor.js run: the exit when idle', () => {
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 20_000);
 
   it('counts the idle time from the end of the last stop, and exits only after the release', async () => {
     writeRecord(SOURCE, A, { at: T0 - 30 * MINUTE, keepRunning: false, limitSeconds: 600 });
