@@ -16,7 +16,7 @@ import * as vscode from 'vscode';
 import { describeDockerHost } from '../core/docker/dockerHost';
 import { errorMessage } from '../core/errors';
 import { systemClock, type Clock, type Logger } from '../core/ports';
-import type { DockerEngineRecords } from '../core/storage/dockerEngineRecords';
+import type { DockerEngineRecords, EngineRemoval } from '../core/storage/dockerEngineRecords';
 import type { ExtensionSettings } from '../core/types';
 import { ControllerTexts } from './controllerTexts';
 import { showInformationMessage, showWarningMessage } from './notifications';
@@ -27,7 +27,8 @@ export const STOP_MONITOR_WHEN_IDLE_SETTING = 'stopMonitorWhenIdle';
 
 /**
  * What the question gave: `keepRunning` or `stopWhenIdle` (stored), `closed` (closed, or the answer could not be
- * stored: nothing that counts is stored), or `notNeeded` (the setting is on, or the engine has its answer).
+ * stored: nothing that counts is stored; or it was not recorded for the engine because another window removes
+ * Devspaces from it: the engine has no answer), or `notNeeded` (the setting is on, or the engine has its answer).
  */
 export type MonitorAnswer = 'keepRunning' | 'stopWhenIdle' | 'closed' | 'notNeeded';
 
@@ -48,17 +49,19 @@ export class MonitorQuestion {
   /**
    * Asks about the Monitor of the engine `host` ('' for the local Docker) when it is needed: the setting is not on and
    * the engine has no answer, as read now (another window may have answered meanwhile). One question per engine at a
-   * time in this window. Never rejects.
+   * time in this window. `removalRuns`: the liveness rule of the busy marks for a removal that the record of the engine
+   * names (the controller's), read when the answer is recorded; without it, every such removal counts as running.
+   * Never rejects.
    */
-  askIfNeeded(host: string): Promise<MonitorAnswer> {
+  askIfNeeded(host: string, removalRuns?: () => Promise<(removal: EngineRemoval) => boolean>): Promise<MonitorAnswer> {
     const open = this.asking.get(host);
     if (open !== undefined) return open;
-    const question = this.ask(host).finally(() => this.asking.delete(host));
+    const question = this.ask(host, removalRuns).finally(() => this.asking.delete(host));
     this.asking.set(host, question);
     return question;
   }
 
-  private async ask(host: string): Promise<MonitorAnswer> {
+  private async ask(host: string, removalRuns?: () => Promise<(removal: EngineRemoval) => boolean>): Promise<MonitorAnswer> {
     const { records, logger } = this.deps;
     const engine = describeDockerHost(host);
     let choice: string | undefined;
@@ -79,14 +82,23 @@ export class MonitorQuestion {
       return 'closed';
     }
     const stop = choice === ControllerTexts.stopMonitorWhenIdle;
+    let recorded: { recorded: boolean; other?: EngineRemoval };
     try {
       // The setting first (an explicit user value, also for the default), then the record of the engine: until both are
       // written, the Monitor of the engine stops when idle.
       await vscode.workspace.getConfiguration(SETTINGS_SECTION).update(STOP_MONITOR_WHEN_IDLE_SETTING, stop, vscode.ConfigurationTarget.Global);
-      await records.recordMonitorAnswer(host, (this.deps.clock ?? systemClock).now());
+      recorded = await records.recordMonitorAnswer(host, (this.deps.clock ?? systemClock).now(), await removalRuns?.());
     } catch (error) {
       logger.warn(`The answer about the Monitor on ${engine} could not be stored. Until it is stored, the Monitor there stops when no devspace runs: ${errorMessage(error)}`);
       showWarningMessage(ControllerTexts.monitorAnswerNotSaved).then(undefined, (shown: unknown) => logger.error('Could not show the message.', shown));
+      return 'closed';
+    }
+    if (!recorded.recorded) {
+      // A removal that another window began while the question was open forgot the answer of the engine (its mark): the
+      // next flow of the user there asks again.
+      logger.info(
+        `The answer about the Monitor on ${engine} is not recorded for that engine: Devspaces is being removed from there in another window${recorded.other !== undefined ? ` (process ${recorded.other.pid})` : ''}.`,
+      );
       return 'closed';
     }
     logger.info(

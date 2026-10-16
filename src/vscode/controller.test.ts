@@ -24,7 +24,7 @@ import { OP_TOKEN_REMOVE } from '../core/helperChannel/protocol';
 import type { OpenOptions, OpenResult, OperationOptions, RepositoryTarget } from '../core/pipeline/operationBase';
 import { PipelineTexts } from '../core/pipeline/operationBase';
 import { removeTokenThroughWorker } from '../core/pipeline/devspaceOperations';
-import { DockerEngineRecords } from '../core/storage/dockerEngineRecords';
+import { DockerEngineRecords, type EngineRemoval } from '../core/storage/dockerEngineRecords';
 import { StoragePaths } from '../core/storage/paths';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { SessionFiles } from '../core/storage/sessionFiles';
@@ -258,7 +258,7 @@ interface Harness {
   /** The VS Code setting workbench.list.openMode (double-click on a row); a test may change it. */
   listOpenMode: { value: ListOpenMode };
   /** The question about the Monitor of an engine (MonitorQuestion); by default the engine has its answer. */
-  monitorQuestion: { askIfNeeded: Mock<(host: string) => Promise<string>> };
+  monitorQuestion: { askIfNeeded: Mock<(host: string, removalRuns?: () => Promise<(removal: EngineRemoval) => boolean>) => Promise<string>> };
   /** docker-engines.json of the storage folder of the test (the removal mark). */
   engineRecords: DockerEngineRecords;
 }
@@ -282,7 +282,7 @@ function createHarness(
     updateImagesNow?: ControllerDeps['updateImagesNow'];
   } = {},
 ): Harness {
-  const monitorQuestion = { askIfNeeded: vi.fn(async (_host: string): Promise<string> => 'notNeeded') };
+  const monitorQuestion = { askIfNeeded: vi.fn(async (_host: string, _removalRuns?: () => Promise<(removal: EngineRemoval) => boolean>): Promise<string> => 'notNeeded') };
   const listOpenMode: Harness['listOpenMode'] = { value: 'singleClick' };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   const clock = { now: () => NOW };
@@ -3363,8 +3363,10 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     onBuildBox(fake);
     const env = ownRemote();
     await h.registry.add(env);
-    h.monitorQuestion.askIfNeeded.mockImplementationOnce(async () => {
+    let removalRuns: ((removal: EngineRemoval) => boolean) | undefined;
+    h.monitorQuestion.askIfNeeded.mockImplementationOnce(async (_host, rule) => {
       await otherWindowRemoves();
+      removalRuns = await rule?.();
       return 'answered';
     });
     await run('start', row('acme/api', env));
@@ -3372,6 +3374,11 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(infoMessages()).toEqual([ControllerTexts.removalRunningElsewhere('build-box')]);
     expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
     expect(await h.engineRecords.removing('build-box')).toEqual(OTHER_REMOVAL);
+    // The question records no answer while that removal runs: it gets the liveness rule of the busy marks, which
+    // reads the window status files. Mutations: no rule (every entry runs), or the rule without the status files.
+    expect(removalRuns?.(OTHER_REMOVAL)).toBe(true);
+    expect(removalRuns?.({ ...OTHER_REMOVAL, pid: 5151 })).toBe(false);
+    expect(removalRuns?.({ ...OTHER_REMOVAL, windowId: 'window-that-closed' })).toBe(false);
   });
 
   // Mutation: a removal that does not check the entry under the lock removes Devspaces at the same time as window 2.
