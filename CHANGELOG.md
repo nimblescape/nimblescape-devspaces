@@ -49,6 +49,8 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Lock of the devspace list:** a window that stopped for more than 10 seconds while it changed the list of devspaces, for example because the computer slept, can lose the lock of the list to another window. The window now checks before it writes that it still holds the lock. If not, it writes nothing, makes its change again on the current list, and does not remove the lock of the other window. Before, it wrote its old copy of the list over the change of the other window and removed the lock of that window.
 
+**Stop and Rebuild after a change of the Docker host:** when the current Docker context is not the engine of the devspace of a window, Stop and Rebuild in that window now show the message that the devspace is on another Docker host, and the window keeps its connection. Before, the window closed its connection, and its empty window then dropped the operation without a message.
+
 ## 0.5.0
 
 **Docker names, without migration:** the image of the worker is now `devspaces-worker:<hash>` (was `devspaces-helper:<hash>`), its cache volume devspaces-worker-cache (was devspaces-helper-cache), and its labels nimblescape.devspaces.worker, nimblescape.devspaces.worker-run and nimblescape.devspaces.worker-channel (were nimblescape.devspaces.helper...). The new image is built at the first use. After the update, remove the old devspaces-helper images and the devspaces-helper-cache volume on each Docker engine by hand; the steps are in the user guide, section [Update from version 0.4.0 or older](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#update-from-version-040-or-older).

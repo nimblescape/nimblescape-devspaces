@@ -256,7 +256,7 @@ Each question before a change of the Docker host has a second button "…, Don't
 
 ### What to know
 
-- The view, the switcher, the status bar, and every command show and act only on the devspaces of the current Docker engine. Each devspace belongs to the engine where it was created, and a repository gets its own devspace on each engine. Two names of the same computer (an SSH alias and `user@address`) count as two hosts.
+- The view, the switcher, the status bar, and every command show and act only on the devspaces of the current Docker engine. Each devspace belongs to the engine where it was created, and a repository gets its own devspace on each engine. Two names of the same computer (an SSH alias and `user@address`) count as two hosts. When the current engine is not the engine of the devspace of a window, **Stop** and **Rebuild** in that window change nothing and say so; switch back to its engine first.
 - The context changes for every Docker tool of your user on this computer, also in terminals. If `DOCKER_HOST` or `DOCKER_CONTEXT` is set for VS Code, the context has no effect, and the commands say so.
 - Docker Desktop may make its own context current again when it starts or updates. When a window of a devspace on another host opens again, for example from **Open Recent**, Devspaces asks "Use `<host>` again?" and switches back after the same test.
 - A Docker context that points to another computer without SSH (for example `tcp://10.0.0.5:2375`) is not supported: no operation runs there, and the view says so.
