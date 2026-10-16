@@ -89,6 +89,9 @@ export const ControllerTexts = {
     `${count} ${count === 1 ? 'item' : 'items'} of Devspaces could not be removed from ${engine}. The log names each one and the command to remove it.`,
   removalEnded: (engine: string) =>
     `The removal from ${engine} stopped before the end. The log names the commands that remove the rest.`,
+  /** A window of a devspace that the user kept on an engine with the removal mark (Controller.leaveRemovedEngine). */
+  windowOnRemovedEngine: (repository: string, engine: string) =>
+    `Devspaces was removed from ${engine}, so this window does not connect to ${repository}. Start ${repository} again to set up Devspaces there.`,
   // On every engine; for the local Docker (host '') the Monitor there is named.
   closeAndKeepRunningUnreachable: (host: string, minutes: number) =>
     `${host === '' ? 'The Monitor of the local Docker' : `The Docker host ${host}`} cannot be reached. The container would stop after ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} without contact. The window stays open.`,

@@ -726,9 +726,13 @@ async function activateExtension(
   const currentDevspace = containerName
     ? await findWindowDevspace(containerName, { registry, needsRestore, docker, service, logger, mayRestore: startWork })
     : undefined;
+  // A window of a devspace that the user kept on an engine with the removal mark ("Remove Devspaces from This Docker
+  // Engine…") does not use it: its heartbeats and its open would set Devspaces up there again. Its session starts
+  // without the devspace, and the window closes its connection (Controller.leaveRemovedEngine).
+  const onRemovedEngine = currentDevspace !== undefined && (await engineRemoved({ host: dockerHostOf(currentDevspace) }));
   // Writes the window status file and cleans up the storage folder. Its result is the pending connection file of this
   // window's devspace, which the first status write removes (role A).
-  const started = sessionCoordinator.start(currentDevspace?.id ?? null);
+  const started = sessionCoordinator.start(onRemovedEngine ? null : (currentDevspace?.id ?? null));
   controller.setReady(started);
 
   const focusThrottle = new Throttle(FOCUS_REFRESH_INTERVAL_MS);
@@ -834,7 +838,7 @@ async function activateExtension(
     'prepare the workspace helper image in the background',
   );
 
-  if (currentDevspace && containerName && docker.isInstalled()) {
+  if (currentDevspace && containerName && docker.isInstalled() && !onRemovedEngine) {
     // Which Docker the Dev Containers extension asks when it resolves this window. Only for a devspace of this
     // extension. Its context: the one in the authority of this window, through which the Dev Containers extension
     // attaches; for a window without one, the current context when that is on the host of the devspace, else none
@@ -858,7 +862,8 @@ async function activateExtension(
     // The stored list first, so that the progress and the status bar name the devspace as the sidebar shows it (with
     // the word of its source when the repository has several sources).
     await listed.catch(() => undefined);
-    await controller.openAttachedWindow(currentDevspace, containerName, pending);
+    if (onRemovedEngine) await controller.leaveRemovedEngine(currentDevspace);
+    else await controller.openAttachedWindow(currentDevspace, containerName, pending);
     return;
   }
   background(started, 'start the window session');
