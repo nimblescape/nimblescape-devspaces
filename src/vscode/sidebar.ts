@@ -661,6 +661,8 @@ export class Sidebar implements vscode.Disposable {
    * end, only the log says it, and the message comes from that refresh.
    */
   private onRateLimited(error: GitHubRateLimitError, afterRateLimit: boolean): void {
+    // A refresh that ends after the view was closed shows nothing and plans nothing.
+    if (this.disposed) return;
     if (!afterRateLimit && this.retryingAfterRateLimit) {
       this.deps.logger.warn('GitHub refused the update of the repository list for its rate limit. The refresh after the rate limit runs next.');
       return;
@@ -838,8 +840,11 @@ function formatTime(isoTime: string): string {
   }
 }
 
-/** `time` (ms since 1970) as the hour and minute of the local time, for a message: 14:32. */
+/**
+ * `time` (ms since 1970) as the hour and minute of the local time, for a message: 14:32. A time within a minute counts
+ * as the next full minute, so that "after 14:32" is never too early.
+ */
 function localClockTime(time: number): string {
-  const date = new Date(time);
+  const date = new Date(Math.ceil(time / 60_000) * 60_000);
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }

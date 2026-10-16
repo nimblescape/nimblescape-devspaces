@@ -876,7 +876,8 @@ describe('Sidebar progressive display', () => {
       await h.sidebar.refreshDiscovery();
       await h.sidebar.render();
       expect(rows().map((row) => row.repository)).toEqual(['acme/api']);
-      const at = new Date(resetAt + RATE_LIMIT_MARGIN_MS);
+      // The time of the message: rounded up to the next full minute.
+      const at = new Date(Math.ceil((resetAt + RATE_LIMIT_MARGIN_MS) / 60_000) * 60_000);
       const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
       const warnings = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call[0]);
       expect(warnings()).toEqual([Messages.gitHubRateLimited(time, true)]);
@@ -930,10 +931,13 @@ describe('Sidebar progressive display', () => {
   describe('one refresh after a rate limit', () => {
     const limitedUntil = (resetAt: number) =>
       new GitHubRateLimitError('GitHub refused the request for its rate limit: API rate limit exceeded', 200, resetAt);
-    const shownTime = (limitResetAt: number) => {
-      const date = new Date(limitResetAt + RATE_LIMIT_MARGIN_MS);
+    /** The local hour and minute of `time`. */
+    const clock = (time: number) => {
+      const date = new Date(time);
       return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     };
+    /** The time that a message names for a limit until `limitResetAt`: rounded up to the next full minute. */
+    const shownTime = (limitResetAt: number) => clock(Math.ceil((limitResetAt + RATE_LIMIT_MARGIN_MS) / 60_000) * 60_000);
     const warnings = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call[0]);
     const resetAt = NOW + 30 * 60_000;
 
@@ -1000,6 +1004,35 @@ describe('Sidebar progressive display', () => {
       expect(warnings()[2]).toBe(Messages.gitHubRateLimited(shownTime(later), false));
       await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
       expect(h.discovery.refresh).toHaveBeenCalledTimes(4);
+    });
+
+    it('names a time rounded up to the next full minute, so that it is never too early', async () => {
+      // The refresh at exactly 12:30:00 (UTC), then at one second after it.
+      const exact = NOW + 30 * 60_000 - RATE_LIMIT_MARGIN_MS;
+      let fail: (error: unknown) => void = () => undefined;
+      h.discovery.refresh
+        .mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)))
+        .mockRejectedValue(limitedUntil(exact + 1_000));
+      await h.sidebar.initialize();
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
+      fail(limitedUntil(exact));
+      await h.sidebar.refreshDiscovery();
+      await h.sidebar.refreshDiscovery({ again: true });
+      expect(warnings()).toEqual([Messages.gitHubRateLimited(clock(NOW + 30 * 60_000), true), Messages.gitHubRateLimited(clock(NOW + 31 * 60_000), true)]);
+    });
+
+    it('shows nothing and plans nothing for a refusal that comes after the view was closed', async () => {
+      let fail: (error: unknown) => void = () => undefined;
+      h.discovery.refresh.mockImplementationOnce(() => new Promise<DiscoveryData>((_resolve, reject) => (fail = reject)));
+      await h.sidebar.initialize();
+      await vi.waitFor(() => expect(h.discovery.refresh).toHaveBeenCalledTimes(1));
+      const running = h.sidebar.refreshDiscovery();
+      h.sidebar.dispose();
+      fail(limitedUntil(resetAt));
+      await running;
+      await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
+      expect(warnings()).toEqual([]);
+      expect(h.logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('GitHub refused the update'));
     });
 
     // refreshIntervalMinutes 5 and a time in 50 minutes: without this, 11 requests and 11 messages instead of 1.
