@@ -167,11 +167,11 @@ interface OperationLogins {
 
 /**
  * The most registries whose login one operation gets. A pull asks for the login of its registry when the registry
- * refused the pull without a login (or Docker Hub limited it), and a check when the registry refused the request
- * without a login (or answered 404), so a registry counts when it refused and this computer has a login for it: the
- * registry of a private image, of private Features (often ghcr.io, with the GitHub sign-in) and of the private images
- * of a Docker Compose configuration. The extension cannot read the configuration on the Docker engine, so this limit is
- * what bounds the logins that a worker that someone else controls gets in one open.
+ * refused the pull without a login or did not find the image (or Docker Hub limited it), and a check when the registry
+ * refused the request without a login (or answered 404), so a registry counts when it answered so and this computer
+ * has a login for it: the registry of a private image, of private Features (often ghcr.io, with the GitHub sign-in)
+ * and of the private images of a Docker Compose configuration. The extension cannot read the configuration on the
+ * Docker engine, so this limit is what bounds the logins that a worker that someone else controls gets in one open.
  */
 export const MAX_LOGIN_REGISTRIES = 8;
 /** The most requests for a registry login of one operation: at most one for each pull and each registry of a check. */
