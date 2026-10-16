@@ -54,7 +54,7 @@ export const TreeTexts = {
   servicesRunning: 'Other containers of the devspace run. Stop stops them.',
   /**
    * Why the state of the devspaces on an engine is unknown (StatesUnknown), in short words: in brackets after the
-   * state text, for example `State unknown (Docker not ready)`.
+   * state text, for example `State unknown (Docker not ready)` (docs/guide.md quotes these texts).
    */
   unknownShort: (engine: string, reason: StatesUnknownReason) =>
     reason === 'unreachable' ? `${engine} cannot be reached` : reason === 'removed' ? `Devspaces removed from ${engine}` : `${engine} not ready`,
