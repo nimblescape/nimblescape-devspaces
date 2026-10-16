@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as esbuild from 'esbuild';
-import { sharedBundleOptions, workerBundleOptions } from './scripts/bundleOptions.mjs';
+import { packageBundleOptions, sharedBundleOptions } from './scripts/bundleOptions.mjs';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -32,7 +32,7 @@ const watchReporter = {
 };
 
 const shared = {
-  // The options of every bundle (scripts/bundleOptions.mjs), which the tests that bundle the worker use too.
+  // The options of every bundle (scripts/bundleOptions.mjs): readable, with source maps only in a development build.
   ...sharedBundleOptions({ production }),
   // In watch mode the reporter above writes all output; esbuild's own "[watch] build finished" lines per bundle would
   // end the problem matcher's build too early.
@@ -40,40 +40,16 @@ const shared = {
   plugins: watch ? [watchReporter] : [],
 };
 
-const outfiles = [
-  'dist/extension.js',
-  'dist/groupsPreviewWorker.js',
-  'dist/helperChannel.js',
-];
+// The three bundles of the package (scripts/bundleOptions.mjs).
+const bundles = packageBundleOptions(shared);
 
 // A production build writes no source maps: remove maps of an earlier development build, so that no map that does not
-// match the minified bundles stays in dist/.
+// match the bundles stays in dist/.
 if (production) {
-  for (const outfile of outfiles) fs.rmSync(`${outfile}.map`, { force: true });
+  for (const { outfile } of bundles) fs.rmSync(`${outfile}.map`, { force: true });
 }
 
-const contexts = await Promise.all([
-  esbuild.context({
-    ...shared,
-    entryPoints: ['src/vscode/extension.ts'],
-    outfile: outfiles[0],
-    external: ['vscode'],
-  }),
-  // The worker thread of the repository groups editor: runs the regular expressions of the draft with a time limit.
-  esbuild.context({
-    ...shared,
-    entryPoints: ['src/vscode/groupsPreviewWorker.ts'],
-    outfile: outfiles[1],
-  }),
-  // The program of the worker, the batch helpers, the Monitor and the analysis threads (scripts/bundleOptions.mjs). The
-  // extension sends it over SSH as the first input line of the pipe loader of the channel container
-  // (src/core/loader/pipeLoader.ts), so it is always minified (less data over SSH) and has no source map.
-  // Its options (workerBundleOptions) are the ones that src/workerBundle.test.ts builds.
-  esbuild.context({
-    ...workerBundleOptions(shared),
-    outfile: outfiles[2],
-  }),
-]);
+const contexts = await Promise.all(bundles.map((options) => esbuild.context(options)));
 
 if (watch) {
   await Promise.all(contexts.map((context) => context.watch()));
