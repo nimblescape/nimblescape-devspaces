@@ -31,6 +31,8 @@ const DIGEST = /^[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*:[0-9a-fA-F]
 const DOMAIN_COMPONENT = '[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?';
 const DOMAIN = new RegExp(`^(?:\\[[0-9A-Fa-f:.]+\\]|${DOMAIN_COMPONENT}(?:\\.${DOMAIN_COMPONENT})*)(?::[0-9]{1,5})?$`);
 const NAME_MAX_LENGTH = 255;
+/** The prefix of the repository of an official image of Docker Hub (`node` is `library/node`). */
+const OFFICIAL_IMAGE_PREFIX = 'library/';
 
 /** True for the host names of Docker Hub. */
 export function isDockerHub(registry: string): boolean {
@@ -80,12 +82,25 @@ export function parseImageReference(reference: string): ImageReference | undefin
   let registry = domain === undefined ? DOCKER_HUB_REGISTRY : domain.toLowerCase();
   if (isDockerHub(registry)) {
     registry = DOCKER_HUB_REGISTRY;
-    if (!path.includes('/')) path = `library/${path}`;
+    if (!path.includes('/')) path = `${OFFICIAL_IMAGE_PREFIX}${path}`;
   }
 
   const result: ImageReference = { original: reference, registry, repository: path, tag: tag ?? 'latest' };
   if (digest !== undefined) result.digest = digest.toLowerCase();
   return result;
+}
+
+/**
+ * True if `registry` and `repository` are the registry and the repository of an image or Feature as
+ * parseImageReference and parseFeatureReference give them: a registry host (with a port) in lower case, Docker Hub as
+ * `registry-1.docker.io` with a repository that has an owner (`library/node`), and a repository path of the Docker
+ * reference format. The extension gives a registry login only for such a pair (hostSideHandler).
+ */
+export function isLoginReference(registry: string, repository: string): boolean {
+  if (registry.length > NAME_MAX_LENGTH || repository.length > NAME_MAX_LENGTH + OFFICIAL_IMAGE_PREFIX.length) return false;
+  if (registry !== registry.toLowerCase() || !DOMAIN.test(registry)) return false;
+  if (isDockerHub(registry) && (registry !== DOCKER_HUB_REGISTRY || !repository.includes('/'))) return false;
+  return repository.split('/').every((component) => PATH_COMPONENT.test(component));
 }
 
 /**

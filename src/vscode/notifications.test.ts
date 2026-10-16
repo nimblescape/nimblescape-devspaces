@@ -12,7 +12,7 @@ import { UserFacingError } from '../core/errors';
 import { Messages } from '../core/messages';
 import { hostAccessReport } from '../core/policy/single';
 import { showError } from './errors';
-import { showErrorMessage, showInformationMessage, showWarningMessage, withoutLinks } from './notifications';
+import { showErrorMessage, showInformationMessage, showWarningMessage, withNotificationProgress, withoutLinks } from './notifications';
 import { progressMessage } from './progress';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
 
@@ -41,7 +41,7 @@ describe('withoutLinks', () => {
     for (const text of texts) {
       const plain = withoutLinks(text);
       expect(links(plain), text).toEqual([]);
-      expect(plain.replaceAll('​', '')).toBe(text);
+      expect(plain.replaceAll('\u200b', '')).toBe(text);
     }
     expect(links(TERMINAL_LINK)).toHaveLength(1);
   });
@@ -81,7 +81,7 @@ describe('the messages', () => {
     showError(new UserFacingError('hostAccess', message), { logger, showLog: vi.fn() });
     const shown = [...window.showErrorMessage.mock.calls, ...window.showWarningMessage.mock.calls].map((call) => call[0] as string);
     expect(shown).toHaveLength(1);
-    expect(shown[0].replaceAll('​', '')).toBe(message);
+    expect(shown[0].replaceAll('\u200b', '')).toBe(message);
     expect(links(shown[0])).toEqual([]);
     // The log keeps the text as it was.
     expect(logger.error.mock.calls[0][0]).toBe(message);
@@ -91,20 +91,51 @@ describe('the messages', () => {
     const text = progressMessage(`Opening ${TERMINAL_LINK}…`, 'downloadingImage', `Step ${TERMINAL_LINK}`, 7);
     expect(links(text)).toEqual([`command:devspaces.showProgressDetails?${encodeURIComponent(JSON.stringify([7]))}`]);
   });
+
+  it('show the title and every message of a progress notification without links', async () => {
+    const reported: unknown[] = [];
+    window.withProgress.mockImplementation(async (_options: unknown, task: (...args: unknown[]) => Promise<unknown>) =>
+      task({ report: (value: unknown) => reported.push(value) }, { onCancellationRequested: () => ({ dispose() {} }) }),
+    );
+    const result = await withNotificationProgress({ title: `Testing ${TERMINAL_LINK}`, cancellable: true }, async (progress) => {
+      progress.report({ message: `step ${TERMINAL_LINK}`, increment: 10 });
+      progress.report({ increment: 5 });
+      return 'done';
+    });
+    expect(result).toBe('done');
+    const [options] = window.withProgress.mock.calls[0] as [{ location: number; title: string; cancellable: boolean }];
+    expect(options).toEqual({ location: fakeVscode.ProgressLocation.Notification, title: withoutLinks(`Testing ${TERMINAL_LINK}`), cancellable: true });
+    expect(links(options.title)).toEqual([]);
+    expect(reported).toEqual([{ message: withoutLinks(`step ${TERMINAL_LINK}`), increment: 10 }, { increment: 5 }]);
+    expect(links((reported[0] as { message: string }).message)).toEqual([]);
+  });
 });
 
 describe('the sources', () => {
+  const root = path.join(__dirname, '..');
+  const sources = fs
+    .readdirSync(root, { recursive: true, encoding: 'utf8' })
+    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts') && !file.endsWith('.d.ts'))
+    .map((file) => file.split(path.sep).join('/'))
+    .filter((file) => !file.startsWith('vscode/testing/'));
+  const offending = (pattern: RegExp, allowed: readonly string[]) =>
+    sources.filter((file) => !allowed.includes(file) && pattern.test(fs.readFileSync(path.join(root, file), 'utf8')));
+
+  it('are found', () => {
+    expect(sources.length).toBeGreaterThan(100);
+    expect(sources).toContain('vscode/notifications.ts');
+  });
+
   // Every message goes through ./notifications; a direct call would show its text with links.
   it('call the show…Message functions of VS Code only in notifications.ts', () => {
-    const root = path.join(__dirname, '..');
-    const files = fs.readdirSync(root, { recursive: true, encoding: 'utf8' }).filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts') && !file.endsWith('.d.ts'));
-    expect(files.length).toBeGreaterThan(100);
-    const direct = /\bwindow\s*\.\s*show(?:Information|Warning|Error)Message\b|\bshow(?:Information|Warning|Error)Message\b[^;]*=\s*(?:vscode\.)?window\b/;
-    const offending = files.filter((file) => {
-      const normalized = file.split(path.sep).join('/');
-      if (normalized === 'vscode/notifications.ts' || normalized.startsWith('vscode/testing/')) return false;
-      return direct.test(fs.readFileSync(path.join(root, file), 'utf8'));
-    });
-    expect(offending).toEqual([]);
+    const direct =
+      /\bwindow\s*\??\.\s*show(?:Information|Warning|Error)Message\b|\bshow(?:Information|Warning|Error)Message\b[^;]*=\s*(?:vscode\s*\.\s*)?window\b|=\s*vscode\s*\??\.\s*window\s*[;,)]/;
+    expect(offending(direct, ['vscode/notifications.ts'])).toEqual([]);
+  });
+
+  // A progress notification renders links in its title and its messages too: withNotificationProgress, or the progress
+  // of an operation, which cleans its text and then adds its link "Show details" (progressMessage).
+  it('show a progress notification only in notifications.ts and progress.ts', () => {
+    expect(offending(/\bProgressLocation\s*\??\.\s*Notification\b/, ['vscode/notifications.ts', 'vscode/progress.ts'])).toEqual([]);
   });
 });

@@ -7,6 +7,7 @@ import {
   credentialServerName,
   hasDigest,
   isDockerHub,
+  isLoginReference,
   isOciFeatureReference,
   parseFeatureReference,
   parseImageReference,
@@ -136,6 +137,64 @@ describe('parseFeatureReference', () => {
     expect(parseFeatureReference('ghcr.io/devcontainers/features/node:1')).toEqual(parseImageReference('ghcr.io/devcontainers/features/node:1'));
     expect(parseFeatureReference('ghcr.io/devcontainers/features/node')?.tag).toBe('latest');
     expect(parseFeatureReference('ghcr.io/o/f:${VERSION}')).toBeUndefined();
+  });
+});
+
+describe('isLoginReference', () => {
+  it('accepts the registry and the repository of every image and Feature as the worker normalizes them', () => {
+    const images = [
+      'ubuntu',
+      'library/ubuntu:22.04',
+      'docker.io/x/y',
+      'index.docker.io/ubuntu:20.04',
+      'localhost:5000/a',
+      'localhost/a:b',
+      'mcr.microsoft.com/devcontainers/python:3.12',
+      `ghcr.io/o/r:1@${DIGEST}`,
+      'GHCR.IO/o/r',
+      '[::1]:5000/repo:tag',
+      '[FD00::1]:5000/team/app',
+      'my-registry.example.com:8443/team/app_x.y__z-w:v1.2-rc_3',
+      // Docker reads a first part with an upper-case letter as a host.
+      'MyHost/team/app',
+      // The longest name of an official image: the repository gets the prefix library/.
+      'a'.repeat(255),
+      `registry.example.com/${'b'.repeat(234)}`,
+    ];
+    for (const reference of images) {
+      const parsed = parseImageReference(reference);
+      expect(parsed, reference).toBeDefined();
+      expect(isLoginReference(parsed!.registry, parsed!.repository), reference).toBe(true);
+    }
+    for (const key of ['ghcr.io/devcontainers/features/node:1', 'ghcr.io/devcontainers-contrib/features/x:1', 'GHCR.IO/Devcontainers/Features/Go:1']) {
+      const parsed = parseFeatureReference(key);
+      expect(parsed, key).toBeDefined();
+      expect(isLoginReference(parsed!.registry, parsed!.repository), key).toBe(true);
+    }
+  });
+
+  it.each([
+    ['GHCR.io', 'acme/app'],
+    ['ghcr.io', 'Acme/app'],
+    ['ghcr.io', 'acme/app:1'],
+    ['ghcr.io', `acme/app@${DIGEST}`],
+    ['ghcr.io', ''],
+    ['ghcr.io', 'acme//app'],
+    ['ghcr.io', '/acme/app'],
+    ['ghcr.io', 'acme/app/'],
+    ['ghcr.io', 'acme/app\n'],
+    ['docker.io', 'library/node'],
+    ['index.docker.io', 'library/node'],
+    ['registry-1.docker.io', 'node'],
+    ['ghcr.io/acme', 'app'],
+    ['a b', 'app'],
+    ['ghcr.io:123456', 'app'],
+    ['-ghcr.io', 'app'],
+    ['', 'app'],
+    ['ghcr.io', 'a'.repeat(264)],
+    [`${'r'.repeat(253)}.io`, 'app'],
+  ])('refuses %j %j', (registry, repository) => {
+    expect(isLoginReference(registry, repository)).toBe(false);
   });
 });
 
