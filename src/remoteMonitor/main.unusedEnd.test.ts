@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LAST_USE_FILE, UNUSED_END_MS, parseLastUse, type LastUse } from '../core/remoteMonitor/protocol';
+import { LAST_USE_FILE, RUN_NOW_FILE, UNUSED_END_MS, parseLastUse, type LastUse } from '../core/remoteMonitor/protocol';
 import { EngineError, type EngineContainerSummary, type EngineFilters } from '../core/worker/dockerEngine';
 import { unusedEngine } from '../core/worker/dockerEngine.testkit';
 import type { MonitorEngineParts } from './engine';
@@ -61,7 +61,7 @@ describe('the use of the engine', () => {
     expect([spanText(30 * DAY), spanText(HOUR), spanText(2 * MINUTE), spanText(3000)]).toEqual(['30 days', '1 hour', '2 minutes', '3 s']);
   });
 
-  it('a subcommand of a window records it at most once an hour; a clock that went back records it again', async () => {
+  it('a subcommand of a window records it at most once an hour; a clock that went back never moves it earlier', async () => {
     const env = { DEVSPACE_MONITOR_CREATE_ID: CREATE };
     const run = (argv: string[], now: number, input = '') => main(argv, { env, stateDir, now: () => now, readStdin: async () => input, err: () => {} });
     expect(await run(['heartbeat', heartbeat], T0)).toBe(0);
@@ -75,9 +75,10 @@ describe('the use of the engine', () => {
     expect(lastUse()?.at).toBe(T0 + 2 * HOUR);
     expect(await run(['images', '-'], T0 + 3 * HOUR, JSON.stringify({ source: SOURCE, references: ['node:20'] }))).toBe(0);
     expect(lastUse()?.at).toBe(T0 + 3 * HOUR);
-    // A time before the stored one: the clock went back, so it is a use now.
-    expect(await run(['heartbeat', heartbeat], T0)).toBe(0);
-    expect(lastUse()).toEqual({ at: T0, createId: CREATE });
+    // A time before the stored one: the clock went back. The stored time stays (only the loop replaces it, when the
+    // clock is still behind at its second look), so a clock that is set right again finds the last use.
+    expect(await run(['heartbeat', heartbeat], T0 - 40 * DAY)).toBe(0);
+    expect(lastUse()).toEqual({ at: T0 + 3 * HOUR, createId: CREATE });
     // The forget of a Delete comes from a window.
     expect(await run(['forget', SOURCE, A], T0 + 4 * HOUR)).toBe(0);
     expect(lastUse()?.at).toBe(T0 + 4 * HOUR);
@@ -111,6 +112,10 @@ describe('the use of the engine', () => {
     // An open created a new container.
     await recordStart(stateDir, { DEVSPACE_MONITOR_CREATE_ID: NEWER }, T0 + 11 * DAY);
     expect(lastUse()).toEqual({ at: T0 + 11 * DAY, createId: NEWER });
+    // A new container while the clock is behind the stored time: its nonce, and the later time.
+    await recordStart(stateDir, { DEVSPACE_MONITOR_CREATE_ID: CREATE }, T0 - 30 * DAY);
+    expect(lastUse()).toEqual({ at: T0 + 11 * DAY, createId: CREATE });
+    await recordStart(stateDir, { DEVSPACE_MONITOR_CREATE_ID: NEWER }, T0 + 11 * DAY);
     // A container without a nonce keeps a valid time; a file that is not valid counts as a use now.
     await recordStart(stateDir, {}, T0 + 12 * DAY);
     expect(lastUse()).toEqual({ at: T0 + 11 * DAY, createId: NEWER });
@@ -242,12 +247,50 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(lastUse()?.at).toBe(T0);
   });
 
-  it('a stored time later than the clock (the clock went back) counts as a use now', async () => {
+  // The clock went back for good, or the stored time was written by a clock that was ahead: a use now, written only
+  // when the clock is still behind at the second look an hour later.
+  it('a stored time later than the clock counts as a use now, and is replaced when the clock is still behind an hour later', async () => {
     writeLastUse({ at: T0 + 400 * DAY, createId: CREATE });
-    const monitor = startRun({ maxTicks: 5 });
-    await vi.waitFor(() => expect(monitor.ticks()).toBe(5));
-    expect(lastUse()).toEqual({ at: T0, createId: CREATE });
+    let halfway: LastUse | undefined;
+    const monitor = startRun({
+      onTick: (mono) => {
+        if (halfway === undefined && mono >= 30 * MINUTE) halfway = lastUse();
+      },
+      maxTicks: Math.ceil((2 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS),
+    });
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((2 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)));
+    // Half an hour after the first look, the stored time is still there.
+    expect(halfway).toEqual({ at: T0 + 400 * DAY, createId: CREATE });
+    const replaced = lastUse();
+    expect(replaced?.createId).toBe(CREATE);
+    expect(replaced?.at).toBeGreaterThanOrEqual(T0 + UNUSED_END_RECHECK_MS);
+    expect(replaced?.at).toBeLessThan(T0 + UNUSED_END_RECHECK_MS + 2 * REMOTE_TICK_MS);
     expect(monitor.events).toEqual([]);
+  });
+
+  // A clock set back by more than the time without use and set right again within the hour: the heartbeats and the loop
+  // keep the stored time of the last use, so the Monitor does not end. Mutation: the old time written at once fails it.
+  it('a clock that went back and is set right again within the hour keeps the last use and ends nothing', async () => {
+    writeLastUse({ at: T0, createId: CREATE });
+    let used = false;
+    const back = (mono: number): number => T0 + mono - (mono < 10 * MINUTE ? 40 * DAY : 0);
+    const monitor = startRun({
+      now: back,
+      onTick: async (mono) => {
+        // A heartbeat of a window while the clock is behind.
+        if (!used && mono >= 5 * MINUTE) {
+          used = true;
+          await recordUse(stateDir, PERMANENT_ENV, back(mono));
+        }
+      },
+      maxTicks: Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS),
+    });
+    await vi.waitFor(() => expect(monitor.ticks()).toBe(Math.ceil((3 * UNUSED_END_RECHECK_MS) / REMOTE_TICK_MS)));
+    expect(used).toBe(true);
+    expect(await pending(monitor.result)).toBe('pending');
+    expect(monitor.events).toEqual([]);
+    expect(monitor.out()).not.toContain('No window used Devspaces');
+    expect(lastUse()?.at).toBe(T0);
   });
 
   it('a failure is logged once and does not end it; it tries again an hour later', async () => {
@@ -294,9 +337,11 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(idle.events).toEqual([]);
   });
 
+  // A run that "Update All Images Now" asked for (a due run waits after the time without use was found, below).
   it('waits for a background run that runs, and ends after it', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] });
     writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
+    fs.writeFileSync(path.join(stateDir, RUN_NOW_FILE), JSON.stringify({ requestedAt: T0 - UNUSED_END_MS }));
     let started!: () => void;
     const runStarted = new Promise<void>((resolve) => (started = resolve));
     let finish!: () => void;
@@ -335,5 +380,49 @@ describe('the end of a permanent monitor after 30 days without use', () => {
     expect(await monitor.result).toBe(0);
     expect(monitor.events).toEqual([expect.stringMatching(/^list /), 'policy own no', 'exit']);
     expect(monitor.out().indexOf('the Monitor ends itself')).toBeGreaterThan(monitor.out().indexOf('The background run ended.'));
+  });
+
+  // Typical after Docker was off for a month: at the first check after the start the run is due, but the time without
+  // use was found first. Mutation: a schedule without the pause starts the run, and the end waits for it.
+  it('starts no background run that is only due after it found the time without use, and ends without one', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval', 'clearTimeout', 'clearInterval'] });
+    writeLastUse({ at: T0 - UNUSED_END_MS, createId: CREATE });
+    const store = path.join(stateDir, 'store');
+    fs.mkdirSync(store);
+    let runs = 0;
+    const vscode = {
+      store: { root: store },
+      storeVolume: 'devspaces-vscode',
+      extensionStateDir: stateDir,
+      engine: {
+        ...unusedEngine(),
+        architecture: async () => {
+          runs += 1;
+          return 'amd64';
+        },
+      },
+      tryLock: async () => ({ kind: 'busy' as const }),
+    } as unknown as NonNullable<ReturnType<typeof vscodeBackgroundDeps>>;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let first = true;
+    const monitor = startRun({
+      env: { ...PERMANENT_ENV, DEVSPACE_IMAGE_FIRST_MS: '1000' },
+      vscodeBackground: () => vscode,
+      onTick: async () => {
+        if (!first) return;
+        first = false;
+        await held;
+      },
+    });
+    // The first look found the time without use; then the first check of the schedule comes.
+    await vi.waitFor(() => expect(monitor.out()).toContain('The Monitor looks again in 1 hour'));
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.waitFor(() => expect(monitor.out()).toContain('The background run is due, but it does not start'));
+    release();
+    expect(await monitor.result).toBe(0);
+    expect(runs).toBe(0);
+    expect(monitor.out()).not.toContain('The background run starts.');
+    expect(monitor.events).toEqual([expect.stringMatching(/^list /), 'policy own no', 'exit']);
   });
 });
