@@ -30,6 +30,18 @@ vi.mock('child_process', async (importOriginal) => {
   }) as typeof actual.spawn;
   return { ...actual, spawn, default: { ...actual, spawn } };
 });
+// No network in these tests: an HTTPS request of the activation (the repository list after a sign-in) fails at once.
+vi.mock('../core/http', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core/http')>();
+  return {
+    ...actual,
+    nodeHttpsTransport: {
+      request: async () => {
+        throw new Error('No network in this test.');
+      },
+    },
+  };
+});
 // The wait of the activation for the first use of Devspaces (devspacesUsed): a test can do something while it waits.
 const whileFirstUseIsRead = vi.hoisted(() => ({ run: undefined as (() => void) | undefined }));
 vi.mock('../core/storage/firstUse', async (importOriginal) => {
@@ -367,20 +379,28 @@ describe('nothing before the first use of Devspaces', () => {
     );
   }, 20_000);
 
+  /** A devspace of the account 1001 that the user kept on the local Docker, which has the removal mark. */
+  const kept = {
+    id: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d',
+    repository: 'acme/api',
+    volumeName: 'devspaces-acme-api-3f2a9c1e',
+    containerName: 'devspaces-acme-api-3f2a9c1e',
+    remoteWorkspaceFolder: '/workspaces/api',
+    owner: { id: '1001', login: 'octo' },
+  };
+  function keptOnRemovedEngine(storage: string): void {
+    fs.writeFileSync(path.join(storage, 'registry.json'), JSON.stringify({ version: 1, devspaces: [kept] }));
+    fs.writeFileSync(path.join(storage, 'docker-engines.json'), '{"engines":[{"host":"","removedAt":1760000000000}]}');
+  }
+  /** The GitHub session of VS Code: the account `id`. */
+  function signIn(id: string, login: string): void {
+    fakeVscode.authentication.getSession.mockResolvedValue({ id: `session-${id}`, accessToken: 'gho_test', account: { id, label: login }, scopes: ['repo', 'read:org'] });
+  }
+
   it('the window of a devspace kept on an engine with the mark stays connected: no heartbeat, no open, no Docker work, one message', async () => {
-    const kept = {
-      id: '3f2a9c1e-5b7d-4e8a-9c0f-2d1e6a7b8c9d',
-      repository: 'acme/api',
-      volumeName: 'devspaces-acme-api-3f2a9c1e',
-      containerName: 'devspaces-acme-api-3f2a9c1e',
-      remoteWorkspaceFolder: '/workspaces/api',
-      owner: { id: '1001', login: 'octo' },
-    };
+    signIn('1001', 'octo');
     await activateWithDocker(
-      (storage) => {
-        fs.writeFileSync(path.join(storage, 'registry.json'), JSON.stringify({ version: 1, devspaces: [kept] }));
-        fs.writeFileSync(path.join(storage, 'docker-engines.json'), '{"engines":[{"host":"","removedAt":1760000000000}]}');
-      },
+      keptOnRemovedEngine,
       async (_storage, docker, log) => {
         await waitFor(() => log().includes('This window of acme/api works without Devspaces'), 'the log of the window');
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -398,6 +418,25 @@ describe('nothing before the first use of Devspaces', () => {
         // Only `docker info`, before the sidebar reads the states, which starts no worker there. No heartbeat (whose
         // repair would start the Monitor), no worker, no open pipeline.
         expect(spawned.filter(([command, sub]) => !(command === docker && (sub === 'context' || sub === 'info')))).toEqual([]);
+      },
+      { containerName: kept.containerName, running: true },
+    );
+  }, 20_000);
+
+  // The account rule outranks the removal mark.
+  it('the window of a devspace of another account on an engine with the mark closes after the token removal through the worker', async () => {
+    signIn('2002', 'someone');
+    await activateWithDocker(
+      keptOnRemovedEngine,
+      async (_storage, docker, log) => {
+        await waitFor(() => fakeVscode.commands.executeCommand.mock.calls.some(([command]) => command === CLOSE_REMOTE_COMMAND), 'the close of the connection');
+        expect(log()).toContain('This window is attached to a devspace of another GitHub account. It closes its remote connection.');
+        expect(fakeVscode.window.showWarningMessage.mock.calls.map((call) => call[0])).toContain(Messages.otherAccountConnection('acme/api'));
+        expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
+        // The removal of the token ran through the worker of that engine (its preparation asks for the helper image;
+        // this Docker answers nothing but its context and `docker info`).
+        expect(spawned.some(([command, sub]) => command === docker && sub === 'image')).toBe(true);
+        expect(log()).toContain(`The GitHub token could not be removed from the container ${kept.containerName}`);
       },
       { containerName: kept.containerName, running: true },
     );

@@ -3068,8 +3068,8 @@ describe('Remove Devspaces from This Docker Engine…', () => {
   it('a window of a kept devspace on an engine with the mark stays connected without Devspaces, says so once, and runs nothing', async () => {
     const env = devspace();
     await h.registry.add(env);
-    h.controller.workWithoutDevspaces(env);
-    h.controller.workWithoutDevspaces(env);
+    await h.controller.workWithoutDevspaces(env, CONTAINER);
+    await h.controller.workWithoutDevspaces(env, CONTAINER);
     expect(fakeVscode.window.showInformationMessage.mock.calls).toEqual([
       [
         'Devspaces was removed from the local Docker, so this window works without it: no background updates and no stop on close. A Start of this devspace sets Devspaces up again there.',
@@ -3094,6 +3094,74 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     h.docker.findContainer.mockResolvedValue(containerInfo(String(CONTAINER_VERSION)));
     await h.controller.reconcileIfRegistryLost({ passive: true, adopt: true });
     expect(h.coordinator.setDevspace).not.toHaveBeenCalledWith(ENV_ID);
+  });
+
+  // The account rule outranks the removal mark (docs/security.md, Accounts). Mutation: the plain window without the
+  // account rule fails it.
+  it('the window of a devspace that the signed-in account may not use closes there as on any engine, after the token removal', async () => {
+    const other = devspace({ owner: OTHER_ACCOUNT });
+    await h.registry.add(other);
+    await h.controller.workWithoutDevspaces(other, CONTAINER);
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close of the connection');
+    expect(h.flow).toHaveBeenCalledWith(OP_TOKEN_REMOVE, { devspaceId: ENV_ID, containerName: CONTAINER }, { timeoutMs: 60_000 });
+    // The token left the container before the close.
+    expect(h.flow.mock.invocationCallOrder[0]).toBeLessThan(h.connection.closeRemoteConnection.mock.invocationCallOrder[0]);
+    expect(warningMessages()).toEqual([Messages.otherAccountConnection('acme/api')]);
+    expect(h.logger.info).toHaveBeenCalledWith('This window is attached to a devspace of another GitHub account. It closes its remote connection.');
+    expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+
+    // Nobody signed in: the same.
+    recreateHarness({});
+    h.auth.getAccount.mockResolvedValue(undefined);
+    const own = devspace();
+    await h.registry.add(own);
+    await h.controller.workWithoutDevspaces(own, CONTAINER);
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close of the connection');
+    expect(tokenRemovals()).toBe(1);
+    expect(warningMessages()).toEqual([ControllerTexts.signedOutConnection('acme/api')]);
+    expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  // Mutation: an account change that does not check the devspace of a window without Devspaces fails it.
+  it('a window that works without Devspaces there closes after an account change or a sign-out, after the token removal', async () => {
+    const env = devspace();
+    await h.registry.add(env);
+    await h.controller.workWithoutDevspaces(env, CONTAINER);
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledTimes(1);
+    expect(h.flow).not.toHaveBeenCalled();
+    h.auth.getAccount.mockResolvedValue(OTHER_ACCOUNT);
+    await h.controller.onSessionChanged();
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close of the connection');
+    expect(h.flow).toHaveBeenCalledWith(OP_TOKEN_REMOVE, { devspaceId: ENV_ID, containerName: CONTAINER }, { timeoutMs: 60_000 });
+    expect(h.flow.mock.invocationCallOrder[0]).toBeLessThan(h.connection.closeRemoteConnection.mock.invocationCallOrder[0]);
+    expect(warningMessages()).toEqual([Messages.otherAccountConnection('acme/api')]);
+    expect(h.logger.info).toHaveBeenCalledWith('The GitHub account changed. acme/api belongs to another account: the window closes its remote connection.');
+    // The window left the devspace: the next change removes nothing more.
+    await h.controller.onSessionChanged();
+    expect(tokenRemovals()).toBe(1);
+
+    // A sign-out: the same.
+    recreateHarness({});
+    const own = devspace();
+    await h.registry.add(own);
+    await h.controller.workWithoutDevspaces(own, CONTAINER);
+    h.auth.getAccount.mockResolvedValue(undefined);
+    await h.controller.onSessionChanged();
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close of the connection');
+    expect(tokenRemovals()).toBe(1);
+    expect(warningMessages()).toEqual([ControllerTexts.signedOutConnection('acme/api')]);
+    expect(h.logger.info).toHaveBeenCalledWith('Nobody is signed in to GitHub anymore. The window closes its remote connection.');
+
+    // The account changed while the window read it: checked again before the window says anything.
+    recreateHarness({});
+    const raced = devspace();
+    await h.registry.add(raced);
+    h.auth.getAccount.mockResolvedValueOnce(ACCOUNT).mockResolvedValue(OTHER_ACCOUNT);
+    await h.controller.workWithoutDevspaces(raced, CONTAINER);
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length === 1, 'the close of the connection');
+    expect(tokenRemovals()).toBe(1);
+    expect(fakeVscode.window.showInformationMessage).not.toHaveBeenCalled();
   });
 
   it('is a command of package.json, in the Command Palette and in the "…" menu of the view', () => {
