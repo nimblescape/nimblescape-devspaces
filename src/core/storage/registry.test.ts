@@ -802,6 +802,65 @@ describe('DevspaceRegistry changes', () => {
     expect(fs.readdirSync(root).filter((name) => name.includes('lock'))).toEqual([]);
   });
 
+  it('checks the lock again right before the rename: a takeover while the temporary file is written writes nothing', async () => {
+    const logger = recordingLogger();
+    const first = new DevspaceRegistry(paths, undefined, { lockStaleMs: 60_000, lockTimeoutMs: 5_000, logger });
+    const second = new DevspaceRegistry(paths, undefined, { lockStaleMs: 100, lockTimeoutMs: 5_000 });
+    await first.add(devspace(ID_A, 'o/a', { lastBuildNumber: 0 }));
+    const until = async (condition: () => boolean) => {
+      while (!condition()) await new Promise((resolve) => setTimeout(resolve, 10));
+    };
+    const temporaryFiles = () => fs.readdirSync(root).filter((name) => name.endsWith('.tmp'));
+    // The first registry stalls right after it wrote its temporary file, after its first check of the token.
+    const realWriteFile = fs.promises.writeFile;
+    let stalled = false;
+    let releaseFirst = false;
+    const writeFile = vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (file, data, options) => {
+      await realWriteFile(file, data, options);
+      if (!stalled && typeof file === 'string' && path.basename(file).startsWith('.registry.json.')) {
+        stalled = true;
+        await until(() => releaseFirst);
+      }
+    });
+    try {
+      let firstRuns = 0;
+      let firstDone = false;
+      const stalledChange = first
+        .update((file) => {
+          firstRuns++;
+          file.devspaces[0].lastBuildNumber = (file.devspaces[0].lastBuildNumber ?? 0) + 1;
+        })
+        .finally(() => (firstDone = true));
+      await until(() => stalled);
+      expect(temporaryFiles()).toHaveLength(1);
+      // The second registry takes the lock over as stale and holds it.
+      let secondHolds = false;
+      let releaseSecond = false;
+      const takeover = second.update(async (file) => {
+        secondHolds = true;
+        const value = file.devspaces[0].lastBuildNumber ?? 0;
+        await until(() => releaseSecond);
+        file.devspaces[0].lastBuildNumber = value + 10;
+      });
+      await until(() => secondHolds);
+      releaseFirst = true;
+      // The first registry finds the lock lost before the rename: nothing written, its temporary file removed.
+      await until(() => logger.warnings.length > 0 || firstDone);
+      expect(logger.warnings).toEqual([expect.stringContaining('Another process took over the lock')]);
+      expect(readRaw()).toMatchObject({ devspaces: [expect.objectContaining({ lastBuildNumber: 0 })] });
+      expect(temporaryFiles()).toEqual([]);
+      releaseSecond = true;
+      await Promise.all([stalledChange, takeover]);
+      // Its change ran again after the second one: no change is lost.
+      expect(firstRuns).toBe(2);
+      await expect(first.get(ID_A)).resolves.toMatchObject({ lastBuildNumber: 11 });
+    } finally {
+      writeFile.mockRestore();
+    }
+    expect(temporaryFiles()).toEqual([]);
+    expect(fs.readdirSync(root).filter((name) => name.includes('lock'))).toEqual([]);
+  });
+
   it('lets a reader without the lock see complete content during many writes', async () => {
     const registry = new DevspaceRegistry(paths);
     await registry.add(devspace(ID_A, 'o/a', { lastBuildNumber: 0 }));
