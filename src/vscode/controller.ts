@@ -294,14 +294,16 @@ interface WindowDevspace {
 
 /**
  * A devspace that this window left because it must not use it, while the window may still be attached to its
- * container: the devspace of another account (or of nobody, after a sign-out), or a container of an older version.
+ * container: the devspace of another account (or of nobody, after a sign-out), a container of an older version, or,
+ * on an engine with the removal mark, a container whose owner cannot be read and whose labels name no devspace
+ * (`unknownOwner`, Controller.leaveUnknownOwner: only its name is known, so no token can be removed from it).
  */
-interface LeftDevspace {
-  devspaceId: string;
-  containerName: string;
-  repository: string;
-  reason: 'account' | 'outdated';
-}
+type LeftDevspace =
+  | { devspaceId: string; containerName: string; repository: string; reason: 'account' | 'outdated' }
+  | { containerName: string; repository: string; reason: 'unknownOwner' };
+
+/** A LeftDevspace whose devspace is known (its ID). */
+type KnownLeftDevspace = Extract<LeftDevspace, { devspaceId: string }>;
 
 /** A flow that connects this window (numbered, see `connectingFlow`), or a new window. */
 type ConnectRequest = { newWindow: false; number: number } | { newWindow: true };
@@ -572,7 +574,8 @@ export class Controller implements vscode.Disposable {
    * labels of the container of this window do not say whose devspace it is (removedEngineWindowDevspace): the account
    * rule cannot be checked, so the window closes its remote connection, as for the devspace of another account. When
    * the labels name the devspace, the token of its owner leaves the container first, through the worker of the engine
-   * (leaveDevspace); without its ID, nothing can find the container's token.
+   * (leaveDevspace); without its ID, nothing can find the container's token. Either way, a window that keeps its
+   * connection (Cancel on unsaved files) closes it again (checkLeftConnection), as for the devspace of another account.
    */
   async leaveUnknownOwner(containerName: string, unknown: { devspaceId?: string; reason: string }): Promise<void> {
     // Nor does a restore of the registry adopt the devspace for this window.
@@ -580,7 +583,9 @@ export class Controller implements vscode.Disposable {
     this.logger.info(`The window closes its remote connection: the owner of the devspace of the container ${containerName} cannot be read (${unknown.reason}).`);
     await this.leaveDevspace(
       ControllerTexts.unknownOwnerConnection(containerName),
-      unknown.devspaceId === undefined ? undefined : { devspaceId: unknown.devspaceId, containerName, repository: containerName, reason: 'account' },
+      unknown.devspaceId === undefined
+        ? { containerName, repository: containerName, reason: 'unknownOwner' }
+        : { devspaceId: unknown.devspaceId, containerName, repository: containerName, reason: 'account' },
     );
   }
 
@@ -2522,7 +2527,7 @@ export class Controller implements vscode.Disposable {
    * credential helper of the container then gives nothing; the next open of the owner writes the token again. Best
    * effort: the result is logged. Never throws.
    */
-  private async removeGitToken(left: LeftDevspace): Promise<void> {
+  private async removeGitToken(left: KnownLeftDevspace): Promise<void> {
     const { containerName } = left;
     try {
       if (!this.deps.docker.isInstalled()) return;

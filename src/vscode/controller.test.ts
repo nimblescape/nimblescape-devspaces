@@ -3670,6 +3670,19 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(warningMessages()).toEqual([ControllerTexts.unknownOwnerConnection(CONTAINER)]);
   });
 
+  // Mutation: without a record of the container, a window that kept its connection stays connected to it.
+  it('a window whose container names neither its owner nor its devspace closes its connection again when it kept it, without a token step', async () => {
+    recreateHarness({ leaveCheckMs: 20 });
+    // This extension host still runs after the close (Cancel on unsaved files): the window is still attached.
+    h.connection.currentContainerName.mockReturnValue(CONTAINER);
+    await h.controller.leaveUnknownOwner(CONTAINER, { reason: 'Docker did not answer in time' });
+    await settle(() => h.connection.closeRemoteConnection.mock.calls.length >= 2, 'the second close');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.stillConnected(CONTAINER), { modal: true });
+    expect(h.logger.warn).toHaveBeenCalledWith(`This window is still connected to ${CONTAINER}, which it must not use. It closes its remote connection again.`);
+    expect(h.flow).not.toHaveBeenCalled();
+    expect(h.connection.open).not.toHaveBeenCalled();
+  });
+
   it('is a command of package.json, in the Command Palette and in the "…" menu of the view', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { commands: Array<{ command: string; title: string; category: string }>; menus: Record<string, Array<{ command: string; when?: string; group?: string }>> };
