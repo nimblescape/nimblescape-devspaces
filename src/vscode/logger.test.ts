@@ -2,6 +2,8 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
@@ -21,6 +23,16 @@ describe('OutputChannelLogger', () => {
     logger.info('Step: Starting Docker');
     logger.warn('careful');
     expect(channel.text).toMatch(/^\[\d\d:\d\d:\d\d\] info Step: Starting Docker\n\[\d\d:\d\d:\d\d\] warn careful\n$/);
+  });
+
+  it('is the name that the messages give the output: "see the Devspaces output"', () => {
+    const root = path.join(__dirname, '..');
+    const names = fs
+      .readdirSync(root, { recursive: true, encoding: 'utf8' })
+      .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+      .flatMap((file) => [...fs.readFileSync(path.join(root, file), 'utf8').matchAll(/see the (\S+) output/gi)].map((match) => `${file}: ${match[1]}`));
+    expect(names.length).toBeGreaterThan(5);
+    expect(names.filter((name) => !name.endsWith(`: ${OUTPUT_CHANNEL_NAME}`))).toEqual([]);
   });
 
   it('appends tool output as it is, and starts a log line on a new line', () => {

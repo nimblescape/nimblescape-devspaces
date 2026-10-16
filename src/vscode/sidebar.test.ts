@@ -11,7 +11,7 @@ vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode)
 
 import { LOCAL_DOCKER_TARGET } from '../core/docker/dockerHost';
 import { operationDockerTarget, runWithDockerTarget } from '../core/docker/dockerTargets';
-import { StateTexts } from '../core/messages';
+import { Actions, StateTexts } from '../core/messages';
 import { StoragePaths } from '../core/storage/paths';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { SessionFiles } from '../core/storage/sessionFiles';
@@ -887,6 +887,8 @@ describe('Sidebar progressive display', () => {
     expect(warnings[0]).toContain('The repository group "(" in the setting devspaces.repositoryGroups is ignored');
     expect(warnings[1]).toContain('uses the flags "g", which are ignored');
     for (const warning of warnings) expect(h.logger.warn).toHaveBeenCalledWith(warning);
+    // Each warning has the button Open Settings.
+    for (const call of fakeVscode.window.showWarningMessage.mock.calls) expect(call.slice(1)).toEqual([Actions.openSettings]);
 
     // Each render compiles the patterns again, but a problem is shown only once.
     await h.sidebar.render();
@@ -1020,6 +1022,8 @@ describe('Sidebar progressive display', () => {
       'The repository group "^(\\\\w+)+$" in the setting devspaces.repositoryGroups took longer than 1 second for the names of your repositories, for example because of a nested repetition such as (a+)+. The view lists the repositories without groups until you change the setting.',
     ]);
     expect(h.logger.warn).toHaveBeenCalledWith(warnings()[0]);
+    // The warning has the button Open Settings.
+    expect(fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call.slice(1))).toEqual([[Actions.openSettings]]);
     // The view does not ask the worker again for this value of the setting.
     await h.sidebar.render();
     expect(h.groupMatcher.runs).toHaveLength(1);
@@ -1044,6 +1048,8 @@ describe('Sidebar progressive display', () => {
     expect(warnings).toEqual([
       'The repository groups of the setting devspaces.repositoryGroups could not be applied, because the separate thread that runs their regular expressions failed. The view lists the repositories without groups until you change the setting or reload the window.',
     ]);
+    // The warning has the button Open Settings.
+    expect(fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call.slice(1))).toEqual([[Actions.openSettings]]);
   });
 
   it('runs a value of repositoryGroups again when it is set again after a value without entries', async () => {

@@ -27,6 +27,7 @@ import { SIGN_IN_AGAIN_DETAIL, type VsCodeGitHubAuth } from './auth';
 import { GROUP_MATCH_TIME_LIMIT_MS, type GroupMatcher, type GroupMatchRun, type GroupPlace } from './groupMatcher';
 import { showWarningMessage } from './notifications';
 import { RepositoryGroupTexts, parseRepositoryGroups, type RepositoryGroupPattern } from './repositoryGroups';
+import { showSettingWarning } from './settings';
 import type { SessionCoordinator } from './sessionCoordinator';
 import { dockerStoppedRuntime, devspaceIdsOf, liveBusyDevspaceIds } from './sidebarData';
 import { CoalescingTask, mapLimit } from './tasks';
@@ -441,9 +442,7 @@ export class Sidebar implements vscode.Disposable {
       if (this.shownGroupProblems.has(message)) continue;
       this.shownGroupProblems.add(message);
       this.deps.logger.warn(message);
-      showWarningMessage(message).then(undefined, (error: unknown) => {
-        this.deps.logger.warn(`A warning could not be shown: ${errorMessage(error)}`);
-      });
+      showSettingWarning(this.deps.logger, 'repositoryGroups', message);
     }
     return { entries, patterns };
   }
@@ -499,9 +498,7 @@ export class Sidebar implements vscode.Disposable {
     const message =
       'tooSlow' in run ? RepositoryGroupTexts.tooSlow(GROUP_MATCH_TIME_LIMIT_MS / 1000, slow?.source) : RepositoryGroupTexts.workerFailed;
     this.deps.logger.warn(message);
-    showWarningMessage(message).then(undefined, (error: unknown) => {
-      this.deps.logger.warn(`A warning could not be shown: ${errorMessage(error)}`);
-    });
+    showSettingWarning(this.deps.logger, 'repositoryGroups', message);
   }
 
   /** Logs once per window session each entry that threw while it was matched (matchRepositoryGroup skipped it). */

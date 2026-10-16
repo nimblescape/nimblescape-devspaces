@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { errorMessage } from '../core/errors';
 import { HOST_ACCESS_CHECKS_OFF_SETTING, parseHostAccessChecksOff } from '../core/policy/hostAccessChecks';
-import { Messages } from '../core/messages';
+import { Actions, Messages } from '../core/messages';
 import type { Logger } from '../core/ports';
 import type { ExtensionSettings } from '../core/types';
 import { DEFAULT_CACHE_UPDATE_SCHEDULE, normalizeCacheSchedule } from '../core/remoteMonitor/cacheSettings';
@@ -99,19 +99,41 @@ export function invalidDefaultImageValue(): string {
   return normalizeDefaultImage(value) === undefined && typeof value === 'string' && value.trim() !== '' ? value.trim() : '';
 }
 
+/** Opens the Settings editor at the setting `devspaces.<key>`. */
+export function openSetting(key: string): Thenable<unknown> {
+  return vscode.commands.executeCommand('workbench.action.openSettings', `@id:${SETTINGS_SECTION}.${key}`);
+}
+
+/**
+ * A warning about the value of the setting `devspaces.<key>`, with the button Open Settings, which opens that setting.
+ * A failure is logged. The caller shows each warning once per window session.
+ */
+export function showSettingWarning(logger: Logger, key: string, message: string): void {
+  Promise.resolve(showWarningMessage(message, Actions.openSettings))
+    .then(async (choice) => {
+      if (choice === Actions.openSettings) await openSetting(key);
+    })
+    .catch((error: unknown) => logger.warn(`The warning about the setting ${key} could not be shown: ${errorMessage(error)}`));
+}
+
+/**
+ * Logs `message` and shows it as a warning about the setting `devspaces.<key>`, once per window session: `warned`
+ * holds the messages that this window showed.
+ */
+function warnOnce(logger: Logger, warned: Set<string>, key: string, message: string): void {
+  if (warned.has(message)) return;
+  warned.add(message);
+  logger.warn(message);
+  showSettingWarning(logger, key, message);
+}
+
 /**
  * One warning (a message and a log line) that names the invalid value of devspaces.defaultImage, which is ignored (no
- * default image). `warned`: the value of the last warning (`''` for none); the same value is not named again. Returns
- * the value of this call, for the next one.
+ * default image). `warned`: the warnings that this window showed; the same value is not named again in this window.
  */
-export function warnInvalidDefaultImage(logger: Logger, warned: string): string {
+export function warnInvalidDefaultImage(logger: Logger, warned: Set<string>): void {
   const invalid = invalidDefaultImageValue();
-  if (invalid === '' || invalid === warned) return invalid;
-  logger.warn(Messages.defaultImageInvalid(invalid));
-  Promise.resolve(showWarningMessage(Messages.defaultImageInvalid(invalid))).catch((error: unknown) =>
-    logger.warn(`The warning about the setting defaultImage could not be shown: ${errorMessage(error)}`),
-  );
-  return invalid;
+  if (invalid !== '') warnOnce(logger, warned, 'defaultImage', Messages.defaultImageInvalid(invalid));
 }
 
 /**
@@ -132,17 +154,11 @@ export function invalidHostAccessChecksOffEntries(): string[] {
 
 /**
  * One warning (a message and a log line) that names the invalid entries of devspaces.hostAccessChecksOff, which
- * are ignored. `warned`: the entries of the last warning (`''` for none); the same entries are not named again. Returns
- * the entries of this call, for the next one.
+ * are ignored. `warned`: the warnings that this window showed; the same entries are not named again in this window.
  */
-export function warnInvalidHostAccessChecksOff(logger: Logger, warned: string): string {
+export function warnInvalidHostAccessChecksOff(logger: Logger, warned: Set<string>): void {
   const invalid = invalidHostAccessChecksOffEntries().join(', ');
-  if (invalid === '' || invalid === warned) return invalid;
-  logger.warn(Messages.hostAccessChecksOffInvalid(invalid));
-  Promise.resolve(showWarningMessage(Messages.hostAccessChecksOffInvalid(invalid))).catch((error: unknown) =>
-    logger.warn(`The warning about the setting hostAccessChecksOff could not be shown: ${errorMessage(error)}`),
-  );
-  return invalid;
+  if (invalid !== '') warnOnce(logger, warned, 'hostAccessChecksOff', Messages.hostAccessChecksOffInvalid(invalid));
 }
 
 /**

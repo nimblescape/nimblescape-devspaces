@@ -3998,7 +3998,10 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     h.connection.currentContainerName.mockReturnValue(CONTAINER);
     await h.controller.leaveUnknownOwner(CONTAINER, { reason: 'Docker did not answer in time' });
     await settle(() => h.connection.closeRemoteConnection.mock.calls.length >= 2, 'the second close');
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.stillConnected(CONTAINER), { modal: true });
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.stillConnected(CONTAINER), { modal: true }, {
+      title: ControllerTexts.closeConnection,
+      isCloseAffordance: true,
+    });
     expect(h.logger.warn).toHaveBeenCalledWith(`This window is still connected to ${CONTAINER}, which it must not use. It closes its remote connection again.`);
     expect(h.flow).not.toHaveBeenCalled();
     expect(h.connection.open).not.toHaveBeenCalled();
@@ -5061,7 +5064,10 @@ describe('Accounts', () => {
     h.auth.getAccount.mockResolvedValue(OTHER_ACCOUNT);
     await h.controller.onSessionChanged();
     await settle(() => h.connection.closeRemoteConnection.mock.calls.length >= 2, 'the second close');
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.stillConnected('acme/api'), { modal: true });
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.stillConnected('acme/api'), { modal: true }, {
+      title: ControllerTexts.closeConnection,
+      isCloseAffordance: true,
+    });
     // The token is taken out again with each close.
     await settle(() => tokenRemovals() >= 2, 'the second removal of the token');
     expect(h.connection.open).not.toHaveBeenCalled();
@@ -5177,7 +5183,10 @@ describe('Accounts', () => {
     h.connection.currentContainerName.mockReturnValue(CONTAINER);
     await h.controller.openAttachedWindow(env, CONTAINER, undefined);
     await settle(() => h.connection.closeRemoteConnection.mock.calls.length >= 2, 'the second close');
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.stillConnected('acme/api'), { modal: true });
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.stillConnected('acme/api'), { modal: true }, {
+      title: ControllerTexts.closeConnection,
+      isCloseAffordance: true,
+    });
     expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
   });
 
