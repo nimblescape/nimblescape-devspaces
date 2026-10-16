@@ -4,9 +4,10 @@
 
 // Background prebuild of the workspace helper image. Devspace never falls back to a previous helper image. After an
 // extension update the helper tag is new; the prebuild builds it right after the activation, in the background, so the
-// first open after the update does not wait for it and does not fail when the network goes away later. Without a
-// previous helper image, an open that finds no usable helper image and cannot build one fails with helperFailed. It
-// runs on the Docker engine of the current Docker context, local or remote alike. With the setting
+// first open after the update does not wait for it and does not fail when the network goes away later. The activation
+// starts it only after the first use of Devspaces (src/vscode/extension.ts); before that, the first open builds the
+// image. Without a previous helper image, an open that finds no usable helper image and cannot build one fails with
+// helperFailed. It runs on the Docker engine of the current Docker context, local or remote alike. With the setting
 // updateImagesOnConnect on, it also runs when the refresh of the helper image is due (the rebuild that a check asked
 // for, the weekly check of the base image), and its maintaining ensure then also runs the daily cleanup when that is due;
 // the cleanup alone never makes it run.

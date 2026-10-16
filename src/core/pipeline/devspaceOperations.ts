@@ -602,6 +602,8 @@ export class DevspaceOperations extends OperationBase {
    * devspaces of the account), in one worker operation (`refresh`; also outside of an operation, never directly). A
    * worker refresh that cannot be made or fails is never read directly: the refresh fails (logged, with the cause).
    * `runtime` is `undefined` when Docker does not run or the states could not be read; then there are no branches.
+   * Without a devspace on the current Docker host there is nothing to read: empty maps, without `docker info` and
+   * without a worker.
    */
   async refreshStates(
     branchIds: ReadonlySet<string>,
@@ -609,7 +611,6 @@ export class DevspaceOperations extends OperationBase {
     try {
       const readable = await this.readableDockerHost();
       if (readable === undefined) return { runtime: new Map(), branches: new Map() };
-      if (!(await this.deps.dockerRunning())) return { runtime: undefined, branches: new Map() };
       // Only the devspaces of the current Docker host; the others are hidden.
       const devspaces: StateDevspace[] = devspacesOfHost(await this.deps.registry.list(), readable).map((env) => ({
         id: env.id,
@@ -619,6 +620,9 @@ export class DevspaceOperations extends OperationBase {
         folder: repositoryFolder(env.repository),
         branch: branchIds.has(env.id),
       }));
+      // No devspace here (for example before the first Start): Docker is not asked, and no worker is started for it.
+      if (devspaces.length === 0) return { runtime: new Map(), branches: new Map() };
+      if (!(await this.deps.dockerRunning())) return { runtime: undefined, branches: new Map() };
       // A failure of the worker refresh fails the refresh (below); only through the worker.
       return await this.deps.workerRefresh(devspaces);
     } catch (error) {

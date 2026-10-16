@@ -10,6 +10,7 @@ import type { DevspaceOperations } from '../core/pipeline/devspaceOperations';
 import type { Logger } from '../core/ports';
 import { isOnDockerHost } from '../core/docker/dockerHost';
 import { errorMessage } from '../core/errors';
+import { RESOURCE_NAME_PREFIX } from '../core/names';
 import type { DevspaceRegistry } from '../core/storage/registry';
 import type { Devspace } from '../core/types';
 
@@ -35,9 +36,21 @@ export async function windowDevspaceName(
 }
 
 /**
+ * Whether the activation does its Docker work in the background (the restore of a lost registry, the prebuild of the
+ * helper image): after the first use of Devspaces (`used`, devspacesUsed), and in the window of a container whose name
+ * starts with `devspaces-` (the dev container of a devspace, also one that Docker Compose named after the project of
+ * the devspace), which needs its devspace also when the storage folder was lost. Before the first use, other windows
+ * ask Docker nothing in the background.
+ */
+export function backgroundWorkAtStart(used: boolean, containerName: string | undefined): boolean {
+  return used || (containerName !== undefined && containerName.toLowerCase().startsWith(RESOURCE_NAME_PREFIX));
+}
+
+/**
  * The registry entry of the container that this window is attached to. When the registry lost its content (the file is
  * missing, not valid, or has invalid entries), it is restored from the volume labels first, so that the open pipeline
- * of role A can run for a restored window; this needs a running Docker, which is not started for it. Never throws.
+ * of role A can run for a restored window; this needs a running Docker, which is not started for it. With `mayRestore`
+ * false (backgroundWorkAtStart), nothing is restored. Never throws.
  */
 export async function findWindowDevspace(
   containerName: string,
@@ -47,12 +60,14 @@ export async function findWindowDevspace(
     docker: Pick<BootstrapDocker, 'isInstalled'>;
     service: Pick<DevspaceOperations, 'reconcileInWorker'>;
     logger: Logger;
+    /** Whether a lost registry may be restored here; true when not given. */
+    mayRestore?: boolean;
   },
 ): Promise<Devspace | undefined> {
   const { registry, needsRestore, docker, service, logger } = deps;
   try {
     const devspace = await registry.findByContainerName(containerName);
-    if (devspace || !(await needsRestore())) return devspace;
+    if (devspace || deps.mayRestore === false || !(await needsRestore())) return devspace;
     // reconcileInWorker checks the Docker target first (never an endpoint that is neither local nor SSH), then whether
     // Docker runs; the worker of the Docker host restores, in the background (passive).
     if (!docker.isInstalled()) return undefined;

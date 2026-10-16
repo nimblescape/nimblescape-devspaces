@@ -163,6 +163,111 @@ describe('no message at activation when Docker is missing', () => {
   });
 });
 
+describe('nothing before the first use of Devspaces', () => {
+  /**
+   * A Docker CLI (a script) whose `docker context inspect` names the local Docker and whose `docker info` fails as
+   * without a running engine, so nothing goes further than `docker info` (no image, build, or worker).
+   */
+  function fakeDockerCli(folder: string): string {
+    const file = path.join(folder, 'docker');
+    fs.writeFileSync(
+      file,
+      [
+        '#!/bin/sh',
+        'case "$1" in',
+        `  context) echo '{"Name":"default","Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock"}}}' ;;`,
+        '  *) echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2; exit 1 ;;',
+        'esac',
+        '',
+      ].join('\n'),
+      { mode: 0o755 },
+    );
+    return file;
+  }
+
+  /** Activates the extension with the sidebar visible, as a window of a local folder; `prepare` fills the storage first. */
+  async function activateWithDocker(prepare: (storage: string) => void, check: (storage: string, docker: string, log: () => string) => Promise<void>): Promise<void> {
+    vi.useRealTimers();
+    const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-first-use-test-'));
+    const docker = fakeDockerCli(fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-first-use-cli-')));
+    // The Dockerfile of the helper image, as in the installed extension.
+    const dockerfile = path.join(storage, 'extension', 'resources', 'helper', 'Dockerfile');
+    fs.mkdirSync(path.dirname(dockerfile), { recursive: true });
+    fs.copyFileSync(path.join(ROOT, 'resources', 'helper', 'Dockerfile'), dockerfile);
+    prepare(storage);
+    foundDockerCli.mockReturnValue(docker);
+    spawned.length = 0;
+    const view = { visible: true, onDidChangeVisibility: new fakeVscode.EventEmitter<{ visible: boolean }>().event, dispose() {} };
+    const window = fakeVscode.window as unknown as Record<string, unknown>;
+    window.createTreeView = vi.fn(() => view);
+    window.onDidChangeWindowState = vi.fn(() => ({ dispose() {} }));
+    const workspace = fakeVscode.workspace as unknown as Record<string, unknown>;
+    workspace.onDidChangeConfiguration = vi.fn(() => ({ dispose() {} }));
+    workspace.workspaceFolders = undefined;
+    workspace.workspaceFile = undefined;
+    fakeVscode.workspace.getConfiguration.mockImplementation(() => ({ get: () => undefined, inspect: () => undefined, update: async () => {} }));
+    const context = {
+      subscriptions: [] as Array<{ dispose(): unknown }>,
+      globalStorageUri: { fsPath: storage },
+      extensionUri: { fsPath: ROOT },
+      extensionMode: 1,
+      asAbsolutePath: (relative: string) => path.join(storage, 'extension', relative),
+    };
+    try {
+      const { activate } = await import('./extension');
+      await activate(context as never);
+      await check(storage, docker, () => fakeVscode.outputChannels.map((channel) => channel.text).join(''));
+    } finally {
+      for (const subscription of context.subscriptions) {
+        try {
+          subscription.dispose();
+        } catch {
+          // Only the cleanup of the test.
+        }
+      }
+      foundDockerCli.mockReturnValue(undefined);
+      fs.rmSync(storage, { recursive: true, force: true });
+      fs.rmSync(path.dirname(docker), { recursive: true, force: true });
+    }
+  }
+
+  async function waitFor(condition: () => boolean, what: string): Promise<void> {
+    for (let waited = 0; !condition(); waited += 20) {
+      if (waited > 10_000) throw new Error(`Waited in vain for ${what}.`);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+
+  it('a fresh storage folder: the activation asks Docker only for its context, and writes no registry, helper record, or marker', async () => {
+    await activateWithDocker(
+      () => {},
+      async (storage, docker) => {
+        // The view title reads the Docker context; then some time for anything else that would start.
+        await waitFor(() => spawned.some(([command, sub]) => command === docker && sub === 'context'), 'docker context inspect');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        // No `docker info`, image, build or run, no worker, no credential helper, no ssh, no wsl.exe: nothing but the
+        // context.
+        expect(spawned.filter(([command, sub]) => !(command === docker && sub === 'context'))).toEqual([]);
+        for (const name of ['registry.json', 'helper.json', 'used']) expect(fs.existsSync(path.join(storage, name)), name).toBe(false);
+      },
+    );
+  });
+
+  it('after the first use (registry.json exists), the activation prepares the helper image in the background and writes the marker', async () => {
+    await activateWithDocker(
+      (storage) => fs.writeFileSync(path.join(storage, 'registry.json'), '{"version":1,"devspaces":[]}'),
+      async (storage, docker, log) => {
+        await waitFor(() => spawned.some(([command, sub]) => command === docker && sub === 'info'), 'docker info');
+        expect(spawned).toContainEqual([docker, 'info', '--format', '{{json .ServerVersion}}']);
+        await waitFor(() => log().includes('The workspace helper image is not prepared in the background: Docker is not running.'), 'the log of the preparation');
+        expect(fs.readFileSync(path.join(storage, 'used'), 'utf8')).toBe('');
+        // An empty registry: no devspace whose state the sidebar reads, and nothing to restore.
+        expect(spawned.filter(([command, sub]) => command === docker && sub === 'info')).toHaveLength(1);
+      },
+    );
+  });
+});
+
 describe('package.json without the walkthrough', () => {
   it('has no walkthroughs and no walkthrough media', () => {
     expect(manifest().contributes.walkthroughs).toBeUndefined();

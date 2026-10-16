@@ -43,12 +43,13 @@ import { heartbeatWiring } from '../core/session/heartbeatWiring';
 import { WindowHeartbeats, resolveHeartbeatEngine } from '../core/session/windowHeartbeats';
 import { isHandedOffStop, releaseDevspace } from '../core/session/windowRelease';
 import { readOrCreateComputerId } from '../core/storage/computerId';
+import { devspacesUsed } from '../core/storage/firstUse';
 import { StoragePaths } from '../core/storage/paths';
 import { ConfigCheckStore } from '../core/storage/configChecks';
 import { bundleHash } from '../core/loader/pipeLoader';
 import { DevspaceRegistry } from '../core/storage/registry';
 import { showWarningMessage } from './notifications';
-import { findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
+import { backgroundWorkAtStart, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
 import { workerMonitor } from './workerMonitor';
 import { defaultExtensionEntries, windowVscodeServer } from './vscodeServer';
 import { HELPER_DOCKER_SOCKET, VSCODE_STORE_VOLUME } from '../core/names';
@@ -194,10 +195,10 @@ async function activateExtension(
     docker,
     logger,
     dockerfilePath: helperDockerfile,
-    // The digest of the base image is read with this registry client and the credentials of this computer (for ghcr.io
-    // also the GitHub sign-in), with its own time limit of 5 seconds: at the build of a missing tag, and by the weekly
-    // check of the maintaining ensure (the preparation of the worker for an operation `open`, and the background
-    // prebuild).
+    // The digest of the base image is read with this registry client, with its own time limit of 5 seconds: at the
+    // build of a missing tag, and by the weekly check of the maintaining ensure (the preparation of the worker for an
+    // operation `open`, and the background prebuild). It asks without a login first; the credentials of this computer
+    // (for ghcr.io also the GitHub sign-in) are read only when the registry refuses that request.
     statePath: paths.helperState,
     baseDigest: registryBaseDigest(registryClient),
     // The engine of the operation (its key: '' for the local Docker, else the host), without its socket, which only the
@@ -566,6 +567,8 @@ async function activateExtension(
     // The current Docker context points to another computer (as last read). Without a Docker CLI no context can be
     // read, so the setup shows.
     remoteDockerHostConfigured: () => targets.last?.kind === 'remote',
+    // Windows: `wsl --status` only while the view shows the setup (also onViewShown below).
+    viewVisible: () => view.visible,
     // Start Docker never starts Docker Desktop for a remote host; it only checks that host.
     startDocker: async (signal, onStarting) =>
       startDockerFor(
@@ -676,8 +679,12 @@ async function activateExtension(
 
   // The devspace of this window: the container of its folder URI, if the registry knows it.
   const containerName = connection.currentContainerName();
+  // Before the first use of Devspaces (no registry.json and no marker of it), the activation asks Docker nothing in the
+  // background: no restore of lost devspaces, no prebuild of the helper image. The window of a devspace container does
+  // both, so it finds its devspace also after the storage folder was lost (backgroundWorkAtStart).
+  const startWork = backgroundWorkAtStart(await devspacesUsed(paths, logger), containerName);
   const currentDevspace = containerName
-    ? await findWindowDevspace(containerName, { registry, needsRestore, docker, service, logger })
+    ? await findWindowDevspace(containerName, { registry, needsRestore, docker, service, logger, mayRestore: startWork })
     : undefined;
   // Writes the window status file and cleans up the storage folder. Its result is the pending connection file of this
   // window's devspace, which the first status write removes (role A).
@@ -697,6 +704,7 @@ async function activateExtension(
     sidebar.onDidRender(() => controller.onStatesRefreshed()),
     view.onDidChangeVisibility((event) => {
       if (!event.visible) return;
+      setup.onViewShown();
       background(sidebar.refreshStates(), 'update the sidebar');
     }),
     vscode.window.onDidChangeWindowState((state) => {
@@ -736,15 +744,16 @@ async function activateExtension(
   const listed = sidebar.initialize();
   background(listed, 'show the repository list');
   if (view.visible) background(sidebar.refreshStates(), 'update the sidebar');
-  // A lost registry is rebuilt from the volume labels (only when Docker runs). A window whose container the registry
-  // did not know takes its restored devspace.
+  // A lost registry is rebuilt from the volume labels (only when Docker runs, and not before the first use). A window
+  // whose container the registry did not know takes its restored devspace.
   const adopt = Boolean(containerName) && currentDevspace === undefined;
-  background(controller.reconcileIfRegistryLost({ passive: true, adopt }), 'restore the devspaces from the volumes');
+  if (startWork) background(controller.reconcileIfRegistryLost({ passive: true, adopt }), 'restore the devspaces from the volumes');
   // When helper.json does not know the current helper tag (after the installation, or an update that changed it; there
-  // is no previous helper image to fall back to), the helper image is built in the background, when Docker runs (no
-  // cross-window lock; windows that start together may each build once, later ones find the record). The build
-  // (HelperImages.prebuildImage) is shared with the preparation of a worker in this window
-  // (HelperImages.ensureImagePresent, ensureImageUse before an open) and cancelled when the extension is deactivated.
+  // is no previous helper image to fall back to), the helper image is built in the background, when Docker runs and
+  // Devspaces was used before (startWork; before the first use, the first Start builds it). No cross-window lock:
+  // windows that start together may each build once, later ones find the record. The build (HelperImages.prebuildImage)
+  // is shared with the preparation of a worker in this window (HelperImages.ensureImagePresent, ensureImageUse before
+  // an open) and cancelled when the extension is deactivated.
   // With updateImagesOnConnect on, it also runs when helper.json says that the refresh of the helper image is due (the
   // rebuild that a check asked for, the weekly check), never for the daily cleanup alone; its maintaining ensure then
   // also runs the cleanup when that is due. On the Docker engine of the current Docker context, local or remote alike,
@@ -762,19 +771,21 @@ async function activateExtension(
     logger,
   });
   context.subscriptions.push(helperPrebuild);
-  background(
-    targets
-      .current()
-      .then((target) => helperPrebuild.start(target))
-      // A lost registry is restored again once the helper image was built.
-      .then((outcome) =>
-        // A failed restore is logged as such, not as a failed preparation.
-        restoreAfterPrebuild(outcome, () => controller.reconcileIfRegistryLost({ passive: false, adopt })).catch((error: unknown) =>
-          logger.error('Could not restore the devspaces from the volumes after the helper image was prepared.', error),
+  if (startWork) {
+    background(
+      targets
+        .current()
+        .then((target) => helperPrebuild.start(target))
+        // A lost registry is restored again once the helper image was built.
+        .then((outcome) =>
+          // A failed restore is logged as such, not as a failed preparation.
+          restoreAfterPrebuild(outcome, () => controller.reconcileIfRegistryLost({ passive: false, adopt })).catch((error: unknown) =>
+            logger.error('Could not restore the devspaces from the volumes after the helper image was prepared.', error),
+          ),
         ),
-      ),
-    'prepare the workspace helper image in the background',
-  );
+      'prepare the workspace helper image in the background',
+    );
+  }
 
   if (currentDevspace && containerName && docker.isInstalled()) {
     // Which Docker the Dev Containers extension asks when it resolves this window. Only for a devspace of this

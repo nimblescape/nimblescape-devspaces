@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { silentLogger } from '../core/ports';
 import type { Devspace } from '../core/types';
 import { resourceName } from '../core/names';
-import { WINDOW_RESTORE_TIMEOUT_MS, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
+import { WINDOW_RESTORE_TIMEOUT_MS, backgroundWorkAtStart, findWindowDevspace, restoreAfterPrebuild, windowDevspaceName } from './windowDevspace';
 
 const ENTRY = { id: 'e1', containerName: 'devspaces-acme-api-x' } as Devspace;
 
@@ -18,7 +18,7 @@ function deps(options: { found?: Devspace[]; needsRestore?: boolean; installed?:
   const warnings: string[] = [];
   const all = {
     registry: { findByContainerName: vi.fn(async () => found.shift()) },
-    needsRestore: async () => options.needsRestore ?? true,
+    needsRestore: vi.fn(async () => options.needsRestore ?? true),
     docker: { isInstalled: () => options.installed ?? true },
     service: {
       reconcileInWorker: vi.fn(async (_options: { passive: boolean; signal?: AbortSignal }) => {
@@ -58,6 +58,34 @@ describe('the devspace of the window at its activation', () => {
     const noDocker = deps({ installed: false });
     expect(await findWindowDevspace('c', noDocker.all)).toBeUndefined();
     expect(noDocker.all.service.reconcileInWorker).not.toHaveBeenCalled();
+  });
+
+  it('restores nothing when the activation may not (before the first use of Devspaces)', async () => {
+    const { all } = deps({ found: [undefined as unknown as Devspace, ENTRY], added: 1 });
+    expect(await findWindowDevspace('other-container', { ...all, mayRestore: false })).toBeUndefined();
+    expect(all.needsRestore).not.toHaveBeenCalled();
+    expect(all.service.reconcileInWorker).not.toHaveBeenCalled();
+    expect(all.registry.findByContainerName).toHaveBeenCalledTimes(1);
+    // The registry is still read: a known container is found.
+    const known = deps({ found: [ENTRY] });
+    expect(await findWindowDevspace('devspaces-acme-api-x', { ...known.all, mayRestore: false })).toBe(ENTRY);
+    // `mayRestore` true restores, as when it is not given.
+    const allowed = deps({ found: [undefined as unknown as Devspace, ENTRY], added: 1 });
+    expect(await findWindowDevspace('devspaces-acme-api-x', { ...allowed.all, mayRestore: true })).toBe(ENTRY);
+    expect(allowed.all.service.reconcileInWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it('does the Docker work at the start after the first use, and in the window of a devspace container', () => {
+    expect(backgroundWorkAtStart(true, undefined)).toBe(true);
+    expect(backgroundWorkAtStart(true, 'my-dev-container')).toBe(true);
+    // Before the first use: only a container of a devspace, also one of a Docker Compose service, in any case.
+    expect(backgroundWorkAtStart(false, undefined)).toBe(false);
+    expect(backgroundWorkAtStart(false, 'my-dev-container')).toBe(false);
+    expect(backgroundWorkAtStart(false, 'vsc-api-0123456789abcdef')).toBe(false);
+    expect(backgroundWorkAtStart(false, resourceName('acme/api', '11111111-2222-4333-8444-555555555555', 'default'))).toBe(true);
+    expect(backgroundWorkAtStart(false, 'devspaces-majikmate-module-html-css-2-x-app-1')).toBe(true);
+    expect(backgroundWorkAtStart(false, 'Devspaces-Acme-Api-x')).toBe(true);
+    expect(backgroundWorkAtStart(false, 'my-devspaces-x')).toBe(false);
   });
 
   it('a restore that fails or times out never fails the activation (logged)', async () => {

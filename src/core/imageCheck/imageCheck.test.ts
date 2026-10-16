@@ -199,14 +199,24 @@ describe('ImageChecker', () => {
   });
 
   it('does not count a hanging credential helper as an unreachable registry', async () => {
+    // A public image and a private one: the private one refuses the anonymous token, and its login does not come in
+    // time.
     const transport = transportFor((request) => {
       if (request.url.startsWith('https://auth.docker.io/')) return { status: 200, body: JSON.stringify({ token: 'anon' }) };
-      if (request.headers?.Authorization === 'Bearer anon') return { headers: { 'docker-content-digest': digest('5') } };
+      if (request.headers?.Authorization === 'Bearer anon' && request.url.includes('/library/ubuntu/')) {
+        return { headers: { 'docker-content-digest': digest('5') } };
+      }
       return { status: 401, headers: { 'www-authenticate': 'Bearer realm="https://auth.docker.io/token",service="registry.docker.io"' } };
     });
     const client = new RegistryClient(transport, () => new Promise(() => {}), undefined, { credentialsTimeoutMs: 30 });
-    const outcome = await new ImageChecker(client).check({ images: ['ubuntu'], features: [] }, { timeoutMs: 1000 });
-    expect(outcome).toEqual({ status: 'checked', images: { ubuntu: digest('5') }, features: {}, authRequired: [], failed: [] });
+    const outcome = await new ImageChecker(client).check({ images: ['ubuntu', 'acme/private'], features: [] }, { timeoutMs: 1000 });
+    expect(outcome).toEqual({
+      status: 'checked',
+      images: { ubuntu: digest('5') },
+      features: {},
+      authRequired: ['registry-1.docker.io'],
+      failed: ['acme/private'],
+    });
   });
 
   it('asks for Feature keys as the Dev Container CLI resolves them, and keeps the keys as written', async () => {
