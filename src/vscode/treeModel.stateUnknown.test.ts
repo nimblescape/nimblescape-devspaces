@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
+import { StateTexts } from '../core/messages';
 import type { Devspace } from '../core/types';
 import { TreeTexts, buildTreeModel, repositoryRows, type DevspaceRuntime, type RepositoryRow, type StatesUnknown, type TreeInput } from './treeModel';
 
@@ -116,6 +117,16 @@ describe('the state of the devspaces on an engine that the refresh could not rea
     expect(remote.tooltip.split('\n')[2]).toBe('State unknown · kept');
     expect(remote.state).toBe('connected');
     expect(remote.contextValue).toBe(before.remote.contextValue);
+  });
+
+  it('has its texts in the table of the states in the user guide, as the rows show them', () => {
+    const guide = fs.readFileSync(path.join(__dirname, '..', '..', 'docs', 'guide.md'), 'utf8');
+    const row = guide.split('\n').find((line) => line.startsWith(`| \`${StateTexts.unknown} (…)\` |`));
+    expect(row).toBeDefined();
+    // The local Docker is named Docker (as in the row of LOCAL above), a remote host by its name.
+    for (const text of [TreeTexts.unknownShort('Docker', 'notReady'), TreeTexts.unknownShort('<host>', 'notReady'), TreeTexts.unknownShort('<host>', 'unreachable')]) {
+      expect(row).toContain(`\`${text}\``);
+    }
   });
 
   it('a refresh that read the states shows them again (no statesUnknown); a missing volume is Files missing', () => {

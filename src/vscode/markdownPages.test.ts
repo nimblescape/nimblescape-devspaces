@@ -97,4 +97,8 @@ describe('the Markdown pages', () => {
   it.each(['README.md', 'CHANGELOG.md'])('%s has no relative link, no image without HTTPS, no SVG image and no raw tag', (file) => {
     expect(problems(read(file))).toEqual([]);
   });
+
+  it('docs/guide.md has no raw tag, so that GitHub shows each placeholder such as `<host>`', () => {
+    expect(problems(read('docs/guide.md'), { links: false })).toEqual([]);
+  });
 });
