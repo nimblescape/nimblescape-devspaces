@@ -55,7 +55,7 @@ export const RepositoryGroupTexts = {
   tooSlow: (seconds: number, source: string | undefined) =>
     `${source !== undefined ? `The repository group ${JSON.stringify(source)}` : 'A repository group'} in the setting devspaces.repositoryGroups took longer than ${seconds} ${seconds === 1 ? 'second' : 'seconds'} for the names of your repositories, for example because of a nested repetition such as (a+)+. The view lists the repositories without groups until you change the setting.`,
   workerFailed:
-    'The repository groups of the setting devspaces.repositoryGroups could not be applied, because the worker thread of Devspaces failed. The view lists the repositories without groups until you change the setting or reload the window.',
+    'The repository groups of the setting devspaces.repositoryGroups could not be applied, because the separate thread that runs their regular expressions failed. The view lists the repositories without groups until you change the setting or reload the window.',
 } as const;
 
 /**

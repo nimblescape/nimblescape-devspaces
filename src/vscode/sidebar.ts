@@ -474,9 +474,10 @@ export class Sidebar implements vscode.Disposable {
       if ('places' in run) {
         for (const [name, place] of run.places) state.places.set(name, place);
         for (const pattern of patterns) pattern.failure ??= run.failures.get(pattern.index);
-      } else if (this.groupPlaces === state) {
+      } else {
         state.off = true;
-        this.warnGroupingOff(run, patterns);
+        // A setting that changed while the job ran gets no warning for its old value: the next render runs the new one.
+        if (JSON.stringify(this.deps.settings().repositoryGroups ?? []) === key) this.warnGroupingOff(run, patterns);
       }
     }
     if (state.off) return plain;
