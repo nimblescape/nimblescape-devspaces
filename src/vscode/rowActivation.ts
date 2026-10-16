@@ -52,6 +52,11 @@ export class RowActivationTracker {
     this.enterAt = this.clock.now();
   }
 
+  /** Forgets the last Enter: no activation of a row follows it, so the next activation is a click again. */
+  forgetEnter(): void {
+    this.enterAt = undefined;
+  }
+
   /** Records an activation of the row `rowId`. True when it completes a double-click, or follows Enter. */
   activate(rowId: string, openMode: ListOpenMode): boolean {
     const now = this.clock.now();

@@ -61,6 +61,15 @@ describe('RowActivationTracker (double-click on a repository row)', () => {
     expect(rows.activate('repo:acme/api', 'singleClick')).toBe(false);
   });
 
+  it('forgets an Enter when told so: the next activation is a click again', () => {
+    let time = 0;
+    const rows = new RowActivationTracker({ now: () => time });
+    rows.enter();
+    rows.forgetEnter();
+    time = 50;
+    expect(rows.activate('repo:acme/api', 'singleClick')).toBe(false);
+  });
+
   it('forgets an Enter after the interval, or when the clock went back', () => {
     let time = 1000;
     const rows = new RowActivationTracker({ now: () => time });

@@ -6676,6 +6676,25 @@ describe('Double-click on a repository row', () => {
     expect(start).toHaveBeenCalledTimes(1);
   });
 
+  // A later VS Code may remove or rename list.select.
+  it('logs a failed list.select once per window, without a message, and forgets the Enter', async () => {
+    const start = vi.spyOn(h.controller, 'start').mockResolvedValue(undefined);
+    fakeVscode.commands.executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'list.select') throw new Error("command 'list.select' not found");
+    });
+    h.clock.now = () => NOW;
+    await run('rowEnter');
+    await run('rowEnter');
+    expect(fakeVscode.window.showErrorMessage).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
+    expect(h.logger.error).not.toHaveBeenCalled();
+    const logged = h.logger.warn.mock.calls.filter((call: unknown[]) => String(call[0]).includes('list.select'));
+    expect(logged).toEqual([[expect.stringContaining("command 'list.select' not found")]]);
+    // A click right after it only selects the row.
+    await click(viewRow('acme/api', undefined), 10);
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it('only selects the row on a single click', async () => {
     const start = vi.spyOn(h.controller, 'start');
     await h.registry.add(devspace());
