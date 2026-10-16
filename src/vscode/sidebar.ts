@@ -44,9 +44,9 @@ export const LOADED_CONTEXT_KEY = 'devspaces.loaded';
 export const LOAD_FAILED_CONTEXT_KEY = 'devspaces.loadFailed';
 
 /**
- * The refresh after a rate limit of GitHub (onRateLimited) runs this long after the time that GitHub names, so that a
- * clock that is a little ahead does not ask too early; without a time, after RATE_LIMIT_WAIT_MS (GitHub asks to wait at
- * least a minute).
+ * The refresh after a rate limit of GitHub (onRateLimited) runs at the next full minute that is at least this long after
+ * the time that GitHub names, so that a clock that is a little ahead does not ask too early; without a time, the time is
+ * RATE_LIMIT_WAIT_MS after now (GitHub asks to wait at least a minute).
  */
 export const RATE_LIMIT_MARGIN_MS = 10_000;
 export const RATE_LIMIT_WAIT_MS = 60_000;
@@ -676,6 +676,9 @@ export class Sidebar implements vscode.Disposable {
     }
     const now = this.clock.now();
     let at = Math.max(error.resetAt ?? now + RATE_LIMIT_WAIT_MS, now) + RATE_LIMIT_MARGIN_MS;
+    // The next full minute, because the message names only hour and minute: the timer, the log, and the message use
+    // the same time, and a time in the same minute is not a new time.
+    at = Math.ceil(at / 60_000) * 60_000;
     // A message for a new time, and for each refused Refresh of the user, who would otherwise see no answer; for any
     // other refusal, the time of the timer that waits was named already.
     let newTime = true;
@@ -848,11 +851,8 @@ function formatTime(isoTime: string): string {
   }
 }
 
-/**
- * `time` (ms since 1970) as the hour and minute of the local time, for a message: 14:32. A time within a minute counts
- * as the next full minute, so that "after 14:32" is never too early.
- */
+/** `time` (ms since 1970, a full minute: onRateLimited rounds it up) as the hour and minute of the local time: 14:32. */
 function localClockTime(time: number): string {
-  const date = new Date(Math.ceil(time / 60_000) * 60_000);
+  const date = new Date(time);
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
