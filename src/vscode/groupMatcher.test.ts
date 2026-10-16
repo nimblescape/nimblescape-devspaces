@@ -142,37 +142,40 @@ describe('GroupMatchWorkerRunner', () => {
   });
 
   it('gives each entry its own time limit, so a job with many entries can take longer than one limit', async () => {
-    // Five entries of 250 ms each: 1250 ms for the job, but each entry stays below the limit of 1000 ms.
+    // Eight entries of 250 ms each: 2000 ms for the job, but each entry stays far below the limit of 1500 ms.
+    const entries = ['^a$', '^b$', '^c$', '^d$', '^e$', '^f$', '^g$', '^h$'];
     const steady = scriptWorker(
       'steady.js',
-      "for (const entryIndex of [0, 1, 2, 3, 4]) { post({ type: 'probe', id: job.id, entryIndex }); sleep(250); }" +
+      "for (const entryIndex of job.entries.keys()) { post({ type: 'probe', id: job.id, entryIndex }); sleep(250); }" +
         " post({ type: 'places', id: job.id, places: job.names.map((name) => [name, null]), failures: [] });",
     );
-    runner = new GroupMatchWorkerRunner(steady, 1000);
+    runner = new GroupMatchWorkerRunner(steady, 1500);
     const started = Date.now();
-    expect(await runner.run(['^a$', '^b$', '^c$', '^d$', '^e$'], ['x'])).toEqual({ places: new Map([['x', null]]), failures: new Map() });
-    expect(Date.now() - started).toBeGreaterThan(1000);
-  });
+    expect(await runner.run(entries, ['x'])).toEqual({ places: new Map([['x', null]]), failures: new Map() });
+    expect(Date.now() - started).toBeGreaterThan(1500);
+  }, 10_000);
 
   it('does not end a job at the start limit when its first entry already runs', async () => {
     // The extension host is busy beyond the start limit while the worker already runs the first entry: the probe still
     // waits in the queue when the start limit is due.
     const late = scriptWorker(
       'late.js',
-      "if (job.names.length > 0) { post({ type: 'probe', id: job.id, entryIndex: 0 }); sleep(1000); }" +
+      "if (job.names.length > 0) { post({ type: 'probe', id: job.id, entryIndex: 0 }); sleep(2000); }" +
         " post({ type: 'places', id: job.id, places: [], failures: [] });",
     );
-    const current = new GroupMatchWorkerRunner(late, 5000, 500);
+    const current = new GroupMatchWorkerRunner(late, 5000);
     runner = current;
-    // The worker runs after this job.
+    // The worker runs after this job, which starts it with the start limit of 10 seconds (a loaded runner starts a
+    // worker slowly); the next job has a start limit of 500 ms.
     expect(await current.run(['^a$'], [])).toEqual({ places: new Map(), failures: new Map() });
+    (current as unknown as { startLimitMs: number }).startLimitMs = 500;
     const job = current.run(['^a$'], ['a']);
     // The job is posted; then the extension host is busy for longer than the start limit.
     await new Promise((resolve) => setImmediate(resolve));
-    const busyUntil = Date.now() + 800;
+    const busyUntil = Date.now() + 1500;
     while (Date.now() < busyUntil);
     expect(await job).toEqual({ places: new Map(), failures: new Map() });
-  });
+  }, 20_000);
 
   it('ends the running job and the queued jobs at dispose, and runs none after it', async () => {
     const current = new GroupMatchWorkerRunner(bundle, 5000);

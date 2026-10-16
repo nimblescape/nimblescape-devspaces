@@ -1025,7 +1025,7 @@ describe('Sidebar progressive display', () => {
     expect(rows().map((row) => row.label)).toEqual(['api', 'web-shop']);
     const warnings = fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => String(call[0]));
     expect(warnings).toEqual([
-      'The repository groups of the setting devspaces.repositoryGroups could not be applied, because the worker thread of Devspaces failed. The view lists the repositories without groups until you change the setting or reload the window.',
+      'The repository groups of the setting devspaces.repositoryGroups could not be applied, because the separate thread that runs their regular expressions failed. The view lists the repositories without groups until you change the setting or reload the window.',
     ]);
   });
 
@@ -1059,6 +1059,26 @@ describe('Sidebar progressive display', () => {
     await rendered;
     expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
     expect(h.logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('shows no warning for a value of repositoryGroups that changed while the worker ran, and runs the new value', async () => {
+    h.discovery.refresh.mockResolvedValue(data([info('acme/web-shop')]));
+    await signedIn();
+    let answer: (run: GroupMatchRun) => void = () => undefined;
+    // The first job waits for the answer of the test; the later jobs run as before.
+    const run = vi.spyOn(h.groupMatcher, 'run').mockImplementationOnce(() => new Promise<GroupMatchRun>((resolve) => (answer = resolve)));
+    h.settings.repositoryGroups = [String.raw`^(\w+)+$`];
+    const rendered = h.sidebar.render();
+    await vi.waitFor(() => expect(run).toHaveBeenCalled());
+    // The user fixes the value while its job runs; then the job of the old value ends as too slow.
+    h.settings.repositoryGroups = ['^(web)-(.+)$'];
+    answer({ tooSlow: true, slowEntry: 0 });
+    await rendered;
+    await h.sidebar.render();
+    expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
+    expect(h.logger.warn).not.toHaveBeenCalled();
+    expect(run.mock.calls.map(([entries]) => entries)).toEqual([[String.raw`^(\w+)+$`], ['^(web)-(.+)$']]);
+    expect(rows().map((row) => row.label)).toEqual(['shop']);
   });
 
   it('shows no part of a first load that failed', async () => {

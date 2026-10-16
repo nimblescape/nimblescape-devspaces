@@ -102,7 +102,11 @@ export class GroupMatchWorkerRunner implements GroupMatcher {
     return result;
   }
 
-  /** Stops the worker; the running job and the jobs after it resolve `failed`. */
+  /**
+   * Stops the worker. The jobs queued before this call and every later job resolve `{ failed: true }` without starting a
+   * new worker. The running job resolves with its places when the worker had already posted them, with `tooSlow` when
+   * its time limit had already ended it, and otherwise with `failed: true`.
+   */
   dispose(): void {
     this.disposed = true;
     clearTimeout(this.idleTimer);
