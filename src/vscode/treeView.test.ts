@@ -13,7 +13,7 @@ import type { Devspace, RepositoryInfo } from '../core/types';
 import { resetFakeVscode, type ThemeIcon, type TreeItem } from './testing/fakeVscode';
 import { parseRepositoryGroups } from './repositoryGroups';
 import { buildTreeModel, type GroupNode, type HintRow, type OwnerGroup, type RepositoryNode, type RepositoryRow } from './treeModel';
-import { DOCKER_HOST_ROW_ID, DockerHostRowTexts, RepositoriesTreeProvider, expandAll, type TreeNode } from './treeView';
+import { DOCKER_HOST_ROW_ID, DockerHostRowTexts, REPOSITORIES_VIEW_ID, RepositoriesTreeProvider, expandAll, type TreeNode } from './treeView';
 
 function repo(nameWithOwner: string): RepositoryInfo {
   const [owner, name] = nameWithOwner.split('/');
@@ -201,6 +201,16 @@ describe('RepositoriesTreeProvider', () => {
     provider.setModel(model(), { signedIn: true });
     expect((provider.getChildren() as OwnerGroup[]).every((node) => node.kind === 'owner')).toBe(true);
     provider.dispose();
+  });
+
+  it('has the icon of its view container, which VS Code shows when the view is moved to another place (package.json)', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      contributes: { viewsContainers: { activitybar: Array<{ id: string; icon: string }> }; views: Record<string, Array<{ id: string; icon?: string }>> };
+    };
+    const [container] = manifest.contributes.viewsContainers.activitybar;
+    const view = manifest.contributes.views[container.id].find((entry) => entry.id === REPOSITORIES_VIEW_ID);
+    expect(view?.icon).toBe(container.icon);
+    expect(fs.existsSync(path.join(__dirname, '..', '..', container.icon))).toBe(true);
   });
 });
 
