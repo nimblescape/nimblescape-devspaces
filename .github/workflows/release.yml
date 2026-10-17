@@ -32,7 +32,7 @@
 # the publishing steps and, in a release, that a successful dry run tested the
 # files of the release process as they are; the job "Check the package" and the
 # publish job check that the VSIX holds the extension ID of package.json and
-# changes more than the version and the change log since the last release.
+# changes something for the users since the last release.
 
 name: Release
 run-name: Release ${{ inputs.version }}${{ inputs.dry_run && ' (dry run)' || '' }}

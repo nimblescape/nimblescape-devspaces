@@ -76,8 +76,14 @@ describe('the bundles of the package', () => {
   });
 });
 
-/** changedFiles of scripts/release-checks.mjs (a script without types): the files of rule 3 that differ. */
-type ChangedFiles = (previous: Map<string, Buffer>, next: Map<string, Buffer>) => string[];
+/**
+ * userChanges of scripts/release-checks.mjs (a script without types): the changes of rule 3 that count, and those that
+ * do not count.
+ */
+type UserChanges = (previous: Map<string, Buffer>, next: Map<string, Buffer>, sourceFiles: string[]) => {
+  counted: string[];
+  ignored: string[];
+};
 
 /**
  * A copy of the sources in `dir` with `version` in its package.json, and the files of its package that depend on the
@@ -104,7 +110,7 @@ function buildCopy(dir: string, version: string): Map<string, Buffer> {
 
 describe('a new version without a change of the code', () => {
   it('builds the same bundles, so that the release checks see no change (rule 3)', async () => {
-    const { changedFiles } = (await import(path.join(ROOT, 'scripts', 'release-checks.mjs'))) as { changedFiles: ChangedFiles };
+    const { userChanges } = (await import(path.join(ROOT, 'scripts', 'release-checks.mjs'))) as { userChanges: UserChanges };
     const { scripts } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
     // buildCopy runs this build.
     expect(scripts['vscode:prepublish']).toBe('node esbuild.mjs --production');
@@ -115,9 +121,10 @@ describe('a new version without a change of the code', () => {
       const previous = buildCopy(path.join(dir, 'a'), '97.531.8642');
       const next = buildCopy(path.join(dir, 'b'), '97.531.8643');
       expect([...next.keys()]).toEqual(['package.json', ...OUTFILES]);
-      // Only the version of package.json differs, which the check leaves out.
+      // Only the version of package.json differs, which rule 3 does not count. The check gets a changed file of src/
+      // that is not a test, so a bundle that differs would count.
       expect(previous.get('package.json')!.equals(next.get('package.json')!)).toBe(false);
-      expect(changedFiles(previous, next)).toEqual([]);
+      expect(userChanges(previous, next, ['src/extension.ts']).counted).toEqual([]);
       for (const file of OUTFILES) expect(next.get(file)!.includes('97.531.'), file).toBe(false);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
