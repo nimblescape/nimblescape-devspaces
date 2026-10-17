@@ -151,9 +151,7 @@ repository.
 
 ### Release rules
 
-On 15 October 2026, nimblescape promised these rules to the Visual Studio
-Marketplace team, after the Marketplace had removed all extensions of the
-publisher `nimblescape` as "Untrustworthy" on 13 October 2026. The script
+Every extension of nimblescape follows these rules. The script
 `scripts/release-checks.mjs` checks each rule that a program can check, and
 the workflows run it. The checks also run in a clone, for example
 `node scripts/release-checks.mjs rules`.
