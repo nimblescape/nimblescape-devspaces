@@ -8,8 +8,9 @@
 //
 //   node scripts/release-checks.mjs rules
 //     Rules 1, 2 and 5 in the source. The extension ID and the names follow the naming scheme, and the ID is the ID
-//     of the newest release tag. No workflow and no npm script deletes an extension, only release.yml publishes, and
-//     it publishes with the sign-in to Microsoft Entra ID, never with a personal access token.
+//     of the newest release tag. No workflow, no action, no npm script and no file of scripts/ but the checks deletes
+//     an extension or the publisher, only release.yml publishes, and it publishes with the sign-in to Microsoft Entra
+//     ID, never with a personal access token.
 //   node scripts/release-checks.mjs package <vsix> [--dry-run]
 //     Rules 1 and 3 in the package. The VSIX holds the ID and the version of package.json. Since the package of the
 //     newest release before that version, it changes a file that is not a document, not the Marketplace icon and not
@@ -119,23 +120,40 @@ export function namingProblems(manifest, repository) {
 
 /** A command of vsce, also of a pinned version such as `vsce@4 publish`; group 1 is the command. */
 const VSCE_COMMAND = /\bvsce(?:@\S*)?\s+([a-z-]+)/;
+/**
+ * An argument list of JavaScript that runs vsce, such as `['vsce', 'publish', '--azure-credential']`: the string
+ * `vsce` or `@vscode/vsce`, also of a pinned version, and the strings after it.
+ */
+const VSCE_ARGUMENTS = /['"`](?:@vscode\/)?vsce(?:@[^'"`\s]*)?['"`](?:\s*,\s*['"`][^'"`]*['"`])+/g;
+/** An import of the API of vsce, whose functions publish and delete without the command line. */
+const VSCE_API = /\bfrom\s*['"]@vscode\/vsce['"]|\b(?:require|import)\s*\(\s*['"]@vscode\/vsce['"]/;
+/** A call of a function of the vsce API that publishes or deletes; group 1 is the function. */
+const VSCE_API_CALL = /\b(publish|publishVSIX|unpublishVSIX)\s*\(/g;
 
 /**
- * The breaches of rules 2 and 5 by the workflows, the actions of the repository and the npm scripts. A line that ends
- * with a backslash continues on the next line, as in a shell; a `#` at the start of a line or after a space starts a
- * comment of YAML; and `&&`, `||`, `;` and `|` separate the commands of a line.
- * @param {{ file: string, text: string }[]} workflows The files of the workflows and of the actions, with their paths
- *   relative to the repository.
+ * The breaches of rules 2 and 5 by the workflows, the actions of the repository, the files of scripts/ and the npm
+ * scripts. A line that ends with a backslash continues on the next line, as in a shell; a `#` at the start of a line or
+ * after a space starts a comment of YAML or of a shell; and `&&`, `||`, `;` and `|` separate the commands of a line.
+ * A file of JavaScript or TypeScript also may not run vsce through an argument list, and may not call the vsce API to
+ * publish or to delete.
+ * @param {{ file: string, text: string }[]} files The files of the workflows, of the actions and of scripts/, with
+ *   their paths relative to the repository.
  * @param {Record<string, string>} [scripts] The npm scripts of package.json.
  * @returns {string[]}
  */
-export function publishingProblems(workflows, scripts = {}) {
+export function publishingProblems(files, scripts = {}) {
   const problems = [];
   const check = (at, command, file) => {
     const vsce = VSCE_COMMAND.exec(command)?.[1];
     if (vsce === 'unpublish') problems.push(`${at}: vsce unpublish deletes the extension on the Marketplace.`);
+    if (vsce === 'delete-publisher') {
+      problems.push(`${at}: vsce delete-publisher deletes the publisher with all its extensions.`);
+    }
     if (vsce === 'login' || /\bVSCE_PAT\b/.test(command) || (vsce && /\s(-p|--pat)(\s|=|$)/.test(command))) {
       problems.push(`${at}: a personal access token signs in to the Marketplace.`);
+    }
+    if (vsce === 'verify-pat' && !/\s--azure-credential\b/.test(command)) {
+      problems.push(`${at}: vsce verify-pat without --azure-credential checks a personal access token.`);
     }
     if (vsce === 'publish') {
       if (file !== RELEASE_WORKFLOW) problems.push(`${at}: only ${RELEASE_WORKFLOW} may publish.`);
@@ -144,7 +162,21 @@ export function publishingProblems(workflows, scripts = {}) {
       }
     }
   };
-  for (const { file, text } of workflows) {
+  for (const { file, text } of files) {
+    const lineOf = (index) => text.slice(0, index).split('\n').length;
+    if (/\.[cm]?[jt]s$/.test(file)) {
+      for (const match of text.matchAll(VSCE_ARGUMENTS)) {
+        const command = [...match[0].matchAll(/['"`]([^'"`]*)['"`]/g)].map((string) => string[1]).join(' ');
+        check(`${file}:${lineOf(match.index)}`, command, file);
+      }
+      if (VSCE_API.test(text)) {
+        for (const match of text.matchAll(VSCE_API_CALL)) {
+          const at = `${file}:${lineOf(match.index)}`;
+          if (match[1] === 'unpublishVSIX') problems.push(`${at}: unpublishVSIX of the vsce API deletes the extension.`);
+          else problems.push(`${at}: ${match[1]} of the vsce API publishes; only ${RELEASE_WORKFLOW} may publish.`);
+        }
+      }
+    }
     const lines = text.split(/\r?\n/);
     for (let start = 0; start < lines.length; ) {
       let joined = '';
@@ -161,15 +193,19 @@ export function publishingProblems(workflows, scripts = {}) {
       const at = `${file}:${start + 1}`;
       start = end;
       // The input `pat` of the publishing actions of other authors, for example HaaLeo/publish-vscode-extension.
-      if (/^\s*pat\s*:/.test(joined)) problems.push(`${at}: a personal access token signs in to the Marketplace.`);
+      if (/\.ya?ml$/.test(file) && /^\s*pat\s*:/.test(joined)) {
+        problems.push(`${at}: a personal access token signs in to the Marketplace.`);
+      }
       for (const command of joined.split(/&&|\|\||;|\|/)) check(at, command, file);
     }
   }
   for (const [name, line] of Object.entries(scripts)) {
     for (const command of line.split(/&&|\|\||;|\|/)) {
       const vsce = VSCE_COMMAND.exec(command)?.[1];
-      if (vsce === 'publish' || vsce === 'unpublish' || vsce === 'login') {
+      if (vsce === 'publish' || vsce === 'login') {
         problems.push(`The npm script "${name}" runs vsce ${vsce}: only the workflow "Release" publishes.`);
+      } else if (vsce === 'unpublish' || vsce === 'delete-publisher') {
+        problems.push(`The npm script "${name}" runs vsce ${vsce}: nothing deletes an extension or the publisher.`);
       }
     }
   }
@@ -620,6 +656,24 @@ function workflowFiles() {
   return files;
 }
 
+/**
+ * The files of scripts/, with their paths relative to the repository, but the checks of the release rules and their
+ * test, which hold the forbidden commands as data. A file with a NUL byte is no text and does not count.
+ */
+function scriptFiles() {
+  const root = path.join(ROOT, 'scripts');
+  const files = [];
+  if (!fs.existsSync(root)) return files;
+  for (const name of fs.readdirSync(root, { recursive: true }).sort()) {
+    const file = `scripts/${name.split(path.sep).join('/')}`;
+    if (file === 'scripts/release-checks.mjs' || file === 'scripts/release-checks.test.mjs') continue;
+    if (!fs.statSync(path.join(root, name)).isFile()) continue;
+    const content = fs.readFileSync(path.join(root, name));
+    if (!content.includes(0)) files.push({ file, text: content.toString('utf8') });
+  }
+  return files;
+}
+
 function checkRules() {
   const manifest = readManifest();
   const id = extensionId(manifest);
@@ -632,10 +686,15 @@ function checkRules() {
     if (released !== id) error(`The extension ID ${id} differs from ${released} of the release ${tag}: an extension keeps its ID. (rule 1)`);
     else console.log(`The extension ID ${id} is the ID of the release ${tag}.`);
   }
-  const problems = publishingProblems(workflowFiles(), manifest.scripts);
+  const scripts = scriptFiles();
+  const problems = publishingProblems([...workflowFiles(), ...scripts], manifest.scripts);
   for (const problem of problems) error(`${problem} (rules 2 and 5)`);
   if (problems.length === 0) {
-    console.log('Only the workflow "Release" publishes, with the sign-in to Microsoft Entra ID, and nothing deletes an extension.');
+    const files = scripts.length === 1 ? 'the file' : `the ${scripts.length} files`;
+    console.log(
+      `In the workflows, the actions, the npm scripts and ${files} of scripts/, only the workflow "Release" publishes, ` +
+        'with the sign-in to Microsoft Entra ID, and nothing deletes an extension or the publisher.',
+    );
   }
 }
 
