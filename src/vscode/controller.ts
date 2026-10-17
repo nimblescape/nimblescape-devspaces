@@ -194,7 +194,7 @@ export interface ControllerDeps {
    * that runs in a window, which refuses those flows and every other operation on that engine (operation) in the other
    * windows while it runs.
    */
-  engineRecords?: Pick<DockerEngineRecords, 'removed' | 'setRemoved' | 'record' | 'removing' | 'startRemoval' | 'endRemoval' | 'clearRemoved'>;
+  engineRecords?: Pick<DockerEngineRecords, 'setRemoved' | 'record' | 'removing' | 'startRemoval' | 'endRemoval' | 'clearRemoved'>;
   /** "Remove Devspaces from This Docker Engine…" (removeFromDockerEngine). Without it, the command does nothing. */
   engineRemoval?: EngineRemovalDeps;
   /** The VS Code setting `workbench.list.openMode` (double-click on a row, rowActivation.ts). Default: `readListOpenMode`. */
@@ -1148,7 +1148,9 @@ export class Controller implements vscode.Disposable {
    * request. The progress can be cancelled, as the one of Start: a cancel during the Docker start sends the Monitor no
    * request and shows nothing. The progress runs in the gate of this window, with the key of the engine
    * (monitorRequestKey): a second request for the engine is not started while it runs (logged), and the removal of
-   * Devspaces from an engine in this window is refused (runningOperation).
+   * Devspaces from an engine in this window is refused (runningOperation). After the Docker start, which can take long,
+   * the request is not sent when a removal of Devspaces began since the question (requestRefusedByRemoval): the request
+   * would set up the Monitor, the worker and the volumes again on the engine.
    */
   async updateImagesNow(): Promise<void> {
     const update = this.deps.updateImagesNow;
@@ -1162,7 +1164,11 @@ export class Controller implements vscode.Disposable {
     if (!(await this.beforeUserFlow('Update All Images Now'))) return;
     const engine = describeDockerHost(target.host);
     const startDocker = this.deps.startDocker;
+    let sent = false;
     const outcome = await this.gate.run(monitorRequestKey(target.host), 'Update All Images Now', async () => {
+      // A removal mark that is there now is one that beforeUserFlow could not clear (logged): it does not stop the
+      // request, only a newer one does.
+      const markBefore = await this.removalMarkOf(target.host);
       await runWithProgress({
         title: ControllerTexts.requestingImageUpdate(engine),
         cancellable: true,
@@ -1174,9 +1180,11 @@ export class Controller implements vscode.Disposable {
           };
           await startDocker?.({ onStarting, signal });
           if (signal.aborted) throw new UserFacingError('cancelled', PipelineTexts.cancelled);
+          if (await this.requestRefusedByRemoval(target.host, markBefore)) return;
           // A Docker that runs already showed no step, and shows none now.
           if (started) progress.step('sendingRequest');
           await update(target, signal);
+          sent = true;
         },
       });
     });
@@ -1184,8 +1192,27 @@ export class Controller implements vscode.Disposable {
       this.logger.info(`Update All Images Now on ${engine} was not started: an earlier request there is still running.`);
       return;
     }
+    if (!sent) return;
     this.logger.info(`The Monitor on ${engine} took the request of "Update All Images Now".`);
     this.inform(ControllerTexts.imagesUpdatingNow(engine));
+  }
+
+  /**
+   * After the Docker start of "Update All Images Now" on the engine `host`, right before its request: true, after a
+   * message, when a removal of Devspaces began since the question about the Monitor (beforeUserFlow). That is a removal
+   * that runs in this window (refusedWhileRemoving; it began before the request took its key in the gate), one that
+   * another window runs on the engine (refusedWhileOtherWindowRemoves), or one that ended and left its removal mark
+   * there: a mark other than `markBefore`, the mark that beforeUserFlow could not clear (none when it cleared it).
+   */
+  private async requestRefusedByRemoval(host: string, markBefore: number | undefined): Promise<boolean> {
+    const operation = 'Update All Images Now';
+    if (this.refusedWhileRemoving(operation) || (await this.refusedWhileOtherWindowRemoves(operation, host))) return true;
+    const mark = await this.removalMarkOf(host);
+    if (mark === undefined || mark === markBefore) return false;
+    const engine = describeDockerHost(host);
+    this.logger.info(`${operation} did not run: Devspaces was removed from ${engine} in the meantime.`);
+    this.inform(ControllerTexts.removedInTheMeantime(engine));
+    return true;
   }
 
   /**
@@ -1636,13 +1663,21 @@ export class Controller implements vscode.Disposable {
 
   /** Whether the engine `host` has the removal mark (docker-engines.json); false when it cannot be read (logged). */
   private async hasRemovalMark(host: string): Promise<boolean> {
+    return (await this.removalMarkOf(host)) !== undefined;
+  }
+
+  /**
+   * The removal mark of the engine `host` (docker-engines.json): its time (DockerEngineRecord.removedAt); undefined
+   * when the engine has none, and when the file cannot be read (logged).
+   */
+  private async removalMarkOf(host: string): Promise<number | undefined> {
     const records = this.deps.engineRecords;
-    if (records === undefined) return false;
+    if (records === undefined) return undefined;
     try {
-      return await records.removed(host);
+      return (await records.record(host))?.removedAt;
     } catch (error) {
       this.logger.warn(`The records of the Docker engines could not be read: ${errorMessage(error)}`);
-      return false;
+      return undefined;
     }
   }
 

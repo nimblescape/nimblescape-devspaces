@@ -3287,6 +3287,83 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(startDocker.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
   });
 
+  // The Docker start can take long, and a removal in another window does not see the request: the request would set
+  // up the Monitor, the worker and the volumes there again. Mutation: without the checks after the Docker start, the
+  // request is sent in both cases.
+  it('Update All Images Now sends no request when another window removes Devspaces from the engine while Docker starts', async () => {
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    let whileDockerStarts = async (): Promise<void> => {};
+    const startDocker = vi.fn(async () => whileDockerStarts());
+    onBuildBox(removalFake(), BUILD_BOX, { updateImagesNow: update, startDocker });
+    // The removal still runs when Docker has started.
+    whileDockerStarts = () => otherWindowRemoves();
+    await run('updateImagesNow');
+    expect(startDocker).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
+    expect(infoMessages()).toEqual([ControllerTexts.removalRunningElsewhere('build-box')]);
+    expect(h.logger.info).toHaveBeenCalledWith(`Update All Images Now did not run: Devspaces is being removed from build-box in another window (process ${OTHER_PID}).`);
+    expect(await h.engineRecords.record('build-box')).toEqual({ host: 'build-box', removedAt: NOW - 30_000, removing: OTHER_REMOVAL });
+
+    // The removal began and ended while Docker started: its mark stays.
+    await h.engineRecords.endRemoval('build-box', OTHER_REMOVAL);
+    whileDockerStarts = () => h.engineRecords.setRemoved('build-box', NOW);
+    await run('updateImagesNow');
+    expect(startDocker).toHaveBeenCalledTimes(2);
+    expect(update).not.toHaveBeenCalled();
+    expect(infoMessages().at(-1)).toBe(
+      'Devspaces was removed from build-box in the meantime. No request was sent. Run "Update All Images Now" again to set up Devspaces there again.',
+    );
+    expect(h.logger.info).toHaveBeenCalledWith('Update All Images Now did not run: Devspaces was removed from build-box in the meantime.');
+    expect(await h.engineRecords.record('build-box')).toEqual({ host: 'build-box', removedAt: NOW });
+
+    // Run again, the request sets up Devspaces there again.
+    whileDockerStarts = async () => {};
+    await run('updateImagesNow');
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(infoMessages().at(-1)).toBe(ControllerTexts.imagesUpdatingNow('build-box'));
+    expect(await h.engineRecords.record('build-box')).toBeUndefined();
+  });
+
+  // A removal of this window that began after the first check of the request, before the request took its key in the
+  // gate (here: during the question about the Monitor, which stands for the time that beforeUserFlow takes). Mutation:
+  // without the check of the removal of this window after the Docker start, the request is sent.
+  it('Update All Images Now sends no request when this window began to remove Devspaces from the engine during its question', async () => {
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    const startDocker = vi.fn(async () => {});
+    const fake = removalFake();
+    onBuildBox(fake, BUILD_BOX, { updateImagesNow: update, startDocker });
+    const question = deferred<string>();
+    h.monitorQuestion.askIfNeeded.mockReturnValueOnce(question.promise);
+    const updating = run('updateImagesNow');
+    await settle(() => h.monitorQuestion.askIfNeeded.mock.calls.length === 1, 'the question');
+    const answers = deferred<boolean>();
+    fake.deps.engineAnswers.mockReturnValueOnce(answers.promise);
+    const removing = run('removeFromDockerEngine');
+    await settle(() => fake.deps.engineAnswers.mock.calls.length === 1, 'the look at the engine');
+    question.resolve('keepRunning');
+    await updating;
+    expect(startDocker).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
+    expect(infoMessages()).toEqual([ControllerTexts.removalRunning('build-box')]);
+    // The engine does not answer: the removal removes nothing.
+    answers.resolve(false);
+    await removing;
+    expect(await h.engineRecords.removed('build-box')).toBe(false);
+  });
+
+  // As for a Start, a mark that beforeUserFlow could not clear (logged) does not stop the flow. Mutation: a check of
+  // any mark after the Docker start refuses the request.
+  it('a removal mark that Update All Images Now could not clear does not stop its request', async () => {
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    onBuildBox(removalFake(), BUILD_BOX, { updateImagesNow: update, startDocker: vi.fn(async () => {}) });
+    await h.engineRecords.setRemoved('build-box', NOW - 1000);
+    vi.spyOn(h.engineRecords, 'clearRemoved').mockRejectedValue(new Error('EACCES: permission denied'));
+    await run('updateImagesNow');
+    expect(h.logger.warn).toHaveBeenCalledWith('The removal mark of build-box could not be cleared: EACCES: permission denied');
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(infoMessages()).toEqual([ControllerTexts.imagesUpdatingNow('build-box')]);
+  });
+
   // The probe of the review: the removal ran while Docker started, and the request then set up the Monitor, the worker
   // and the volumes there again. Mutation: without the key of the request in the gate, the removal runs.
   it('refuses the removal in this window while Update All Images Now runs, also while Docker starts', async () => {
