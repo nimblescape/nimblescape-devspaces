@@ -17,6 +17,11 @@
 //     file of src/ that is not a test. The section of the version in its change log has text, and no phrase such as
 //     "maintenance release". The GitHub CLI downloads the package of that release (environment GH_TOKEN and GH_REPO).
 //     In a dry run, a breach of rule 3 is a warning; in a release, it is an error.
+//   node scripts/release-checks.mjs interval <version> [--dry-run]
+//     Rule 3 in time. The GitHub release of the newest tag before the version is at least 7 days old, or the reason of
+//     an urgent fix (environment URGENT) is one line of at least 20 characters. A reason is checked also after the 7
+//     days and before the first release. The GitHub CLI reads the release (environment GH_TOKEN and GH_REPO). In a dry
+//     run, a problem is a warning.
 //   node scripts/release-checks.mjs dry-run
 //     Rule 4 (environment GITHUB_REPOSITORY, GH_TOKEN and HEAD_SHA). A successful dry run of the workflow "Release"
 //     tested the files of the release process as they are at the commit HEAD_SHA. On a pull request (also PR_NUMBER
@@ -345,6 +350,50 @@ export function wordingProblems(section, version) {
   );
 }
 
+const DAY = 24 * 60 * 60 * 1000;
+/** The days from a release to the next one at least, unless an urgent fix gives its reason (rule 3). */
+const RELEASE_INTERVAL_DAYS = 7;
+/** The shortest reason of an urgent fix, in characters. */
+const URGENT_REASON_LENGTH = 20;
+
+/**
+ * Rule 3 in time: a release starts 7 days after the newest release at the earliest. An urgent fix may start earlier
+ * when its reason is one line of at least 20 characters: a line break counts as a space, and the spaces at the ends do
+ * not count. The run name shows "(urgent)" and the version commit keeps the reason for every input that is not empty,
+ * so the reason is checked also after the 7 days and before the first release.
+ * @param {string | undefined} tag The newest release tag before the version; undefined before the first release.
+ * @param {Date | undefined} published When the GitHub release of the tag was published; undefined without a tag.
+ * @param {Date} now
+ * @param {string} [urgent] The reason of an urgent fix, the input "urgent" of the workflow; empty for none.
+ * @returns {{ problem?: string, notice?: string }} A problem when the release is too early or the reason is too short,
+ *   a notice when the reason is valid, and neither after 7 days or before the first release without a reason.
+ */
+export function intervalProblem(tag, published, now, urgent = '') {
+  // Before the first release, the 7 days do not apply.
+  const age = tag === undefined ? Infinity : now.getTime() - published.getTime();
+  const days =
+    tag === undefined
+      ? 'There is no release before this version'
+      : `The newest release ${tag} is ${(Math.floor(Math.max(age, 0) / DAY * 10) / 10).toFixed(1)} days old`;
+  const reason = urgent.replace(/\r\n|[\r\n]/g, ' ').trim();
+  const short = urgent === '' ? '' : ` The reason in the input urgent must be one line of at least ${URGENT_REASON_LENGTH} characters.`;
+  if (age >= RELEASE_INTERVAL_DAYS * DAY) {
+    if (urgent === '') return {};
+    const needless = `${days}, so the release does not need the input urgent.`;
+    if (reason.length >= URGENT_REASON_LENGTH) {
+      return { notice: `${needless} The input gives the reason of an urgent fix: ${reason}` };
+    }
+    return { problem: `${needless}${short} (rule 3)` };
+  }
+  if (reason.length >= URGENT_REASON_LENGTH) {
+    return { notice: `${days}. The input urgent gives the reason of an urgent fix: ${reason}` };
+  }
+  // The earliest start, rounded up to the minute that the text shows.
+  const earliest = new Date(Math.ceil((published.getTime() + RELEASE_INTERVAL_DAYS * DAY) / 60000) * 60000);
+  const start = `${earliest.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+  return { problem: `${days}. The next release can start on ${start}, or now with the input urgent.${short} (rule 3)` };
+}
+
 let failed = false;
 
 function error(text) {
@@ -354,6 +403,10 @@ function error(text) {
 
 function warning(text) {
   console.log(`::warning::${text}`);
+}
+
+function notice(text) {
+  console.log(`::notice::${text}`);
 }
 
 function run(command, args, options = {}) {
@@ -396,6 +449,34 @@ function manifestAtTag(tag) {
 function sourceChanges(tag) {
   fetchTag(tag);
   return run('git', ['diff', '--name-only', '--no-renames', '-z', 'FETCH_HEAD', 'HEAD']).split('\0').filter(Boolean);
+}
+
+/**
+ * The answer of the GitHub CLI to a request of the GitHub API, as JSON; undefined for HTTP 404, else an error. The
+ * CLI fills `{owner}/{repo}` from GH_REPO or from the remote of the clone.
+ */
+function ghApi(request) {
+  try {
+    return JSON.parse(run('gh', ['api', request], { stdio: ['ignore', 'pipe', 'pipe'] }));
+  } catch (cause) {
+    if (/\(HTTP 404\)/.test(String(cause.stderr))) return undefined;
+    throw cause;
+  }
+}
+
+/**
+ * When the GitHub release of a tag was published (rule 3). GitHub sets this date when the workflow "Release" publishes
+ * the release, minutes before the Marketplace receives the version. A tag without a release counts from its commit.
+ * @param {string} tag
+ * @returns {Date}
+ */
+export function releaseDate(tag) {
+  const release = ghApi(`repos/{owner}/{repo}/releases/tags/${tag}`);
+  if (release?.published_at) return new Date(release.published_at);
+  console.log(`The tag ${tag} has no GitHub release: the date of its commit counts.`);
+  const commit = ghApi(`repos/{owner}/{repo}/commits/${tag}`);
+  if (commit === undefined) throw new Error(`The GitHub API knows no commit of the tag ${tag}.`);
+  return new Date(commit.commit.committer.date);
 }
 
 /** The files of the workflows and of the actions of the repository, with their paths relative to the repository. */
@@ -489,6 +570,22 @@ function checkPackage(vsix, dryRun) {
   }
 }
 
+function checkInterval(version, dryRun) {
+  const tag = newestTag(releaseTags(), version);
+  if (tag === undefined) console.log(`No release before ${version}: the 7 days of rule 3 do not apply.`);
+  const published = tag === undefined ? undefined : releaseDate(tag);
+  const { problem, notice: urgent } = intervalProblem(tag, published, new Date(), process.env.URGENT ?? '');
+  if (problem !== undefined) {
+    if (dryRun) warning(`${problem} A release would stop here.`);
+    else error(problem);
+  } else if (urgent !== undefined) {
+    notice(urgent);
+    if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${urgent}\n`);
+  } else if (tag !== undefined) {
+    console.log(`The newest release ${tag} is at least 7 days old.`);
+  }
+}
+
 async function checkDryRun() {
   const { GITHUB_REPOSITORY: repository, GH_TOKEN: token, HEAD_SHA: head, PR_NUMBER: number, HEAD_REF: branch } = process.env;
   if (!repository || !token || !head || (number && !branch)) {
@@ -565,13 +662,18 @@ async function checkDryRun() {
 // The tests import the functions above; only a start as a program runs a check.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, ...args] = process.argv.slice(2);
+  // The option --dry-run comes last; the other arguments are the operands.
+  const dryRun = args.at(-1) === '--dry-run';
+  const operands = dryRun ? args.slice(0, -1) : args;
   try {
     if (command === 'rules' && args.length === 0) checkRules();
-    else if (command === 'package' && (args.length === 1 || (args.length === 2 && args[1] === '--dry-run'))) {
-      checkPackage(args[0], args.length === 2);
-    } else if (command === 'dry-run' && args.length === 0) await checkDryRun();
+    else if (command === 'package' && operands.length === 1) checkPackage(operands[0], dryRun);
+    else if (command === 'interval' && operands.length === 1 && parseVersion(operands[0])) checkInterval(operands[0], dryRun);
+    else if (command === 'dry-run' && args.length === 0) await checkDryRun();
     else {
-      console.error('Usage: node scripts/release-checks.mjs rules | package <vsix> [--dry-run] | dry-run');
+      console.error(
+        'Usage: node scripts/release-checks.mjs rules | package <vsix> [--dry-run] | interval <version> [--dry-run] | dry-run',
+      );
       process.exit(2);
     }
   } catch (cause) {

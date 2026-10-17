@@ -3,10 +3,12 @@
 # Licensed under the MIT License. See LICENSE in the repository root for details.
 
 # Release and publish a version on a manual start from the branch main, with
-# the version as input. The version job checks the version, sets it in
-# package.json and package-lock.json, adds its section to CHANGELOG.md from the
-# notes of the start when the file has none, and pushes the commit "Release
-# <version>" to the temporary branch release/run-<run ID>, not to main. A push
+# the version as input; an urgent fix within 7 days of the newest release also
+# gives its reason, and its run name shows "(urgent)". The version job checks
+# the version, sets it in package.json and package-lock.json, adds its section
+# to CHANGELOG.md from the notes of the start when the file has none, and
+# pushes the commit "Release <version>", with the reason of an urgent fix, to
+# the temporary branch release/run-<run ID>, not to main. A push
 # with the token of a workflow starts no other workflow, so the CI job calls
 # the workflow ci.yml for that commit; the VSIX that this job tests and builds
 # is the VSIX of the release, so the release neither repeats the tests nor
@@ -28,15 +30,17 @@
 # temporary branch, so it tests a release, and a change of this workflow,
 # without a change of main, a tag, a release or the Marketplace; its run name
 # ends with "(dry run)". The script scripts/release-checks.mjs checks the
-# release rules of CONTRIBUTING.md: the version job checks the extension ID and
-# the publishing steps and, in a release, that a successful dry run tested the
-# files of the release process as they are; the job "Check the package" and the
-# publish job check that the VSIX holds the extension ID of package.json and
-# changes something for the users since the last release, and that the section
-# of the version in its change log describes the change.
+# release rules of CONTRIBUTING.md: the version job checks the extension ID,
+# the publishing steps and the 7 days since the newest release and, in a
+# release, that a successful dry run tested the files of the release process
+# as they are; the job "Check the package" and the publish job check that the
+# VSIX holds the extension ID of package.json and changes something for the
+# users since the last release, and that the section of the version in its
+# change log describes the change.
 
 name: Release
-run-name: Release ${{ inputs.version }}${{ inputs.dry_run && ' (dry run)' || '' }}
+# "(dry run)" stays at the end: the check of rule 4 finds the dry runs by it.
+run-name: Release ${{ inputs.version }}${{ inputs.urgent != '' && ' (urgent)' || '' }}${{ inputs.dry_run && ' (dry run)' || '' }}
 
 on:
   workflow_dispatch:
@@ -47,6 +51,10 @@ on:
         type: string
       notes:
         description: The notes of the version, used only when CHANGELOG.md has no section for it
+        required: false
+        type: string
+      urgent:
+        description: 'Only for an urgent fix within 7 days of the newest release: the reason, one line, at least 20 characters'
         required: false
         type: string
       dry_run:
@@ -138,6 +146,17 @@ jobs:
       - name: Check the release rules
         run: node scripts/release-checks.mjs rules
 
+      # Rule 3 of CONTRIBUTING.md: 7 days since the newest release, unless the input urgent gives the reason of an
+      # urgent fix. A dry run only warns.
+      - name: Check the time since the newest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.check.outputs.version }}
+          URGENT: ${{ inputs.urgent }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: node scripts/release-checks.mjs interval "$VERSION" $DRY_RUN
+
       # Rule 4 of CONTRIBUTING.md: a release runs only with the files of the release process that a dry run tested.
       - name: Check that a dry run tested the release process
         if: ${{ !inputs.dry_run }}
@@ -207,16 +226,23 @@ jobs:
             fi
           done
 
-      # main receives the commit only after CI passed, so the commit goes to a temporary branch.
+      # main receives the commit only after CI passed, so the commit goes to a temporary branch. The reason of an
+      # urgent release stays in the commit as the trailer "Urgent", on one line.
       - name: Commit the version to a temporary branch
         id: commit
         env:
           VERSION: ${{ steps.check.outputs.version }}
+          URGENT: ${{ inputs.urgent }}
         run: |
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit --quiet --all --message "Release $VERSION"
+            message="Release $VERSION"
+            if [ -n "$URGENT" ]; then
+              reason="${URGENT//$'\r\n'/ }"
+              message="$message"$'\n\n'"Urgent: ${reason//[$'\r\n']/ }"
+            fi
+            git commit --quiet --all --message "$message"
             branch="release/run-$GITHUB_RUN_ID"
             git push --quiet --force origin "HEAD:refs/heads/$branch"
             echo "branch=$branch" >> "$GITHUB_OUTPUT"

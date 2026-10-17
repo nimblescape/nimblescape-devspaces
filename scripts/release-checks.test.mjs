@@ -2,21 +2,26 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The rules of scripts/release-checks.mjs, without Git, the network or a VSIX. The test is the same in every extension
-// repository of nimblescape.
-import { describe, expect, it } from 'vitest';
+// The rules of scripts/release-checks.mjs, without Git, the network or a VSIX: a mock answers in place of the GitHub
+// CLI. The test is the same in every extension repository of nimblescape.
+import { execFileSync } from 'child_process';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   RELEASE_WORKFLOW,
   changelogSection,
   compareVersions,
+  intervalProblem,
   newestTag,
   namingProblems,
   packageProblems,
   parseVersion,
   publishingProblems,
+  releaseDate,
   userChanges,
   wordingProblems,
 } from './release-checks.mjs';
+
+vi.mock('child_process', async (importOriginal) => ({ ...(await importOriginal()), execFileSync: vi.fn() }));
 
 const MANIFEST = { publisher: 'nimblescape', name: 'nimblescape-sample', displayName: 'nimblescape Sample', version: '1.2.3' };
 
@@ -308,5 +313,102 @@ describe('rule 3: only changes for the users', () => {
     expect(wordingProblems('Enter now behaves as in the Explorer view.', '1.2.4')).toEqual([]);
     expect(wordingProblems('The link behaves as in 2 other editors.', '1.2.4')).toEqual([]);
     expect(wordingProblems('Undo behaves as before the save.', '1.2.4')).toEqual([]);
+  });
+});
+
+describe('rule 3: at most one version in 7 days', () => {
+  const published = new Date('2026-10-13T17:52:03Z');
+  const later = (days, hours = 0) => new Date(published.getTime() + (days * 24 + hours) * 60 * 60 * 1000);
+  const reason = 'Fix the start on Mac';
+
+  it('passes 7 days after the newest release', () => {
+    expect(intervalProblem('v0.5.0', published, later(7))).toEqual({});
+  });
+
+  it('refuses a release within 7 days and names its earliest start', () => {
+    expect(intervalProblem('v0.5.0', published, later(6, 23))).toEqual({
+      problem:
+        'The newest release v0.5.0 is 6.9 days old. The next release can start on 2026-10-20 17:53 UTC, or now with the ' +
+        'input urgent. (rule 3)',
+    });
+  });
+
+  it('lets an urgent fix start with a reason of one line and at least 20 characters', () => {
+    expect(reason).toHaveLength(20);
+    expect(intervalProblem('v0.5.0', published, later(3), reason)).toEqual({
+      notice: `The newest release v0.5.0 is 3.0 days old. The input urgent gives the reason of an urgent fix: ${reason}`,
+    });
+    // A line break counts as a space, and the spaces at the ends do not count.
+    expect(intervalProblem('v0.5.0', published, later(3), ' Fix the start\non Mac ').notice).toMatch(/: Fix the start on Mac$/);
+    expect(intervalProblem('v0.5.0', published, later(3), 'Fix the start\r\non Mac').notice).toMatch(/: Fix the start on Mac$/);
+    for (const urgent of [reason.slice(0, 19), '   ', ` ${reason.slice(0, 18)}\n`, 'Fix the start\r\non Ma']) {
+      expect(intervalProblem('v0.5.0', published, later(3), urgent).problem, urgent).toMatch(
+        /The reason in the input urgent must be one line of at least 20 characters\. \(rule 3\)$/,
+      );
+    }
+  });
+
+  it('checks the reason also after 7 days, when the release does not need it', () => {
+    expect(intervalProblem('v0.5.0', published, later(8), reason)).toEqual({
+      notice:
+        'The newest release v0.5.0 is 8.0 days old, so the release does not need the input urgent. The input gives the ' +
+        `reason of an urgent fix: ${reason}`,
+    });
+    for (const urgent of ['x', '   ', reason.slice(0, 19)]) {
+      expect(intervalProblem('v0.5.0', published, later(30), urgent), urgent).toEqual({
+        problem:
+          'The newest release v0.5.0 is 30.0 days old, so the release does not need the input urgent. The reason in the ' +
+          'input urgent must be one line of at least 20 characters. (rule 3)',
+      });
+    }
+  });
+
+  it('checks the reason also before the first release, when the release does not need it', () => {
+    expect(intervalProblem(undefined, undefined, later(0))).toEqual({});
+    expect(intervalProblem(undefined, undefined, later(0), reason)).toEqual({
+      notice:
+        'There is no release before this version, so the release does not need the input urgent. The input gives the ' +
+        `reason of an urgent fix: ${reason}`,
+    });
+    for (const urgent of ['x', '   ', 'Fix the start\r\non Ma']) {
+      expect(intervalProblem(undefined, undefined, later(0), urgent), urgent).toEqual({
+        problem:
+          'There is no release before this version, so the release does not need the input urgent. The reason in the ' +
+          'input urgent must be one line of at least 20 characters. (rule 3)',
+      });
+    }
+  });
+
+  describe('the date of the newest release', () => {
+    let log;
+    beforeEach(() => {
+      execFileSync.mockReset();
+      log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => log.mockRestore());
+    // The answers of `gh api`, by request; an Error is a failed request with the text of the CLI.
+    const gh = (answers) =>
+      execFileSync.mockImplementation((command, [, request]) => {
+        const answer = answers[request];
+        if (command !== 'gh' || answer === undefined) throw new Error(`Unexpected: ${command} ${request}`);
+        if (answer instanceof Error) throw Object.assign(answer, { stderr: answer.message });
+        return JSON.stringify(answer);
+      });
+
+    it('reads the date of the GitHub release, and the commit date of a tag without a release', () => {
+      gh({
+        'repos/{owner}/{repo}/releases/tags/v0.5.0': { published_at: '2026-10-13T17:52:03Z' },
+        'repos/{owner}/{repo}/releases/tags/v0.1.4': new Error('gh: Not Found (HTTP 404)'),
+        'repos/{owner}/{repo}/commits/v0.1.4': { commit: { committer: { date: '2026-10-12T15:47:01Z' } } },
+      });
+      expect(releaseDate('v0.5.0')).toEqual(new Date('2026-10-13T17:52:03Z'));
+      expect(releaseDate('v0.1.4')).toEqual(new Date('2026-10-12T15:47:01Z'));
+      expect(log).toHaveBeenCalledWith('The tag v0.1.4 has no GitHub release: the date of its commit counts.');
+    });
+
+    it('stops at another error of the GitHub CLI', () => {
+      gh({ 'repos/{owner}/{repo}/releases/tags/v0.5.0': new Error('gh: Bad credentials (HTTP 401)') });
+      expect(() => releaseDate('v0.5.0')).toThrow('Bad credentials');
+    });
   });
 });
