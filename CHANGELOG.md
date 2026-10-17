@@ -3,6 +3,12 @@
 Each section lists the changes of one released version. The release workflow
 takes the section of a version as the notes of its GitHub release.
 
+Versions 0.1.1 to 0.1.8 contain the same extension as 0.1.0: they changed
+only the release process, the tests and the contribution guide. Since then, a
+version is released only when it changes something for its users, as the
+[release rules](https://github.com/nimblescape/nimblescape-devspaces/blob/main/CONTRIBUTING.md#release-rules)
+require.
+
 ## 0.6.0
 
 **One devspace per source:** a devspace is now created for one source of its repository, a Dev Container configuration or the default image, and keeps it. A repository with several sources (several configurations, or a configuration and the default image of the setting devspaces.defaultImage) shows one child row per source in the sidebar, labelled default, config, or the folder name of the configuration; each child row is its own devspace with its own clone, so the default-image devspace and the configuration devspace of a repository can run at the same time, also each in its own window. The buttons, the state and the context menu of such a repository are on its child rows. The commands Start with Default Image, Start with Configuration and Select Configuration… are gone: Start on a row starts the devspace of that source, and a start from the Command Palette, Search or the switcher asks for the source when a repository has several. The setting devspaces.startWithDefaultImage places the default row first (on) or last (off). A double-click or `Enter` on such a repository starts its first child row and opens its rows to show it: the row of the default image while the setting is on, else the row of its first configuration. A single click on the name of the repository only selects it; the arrow next to it and the arrow keys open and close its rows. A changed default image in the settings still asks Rebuild now or Later at the next start of a default-image devspace. A devspace keeps its source also on a branch that does not have its configuration: the start uses the first configuration of that branch and says so once.

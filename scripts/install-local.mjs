@@ -2,6 +2,7 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
+
 // `npm run install-local`: packages the extension (npm run package) and installs the .vsix into the VS Code of this
 // computer (`code --install-extension … --force`), so that every window has it, also windows that a debug run opens.
 // It installs into every VS Code profile: the default profile and each profile listed in VS Code's storage.json
