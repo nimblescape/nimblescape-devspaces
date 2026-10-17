@@ -37,10 +37,10 @@
 # the publishing steps, the 7 days since the newest release and the listing of
 # the extension on the Marketplace and, in a release, that a successful dry
 # run tested the files of the release process as they are; the job "Check the
-# package" and the publish job check that the
-# VSIX holds the extension ID of package.json and changes something for the
-# users since the last release, and that the section of the version in its
-# change log describes the change.
+# package" and the publish job check that the VSIX holds the extension ID of
+# package.json, has at most 30 tags and changes something for the users since
+# the last release, and that the section of the version in its change log
+# describes the change.
 
 name: Release
 # "(dry run)" stays at the end: the check of rule 4 finds the dry runs by it.
@@ -275,8 +275,8 @@ jobs:
     with:
       ref: ${{ needs.version.outputs.sha }}
 
-  # Rules 1 and 3 of CONTRIBUTING.md in the VSIX of the CI job, also in a dry run: the extension ID, the changes since
-  # the last release and the section of the version in the change log.
+  # Rules 1 and 3 of CONTRIBUTING.md and the limit of 30 tags in the VSIX of the CI job, also in a dry run: the
+  # extension ID, the number of tags, the changes since the last release and the change-log section.
   package:
     name: Check the package
     needs: [version, ci]
@@ -300,7 +300,7 @@ jobs:
           name: vsix
 
       # The check downloads the VSIX of the last release with the GitHub CLI.
-      - name: Check the extension ID, the changes since the last release and the change-log section
+      - name: Check the extension ID, the number of tags, the changes since the last release and the change-log section
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -505,7 +505,7 @@ jobs:
         run: gh release download "$TAG" --pattern "$VSIX"
 
       # The VSIX of the GitHub release is the file that the Marketplace receives, so the rules 1 and 3 hold for it.
-      - name: Check the extension ID, the changes since the last release and the change-log section
+      - name: Check the extension ID, the number of tags, the changes since the last release and the change-log section
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

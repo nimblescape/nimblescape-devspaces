@@ -21,6 +21,7 @@ import {
   publishingProblems,
   queryMarketplace,
   releaseDate,
+  tagProblems,
   userChanges,
   wordingProblems,
 } from './release-checks.mjs';
@@ -648,5 +649,23 @@ describe('before the tag: the Marketplace lists the extension', () => {
       expect(fetch).toHaveBeenCalledTimes(1);
       expect(await problem(query)).toEqual(failed);
     });
+  });
+});
+
+describe('before the tag: at most 30 tags in the package', () => {
+  const withTags = (count) =>
+    `<Metadata>\n  <Tags>${Array.from({ length: count }, (_, index) => `tag${index}`).join(',')}</Tags>\n</Metadata>`;
+
+  it('accepts 30 tags, no tag and a package without the element Tags', () => {
+    expect(tagProblems(withTags(30))).toEqual([]);
+    expect(tagProblems(withTags(0))).toEqual([]);
+    expect(tagProblems('<Metadata />')).toEqual([]);
+  });
+
+  it('refuses 31 tags, which the Marketplace does not take', () => {
+    expect(tagProblems(withTags(31))).toEqual([
+      'The package has 31 tags: the keywords and the tags that vsce adds, one per language of activationEvents. ' +
+        'The Marketplace takes at most 30.',
+    ]);
   });
 });

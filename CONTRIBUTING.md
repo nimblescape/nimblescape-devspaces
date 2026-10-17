@@ -113,7 +113,7 @@ The run has six jobs:
 
 1. "Version commit" checks that the run starts from `main`, that the version has the form `<major>.<minor>.<patch>`, that it is not lower than the version in `package.json` and that its tag does not exist, and it checks the [release rules](#release-rules) of the source with `scripts/release-checks.mjs rules`, the 7 days since the newest release with `scripts/release-checks.mjs interval`, that the Marketplace lists the extension with `scripts/release-checks.mjs listed` (see "Checks before the tag" in [Release rules](#release-rules)) and, in a release, that a dry run tested the files of the release process with `scripts/release-checks.mjs dry-run`. It sets the version in `package.json` and `package-lock.json`, adds the section of the notes to `CHANGELOG.md` when the file has none, commits the change as "Release `<version>`", for an urgent fix with the line `Urgent: <reason>`, and pushes it to the temporary branch `release/run-<run ID>`, not to `main`. When `main` holds the version and its section already, it commits nothing. It also deletes the temporary branches of earlier runs that failed.
 2. "CI" runs the workflow `ci.yml` for the commit of the version, because a push with the token of a workflow starts no other workflow. The VSIX that this job tests and builds is the VSIX of the release, so the release repeats no test and no build.
-3. "Check the package" checks the VSIX of CI with `scripts/release-checks.mjs package`: the VSIX holds the extension ID and the version of `package.json`, it changes something for the users since the newest release before the version, and the section of the version in its change log describes the change (rule 3).
+3. "Check the package" checks the VSIX of CI with `scripts/release-checks.mjs package`: the VSIX holds the extension ID and the version of `package.json`, it has at most 30 tags (see "Checks before the tag" in [Release rules](#release-rules)), it changes something for the users since the newest release before the version, and the section of the version in its change log describes the change (rule 3).
 4. "Check the Marketplace" runs at the same time as CI, only in a release and in the environment `marketplace`. It signs in to Microsoft Entra ID like the publish job and checks with `vsce verify-pat --azure-credential` that the app registration has a role on the publisher `nimblescape`. The check changes nothing.
 5. "Main, tag and GitHub release" runs only when CI, the check of the package and the check of the Marketplace passed. It moves `main` to the commit of the version as a fast-forward and deletes the temporary branch. When `main` changed during the run, it stops before the tag. Then it creates the tag `v<version>` on the commit and the release of the tag with the GitHub CLI `gh`. The section of the version in `CHANGELOG.md` becomes the notes, and the VSIX becomes the file of the release. A release that exists keeps its notes and receives the VSIX only when it holds none.
 6. "Publish to the Visual Studio Marketplace" downloads the VSIX of the GitHub release, checks it again as the job "Check the package" does, signs in to Microsoft Entra ID with the official [`azure/login`](https://github.com/Azure/login) action and publishes the VSIX with `vsce publish --azure-credential`.
@@ -171,9 +171,16 @@ there is lower than the new version and has a release tag. Before the first
 release tag, the check only notes that the first release creates the
 extension. The job "Check the Marketplace" signs in like the publish job and
 checks with `vsce verify-pat --azure-credential` that the app registration
-has a role on the publisher. In a dry run, the listing only warns, and "Check
-the Marketplace" does not run: a dry run also starts from other branches, and
-the environment `marketplace` admits only `main` and the tags.
+has a role on the publisher. The Marketplace refuses a package with more than
+30 tags with the error "You exceeded the number of allowed tags of 30", which
+the Microsoft publishing guide names. So the job "Check the package" fails when
+the package has more than 30 tags, also in a dry run. It counts every tag in
+the element `<Tags>` of the package: the keywords of `package.json` and the
+tags that vsce adds, for example the language of each `onLanguage` event in
+`activationEvents`. Because vsce adds tags, the check can refuse a package with
+fewer than 30 keywords. In a dry run, the listing only warns, and "Check the
+Marketplace" does not run: a dry run also starts from other branches, and the
+environment `marketplace` admits only `main` and the tags.
 
 ## Marketplace setup
 
