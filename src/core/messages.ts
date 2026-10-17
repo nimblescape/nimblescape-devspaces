@@ -8,8 +8,8 @@ import { sshCommandLine } from './docker/dockerHost';
 export const Steps = {
   startingDocker: 'Starting Docker',
   /**
-   * Update All Images Now, after a Docker start: the worker is made ready, and the Monitor is asked. Not "Asking the
-   * Monitor": the title of that progress says it already.
+   * Update All Images Now, after a Docker start: the worker is made ready, and the request goes to the Monitor. Not
+   * "Asking the Monitor": the title of that progress says it already.
    */
   sendingRequest: 'Sending the request',
   downloadingRepository: 'Downloading repository',

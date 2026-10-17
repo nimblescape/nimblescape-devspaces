@@ -178,8 +178,8 @@ export interface ControllerDeps {
   /**
    * The step "Docker start" of an operation, the function that DevspaceOperations gets (startDockerFor with
    * ensureDockerRunning), on the target of the running operation: a local Docker that does not run is started, Podman
-   * is refused, and an SSH host gets the reachability check. "Update All Images Now" runs it before it asks the
-   * Monitor. Default: nothing.
+   * is refused, and an SSH host gets the reachability check. "Update All Images Now" runs it in its progress, after
+   * the question about the Monitor (beforeUserFlow) and before it sends its request to the Monitor. Default: nothing.
    */
   startDocker?: DockerStarter;
   /**
@@ -1134,8 +1134,8 @@ export class Controller implements vscode.Disposable {
    * In the progress, the step "Docker start" of Start runs first (startDocker): a local Docker that does not run is
    * started, a Podman engine behind the Docker CLI is refused, and an SSH host is checked. After a Docker start, the
    * progress names the next step (sendingRequest), so that it does not say "Starting Docker" until the Monitor took the
-   * request. The progress can be cancelled, as the one of Start: a cancel during the Docker start asks the Monitor
-   * nothing and shows nothing.
+   * request. The progress can be cancelled, as the one of Start: a cancel during the Docker start sends the Monitor no
+   * request and shows nothing.
    */
   async updateImagesNow(): Promise<void> {
     const update = this.deps.updateImagesNow;

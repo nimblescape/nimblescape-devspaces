@@ -717,7 +717,8 @@ async function activateExtension(
     // "Update All Images Now", through this window's worker of the engine, with the monitor settings of this computer
     // for that engine (as the repair of a heartbeat).
     updateImagesNow: async (target, signal) => monitorCalls.monitorRunNow(target, await monitorSettings.forTarget(target), signal),
-    // Before it, the step "Docker start" of Start: Podman is refused, a local Docker that does not run is started.
+    // Before the request, after the question about the Monitor, the step "Docker start" of Start: Podman is refused, a
+    // local Docker that does not run is started.
     startDocker,
     // The question about the Monitor of an engine, which a Start, a Rebuild and "Update All Images Now" of the user ask
     // there first (once per engine); its answer goes into the setting stopMonitorWhenIdle and the records of the engines.

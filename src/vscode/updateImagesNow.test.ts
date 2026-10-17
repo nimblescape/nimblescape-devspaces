@@ -2,9 +2,10 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The command "Update All Images Now": the controller runs the step "Docker start" of Start, then asks the Monitor of
-// the Docker engine of the operation (the sidebar's) through the worker (`monitorRunNow`), with a progress until the
-// monitor took the request, then the message; the window's call to the worker (workerMonitor.monitorRunNow) with the
+// The command "Update All Images Now": the controller asks the question about the Monitor of the engine
+// (monitorQuestion.ts), runs the step "Docker start" of Start, then sends the request to the Monitor of the Docker
+// engine of the operation (the sidebar's) through the worker (`monitorRunNow`), with a progress until the monitor took
+// the request, then the message; the window's call to the worker (workerMonitor.monitorRunNow) with the
 // monitor settings of this computer, its time limit, and a strict answer; and the command and its menu in package.json.
 import * as fs from 'fs';
 import * as path from 'path';
