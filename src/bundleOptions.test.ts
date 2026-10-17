@@ -89,7 +89,7 @@ function buildCopy(dir: string, version: string): Map<string, Buffer> {
   fs.cpSync(path.join(ROOT, 'src'), path.join(dir, 'src'), { recursive: true, filter: (source) => !source.endsWith('.test.ts') });
   fs.cpSync(path.join(ROOT, 'scripts'), path.join(dir, 'scripts'), { recursive: true });
   for (const file of ['esbuild.mjs', 'tsconfig.json']) fs.copyFileSync(path.join(ROOT, file), path.join(dir, file));
-  fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
+  fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'), 'junction');
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as Record<string, unknown>;
   const packageJson = Buffer.from(`${JSON.stringify({ ...manifest, version }, null, 2)}\n`);
   fs.writeFileSync(path.join(dir, 'package.json'), packageJson);
