@@ -10,10 +10,9 @@
 //
 // The worker's bundle, dist/helperChannel.js, is the program of four uses, each with its own entry
 // (src/helperChannel/main.ts): the worker (startChannel), the batch helpers (startBatchHelper), the Monitor
-// (startMonitor, and `node /opt/devspace/monitor.js <subcommand>`) and the threads of the host access analysis. It no
-// longer carries the Monitor or the analysis as text, and nothing in it runs with `eval`. It still holds fixed scripts
-// as text, which run with `node -e` or `sh -c`: the one-line pipe loader, and the scripts that the worker and the steps
-// of the batch helpers run in containers.
+// (startMonitor, and `node /opt/devspace/monitor.js <subcommand>`) and the threads of the host access analysis. Nothing
+// in it runs with `eval`. It holds fixed scripts as text, which run with `node -e` or `sh -c`: the one-line pipe
+// loader, and the scripts that the worker and the steps of the batch helpers run in containers.
 import { fileURLToPath } from 'url';
 import { buildDefines } from './buildDefines.mjs';
 

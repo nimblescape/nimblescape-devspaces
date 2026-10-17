@@ -94,7 +94,14 @@ After an installation or update, the extension builds a missing image in the bac
 
 The worker, its batch helpers, and the Monitor all get their code the same way (`src/core/loader/pipeLoader.ts`). The container runs a one-line `node -e` loader with the path, the SHA-256 hash, and the entry function of its bundle on its command line. The writer sends the bundle as the first line of standard input. The loader checks its length and hash, stores it in the container (`/opt/devspace/channel.js`, `batch.js`, or `monitor.js`), and calls its entry with the rest of the input. A container that restarts with a stored file of the right hash starts it without reading its input, which is how the Monitor survives a restart by Docker. Every failure of the loader exits with code 3. No code goes into an argument or a variable of a container.
 
-The worker's bundle, `dist/helperChannel.js`, is the one program of the worker (entry `startChannel`), its batch helpers (`startBatchHelper`), the Monitor (`startMonitor`, `src/remoteMonitor/main.ts`; the commands over `docker exec` run `node /opt/devspace/monitor.js <command>`), and the threads of the host access analysis (`src/core/helper/configurationAnalysisWorker.ts`). The worker starts each analysis thread from its own stored file, after it checked the SHA-256 hash of that file again. The bundle no longer carries the Monitor or the analysis as text, and nothing in it runs with `eval`. It still holds fixed scripts as text, which run with `node -e` or `sh -c`: the one-line pipe loader, and the scripts that the worker and the steps of the batch helpers run in containers.
+The worker's bundle, `dist/helperChannel.js`, is one program with four uses, each with its own entry (`src/helperChannel/main.ts`):
+
+- **Worker**: `startChannel`.
+- **Batch helpers**: `startBatchHelper`.
+- **Monitor**: `startMonitor` (`src/remoteMonitor/main.ts`). The commands over `docker exec` run `node /opt/devspace/monitor.js <command>`.
+- **Host access analysis**: threads of the worker (`src/core/helper/configurationAnalysisWorker.ts`). The worker starts each thread from its own stored file, after it checked the SHA-256 hash of that file again.
+
+Nothing in the bundle runs with `eval`. The bundle holds fixed scripts as text, which run with `node -e` or `sh -c`: the one-line pipe loader, and the scripts that the worker and the steps of the batch helpers run in containers.
 
 ### The batch helper
 
