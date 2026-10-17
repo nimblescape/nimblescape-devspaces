@@ -706,7 +706,7 @@ async function activateExtension(
     updateImagesNow: async (target, signal) => monitorCalls.monitorRunNow(target, await monitorSettings.forTarget(target), signal),
     // The question about the Monitor of an engine, which a Start, a Rebuild and "Update All Images Now" of the user ask
     // there first (once per engine); its answer goes into the setting stopMonitorWhenIdle and the records of the engines.
-    monitorQuestion: new MonitorQuestion({ records: engineRecords, settings: getSettings, logger }),
+    monitorQuestion: new MonitorQuestion({ records: engineRecords, settings: getSettings, logger, showLog: () => logger.show() }),
     // The removal mark of the engines, which a Start, a Rebuild and "Update All Images Now" of the user clear there.
     engineRecords,
     // "Remove Devspaces from This Docker Engine…": whether the engine answers (as for the background builds: Docker is

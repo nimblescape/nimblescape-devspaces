@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
+import { Actions } from '../core/messages';
 import { DockerEngineRecords, type EngineRemoval } from '../core/storage/dockerEngineRecords';
 import { ControllerTexts } from './controllerTexts';
 import { MonitorQuestion, STOP_MONITOR_WHEN_IDLE_SETTING } from './monitorQuestion';
@@ -27,6 +28,8 @@ let update: ReturnType<typeof vi.fn>;
 /** The order of the writes: the setting and the record. */
 let writes: string[];
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
+/** Opens the log: the action Show details of the warning. */
+const showLog = vi.fn();
 
 beforeEach(() => {
   resetFakeVscode();
@@ -40,6 +43,7 @@ beforeEach(() => {
   });
   fakeVscode.workspace.getConfiguration.mockImplementation((section: string) => (section === SETTINGS_SECTION ? { update } : undefined));
   for (const mock of Object.values(logger)) mock.mockReset();
+  showLog.mockReset();
 });
 
 afterEach(() => {
@@ -54,7 +58,7 @@ function question(over: Partial<ConstructorParameters<typeof MonitorQuestion>[0]
       return records.recordMonitorAnswer(host, now, runs);
     },
   };
-  return new MonitorQuestion({ records: recording, settings: () => settings, logger, clock: { now: () => NOW }, ...over });
+  return new MonitorQuestion({ records: recording, settings: () => settings, logger, showLog, clock: { now: () => NOW }, ...over });
 }
 
 function modals(): unknown[][] {
@@ -136,12 +140,14 @@ describe('the question about the Monitor of an engine', () => {
     expect(writes).toEqual(['stopMonitorWhenIdle=false', 'record build-box']);
   });
 
-  it('an answer that cannot be stored counts as closed, with a warning', async () => {
+  it('an answer that cannot be stored counts as closed, with a warning whose Show details opens the log', async () => {
     fakeVscode.window.showInformationMessage.mockResolvedValue(ControllerTexts.keepMonitorRunning);
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(Actions.showDetails);
     update.mockRejectedValueOnce(new Error('Unable to write into user settings.'));
     await expect(question().askIfNeeded('')).resolves.toBe('closed');
     expect(await records.read()).toEqual([]);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.monitorAnswerNotSaved);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.monitorAnswerNotSaved, Actions.showDetails);
+    await vi.waitFor(() => expect(showLog).toHaveBeenCalledTimes(1));
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Unable to write into user settings.'));
     // The record of the engine fails: no answer either.
     const failing = question({
@@ -149,6 +155,9 @@ describe('the question about the Monitor of an engine', () => {
     });
     await expect(failing.askIfNeeded('')).resolves.toBe('closed');
     expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(2);
+    // Closed without Show details: the log does not open.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(showLog).toHaveBeenCalledTimes(1);
   });
 
   // Another window began "Remove Devspaces from This Docker Engine…" there while the question was open: its mark forgot
