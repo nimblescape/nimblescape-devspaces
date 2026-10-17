@@ -123,18 +123,21 @@ describe('the texts of the Monitor question and of the removal in the docs', () 
   // The mode of a running Monitor changes only at the next ensure on its engine (a start of a devspace, or Update All
   // Images Now); the answer Keep Running writes the value that the setting has while the question comes. The setting
   // has a short description (settings.test.ts): it names the question and links to the section of the guide that says
-  // the rest.
+  // the rest, also what happens on an engine that several computers use.
   it('the guide says when a changed answer reaches a running Monitor, and the setting links to that section', () => {
     const { contributes } = JSON.parse(read('package.json')) as { contributes: { configuration: { properties: Record<string, { markdownDescription?: string }> } } };
     const setting = contributes.configuration.properties['devspaces.stopMonitorWhenIdle'];
     const guide = read('docs/guide.md');
     const changed = 'A change applies on each engine at the next start of a devspace or **Update All Images Now** there.';
+    const shared =
+      'On an engine that several computers use, a monitor that keeps running and that another computer created stays; the computer that created it replaces it when it turns the setting on (see [Shared Docker engines](#shared-docker-engines)).';
     expect(setting?.markdownDescription).toContain('the first Start or Rebuild on an engine, or **Update All Images Now** there, asks');
     expect(setting?.markdownDescription).toContain('(https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#the-background-run)');
     const start = guide.indexOf('\n### The background run\n');
     expect(start, 'the section "The background run"').toBeGreaterThan(0);
     const backgroundRun = guide.slice(start, guide.indexOf('\n### ', start + 1));
-    for (const words of [changed, 'removes it at once', 'It does not ask while `devspaces.stopMonitorWhenIdle` is on.']) expect(backgroundRun).toContain(words);
+    for (const words of [changed, 'removes it at once', 'It does not ask while `devspaces.stopMonitorWhenIdle` is on.', shared]) expect(backgroundRun).toContain(words);
+    expect(guide).toContain('\n## Shared Docker engines\n');
     // The row of the setting in the guide: the answer Keep Running keeps the setting off.
     expect(guide).toContain('the answer **Keep Running** keeps it off');
     // A Stop sends a heartbeat: it is a use of the engine.
