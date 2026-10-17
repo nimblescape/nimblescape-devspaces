@@ -195,7 +195,7 @@ A small container on each Docker engine, the **Monitor** (`devspaces-monitor`), 
 
 1. **Pulls the newer versions of the images that the devspaces on that engine use**, for example `node:20` or `mcr.microsoft.com/devcontainers/base:ubuntu`, and removes the older versions of those images that nothing uses any more. It pulls without a sign-in, so private images are not updated in the background; an image pinned by a digest never changes.
 2. **Downloads the newest VS Code server** into a store that all dev containers of the engine share, and links it into the running dev containers, so that a window that VS Code restores after its own update finds its server.
-3. **Downloads the newest releases of the VS Code extensions** that your devspaces used in the last 14 days, so that a start installs them without a download.
+3. **Downloads the VS Code extensions** that the devspaces on that engine used in the last 14 days, also those of other users of the engine: of each extension, the newest release that works with the current VS Code server, or the exact version when the extension is listed as `publisher.name@x.y.z`. A start then installs them without a download.
 4. **Cleans up** that store at most once a day.
 5. **Prepares the next image of each devspace** whose base image or Features changed: it builds the new image in the background, so that the update at the next start takes seconds. It prepares one devspace at a time, the most recently used first, and stops a prepare after 30 minutes. It uses no token and no credentials, so devspaces with private images or Features, and repositories whose host access checks are off, are not prepared.
 
