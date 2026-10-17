@@ -49,6 +49,7 @@ later (`engines.vscode`) for the extension.
 | `npm run build` | Bundles `dist/extension.js`, `dist/groupsPreviewWorker.js` and `dist/helperChannel.js` as readable JavaScript, the first two with source maps. `npm run package` builds them without source maps. |
 | `npm run package` | Builds `nimblescape-devspaces-<version>.vsix` with vsce. vsce also validates the manifest and the README. |
 | `npm run install-local` | Builds the package and installs it into every VS Code profile (`-- --profile <name>` into one). |
+| `npm run uninstall-local` | Removes `nimblescape.nimblescape-devspaces` from every VS Code profile (`-- --profile <name>` from one). |
 | `code --install-extension nimblescape-devspaces-<version>.vsix` | Installs the built package. Reload the window after an update of an active extension. |
 | `bash scripts/purge-docker-context.sh --dry-run` | Shows what a reset of the engine of the current Docker context removes. Without `--dry-run`, it removes **everything** on that engine (all containers, volumes, images, unused networks and the build cache, not only those of Devspaces), after you type the name of the context, so that the next start begins like a fresh installation. Changes that are not pushed are lost. |
 

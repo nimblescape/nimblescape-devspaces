@@ -312,7 +312,7 @@ The extension contributes eight icons (`contributes.icons`) from the font `resou
 | `src/helperChannel/` | The entry of the worker and the batch helper, its Engine API client, and its operations. |
 | `src/remoteMonitor/` | The Monitor: ticks, background run, images, prepares. |
 | `resources/` | The helper Dockerfile, the icon font and icon, and the repository groups editor. |
-| `scripts/` | Build helpers, the icon font, `install-local.mjs`, `marketplace-setup.sh`, and `purge-docker-context.sh`. |
+| `scripts/` | Build helpers, the icon font, `install-local.mjs`, `uninstall-local.mjs`, `marketplace-setup.sh`, and `purge-docker-context.sh`. |
 | `test/docker/` | The Docker tests. |
 
 `esbuild.mjs` builds three CommonJS bundles for Node.js 24 with the options of `scripts/bundleOptions.mjs`: `dist/extension.js` (external `vscode`), `dist/groupsPreviewWorker.js`, and `dist/helperChannel.js`, the program of the worker, the batch helpers, the Monitor, and the analysis threads. The bundles are not minified and keep the names of the source (`keepNames`), so that the code of the package can be read. Only a development build has source maps, and never for `dist/helperChannel.js`. The extension has no runtime dependencies. The Dev Container CLI is not bundled: `package.json` pins its version as an exact devDependency, the build passes that version to the code, and the helper image installs it.
