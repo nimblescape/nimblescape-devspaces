@@ -12,12 +12,13 @@
 //     an extension or the publisher, only release.yml publishes, and it publishes with the sign-in to Microsoft Entra
 //     ID, never with a personal access token.
 //   node scripts/release-checks.mjs package <vsix> [--dry-run]
-//     Rules 1 and 3 in the package. The VSIX holds the ID and the version of package.json. Since the package of the
-//     newest release before that version, it changes a file that is not a document, not the Marketplace icon and not
-//     in dist/, a field of package.json that changes how the extension works, or a bundle of dist/ together with a
-//     file of src/ that is not a test. The section of the version in its change log has text, and no phrase such as
-//     "maintenance release". The GitHub CLI downloads the package of that release (environment GH_TOKEN and GH_REPO).
-//     In a dry run, a breach of rule 3 is a warning; in a release, it is an error.
+//     Rules 1 and 3 in the package, and the tag limit of the Marketplace. The VSIX holds the ID and the version of
+//     package.json, and at most 30 tags. Since the package of the newest release before that version, it changes a
+//     file that is not a document, not the Marketplace icon and not in dist/, a field of package.json that changes how
+//     the extension works, or a bundle of dist/ together with a file of src/ that is not a test. The section of the
+//     version in its change log has text, and no phrase such as "maintenance release". The GitHub CLI downloads the
+//     package of that release (environment GH_TOKEN and GH_REPO). In a dry run, a breach of rule 3 is a warning; in a
+//     release, it is an error.
 //   node scripts/release-checks.mjs interval <version> [--dry-run]
 //     Rule 3 in time. The GitHub release of the newest tag before the version is at least 7 days old, or the reason of
 //     an urgent fix (environment URGENT) is one line of at least 20 characters. A reason is checked also after the 7
@@ -238,6 +239,34 @@ export function packageProblems(vsixManifest, packed, manifest) {
     problems.push(`The package holds the extension ${contained} in its package.json, not ${expected} of package.json.`);
   }
   return problems;
+}
+
+/** The most tags that the Marketplace takes in a package. */
+const MAX_TAGS = 30;
+
+/**
+ * The tags of a package. vsce writes them into the element <Tags> of extension.vsixmanifest, separated by commas: the
+ * keywords of package.json and tags of its own, such as the language of each onLanguage event of activationEvents.
+ * @param {string} vsixManifest The content of extension.vsixmanifest in the VSIX.
+ * @returns {string[]}
+ */
+function packageTags(vsixManifest) {
+  return (/<Tags>([^<]*)<\/Tags>/.exec(vsixManifest)?.[1] ?? '').split(',').filter((tag) => tag !== '');
+}
+
+/**
+ * The breach of the tag limit by a package: the Marketplace refuses a package with more than 30 tags, so such a
+ * package can never be published.
+ * @param {string} vsixManifest The content of extension.vsixmanifest in the VSIX.
+ * @returns {string[]}
+ */
+export function tagProblems(vsixManifest) {
+  const count = packageTags(vsixManifest).length;
+  if (count <= MAX_TAGS) return [];
+  return [
+    `The package has ${count} tags: the keywords and the tags that vsce adds, one per language of activationEvents. ` +
+      `The Marketplace takes at most ${MAX_TAGS}.`,
+  ];
 }
 
 /**
@@ -727,6 +756,12 @@ function checkPackage(vsix, dryRun) {
     const problems = packageProblems(vsixManifest, JSON.parse(next.get('package.json').toString('utf8')), manifest);
     for (const problem of problems) error(`${problem} (rule 1)`);
     if (problems.length === 0) console.log(`The package holds ${extensionId(manifest)} ${manifest.version}.`);
+    // Too many tags are an error also in a dry run, as in rule 1: the Marketplace never takes such a package.
+    const tagLimit = tagProblems(vsixManifest);
+    for (const problem of tagLimit) error(problem);
+    if (tagLimit.length === 0) {
+      console.log(`The package has ${packageTags(vsixManifest).length} tags; the Marketplace takes at most ${MAX_TAGS}.`);
+    }
 
     const changelog = [...next].find(([name]) => name.toLowerCase() === 'changelog.md')?.[1].toString('utf8') ?? '';
     const wording = wordingProblems(changelogSection(changelog, manifest.version), manifest.version);
