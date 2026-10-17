@@ -28,6 +28,9 @@ export const ControllerTexts = {
   // "Update All Images Now" (`engine`: describeDockerHost).
   requestingImageUpdate: (engine: string) => `Asking the Monitor on ${engine} to update the images…`,
   imagesUpdatingNow: (engine: string) => `The Monitor on ${engine} updates the images now.`,
+  /** No request: a removal of Devspaces from the engine began and ended after the question about the Monitor. */
+  removedInTheMeantime: (engine: string) =>
+    `Devspaces was removed from ${engine} in the meantime. No request was sent. Run "Update All Images Now" again to set up Devspaces there again.`,
   /**
    * The question about the Monitor of an engine (monitorQuestion.ts), once per engine before the first Monitor there
    * that would keep running (`engine`: describeDockerHost). "Keep Running" is the first and default button.
