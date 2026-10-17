@@ -282,6 +282,8 @@ function createHarness(
     engineRemoval?: ControllerDeps['engineRemoval'];
     /** "Update All Images Now". Default: none (the command does nothing). */
     updateImagesNow?: ControllerDeps['updateImagesNow'];
+    /** The step "Docker start" that "Update All Images Now" runs in its progress. Default: none. */
+    startDocker?: ControllerDeps['startDocker'];
     /** The longest wait of a removal for the background builds of the helper image (default 60 s). */
     helperBuildsStopWaitMs?: number;
   } = {},
@@ -462,6 +464,7 @@ function createHarness(
     engineRecords,
     engineRemoval: options.engineRemoval,
     updateImagesNow: options.updateImagesNow,
+    startDocker: options.startDocker,
     listOpenMode: () => listOpenMode.value,
     clock,
     isAlive: (pid: number) => alive.has(pid),
@@ -3255,6 +3258,35 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
   });
 
+  // Update All Images Now keeps the order of Start: the refusal while this window removes Devspaces comes first, before
+  // the question about the Monitor and before the step "Docker start". Mutation: a Docker start or a question before
+  // the check fails it.
+  it('refuses Update All Images Now while it looks for Devspaces on the engine, before the question and the Docker start', async () => {
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    const startDocker = vi.fn(async () => {});
+    const fake = removalFake();
+    onBuildBox(fake, BUILD_BOX, { updateImagesNow: update, startDocker });
+    const answers = deferred<boolean>();
+    fake.deps.engineAnswers.mockReturnValueOnce(answers.promise);
+    const removing = run('removeFromDockerEngine');
+    await settle(() => fake.deps.engineAnswers.mock.calls.length === 1, 'the look at the engine');
+    await run('updateImagesNow');
+    expect(infoMessages()).toEqual([ControllerTexts.removalRunning('build-box')]);
+    expect(h.logger.info).toHaveBeenCalledWith('Update All Images Now did not run: Devspaces is being removed from build-box.');
+    expect(h.monitorQuestion.askIfNeeded).not.toHaveBeenCalled();
+    expect(startDocker).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    // After the removal (here: cancelled at its question), it runs: the question, the Docker start, then the request.
+    answers.resolve(true);
+    await removing;
+    await run('updateImagesNow');
+    expect(h.monitorQuestion.askIfNeeded).toHaveBeenCalledTimes(1);
+    expect(startDocker).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(h.monitorQuestion.askIfNeeded.mock.invocationCallOrder[0]).toBeLessThan(startDocker.mock.invocationCallOrder[0]);
+    expect(startDocker.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
+  });
+
   it('says in its last message when the removal mark could not be written: background work may come back there', async () => {
     const fake = removalFake();
     onBuildBox(fake);
@@ -3501,8 +3533,10 @@ describe('Remove Devspaces from This Docker Engine…', () => {
   // Mutation: without the entry, or without its check in beforeUserFlow, the Start clears the mark and runs.
   it('while another window removes Devspaces from the engine, a Start, a Rebuild, Update All Images Now and a second removal there are refused; after that window ended, a Start runs', async () => {
     const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    // The step "Docker start" of Update All Images Now runs only after the refusal checks.
+    const startDocker = vi.fn(async () => {});
     const fake = removalFake();
-    onBuildBox(fake, BUILD_BOX, { updateImagesNow: update });
+    onBuildBox(fake, BUILD_BOX, { updateImagesNow: update, startDocker });
     const env = ownRemote();
     await h.registry.add(env);
     await otherWindowRemoves();
@@ -3516,6 +3550,7 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(h.logger.info).toHaveBeenCalledWith(`Start did not run: Devspaces is being removed from build-box in another window (process ${OTHER_PID}).`);
     expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
+    expect(startDocker).not.toHaveBeenCalled();
     expect(fake.deps.engineAnswers).not.toHaveBeenCalled();
     expect(h.monitorQuestion.askIfNeeded).not.toHaveBeenCalled();
     expect(await h.engineRecords.record('build-box')).toEqual({ host: 'build-box', removedAt: NOW - 30_000, removing: OTHER_REMOVAL });
