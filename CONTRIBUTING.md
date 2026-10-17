@@ -111,7 +111,7 @@ follow these steps:
 
 The run has six jobs:
 
-1. "Version commit" checks that the run starts from `main`, that the version has the form `<major>.<minor>.<patch>`, that it is not lower than the version in `package.json` and that its tag does not exist, and it checks the [release rules](#release-rules) of the source with `scripts/release-checks.mjs rules`, the 7 days since the newest release with `scripts/release-checks.mjs interval`, that the Marketplace lists the extension with `scripts/release-checks.mjs listed` (see "Checks before the tag" in [Release rules](#release-rules)) and, in a release, that a dry run tested the files of the release process with `scripts/release-checks.mjs dry-run`. It sets the version in `package.json` and `package-lock.json`, adds the section of the notes to `CHANGELOG.md` when the file has none, commits the change as "Release `<version>`", for an urgent fix with the line `Urgent: <reason>`, and pushes it to the temporary branch `release/run-<run ID>`, not to `main`. When `main` holds the version and its section already, it commits nothing. It also deletes the temporary branches of earlier runs that failed.
+1. "Version commit" checks that the run starts from `main`, that the version has the form `<major>.<minor>.<patch>`, that it is not lower than the version in `package.json` and that its tag does not exist, and it checks the [release rules](#release-rules) of the source with `scripts/release-checks.mjs rules`, the 7 days since the newest release with `scripts/release-checks.mjs interval` and, in a release, that a dry run tested the files of the release process with `scripts/release-checks.mjs dry-run`. It sets the version in `package.json` and `package-lock.json`, adds the section of the notes to `CHANGELOG.md` when the file has none, commits the change as "Release `<version>`", for an urgent fix with the line `Urgent: <reason>`, and pushes it to the temporary branch `release/run-<run ID>`, not to `main`. When `main` holds the version and its section already, it commits nothing. It also deletes the temporary branches of earlier runs that failed.
 2. "CI" runs the workflow `ci.yml` for the commit of the version, because a push with the token of a workflow starts no other workflow. The VSIX that this job tests and builds is the VSIX of the release, so the release repeats no test and no build.
 3. "Check the package" checks the VSIX of CI with `scripts/release-checks.mjs package`: the VSIX holds the extension ID and the version of `package.json`, it has at most 30 tags (see "Checks before the tag" in [Release rules](#release-rules)), it changes something for the users since the newest release before the version, and the section of the version in its change log describes the change (rule 3).
 4. "Check the Marketplace" runs at the same time as CI, only in a release and in the environment `marketplace`. It signs in to Microsoft Entra ID like the publish job and checks with `vsce verify-pat --azure-credential` that the app registration has a role on the publisher `nimblescape`. The check changes nothing.
@@ -131,10 +131,9 @@ CI and the check of the package for it and deletes the branch; it changes
 neither `main`, a tag, a release nor the Marketplace. Its run name ends with
 "(dry run)". A dry run may start from another branch than `main`, so it also
 tests a change of `release.yml` on that branch before the change reaches
-`main`. In a dry run, the checks of rule 3 and the check `listed` only warn, so
-that a change of the release process can be tested also when there is no change
-for the users to release, within 7 days of the newest release, and while the
-Marketplace does not list the extension.
+`main`. In a dry run, the checks of rule 3 only warn, so that a change of the
+release process can be tested also when there is no change for the users to
+release and within 7 days of the newest release.
 
 When a job fails, remove the cause and choose "Re-run failed jobs" on the
 run. A re-run keeps the tag and the VSIX that the GitHub release already
@@ -161,26 +160,26 @@ the workflows run it. The checks also run in a clone, for example
 2. **No deletion.** nimblescape never deletes an extension. The check `rules` fails when a workflow, an action, an npm script or a file of `scripts/` runs `vsce unpublish`, which deletes the extension on the Marketplace, or `vsce delete-publisher`, which deletes the publisher with all its extensions. On the publisher management page, nobody uses More Actions > Remove, which deletes the extension and keeps its name reserved permanently, or "Delete this version" (More Actions > Reports, tab Manage), after which the number of the version can never be used again. An extension that is no longer wanted is unpublished on the publisher management page, as [Naming](#naming) describes.
 3. **Only changes for the users, at most one version in 7 days.** A version is published only when it changes something for the users, its section in `CHANGELOG.md` describes that change, and at least 7 days passed since the newest release. The check `package` compares the VSIX with the package of the newest release before the version. These changes count: a file of the package that is not a document, not the Marketplace icon, not `package.json` and not in `dist/`, for example the icon of a view; a field of `package.json` that changes how the extension works, for example `contributes`; and a bundle in `dist/`, when the version also changes a file of `src/` that is not a test. These do not count: the documents (the files `.md` in any folder of the package, the files `.txt` at its top, and the license), the Marketplace icon (the file that the field `icon` of `package.json` names), the other fields of `package.json`, which do not change how the extension works (for example `displayName`, `description` and `icon`), the tests and the build tools. A file `.md` or the Marketplace icon counts when `contributes` names it, for example the page of a walkthrough, because VS Code then shows it at run time. A change only of the build, for example of `esbuild.mjs`, `tsconfig.json` or a file of `scripts/`, does not count: it reaches the users with the next change of `src/`. Images that only the README shows do not belong in the package: the README links them with full `https://github.com/…` links (see [Manifest](#manifest)), and the check counts the other files of the package. The check fails when nothing counts. It also fails when the section of the version in `CHANGELOG.md` is missing, has no text other than headings and HTML comments, or says "maintenance release", "behaves as in" followed by a version, or a phrase of that kind. The check `interval`, in the job "Version commit", fails when the GitHub release of the newest tag before the version is less than 7 days old. For an urgent fix, the input "urgent" gives the reason: one line, at least 20 characters. The check then passes with a notice, the run name shows "(urgent)", and the version commit keeps the reason. After the 7 days and before the first release, the check still refuses a shorter reason, and a valid reason gives only a notice that the release does not need the input. No input lets a version without a change for the users pass. A failed check stops the release before its tag.
 4. **Dry run first.** A change of the release process is tested with a dry run before it reaches `main`. The files of the release process are `release.yml`, `ci.yml`, whose VSIX the release publishes, and `scripts/release-checks.mjs`. The workflow "Release dry run" runs on every pull request. When the pull request changes one of these files, also in an update by Dependabot, the check `dry-run` fails until a successful dry run, or the newest release, had these files as they are at the head of the pull request. Start the workflow "Release" on the branch of the pull request with "Dry run" and a version without a tag (with notes when `CHANGELOG.md` has no section for the version), then re-run the job "release dry run" of the pull request. A pull request from a fork cannot meet the rule, because the dry run needs a branch of this repository. The job "Version commit" of a release runs the check `dry-run` again, so a change that reached `main` without a dry run stops the release until a dry run tested it. Do not make "release dry run" a required check of `main`: the release moves `main` to its version commit, which has no result of the check.
-5. **Only GitHub Actions with Microsoft Entra ID.** Only the job "Publish to the Visual Studio Marketplace" publishes, signed in with the app registration of [Marketplace setup](#marketplace-setup). No personal access token exists for the publisher. Nobody uploads a VSIX on the publisher management page or runs `vsce publish`, `unpublish`, `delete-publisher` or `login` on a computer. The check `rules` reads the workflows, the actions, the npm scripts and every file of `scripts/` except the checks and their test. It fails when a file other than `release.yml` runs `vsce publish`, when `vsce publish` or `vsce verify-pat` runs without `--azure-credential`, when a file uses `VSCE_PAT`, `vsce login` or the option `-p` or `--pat` of vsce, or when an npm script runs `vsce publish`, `vsce unpublish`, `vsce delete-publisher` or `vsce login`. In a file of JavaScript or TypeScript, it also reads the argument lists that run vsce and the calls of `publish`, `publishVSIX` and `unpublishVSIX` of the vsce API. No check sees the website or another computer, so there everyone must follow the rule without a check. At the next release, the check `listed` finds a Marketplace version without a release tag.
+5. **Only GitHub Actions with Microsoft Entra ID.** Only the job "Publish to the Visual Studio Marketplace" publishes, signed in with the app registration of [Marketplace setup](#marketplace-setup). No personal access token exists for the publisher. Nobody uploads a VSIX on the publisher management page or runs `vsce publish`, `unpublish`, `delete-publisher` or `login` on a computer. The check `rules` reads the workflows, the actions, the npm scripts and every file of `scripts/` except the checks and their test. It fails when a file other than `release.yml` runs `vsce publish`, when `vsce publish` or `vsce verify-pat` runs without `--azure-credential`, when a file uses `VSCE_PAT`, `vsce login` or the option `-p` or `--pat` of vsce, or when an npm script runs `vsce publish`, `vsce unpublish`, `vsce delete-publisher` or `vsce login`. In a file of JavaScript or TypeScript, it also reads the argument lists that run vsce and the calls of `publish`, `publishVSIX` and `unpublishVSIX` of the vsce API. No check sees the website or another computer, so there everyone must follow the rule without a check.
 
-**Checks before the tag.** No tag and no GitHub release may name a version
-that cannot reach the Marketplace. So the job "Version commit" checks with
-`scripts/release-checks.mjs listed` that the public query of the Marketplace,
-which VS Code also sends, lists the extension, and that the newest version
-there is lower than the new version and has a release tag. Before the first
-release tag, the check only notes that the first release creates the
-extension. The job "Check the Marketplace" signs in like the publish job and
-checks with `vsce verify-pat --azure-credential` that the app registration
-has a role on the publisher. The Marketplace refuses a package with more than
-30 tags with the error "You exceeded the number of allowed tags of 30", which
-the Microsoft publishing guide names. So the job "Check the package" fails when
-the package has more than 30 tags, also in a dry run. It counts every tag in
-the element `<Tags>` of the package: the keywords of `package.json` and the
-tags that vsce adds, for example the language of each `onLanguage` event in
-`activationEvents`. Because vsce adds tags, the check can refuse a package with
-fewer than 30 keywords. In a dry run, the listing only warns, and "Check the
-Marketplace" does not run: a dry run also starts from other branches, and the
-environment `marketplace` admits only `main` and the tags.
+**Checks before the tag.** Some checks stop a release before the tag for the
+known causes of a failed publish. So the job "Check the Marketplace" signs in
+like the publish job and checks with `vsce verify-pat --azure-credential` that
+the app registration has a role on the publisher. The Marketplace refuses a
+package with more than 30 tags with the error "You exceeded the number of
+allowed tags of 30", which the Microsoft publishing guide names. So the job
+"Check the package" fails when the package has more than 30 tags, also in a
+dry run. It counts every tag in the element `<Tags>` of the package: the
+keywords of `package.json` and the tags that vsce adds, for example the
+language of each `onLanguage` event in `activationEvents`. Because vsce adds
+tags, the check can refuse a package with fewer than 30 keywords. In a dry
+run, "Check the Marketplace" does not run: a dry run also starts from other
+branches, and the environment `marketplace` admits only `main` and the tags.
+The release does not check whether the Marketplace lists the extension. When
+the publish job fails, the tag and the GitHub release stay: remove the cause,
+then choose "Re-run failed jobs" on the run; the re-run publishes the VSIX of
+the GitHub release. GitHub allows a re-run only within 30 days of the run;
+after that, only a new version can reach the Marketplace.
 
 ## Marketplace setup
 

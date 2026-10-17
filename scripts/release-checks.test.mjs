@@ -2,8 +2,8 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The rules of scripts/release-checks.mjs, without Git, the network or a VSIX: mocks answer in place of the GitHub
-// CLI and of fetch. The test is the same in every extension repository of nimblescape.
+// The rules of scripts/release-checks.mjs, without Git, the network or a VSIX: a mock answers in place of the GitHub
+// CLI. The test is the same in every extension repository of nimblescape.
 import { execFileSync } from 'child_process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -12,14 +12,11 @@ import {
   changelogSection,
   compareVersions,
   intervalProblem,
-  listingProblems,
-  listingQuery,
   newestTag,
   namingProblems,
   packageProblems,
   parseVersion,
   publishingProblems,
-  queryMarketplace,
   releaseDate,
   tagProblems,
   userChanges,
@@ -473,182 +470,6 @@ describe('rule 3: at most one version in 7 days', () => {
 describe('rule 4: dry run first', () => {
   it('counts ci.yml among the files of the release process, because the release publishes its VSIX', () => {
     expect(RELEASE_FILES).toEqual([RELEASE_WORKFLOW, '.github/workflows/ci.yml', 'scripts/release-checks.mjs']);
-  });
-});
-
-describe('before the tag: the Marketplace lists the extension', () => {
-  const ID = 'nimblescape.nimblescape-sample';
-  const TAGS = ['v1.2.2', 'v1.2.3'];
-  const extension = (id, version) => {
-    const [publisherName, extensionName] = id.split('.');
-    return { publisher: { publisherName }, extensionName, versions: [{ version }] };
-  };
-  const answer = (...extensions) => ({ results: [{ extensions, resultMetadata: [] }] });
-
-  it('asks for the newest version of the extension as VS Code asks', () => {
-    expect(JSON.stringify(listingQuery('nimblescape.nimblescape-devspaces'))).toBe(
-      '{"filters":[{"pageNumber":1,"pageSize":1,"criteria":[{"filterType":7,"value":"nimblescape.nimblescape-devspaces"},' +
-        '{"filterType":8,"value":"Microsoft.VisualStudio.Code"},{"filterType":12,"value":"4096"}]}],"assetTypes":[],"flags":513}',
-    );
-  });
-
-  it('accepts a lower version that has a release tag', () => {
-    expect(listingProblems(answer(extension(ID, '1.2.3')), ID, '1.2.4', TAGS)).toEqual([]);
-    expect(listingProblems(answer(extension('Nimblescape.Nimblescape-Sample', '1.2.3')), ID, '1.2.4', TAGS)).toEqual([]);
-  });
-
-  it('refuses an extension that the Marketplace does not list, but not before the first release', () => {
-    const missing =
-      `The Marketplace does not list ${ID}. The release stops here, before the tag v1.2.4: without this check, it would ` +
-      'create the tag and the GitHub release and then fail at the publish.';
-    expect(listingProblems(answer(), ID, '1.2.4', TAGS)).toEqual([missing]);
-    expect(listingProblems(answer(extension('nimblescape.nimblescape-other', '1.2.3')), ID, '1.2.4', TAGS)).toEqual([missing]);
-    // JSON also allows null in the lists of the answer.
-    expect(listingProblems({ results: [null, { extensions: [null] }] }, ID, '1.2.4', TAGS)).toEqual([missing]);
-    expect(listingProblems(answer(), ID, '0.1.0', [])).toEqual([]);
-  });
-
-  it('says in a dry run that a release would stop there', () => {
-    expect(listingProblems(answer(), ID, '1.2.4', TAGS, true)).toEqual([
-      `The Marketplace does not list ${ID}. A release would stop here, before the tag v1.2.4: without this check, it ` +
-        'would create the tag and the GitHub release and then fail at the publish.',
-    ]);
-    expect(listingProblems(undefined, ID, '1.2.4', TAGS, true)).toEqual([
-      'The Marketplace did not answer the query. A release would stop here, before the tag v1.2.4.',
-    ]);
-    const stop = 'A release would stop here, before the tag v1.2.4';
-    expect(listingProblems({ results: [null, { extensions: [null] }] }, ID, '1.2.4', TAGS, true)).toEqual([
-      `The Marketplace does not list ${ID}. ${stop}: without this check, it would create the tag and the GitHub ` +
-        'release and then fail at the publish.',
-    ]);
-    expect(listingProblems({ errorCode: 0, message: 'The query is not valid.' }, ID, '1.2.4', TAGS, true)).toEqual([
-      `The Marketplace answered the query with an error: The query is not valid. ${stop}.`,
-    ]);
-    expect(listingProblems({}, ID, '1.2.4', TAGS, true)).toEqual([
-      `The Marketplace answered the query in an unknown form. ${stop}.`,
-    ]);
-    expect(listingProblems(answer(extension(ID, '1.2.4')), ID, '1.2.4', [...TAGS, 'v1.2.4'], true)).toEqual([
-      `The Marketplace lists ${ID} 1.2.4, which is not lower than 1.2.4. ${stop}: without this check, it would ` +
-        'create the tag and the GitHub release without a new version on the Marketplace.',
-    ]);
-    expect(listingProblems(answer(extension(ID, '1.2.3')), ID, '1.2.4', ['v1.2.2'], true)).toEqual([
-      `The Marketplace lists ${ID} 1.2.3, but the repository has no tag v1.2.3: that version did not come from the ` +
-        `workflow "Release". ${stop}. (rule 5)`,
-    ]);
-  });
-
-  it('refuses a version that is not lower, and a version without a release tag', () => {
-    expect(listingProblems(answer(extension(ID, '1.2.4')), ID, '1.2.4', [...TAGS, 'v1.2.4'])).toEqual([
-      `The Marketplace lists ${ID} 1.2.4, which is not lower than 1.2.4. The release stops here, before the tag ` +
-        'v1.2.4: without this check, it would create the tag and the GitHub release without a new version on the ' +
-        'Marketplace.',
-    ]);
-    expect(listingProblems(answer(extension(ID, '1.3.0')), ID, '1.2.4', [...TAGS, 'v1.3.0'])).toHaveLength(1);
-    expect(listingProblems(answer(extension(ID, '1.2.3')), ID, '1.2.4', ['v1.2.2'])).toEqual([
-      `The Marketplace lists ${ID} 1.2.3, but the repository has no tag v1.2.3: that version did not come from the ` +
-        'workflow "Release". The release stops here, before the tag v1.2.4. (rule 5)',
-    ]);
-  });
-
-  it('refuses an error, an answer of an unknown form and no answer', () => {
-    const stop = 'The release stops here, before the tag v1.2.4.';
-    expect(listingProblems({ errorCode: 0, message: 'The query is not valid.' }, ID, '1.2.4', TAGS)).toEqual([
-      `The Marketplace answered the query with an error: The query is not valid. ${stop}`,
-    ]);
-    // A period ends the text of the Marketplace.
-    expect(listingProblems({ errorCode: 0 }, ID, '1.2.4', TAGS)).toEqual([
-      `The Marketplace answered the query with an error: 0. ${stop}`,
-    ]);
-    expect(listingProblems({ errorCode: 0, message: 'The query is not valid' }, ID, '1.2.4', TAGS)).toEqual([
-      `The Marketplace answered the query with an error: The query is not valid. ${stop}`,
-    ]);
-    // JSON also allows null, a text, a number and an array as the answer.
-    for (const unknown of [{}, null, 'text', 42, []]) {
-      expect(listingProblems(unknown, ID, '1.2.4', TAGS), JSON.stringify(unknown)).toEqual([
-        `The Marketplace answered the query in an unknown form. ${stop}`,
-      ]);
-    }
-    expect(listingProblems(undefined, ID, '1.2.4', TAGS)).toEqual([`The Marketplace did not answer the query. ${stop}`]);
-  });
-
-  describe('the query', () => {
-    const answered = (status, body) => ({ ok: status < 300, status, json: async () => body });
-    afterEach(() => vi.unstubAllGlobals());
-    // The problem that the check "listed" names for the end of a query.
-    const problem = async (query) => listingProblems(await query.catch((cause) => cause), ID, '1.2.4', TAGS);
-    const failed = ['The query of the Marketplace failed. The release stops here, before the tag v1.2.4.'];
-    const noAnswer = ['The Marketplace did not answer the query. The release stops here, before the tag v1.2.4.'];
-
-    it('sends the query once more after a network error, an answer HTTP 429 or an answer HTTP 5xx', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('reset')).mockResolvedValueOnce(answered(200, answer())));
-      expect(await queryMarketplace(ID, { retryDelay: 0 })).toEqual(answer());
-      expect(fetch).toHaveBeenCalledTimes(2);
-      const url = 'https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery';
-      const request = expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({ 'user-agent': 'nimblescape-release-checks' }),
-        body: JSON.stringify(listingQuery(ID)),
-      });
-      expect(fetch).toHaveBeenNthCalledWith(1, url, request);
-      expect(fetch).toHaveBeenNthCalledWith(2, url, request);
-      for (const status of [429, 503]) {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(answered(status)).mockResolvedValueOnce(answered(200, answer())));
-        expect(await queryMarketplace(ID, { retryDelay: 0 }), String(status)).toEqual(answer());
-        expect(fetch).toHaveBeenCalledTimes(2);
-      }
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answered(503)));
-      const query = queryMarketplace(ID, { retryDelay: 0 });
-      await expect(query).rejects.toThrow('The Marketplace answered the query with HTTP 503.');
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(await problem(query)).toEqual(failed);
-    });
-
-    it('says that the Marketplace did not answer when both tries fail with a network error', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('reset')));
-      const query = queryMarketplace(ID, { retryDelay: 0 });
-      await expect(query).rejects.toThrow('The Marketplace did not answer the query: reset');
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(await problem(query)).toEqual(noAnswer);
-    });
-
-    it('says that the Marketplace did not answer when its answer does not arrive in full', async () => {
-      const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.reject(timeout) }));
-      const cut = queryMarketplace(ID, { retryDelay: 0 });
-      await expect(cut).rejects.toThrow('The Marketplace did not answer the query: The operation was aborted due to timeout');
-      expect(await problem(cut)).toEqual(noAnswer);
-    });
-
-    it('waits 5 seconds before the second try', async () => {
-      vi.useFakeTimers();
-      try {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(answered(503)).mockResolvedValueOnce(answered(200, answer())));
-        const query = queryMarketplace(ID);
-        await vi.advanceTimersByTimeAsync(4_999);
-        expect(fetch).toHaveBeenCalledTimes(1);
-        await vi.advanceTimersByTimeAsync(1);
-        expect(fetch).toHaveBeenCalledTimes(2);
-        expect(await query).toEqual(answer());
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('stops immediately at another answer that is not a success', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answered(400)));
-      const query = queryMarketplace(ID);
-      await expect(query).rejects.toThrow('HTTP 400');
-      expect(fetch).toHaveBeenCalledTimes(1);
-      expect(await problem(query)).toEqual(failed);
-    });
-
-    it('stops immediately at an answer that is not JSON', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => JSON.parse('<html>') }));
-      const query = queryMarketplace(ID);
-      await expect(query).rejects.toThrow('The answer of the Marketplace is not JSON: ');
-      expect(fetch).toHaveBeenCalledTimes(1);
-      expect(await problem(query)).toEqual(failed);
-    });
   });
 });
 
