@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
 // Progress of one operation in one notification: the plain steps, the reason of an update, and "Show details" for the
-// output channel.
+// output channel, which also hides the notification.
 import * as vscode from 'vscode';
 import { Actions, Steps, type ProgressStep } from '../core/messages';
 import type { ProgressReporter } from '../core/ports';
@@ -11,10 +11,20 @@ import { withoutLinks } from './notifications';
 
 /** Command that opens the output channel (package.json). */
 export const SHOW_LOG_COMMAND = 'devspaces.showLog';
+/** Argument of SHOW_LOG_COMMAND in the link "Show details" of a progress notification: it also hides the notification. */
+export const FROM_PROGRESS_NOTIFICATION = 'progressNotification';
+/**
+ * The VS Code command of the key Escape on a notification: it hides the notifications on the screen. Each one stays in
+ * the notification center (the bell in the status bar), a progress notification with its progress and its Cancel
+ * button. It is no command of the API, so the live tests check that VS Code still has it (test/vscode).
+ */
+export const HIDE_NOTIFICATIONS_COMMAND = 'notifications.hideToasts';
 
 // A progress notification cannot have buttons besides Cancel, but its message renders links, also command links. A
-// click on a link runs its command and keeps the notification open, with its Cancel button.
-const SHOW_DETAILS_LINK = `[${Actions.showDetails}](command:${SHOW_LOG_COMMAND})`;
+// click on a link runs its command and keeps the notification on the screen, so Show Log hides it then
+// (FROM_PROGRESS_NOTIFICATION). The notification must not end before its task: its Cancel button is the only way to
+// cancel the operation.
+const SHOW_DETAILS_LINK = `[${Actions.showDetails}](command:${SHOW_LOG_COMMAND}?${encodeURIComponent(JSON.stringify([FROM_PROGRESS_NOTIFICATION]))})`;
 
 export interface ProgressRun<T> {
   /** For example `Messages.opening(repository)`. */
@@ -77,8 +87,9 @@ export function progressMessage(title: string, step: ProgressStep | undefined, d
 
 /**
  * Runs `task` with one progress notification. The message shows the current step (`Steps[step]`) and its detail,
- * followed by the link "Show details" (command `devspaces.showLog`: it opens the output channel, and the notification
- * stays open with its Cancel button). Cancel aborts the signal. The promise settles with the result of the task.
+ * followed by the link "Show details" (command `devspaces.showLog`: it opens the output channel and hides the
+ * notification, which stays in the notification center with its Cancel button). Cancel aborts the signal. The promise
+ * settles with the result of the task.
  */
 export function runWithProgress<T>(run: ProgressRun<T>): Promise<T> {
   const operation: RunningOperation = { title: run.title, repository: run.repository };

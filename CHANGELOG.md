@@ -37,7 +37,7 @@ The description and the top of the README, which is the Marketplace page, now sa
 
 **Key of Switch Devspace…:** on Windows and Linux, the command Switch Devspace… has no key any more. Before, its key was `Ctrl+Alt+E`, which on many Windows keyboards is `AltGr+E` and types a character such as `€`. On macOS, the key stays `Cmd+Alt+E`. The section [Status bar and switcher](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#status-bar-and-switcher) of the user guide says how to set a key.
 
-**Show details in a progress notification:** the link Show details now opens the log and keeps the notification open, with its Cancel button. Before, the link also closed the notification, and then nothing could cancel the operation.
+**Show details in a progress notification:** the link Show details now opens the log and hides the notification, as the key `Escape` does. The operation goes on: the status bar shows its progress, and the notification stays in the notification center (the bell in the status bar) with its Cancel button. Before, the link closed the notification, and then nothing could cancel the operation.
 
 **The pick of a repository to start:** when a Start from the Command Palette or Search asks for the repository, the text in the field now says whether the devspace opens in this window or in a new window, as in the switcher. Before, it always said "in this window", also when the Start opened a new window.
 

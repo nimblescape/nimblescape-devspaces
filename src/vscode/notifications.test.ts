@@ -89,7 +89,7 @@ describe('the messages', () => {
 
   it('show the title and the detail of a progress notification without links, besides its own link Show details', () => {
     const text = progressMessage(`Opening ${TERMINAL_LINK}…`, 'downloadingImage', `Step ${TERMINAL_LINK}`);
-    expect(links(text)).toEqual(['command:devspaces.showLog']);
+    expect(links(text)).toEqual(['command:devspaces.showLog?%5B%22progressNotification%22%5D']);
   });
 
   it('show the title and every message of a progress notification without links', async () => {
