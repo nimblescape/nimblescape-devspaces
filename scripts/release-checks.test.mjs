@@ -88,6 +88,10 @@ describe('rules 2 and 5: no deletion, only GitHub Actions with Microsoft Entra I
     expect(publishingProblems(release(text), { package: 'vsce package --no-dependencies' })).toEqual([]);
   });
 
+  it('accepts the check of the role on the publisher before the tag', () => {
+    expect(publishingProblems(release('          if ! npx vsce verify-pat --azure-credential; then\n'))).toEqual([]);
+  });
+
   it('reads a command that continues on the next line, and skips comments', () => {
     const text = '  run: |\n    npx vsce publish \\\n      --azure-credential\n    # vsce unpublish, VSCE_PAT\n';
     expect(publishingProblems(release(text))).toEqual([]);
