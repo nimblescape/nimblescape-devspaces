@@ -53,7 +53,7 @@ describe('versions and tags', () => {
   });
 });
 
-describe('rule 1: one ID for good', () => {
+describe('rule 1: the ID never changes', () => {
   it('accepts the naming scheme', () => {
     expect(namingProblems(MANIFEST, 'nimblescape-sample')).toEqual([]);
   });
@@ -99,7 +99,7 @@ describe('rules 2 and 5: no deletion, only GitHub Actions with Microsoft Entra I
     expect(publishingProblems(release(text))).toEqual([]);
   });
 
-  it('reads each command of a line on its own', () => {
+  it('reads each command of a line separately', () => {
     expect(publishingProblems(release('run: npx vsce package && mkdir -p out; ls | head -p 1'))).toEqual([]);
     expect(publishingProblems(release('run: mkdir -p out && npx vsce publish --azure-credential'))).toEqual([]);
     expect(publishingProblems(release('run: npx vsce package --azure-credential && npx vsce publish'))).toHaveLength(1);
