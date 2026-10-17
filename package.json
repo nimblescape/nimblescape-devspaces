@@ -671,7 +671,7 @@
           "order": 1,
           "type": "boolean",
           "default": true,
-          "markdownDescription": "When VS Code starts with an empty window, open the devspace you used last, unless you stopped it with **Stop**."
+          "markdownDescription": "When VS Code starts with an empty window, open the devspace of the window that you closed last, if that window was connected to a devspace and you did not stop the devspace with **Stop**."
         },
         "devspaces.openInNewWindow": {
           "order": 2,

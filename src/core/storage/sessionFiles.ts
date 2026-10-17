@@ -15,7 +15,7 @@ import type {
   ReopenRecord,
   WindowStatus,
 } from '../types';
-import { listJsonFiles, removeFile, writeJsonAtomic, writeJsonAtomicSync } from './atomicJson';
+import { listJsonFiles, removeFile, removeFileSync, writeJsonAtomic, writeJsonAtomicSync } from './atomicJson';
 import {
   CLAIM_MARKER,
   errorCode,
@@ -193,6 +193,11 @@ export class SessionFiles {
 
   async removeReopen(): Promise<void> {
     await retryTransient(() => removeFile(this.paths.reopen));
+  }
+
+  /** Synchronous removal, for `deactivate()` of a window that is not connected to a devspace. */
+  removeReopenSync(): void {
+    retryTransientSync(() => removeFileSync(this.paths.reopen));
   }
 
   /**

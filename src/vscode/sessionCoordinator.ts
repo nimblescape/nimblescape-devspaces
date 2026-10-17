@@ -4,8 +4,8 @@
 
 // Session Coordinator: the window side of the stop-on-close mechanism. It writes the window status file at activation
 // and every 15 seconds (and then drives the window's heartbeats to the Monitor container of each engine),
-// removes the pending connection file of the connected devspace, and writes `closing` plus the reopen record in
-// deactivate().
+// removes the pending connection file of the connected devspace, and writes `closing` in deactivate(). There it also
+// writes the reopen record of the connected devspace, or removes the record when the window has no devspace.
 //
 // The Monitor runs only as a container on each engine; there is no local Monitor process. The window
 // also does:
@@ -343,9 +343,12 @@ export class SessionCoordinator implements vscode.Disposable {
   }
 
   /**
-   * For `deactivate()`: synchronous write of the state `closing`, plus the reopen record when the window is connected
-   * Stops the updates first; an update that is still running cannot replace the file afterwards (see
-   * `writeActiveStatus`). Never throws.
+   * For `deactivate()`: synchronous write of the state `closing`, and of the reopen record. A window that is connected
+   * to a devspace writes the record of its devspace; any other window removes the record, so that the reopen at startup
+   * opens a devspace only when the window that closed last was connected to it. This also runs at each reload of the
+   * window (Reload Window, a Start or Switch in this window, Close Remote Connection); a window that closes before its
+   * start() leaves the record as it is. Stops the updates first; an update that is still running cannot replace the
+   * file afterwards (see `writeActiveStatus`). Never throws.
    */
   deactivateSync(): void {
     if (this.deactivated) return;
@@ -372,6 +375,14 @@ export class SessionCoordinator implements vscode.Disposable {
       } catch (error) {
         this.logger.error('The reopen record could not be written.', error);
       }
+      return;
+    }
+    // A local window, the window of another remote, or one that works without Devspaces (plainDevspaceId): the record
+    // of a window that closed before it goes.
+    try {
+      this.sessionFiles.removeReopenSync();
+    } catch (error) {
+      this.logger.error('The reopen record could not be removed.', error);
     }
   }
 

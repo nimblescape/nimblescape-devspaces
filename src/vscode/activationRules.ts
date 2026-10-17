@@ -74,7 +74,7 @@ export interface ReopenInput {
 
 export type ReopenDecision = { reopen: true; devspaceId: string } | { reopen: false; reason: string };
 
-/** Open the last used devspace in an empty window at start. */
+/** Open the devspace of the window that closed last (the reopen record) in an empty window at start. */
 export function decideReopen(input: ReopenInput): ReopenDecision {
   if (!input.settings.reopenLastOnStartup) return { reopen: false, reason: 'the setting reopenLastOnStartup is off' };
   if (!input.emptyWindow) return { reopen: false, reason: 'the window is not empty' };
@@ -82,7 +82,10 @@ export function decideReopen(input: ReopenInput): ReopenDecision {
   if (others > 0) return { reopen: false, reason: 'another window is open' };
   if (input.pendingOperations > 0) return { reopen: false, reason: 'an operation is pending' };
   const record = input.record;
-  if (!record) return { reopen: false, reason: 'no devspace was open before' };
+  // A window that is not connected to a devspace removes the record when it closes (SessionCoordinator.deactivateSync).
+  if (!record) {
+    return { reopen: false, reason: 'no devspace is recorded: the window that closed last was not connected to one, or the devspace was stopped or deleted' };
+  }
   if (!input.devspaceIds.has(record.devspaceId)) {
     return { reopen: false, reason: 'the last devspace does not exist anymore' };
   }

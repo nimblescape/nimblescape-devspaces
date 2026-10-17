@@ -806,7 +806,7 @@ export class Controller implements vscode.Disposable {
       this.logger.info('The last devspace is not opened: another devspace is opening in this window.');
       return;
     }
-    this.logger.info(`Opening the last used devspace ${devspace.repository}.`);
+    this.logger.info(`Opening the devspace of the window that closed last, ${devspace.repository}.`);
     // The progress notification "Opening owner/name…" has Cancel: the user can stay in the empty window. The user did
     // not start it, so it asks nothing about the Monitor of the engine.
     await this.startTarget(this.devspaceTarget(devspace), { automatic: true });
