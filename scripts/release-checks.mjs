@@ -11,10 +11,11 @@
 //     of the newest release tag. No workflow and no npm script deletes an extension, only release.yml publishes, and
 //     it publishes with the sign-in to Microsoft Entra ID, never with a personal access token.
 //   node scripts/release-checks.mjs package <vsix> [--dry-run]
-//     Rules 1 and 3 in the package. The VSIX holds the ID and the version of package.json, and its extension differs
-//     from the package of the newest release before that version in more than the version and the change log. The
-//     GitHub CLI downloads the package of that release (environment GH_TOKEN and GH_REPO). In a dry run, a package
-//     without such a change is a warning; in a release, it is an error.
+//     Rules 1 and 3 in the package. The VSIX holds the ID and the version of package.json. Since the package of the
+//     newest release before that version, it changes a file that is not a document, not the Marketplace icon and not
+//     in dist/, a field of package.json that changes how the extension works, or a bundle of dist/ together with a
+//     file of src/ that is not a test. The GitHub CLI downloads the package of that release (environment GH_TOKEN and
+//     GH_REPO). In a dry run, a package without such a change is a warning; in a release, it is an error.
 //   node scripts/release-checks.mjs dry-run
 //     Rule 4 (environment GITHUB_REPOSITORY, GH_TOKEN and HEAD_SHA). A successful dry run of the workflow "Release"
 //     tested the files of the release process as they are at the commit HEAD_SHA. On a pull request (also PR_NUMBER
@@ -191,26 +192,108 @@ export function packageProblems(vsixManifest, packed, manifest) {
 }
 
 /**
- * The files of the extension that differ between two packages, without the change log, and without the version and
- * the development tools in package.json (rule 3): vsce packs package.json with its `scripts`, `devDependencies` and
- * `overrides`, which change for users only through the files that the build makes.
+ * The fields of package.json that change how the extension works (rule 3), for example `contributes` or `type`, which
+ * Node reads to load the bundle. The other fields do not, for example `displayName`, `description` and `icon`, which
+ * only describe the extension. A script and a development package are fields of their own, such as
+ * `scripts.vscode:uninstall`, which VS Code runs after the uninstall of the extension.
+ */
+const RUNTIME_FIELDS = [
+  'main', 'browser', 'type', 'engines', 'activationEvents', 'contributes', 'extensionDependencies', 'extensionPack',
+  'extensionKind', 'capabilities', 'enabledApiProposals', 'api', 'dependencies', 'l10n', 'scripts.vscode:uninstall',
+];
+/**
+ * The development packages whose version the build puts into the code: Devspaces builds its helper image with the
+ * Dev Container CLI of this version (scripts/cliVersion.mjs).
+ */
+const RUNTIME_DEV_DEPENDENCIES = ['@devcontainers/cli'];
+/** The tests and type declarations of src/, which the bundles do not hold. */
+const TEST_SOURCE = /(^|\/)(test|testing|__tests__|__fixtures__)\/|\.(test|testkit|stub)\.[^/]+$|\.d\.[cm]?ts$/;
+/** The documents of a package: the files .md in any folder, the files .txt at its top, and the license. */
+const DOCUMENT = /\.md$|^[^/]+\.txt$|^license[^/]*$/i;
+
+/** The fields of a manifest in their order, with each script and each development package as a field of its own. */
+function manifestFields(manifest) {
+  const fields = {};
+  for (const [field, value] of Object.entries(manifest)) {
+    if ((field === 'scripts' || field === 'devDependencies') && typeof value === 'object' && value !== null) {
+      for (const [name, entry] of Object.entries(value)) fields[`${field}.${name}`] = entry;
+    } else fields[field] = value;
+  }
+  return fields;
+}
+
+/** The texts in a value of a manifest, also in its arrays and objects. */
+function manifestTexts(value) {
+  if (typeof value === 'string') return [value];
+  return value !== null && typeof value === 'object' ? Object.values(value).flatMap(manifestTexts) : [];
+}
+
+/** A value as JSON with the keys of each object in sorted order; arrays keep their order. */
+function sortedJson(value) {
+  const sorted = (entry) => {
+    if (Array.isArray(entry)) return entry.map(sorted);
+    if (entry === null || typeof entry !== 'object') return entry;
+    return Object.fromEntries(Object.keys(entry).sort().map((key) => [key, sorted(entry[key])]));
+  };
+  return JSON.stringify(sorted(value));
+}
+
+/**
+ * The changes of a package for the users since an earlier package (rule 3). A file of the package counts when it is
+ * not a document, not the Marketplace icon and not in dist/, package.json in the fields that change how the extension
+ * works, and a bundle of dist/ only when a file of src/ that is not a test changed too: a newer build tool changes the
+ * bundles without a change of src/, and a comment in src/ changes src/ without a change of the bundles. A file .md and
+ * the Marketplace icon count when `contributes` names them, because VS Code then shows them at run time. A field of
+ * package.json counts only when its value changed: the order of the keys of an object does not count.
  * @param {Map<string, Buffer>} previous The files below extension/ of the earlier package, by their path below it.
  * @param {Map<string, Buffer>} next The files below extension/ of the new package.
- * @returns {string[]} The paths below extension/ of the files that were added, removed or changed.
+ * @param {string[]} sourceFiles The files of the repository that differ between the commits of the two packages.
+ * @returns {{ counted: string[], ignored: string[] }} The changes that count, and those that do not count with the
+ *   reason, for example `dist/extension.js (no change of src/ outside the tests)`.
  */
-export function changedFiles(previous, next) {
-  const withoutVersion = (content) => {
-    const { version, scripts, devDependencies, overrides, ...manifest } = JSON.parse(content.toString('utf8'));
-    return JSON.stringify(manifest);
-  };
-  const changed = [];
+export function userChanges(previous, next, sourceFiles) {
+  const isRuntimeField = (field) =>
+    RUNTIME_FIELDS.includes(field) || RUNTIME_DEV_DEPENDENCIES.some((name) => field === `devDependencies.${name}`);
+  const sourceChanged = sourceFiles.some((file) => file.startsWith('src/') && !TEST_SOURCE.test(file));
+  const manifests = [previous, next].map((files) =>
+    files.has('package.json') ? JSON.parse(files.get('package.json').toString('utf8')) : {},
+  );
+  // The paths below extension/ that the manifests name, for example `./resources/icon.png` and `/resources/icon.png`
+  // as `resources/icon.png`, as vsce reads them.
+  const paths = (values) =>
+    new Set(
+      values
+        .filter((value) => typeof value === 'string')
+        .map((value) => path.posix.normalize(value).replace(/^\/+/, '')),
+    );
+  const icons = paths(manifests.map((manifest) => manifest.icon));
+  const contributed = paths(manifests.flatMap((manifest) => manifestTexts(manifest.contributes)));
+  // The Marketplace icon, unless contributes names it too, for example as the icon of a view.
+  const isIcon = (name) => icons.has(name) && !contributed.has(name);
+  // A document, unless it is a file .md that contributes names, for example the page of a walkthrough.
+  const isDocument = (name) => DOCUMENT.test(name) && !(/\.md$/i.test(name) && contributed.has(name));
+  const counted = [];
+  const ignored = [];
   for (const name of [...new Set([...previous.keys(), ...next.keys()])].sort()) {
-    if (name.toLowerCase() === 'changelog.md') continue;
     const [a, b] = [previous.get(name), next.get(name)];
-    if (a === undefined || b === undefined) changed.push(name);
-    else if (name === 'package.json' ? withoutVersion(a) !== withoutVersion(b) : !a.equals(b)) changed.push(name);
+    if (a !== undefined && b !== undefined && a.equals(b)) continue;
+    if (name === 'package.json') {
+      const [before, after] = manifests.map(manifestFields);
+      const fields = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+        (field) => sortedJson(before[field]) !== sortedJson(after[field]),
+      );
+      const runtime = fields.filter(isRuntimeField);
+      const other = fields.filter((field) => !isRuntimeField(field));
+      if (runtime.length > 0) counted.push(`package.json: ${runtime.join(', ')}`);
+      if (other.length > 0) {
+        ignored.push(`package.json: ${other.join(', ')} (does not change how the extension works)`);
+      }
+    } else if (isIcon(name)) ignored.push(`${name} (the Marketplace icon)`);
+    else if (isDocument(name)) ignored.push(`${name} (a document)`);
+    else if (!name.startsWith('dist/') || sourceChanged) counted.push(name);
+    else ignored.push(`${name} (no change of src/ outside the tests)`);
   }
-  return changed;
+  return { counted, ignored };
 }
 
 let failed = false;
@@ -248,11 +331,22 @@ function releaseTags() {
     .map((line) => line.split('\trefs/tags/')[1]);
 }
 
-/** The package.json of a tag of the remote origin. A shallow clone fetches only the commit of the tag. */
-function manifestAtTag(tag) {
+/** Fetches the commit of a tag of the remote origin as FETCH_HEAD. A shallow clone fetches only this commit. */
+function fetchTag(tag) {
   const shallow = run('git', ['rev-parse', '--is-shallow-repository']).trim() === 'true';
   run('git', ['fetch', '--quiet', '--no-tags', ...(shallow ? ['--depth=1'] : []), 'origin', `refs/tags/${tag}`]);
+}
+
+/** The package.json of a tag of the remote origin. */
+function manifestAtTag(tag) {
+  fetchTag(tag);
   return JSON.parse(run('git', ['show', 'FETCH_HEAD:package.json']));
+}
+
+/** The files of the repository that differ between a tag of the remote origin and HEAD; a renamed file twice. */
+function sourceChanges(tag) {
+  fetchTag(tag);
+  return run('git', ['diff', '--name-only', '--no-renames', '-z', 'FETCH_HEAD', 'HEAD']).split('\0').filter(Boolean);
 }
 
 /** The files of the workflows and of the actions of the repository, with their paths relative to the repository. */
@@ -323,11 +417,13 @@ function checkPackage(vsix, dryRun) {
       error(`The release ${tag} holds ${downloaded.length} VSIX files, not one.`);
       return;
     }
-    const changed = changedFiles(unpack(path.join(download, downloaded[0]), path.join(work, 'previous')), next);
-    if (changed.length > 0) {
-      console.log(`Changed since the release ${tag}: ${changed.join(', ')}.`);
+    const previous = unpack(path.join(download, downloaded[0]), path.join(work, 'previous'));
+    const { counted, ignored } = userChanges(previous, next, sourceChanges(tag));
+    const notCounted = ignored.length > 0 ? ` Not counted: ${ignored.join('; ')}.` : '';
+    if (counted.length > 0) {
+      console.log(`Changed for the users since the release ${tag}: ${counted.join('; ')}.${notCounted}`);
     } else {
-      const text = `The package changes nothing for users since the release ${tag}: only the version and the change log differ. (rule 3)`;
+      const text = `The package changes nothing for the users since the release ${tag}.${notCounted} (rule 3)`;
       if (dryRun) warning(`${text} A release of this package would stop here.`);
       else error(text);
     }

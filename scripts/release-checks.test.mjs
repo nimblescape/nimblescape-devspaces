@@ -7,13 +7,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   RELEASE_WORKFLOW,
-  changedFiles,
   compareVersions,
   newestTag,
   namingProblems,
   packageProblems,
   parseVersion,
   publishingProblems,
+  userChanges,
 } from './release-checks.mjs';
 
 const MANIFEST = { publisher: 'nimblescape', name: 'nimblescape-sample', displayName: 'nimblescape Sample', version: '1.2.3' };
@@ -121,25 +121,132 @@ describe('rules 2 and 5: no deletion, only GitHub Actions with Microsoft Entra I
   });
 });
 
-describe('rule 3: only changes for users', () => {
+describe('rule 3: only changes for the users', () => {
   const files = (entries) => new Map(Object.entries(entries).map(([name, text]) => [name, Buffer.from(text)]));
   const manifest = (version, extra = {}) => JSON.stringify({ name: 'nimblescape-sample', version, ...extra }, null, 2);
+  const released = { 'package.json': manifest('1.2.3'), 'changelog.md': 'a', 'dist/extension.js': 'code' };
 
-  it('sees no change when only the version and the change log differ', () => {
-    const previous = files({ 'package.json': manifest('1.2.3'), 'changelog.md': 'a', 'dist/extension.js': 'code' });
-    const next = files({ 'package.json': manifest('1.2.4'), 'changelog.md': 'b', 'dist/extension.js': 'code' });
-    expect(changedFiles(previous, next)).toEqual([]);
+  it('counts no version bump, document or build tool', () => {
+    const previous = files({ ...released, 'readme.md': 'a', 'LICENSE.txt': 'a', 'ThirdPartyNotices.txt': 'a' });
+    const next = files({
+      'package.json': manifest('1.2.4', { scripts: { test: 'b' }, devDependencies: { esbuild: '^1.0.1' }, overrides: {} }),
+      'changelog.md': 'b',
+      'dist/extension.js': 'code',
+      'readme.md': 'b',
+      'LICENSE.txt': 'b',
+      'ThirdPartyNotices.txt': 'b',
+      'SUPPORT.md': 'new',
+    });
+    expect(userChanges(previous, next, ['esbuild.mjs', 'scripts/build.mjs', 'package-lock.json'])).toEqual({
+      counted: [],
+      ignored: [
+        'LICENSE.txt (a document)',
+        'SUPPORT.md (a document)',
+        'ThirdPartyNotices.txt (a document)',
+        'changelog.md (a document)',
+        'package.json: version, scripts.test, devDependencies.esbuild, overrides (does not change how the extension works)',
+        'readme.md (a document)',
+      ],
+    });
   });
 
-  it('sees no change when only the development tools in package.json differ', () => {
-    const previous = files({ 'package.json': manifest('1.2.3', { scripts: { test: 'a' }, devDependencies: { x: '^1.0.0' } }) });
-    const next = files({ 'package.json': manifest('1.2.4', { scripts: { test: 'b' }, devDependencies: { x: '^1.0.1' }, overrides: {} }) });
-    expect(changedFiles(previous, next)).toEqual([]);
+  it('counts a bundle only with a change of src/ outside the tests', () => {
+    const bumped = { ...released, 'package.json': manifest('1.2.4') };
+    const rebuilt = files({ ...bumped, 'dist/extension.js': 'new code' });
+    const tests = ['src/a.test.ts', 'src/core/b.testkit.ts', 'src/c.stub.ts', 'src/vscode/testing/fake.ts', 'src/types/globals.d.ts'];
+    const withTests = userChanges(files(released), rebuilt, ['esbuild.mjs', ...tests]);
+    expect(withTests.counted).toEqual([]);
+    expect(withTests.ignored).toContain('dist/extension.js (no change of src/ outside the tests)');
+    expect(userChanges(files(released), rebuilt, ['src/core/a.ts']).counted).toEqual(['dist/extension.js']);
+    // A change of src/ that leaves the bundles as they are, for example a comment, does not count either.
+    expect(userChanges(files(released), files(bumped), ['src/core/a.ts']).counted).toEqual([]);
   });
 
-  it('names the files that were changed, added or removed', () => {
-    const previous = files({ 'package.json': manifest('1.2.3'), 'readme.md': 'a', 'dist/old.js': 'x', 'dist/extension.js': 'code' });
-    const next = files({ 'package.json': manifest('1.2.4', { main: 'y' }), 'readme.md': 'b', 'dist/new.js': 'x', 'dist/extension.js': 'code' });
-    expect(changedFiles(previous, next)).toEqual(['dist/new.js', 'dist/old.js', 'package.json', 'readme.md']);
+  it('counts the other files of the package that were changed, added or removed', () => {
+    const previous = files({ ...released, 'resources/helper/Dockerfile': 'FROM a', 'resources/old.svg': 'x' });
+    const next = files({ ...released, 'resources/helper/Dockerfile': 'FROM b', 'resources/new.svg': 'x' });
+    expect(userChanges(previous, next, []).counted).toEqual(['resources/helper/Dockerfile', 'resources/new.svg', 'resources/old.svg']);
+  });
+
+  it('counts the Marketplace icon only when contributes names it too', () => {
+    const withIcon = (icon, contributes = {}) => manifest('1.2.3', { icon, contributes });
+    // The field icon of each of the two manifests names a Marketplace icon, also with ./ before the path.
+    const previous = files({ 'package.json': withIcon('./resources/icon.png'), 'resources/icon.png': 'a', 'resources/new.png': 'a' });
+    const next = files({ 'package.json': withIcon('resources/new.png'), 'resources/icon.png': 'b', 'resources/new.png': 'b' });
+    expect(userChanges(previous, next, [])).toEqual({
+      counted: [],
+      ignored: [
+        'package.json: icon (does not change how the extension works)',
+        'resources/icon.png (the Marketplace icon)',
+        'resources/new.png (the Marketplace icon)',
+      ],
+    });
+    // The same file as the icon of a view, which VS Code shows at run time.
+    const view = { viewsContainers: { activitybar: [{ id: 'sample', title: 'Sample', icon: 'resources/icon.png' }] } };
+    const shown = (icon) => files({ 'package.json': withIcon('resources/icon.png', view), 'resources/icon.png': icon });
+    expect(userChanges(shown('a'), shown('b'), [])).toEqual({ counted: ['resources/icon.png'], ignored: [] });
+  });
+
+  it('reads a path of the manifest with / before it as vsce does, below extension/', () => {
+    const walkthrough = { walkthroughs: [{ id: 'start', steps: [{ id: 'one', media: { markdown: '/media/one.md' } }] }] };
+    const pack = (text) =>
+      files({
+        'package.json': manifest('1.2.3', { icon: '/resources/icon.png', contributes: walkthrough }),
+        'resources/icon.png': text,
+        'media/one.md': text,
+      });
+    expect(userChanges(pack('a'), pack('b'), [])).toEqual({
+      counted: ['media/one.md'],
+      ignored: ['resources/icon.png (the Marketplace icon)'],
+    });
+  });
+
+  it('counts no file .md in any folder unless contributes names it, and no file .txt at the top', () => {
+    const walkthrough = { walkthroughs: [{ id: 'start', steps: [{ id: 'one', media: { markdown: './media/one.md' } }] }] };
+    const pack = (text) =>
+      files({
+        'package.json': manifest('1.2.3', { contributes: walkthrough }),
+        'docs/guide.md': text,
+        'media/one.md': text,
+        'NOTES.txt': text,
+        'media/words.txt': text,
+      });
+    expect(userChanges(pack('a'), pack('b'), [])).toEqual({
+      counted: ['media/one.md', 'media/words.txt'],
+      ignored: ['NOTES.txt (a document)', 'docs/guide.md (a document)'],
+    });
+  });
+
+  it('counts a field of package.json only when its value changed, not the order of the keys', () => {
+    const commands = (...list) => files({ 'package.json': manifest('1.2.3', { contributes: { commands: list } }) });
+    const [a, b] = [{ command: 'sample.a', title: 'A' }, { command: 'sample.b', title: 'B' }];
+    const reordered = (command) => Object.fromEntries(Object.entries(command).reverse());
+    expect(userChanges(commands(a, b), commands(reordered(a), reordered(b)), [])).toEqual({ counted: [], ignored: [] });
+    // An array keeps its order, so the order of the commands counts.
+    expect(userChanges(commands(a, b), commands(b, a), []).counted).toEqual(['package.json: contributes']);
+  });
+
+  // `scripts.<name>` and `devDependencies.<name>` stand for one script and one development package.
+  const withField = (field, value) => {
+    const [name, entry] = field.split('.', 2);
+    return files({ 'package.json': manifest('1.2.3', { [name]: entry === undefined ? value : { [entry]: value } }) });
+  };
+
+  it.each([
+    'main', 'browser', 'type', 'engines', 'activationEvents', 'contributes', 'extensionDependencies', 'extensionPack',
+    'extensionKind', 'capabilities', 'enabledApiProposals', 'api', 'dependencies', 'l10n', 'scripts.vscode:uninstall',
+    'devDependencies.@devcontainers/cli',
+  ])('counts the field %s of package.json, which changes how the extension works', (field) => {
+    expect(userChanges(withField(field, 'a'), withField(field, 'b'), [])).toEqual({ counted: [`package.json: ${field}`], ignored: [] });
+  });
+
+  it.each([
+    'displayName', 'description', 'keywords', 'icon', 'galleryBanner', 'repository', 'scripts.test',
+    'devDependencies.esbuild', 'overrides',
+  ])('does not count the field %s of package.json, which does not change how the extension works', (field) => {
+    expect(userChanges(withField(field, 'a'), withField(field, 'b'), [])).toEqual({
+      counted: [],
+      ignored: [`package.json: ${field} (does not change how the extension works)`],
+    });
   });
 });
