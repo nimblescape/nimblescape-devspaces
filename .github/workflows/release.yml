@@ -32,7 +32,8 @@
 # the publishing steps and, in a release, that a successful dry run tested the
 # files of the release process as they are; the job "Check the package" and the
 # publish job check that the VSIX holds the extension ID of package.json and
-# changes something for the users since the last release.
+# changes something for the users since the last release, and that the section
+# of the version in its change log describes the change.
 
 name: Release
 run-name: Release ${{ inputs.version }}${{ inputs.dry_run && ' (dry run)' || '' }}
@@ -236,7 +237,8 @@ jobs:
     with:
       ref: ${{ needs.version.outputs.sha }}
 
-  # Rules 1 and 3 of CONTRIBUTING.md in the VSIX of the CI job, also in a dry run.
+  # Rules 1 and 3 of CONTRIBUTING.md in the VSIX of the CI job, also in a dry run: the extension ID, the changes since
+  # the last release and the section of the version in the change log.
   package:
     name: Check the package
     needs: [version, ci]
@@ -260,7 +262,7 @@ jobs:
           name: vsix
 
       # The check downloads the VSIX of the last release with the GitHub CLI.
-      - name: Check the extension ID and the changes since the last release
+      - name: Check the extension ID, the changes since the last release and the change-log section
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -416,7 +418,7 @@ jobs:
         run: gh release download "$TAG" --pattern "$VSIX"
 
       # The VSIX of the GitHub release is the file that the Marketplace receives, so the rules 1 and 3 hold for it.
-      - name: Check the extension ID and the changes since the last release
+      - name: Check the extension ID, the changes since the last release and the change-log section
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

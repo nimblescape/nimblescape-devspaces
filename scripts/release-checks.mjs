@@ -14,8 +14,9 @@
 //     Rules 1 and 3 in the package. The VSIX holds the ID and the version of package.json. Since the package of the
 //     newest release before that version, it changes a file that is not a document, not the Marketplace icon and not
 //     in dist/, a field of package.json that changes how the extension works, or a bundle of dist/ together with a
-//     file of src/ that is not a test. The GitHub CLI downloads the package of that release (environment GH_TOKEN and
-//     GH_REPO). In a dry run, a package without such a change is a warning; in a release, it is an error.
+//     file of src/ that is not a test. The section of the version in its change log has text, and no phrase such as
+//     "maintenance release". The GitHub CLI downloads the package of that release (environment GH_TOKEN and GH_REPO).
+//     In a dry run, a breach of rule 3 is a warning; in a release, it is an error.
 //   node scripts/release-checks.mjs dry-run
 //     Rule 4 (environment GITHUB_REPOSITORY, GH_TOKEN and HEAD_SHA). A successful dry run of the workflow "Release"
 //     tested the files of the release process as they are at the commit HEAD_SHA. On a pull request (also PR_NUMBER
@@ -296,6 +297,54 @@ export function userChanges(previous, next, sourceFiles) {
   return { counted, ignored };
 }
 
+/**
+ * The phrases that say that a version changes nothing for the users (rule 3), for a text in lower case. "behaves as
+ * in" counts only before a version, as in "the extension behaves as in 0.1.7" or "behaves as in version 0.1.7", and
+ * "behaves as before" only after "extension", so that a description such as "Enter now behaves as in the Explorer
+ * view." or "The link behaves as in 2 other editors." passes.
+ */
+const NO_CHANGE_PHRASES = [
+  /maintenance release/, /maintenance version/, /behaves as in (?:version )?v?\d+(?:\.\d+)+/,
+  /extension behaves as before/, /no change for users/, /no changes for users/, /no change for the users/,
+  /no changes for the users/, /no user-facing change/,
+];
+
+/**
+ * The section of a version in a change log, which the workflow "Release" uses as the notes of the GitHub release:
+ * the lines after the heading `## <version>` up to the next heading `## ` or the closing rule `---`.
+ * @param {string} text The change log.
+ * @param {string} version
+ * @returns {string | undefined} undefined when the change log has no section for the version.
+ */
+export function changelogSection(text, version) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.indexOf(`## ${version}`);
+  if (start < 0) return undefined;
+  const end = lines.findIndex((line, index) => index > start && (line.startsWith('## ') || line === '---'));
+  return lines.slice(start + 1, end < 0 ? lines.length : end).join('\n');
+}
+
+/**
+ * The breaches of rule 3 by the section of a version in the change log: the section describes the change for the
+ * users, so it has text besides its headings and does not say that the version changes nothing for them. The check
+ * ignores the HTML comments, which the notes do not show (a comment without its end `-->` hides the rest of the
+ * section), the case, the marks `*`, `_` and `` ` `` of Markdown, and the line breaks.
+ * @param {string | undefined} section The section, as changelogSection returns it.
+ * @param {string} version
+ * @returns {string[]}
+ */
+export function wordingProblems(section, version) {
+  const shown = (section ?? '').replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+  const flat = (part) => part.toLowerCase().replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim();
+  const body = shown.split(/\r?\n/).filter((line) => !/^ {0,3}#{1,6}(\s|$)/.test(line)).join('\n');
+  if (flat(body) === '') return [`CHANGELOG.md has no text for the version ${version}.`];
+  const text = flat(shown);
+  const said = NO_CHANGE_PHRASES.map((phrase) => phrase.exec(text)?.[0]).filter((phrase) => phrase !== undefined);
+  return said.map(
+    (phrase) => `The section ${version} of CHANGELOG.md says "${phrase}": it must describe the change for the users.`,
+  );
+}
+
 let failed = false;
 
 function error(text) {
@@ -397,6 +446,9 @@ function unpack(vsix, folder) {
 
 function checkPackage(vsix, dryRun) {
   const manifest = readManifest();
+  // A breach of rule 3 stops a release. A dry run only warns, so that it can test the release process also when there
+  // is no change for the users to release.
+  const breach = (text) => (dryRun ? warning(`${text} A release of this package would stop here.`) : error(text));
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'release-checks-'));
   try {
     const next = unpack(vsix, path.join(work, 'next'));
@@ -404,6 +456,13 @@ function checkPackage(vsix, dryRun) {
     const problems = packageProblems(vsixManifest, JSON.parse(next.get('package.json').toString('utf8')), manifest);
     for (const problem of problems) error(`${problem} (rule 1)`);
     if (problems.length === 0) console.log(`The package holds ${extensionId(manifest)} ${manifest.version}.`);
+
+    const changelog = [...next].find(([name]) => name.toLowerCase() === 'changelog.md')?.[1].toString('utf8') ?? '';
+    const wording = wordingProblems(changelogSection(changelog, manifest.version), manifest.version);
+    for (const problem of wording) breach(`${problem} (rule 3)`);
+    if (wording.length === 0) {
+      console.log(`The section ${manifest.version} of CHANGELOG.md has text, and no phrase such as "maintenance release".`);
+    }
 
     const tag = newestTag(releaseTags(), manifest.version);
     if (tag === undefined) {
@@ -423,9 +482,7 @@ function checkPackage(vsix, dryRun) {
     if (counted.length > 0) {
       console.log(`Changed for the users since the release ${tag}: ${counted.join('; ')}.${notCounted}`);
     } else {
-      const text = `The package changes nothing for the users since the release ${tag}.${notCounted} (rule 3)`;
-      if (dryRun) warning(`${text} A release of this package would stop here.`);
-      else error(text);
+      breach(`The package changes nothing for the users since the release ${tag}.${notCounted} (rule 3)`);
     }
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
