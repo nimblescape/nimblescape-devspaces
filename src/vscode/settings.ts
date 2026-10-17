@@ -195,18 +195,13 @@ export function invalidCacheUpdateScheduleValue(): string {
 }
 
 /**
- * One warning (a message and a log line) that names the invalid value of devspaces.cacheUpdateSchedule, in whose place
- * the Monitor uses the default. `warned`: the value of the last warning (`''` for none); the same value is not named
- * again. Returns the value of this call, for the next one.
+ * The check of devspaces.cacheUpdateSchedule at the start, and when `change` changes it: a value that the Monitor does
+ * not take is replaced by the default (normalizeSettings), and named in the log and in a warning (warnOnce).
  */
-export function warnInvalidCacheUpdateSchedule(logger: Logger, warned: string): string {
+export function warnInvalidCacheUpdateSchedule(logger: Logger, warned: Set<string>, change?: vscode.ConfigurationChangeEvent): void {
+  if (!checksSetting('cacheUpdateSchedule', change)) return;
   const invalid = invalidCacheUpdateScheduleValue();
-  if (invalid === '' || invalid === warned) return invalid;
-  logger.warn(Messages.cacheUpdateScheduleInvalid(invalid));
-  Promise.resolve(showWarningMessage(Messages.cacheUpdateScheduleInvalid(invalid))).catch((error: unknown) =>
-    logger.warn(`The warning about the setting cacheUpdateSchedule could not be shown: ${errorMessage(error)}`),
-  );
-  return invalid;
+  warnOnce(logger, warned, 'cacheUpdateSchedule', invalid === '' ? undefined : Messages.cacheUpdateScheduleInvalid(invalid));
 }
 
 /**

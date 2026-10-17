@@ -144,30 +144,49 @@ describe('settings', () => {
   });
 
   // The settings editor takes any five fields (the pattern in package.json); the Monitor would use the default in place
-  // of a schedule that it does not take, without a word.
-  it('warns once about a cacheUpdateSchedule that the Monitor does not take, and again only when it changes', () => {
+  // of a schedule that it does not take, without a word. The warning follows the rules of the other settings: Open
+  // Settings, and once per window session for each invalid value, until the value is valid.
+  it('warns once per window session about each cacheUpdateSchedule that the Monitor does not take, with Open Settings', async () => {
     let value: unknown = ' 0 25 * * * ';
     fakeVscode.workspace.getConfiguration.mockReturnValue({ get: (key: string) => (key === 'cacheUpdateSchedule' ? value : undefined), inspect: () => undefined });
+    fakeVscode.window.showWarningMessage.mockResolvedValue(Actions.openSettings);
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), output: vi.fn() };
-    const warned = warnInvalidCacheUpdateSchedule(logger, '');
-    expect(warned).toBe('0 25 * * *');
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(Messages.cacheUpdateScheduleInvalid('0 25 * * *'));
-    expect(logger.warn).toHaveBeenCalledWith(Messages.cacheUpdateScheduleInvalid('0 25 * * *'));
-    expect(warnInvalidCacheUpdateSchedule(logger, warned)).toBe(warned);
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
+    const warned = new Set<string>();
+    const change = (key: string) => ({ affectsConfiguration: (section: string) => section === `${SETTINGS_SECTION}.${key}` }) as never;
+    const shown = () => fakeVscode.window.showWarningMessage.mock.calls.map((call: unknown[]) => call[0]);
+    const logged = () => logger.warn.mock.calls.map((call: unknown[]) => call[0]);
+    const hour25 = Messages.cacheUpdateScheduleInvalid('0 25 * * *');
+    const everyMinute = Messages.cacheUpdateScheduleInvalid('* * * * *');
+    const threeMinutes = Messages.cacheUpdateScheduleInvalid('3');
+    warnInvalidCacheUpdateSchedule(logger, warned);
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(hour25, Actions.openSettings);
+    expect(logged()).toEqual([hour25]);
+    // The button opens the Settings editor at the setting.
+    await vi.waitFor(() =>
+      expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', '@id:devspaces.cacheUpdateSchedule'),
+    );
+    // A change of another setting checks nothing. The same invalid value again: a line in the log, no second warning.
+    warnInvalidCacheUpdateSchedule(logger, warned, change('owners'));
+    warnInvalidCacheUpdateSchedule(logger, warned, change('cacheUpdateSchedule'));
+    expect(shown()).toEqual([hour25]);
+    expect(logged()).toEqual([hour25, hour25]);
     // Every minute is less than 5 minutes apart; a number of minutes below 5 is named too.
     value = '* * * * *';
-    expect(warnInvalidCacheUpdateSchedule(logger, warned)).toBe('* * * * *');
+    warnInvalidCacheUpdateSchedule(logger, warned, change('cacheUpdateSchedule'));
     value = 3;
-    expect(warnInvalidCacheUpdateSchedule(logger, '* * * * *')).toBe('3');
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(3);
-    // A valid value, and none: nothing to warn about.
+    warnInvalidCacheUpdateSchedule(logger, warned, change('cacheUpdateSchedule'));
+    expect(shown()).toEqual([hour25, everyMinute, threeMinutes]);
+    // A valid value, and none: nothing to warn about, and the window forgets its warnings.
     for (const valid of ['7 6 * * *', '*/5 * * * *', '60', 60, undefined, '']) {
       value = valid;
-      expect(warnInvalidCacheUpdateSchedule(logger, ''), JSON.stringify(valid)).toBe('');
+      warnInvalidCacheUpdateSchedule(logger, warned, change('cacheUpdateSchedule'));
     }
-    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledTimes(3);
+    expect(logged()).toHaveLength(4);
+    // The same invalid value entered again is a new warning.
+    value = '0 25 * * *';
+    warnInvalidCacheUpdateSchedule(logger, warned, change('cacheUpdateSchedule'));
+    expect(shown()).toEqual([hour25, everyMinute, threeMinutes, hour25]);
+    expect(logged()).toHaveLength(5);
   });
 
   // There is no setting imageUpdates: a value that settings.json holds is not read (VS Code shows it as an unknown
