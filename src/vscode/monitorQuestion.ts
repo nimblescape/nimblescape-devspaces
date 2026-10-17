@@ -15,6 +15,7 @@
 import * as vscode from 'vscode';
 import { describeDockerHost } from '../core/docker/dockerHost';
 import { errorMessage } from '../core/errors';
+import { Actions } from '../core/messages';
 import { systemClock, type Clock, type Logger } from '../core/ports';
 import type { DockerEngineRecords, EngineRemoval } from '../core/storage/dockerEngineRecords';
 import type { ExtensionSettings } from '../core/types';
@@ -37,6 +38,8 @@ export interface MonitorQuestionDeps {
   records: Pick<DockerEngineRecords, 'monitorAnswered' | 'recordMonitorAnswer'>;
   settings: () => Pick<ExtensionSettings, 'stopMonitorWhenIdle'>;
   logger: Logger;
+  /** Opens the log (action Show details of the warning that the answer could not be saved). */
+  showLog: () => void;
   clock?: Clock;
 }
 
@@ -90,7 +93,12 @@ export class MonitorQuestion {
       recorded = await records.recordMonitorAnswer(host, (this.deps.clock ?? systemClock).now(), await removalRuns?.());
     } catch (error) {
       logger.warn(`The answer about the Monitor on ${engine} could not be stored. Until it is stored, the Monitor there stops when no devspace runs: ${errorMessage(error)}`);
-      showWarningMessage(ControllerTexts.monitorAnswerNotSaved).then(undefined, (shown: unknown) => logger.error('Could not show the message.', shown));
+      showWarningMessage(ControllerTexts.monitorAnswerNotSaved, Actions.showDetails).then(
+        (action) => {
+          if (action === Actions.showDetails) this.deps.showLog();
+        },
+        (shown: unknown) => logger.error('Could not show the message.', shown),
+      );
       return 'closed';
     }
     if (!recorded.recorded) {
