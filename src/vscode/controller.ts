@@ -246,6 +246,17 @@ export interface EngineRemovalDeps {
 /** The names of the operations of a busy mark of another window, in the texts of the user. */
 const BUSY_OPERATION_NAMES: Record<BusyOperation, string> = { create: 'Start', update: 'Update', rebuild: 'Rebuild', delete: 'Delete' };
 
+/** The start of the key of a request of "Update All Images Now" in the gate of a window (monitorRequestKey). */
+const MONITOR_REQUEST_KEY = 'monitor#';
+
+/**
+ * The key of the requests of "Update All Images Now" on the engine `host` in the gate of a window: one request per
+ * engine at a time. It is never the key of a devspace (operationKey), whose repository has a slash before the `#`.
+ */
+function monitorRequestKey(host: string): string {
+  return `${MONITOR_REQUEST_KEY}${host}`;
+}
+
 /** The checks of the container before the window connects (readyForWindow). */
 const READY_CHECKS = 5;
 const READY_POLL_MS = 1_000;
@@ -1135,7 +1146,9 @@ export class Controller implements vscode.Disposable {
    * started, a Podman engine behind the Docker CLI is refused, and an SSH host is checked. After a Docker start, the
    * progress names the next step (sendingRequest), so that it does not say "Starting Docker" until the Monitor took the
    * request. The progress can be cancelled, as the one of Start: a cancel during the Docker start sends the Monitor no
-   * request and shows nothing.
+   * request and shows nothing. The progress runs in the gate of this window, with the key of the engine
+   * (monitorRequestKey): a second request for the engine is not started while it runs (logged), and the removal of
+   * Devspaces from an engine in this window is refused (runningOperation).
    */
   async updateImagesNow(): Promise<void> {
     const update = this.deps.updateImagesNow;
@@ -1149,22 +1162,28 @@ export class Controller implements vscode.Disposable {
     if (!(await this.beforeUserFlow('Update All Images Now'))) return;
     const engine = describeDockerHost(target.host);
     const startDocker = this.deps.startDocker;
-    await runWithProgress({
-      title: ControllerTexts.requestingImageUpdate(engine),
-      cancellable: true,
-      task: async (progress, signal) => {
-        let started = false;
-        const onStarting = (): void => {
-          started = true;
-          progress.step('startingDocker');
-        };
-        await startDocker?.({ onStarting, signal });
-        if (signal.aborted) throw new UserFacingError('cancelled', PipelineTexts.cancelled);
-        // A Docker that runs already showed no step, and shows none now.
-        if (started) progress.step('sendingRequest');
-        await update(target, signal);
-      },
+    const outcome = await this.gate.run(monitorRequestKey(target.host), 'Update All Images Now', async () => {
+      await runWithProgress({
+        title: ControllerTexts.requestingImageUpdate(engine),
+        cancellable: true,
+        task: async (progress, signal) => {
+          let started = false;
+          const onStarting = (): void => {
+            started = true;
+            progress.step('startingDocker');
+          };
+          await startDocker?.({ onStarting, signal });
+          if (signal.aborted) throw new UserFacingError('cancelled', PipelineTexts.cancelled);
+          // A Docker that runs already showed no step, and shows none now.
+          if (started) progress.step('sendingRequest');
+          await update(target, signal);
+        },
+      });
     });
+    if (!outcome.started) {
+      this.logger.info(`Update All Images Now on ${engine} was not started: an earlier request there is still running.`);
+      return;
+    }
     this.logger.info(`The Monitor on ${engine} took the request of "Update All Images Now".`);
     this.inform(ControllerTexts.imagesUpdatingNow(engine));
   }
@@ -1483,12 +1502,14 @@ export class Controller implements vscode.Disposable {
 
   /**
    * An operation that runs: any operation of this window (its gate), or one of another live window on a devspace of
-   * `devspaces` (its busy mark). The name of the operation and of its repository; undefined when none runs.
+   * `devspaces` (its busy mark). The name of the operation and of its repository; undefined when none runs. A request
+   * of "Update All Images Now" (monitorRequestKey) has no repository.
    */
-  private async runningOperation(devspaces: readonly Devspace[]): Promise<{ operation: string; repository: string } | undefined> {
+  private async runningOperation(devspaces: readonly Devspace[]): Promise<{ operation: string; repository?: string } | undefined> {
     for (const key of this.gate.keys()) {
       const label = this.gate.runningFor(key);
       if (label === undefined) continue;
+      if (key.startsWith(MONITOR_REQUEST_KEY)) return { operation: label };
       const devspace = devspaces.find((candidate) => this.operationKey(this.devspaceTarget(candidate)).toLowerCase() === key);
       return { operation: label, repository: devspace !== undefined ? this.shownName(this.devspaceTarget(devspace)) : key.split('#')[0] };
     }
@@ -1521,7 +1542,8 @@ export class Controller implements vscode.Disposable {
     }
     const running = await this.runningOperation(here);
     if (running !== undefined) {
-      this.logger.info(`Devspaces is not removed from ${engine}: ${running.operation} of ${running.repository} is still running.`);
+      const operation = running.repository !== undefined ? `${running.operation} of ${running.repository}` : running.operation;
+      this.logger.info(`Devspaces is not removed from ${engine}: ${operation} is still running.`);
       this.warn(ControllerTexts.removeWhileOperation(running.operation, running.repository));
       return true;
     }
