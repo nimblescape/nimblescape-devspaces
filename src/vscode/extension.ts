@@ -90,7 +90,7 @@ import {
 import { Sidebar } from './sidebar';
 import { DevspaceStatusBar } from './statusBar';
 import { Throttle } from './tasks';
-import { REPOSITORIES_VIEW_ID, RepositoriesTreeProvider, expandAll, type TreeNode } from './treeView';
+import { REPOSITORIES_VIEW_ID, RepositoriesTreeProvider, expandAll, revealRow, type TreeNode } from './treeView';
 
 /** A window that gets the focus refreshes the sidebar at most this often. */
 const FOCUS_REFRESH_INTERVAL_MS = 15_000;
@@ -693,6 +693,7 @@ async function activateExtension(
     repositoryGroupsEditor,
     viewVisible: () => view.visible,
     expandAll: () => expandAll(view, tree.getModel()),
+    revealRow: (rowId) => revealRow(view, tree, rowId),
     development: context.extensionMode === vscode.ExtensionMode.Development,
     dockerTargets: targets,
     remoteDocker: new RemoteDockerCommands({
@@ -752,6 +753,9 @@ async function activateExtension(
     controller,
     ...controller.registerCommands(),
     controller.watchDisconnectRequests(),
+    // Enter on an owner or a group opens or closes it and runs no command (Controller.rowEnter).
+    view.onDidExpandElement(() => controller.nodeToggled()),
+    view.onDidCollapseElement(() => controller.nodeToggled()),
     // The first load shows the repositories as they arrive.
     discovery.onPartialResult((result) => sidebar.onPartialResult(result)),
   );

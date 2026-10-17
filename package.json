@@ -658,42 +658,48 @@
       {
         "command": "devspaces.rowEnter",
         "key": "enter",
-        "when": "focusedView == devspaces.repositories && listFocus && !inputFocus && !treestickyScrollFocused && !treeElementCanExpand && !treeElementCanCollapse"
+        "when": "focusedView == devspaces.repositories && listFocus && !inputFocus && !treestickyScrollFocused"
       }
     ],
     "configuration": {
       "title": "Devspaces",
       "properties": {
         "devspaces.reopenLastOnStartup": {
+          "order": 1,
           "type": "boolean",
           "default": true,
           "markdownDescription": "When VS Code starts with an empty window, open the devspace you used last, unless you stopped it with **Stop**."
         },
         "devspaces.openInNewWindow": {
+          "order": 2,
           "type": "boolean",
           "default": false,
           "scope": "application",
           "markdownDescription": "Where **Start** opens a devspace.\n\n- On: in a new window; the current window keeps its devspace (an empty window is used directly)\n- Off: in the current window\n\nThe context menu always offers the other choice. A devspace that is already open in a window is never opened twice: that window comes to the front."
         },
         "devspaces.defaultImage": {
+          "order": 3,
           "type": "string",
           "scope": "application",
           "default": "",
           "markdownDescription": "An image, for example `ghcr.io/majikmate/devcontainer-base:latest`, that a devspace can start from. A repository with a Dev Container configuration gets a `default` row, its own devspace; one without is listed too and starts from the image. Empty: no default image; only repositories with a configuration are listed.\n\n[Default image in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#default-image)"
         },
         "devspaces.startWithDefaultImage": {
+          "order": 4,
           "type": "boolean",
           "scope": "application",
           "default": true,
-          "markdownDescription": "Only with **Default Image** set: the place of the `default` row among the child rows of a repository.\n\n- On: the `default` row comes first, before the rows of the configurations\n- Off: the `default` row comes last\n\nEvery row keeps its own **Start**; the setting changes the order only."
+          "markdownDescription": "Only with **Default Image** set: the place of the `default` row among the child rows of a repository, and what a double-click on the repository starts.\n\n- On: the `default` row comes first, before the rows of the configurations, and a double-click on the repository starts the default image\n- Off: the `default` row comes last, and a double-click on the repository starts its first configuration\n\nEvery row keeps its own **Start**."
         },
         "devspaces.stopOnClose": {
+          "order": 5,
           "type": "boolean",
           "scope": "application",
           "default": true,
           "markdownDescription": "Stop a devspace's container 5 minutes after its last window closes (enough for a window reload).\n\n- Off: every devspace keeps running until you stop it\n- To keep only some running, use **Keep Running When Closed** on their rows"
         },
         "devspaces.stopAfterMinutes": {
+          "order": 6,
           "type": "number",
           "scope": "application",
           "default": 10,
@@ -702,6 +708,7 @@
           "markdownDescription": "Minutes without any sign from a window before the Monitor stops the container anyway.\n\nCovers the cases where the window cannot say goodbye: this computer sleeps or goes offline, or VS Code crashes. Devspaces that keep running when closed are never stopped."
         },
         "devspaces.cacheUpdateSchedule": {
+          "order": 9,
           "type": "string",
           "scope": "application",
           "default": "7 6 * * *",
@@ -716,17 +723,20 @@
           "markdownDescription": "When the Monitor on each Docker engine updates the images, the VS Code server and the extensions of your devspaces: a cron expression in your time zone, with at least 5 minutes between two of its times, for example `7 6 * * *` (daily at 06:07, the default), or the minutes between two runs (5 to 1440).\n\n[The background run in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#the-background-run)"
         },
         "devspaces.stopMonitorWhenIdle": {
+          "order": 10,
           "type": "boolean",
           "scope": "application",
           "default": false,
           "markdownDescription": "End the Monitor container of a Docker engine, local or remote, when no devspace has run there for 5 minutes; the next start starts it again. Off: the first Start or Rebuild on an engine, or **Update All Images Now** there, asks whether the Monitor keeps running there; until you answer, it ends when idle.\n\n[The background run in the user guide](https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/guide.md#the-background-run)"
         },
         "devspaces.updateImagesOnConnect": {
+          "order": 7,
           "type": "boolean",
           "default": true,
           "markdownDescription": "At each open, check whether the devspace's base image or Features have a newer version, and if so update the devspace (your files are kept).\n\nOff: the devspace keeps its image until you choose **Rebuild**."
         },
         "devspaces.updateContainer": {
+          "order": 8,
           "type": "string",
           "scope": "application",
           "enum": [
@@ -741,12 +751,14 @@
           ]
         },
         "devspaces.respectShutdownActionNone": {
+          "order": 11,
           "type": "boolean",
           "scope": "application",
           "default": false,
           "markdownDescription": "Keep a devspace running after its window closes when its `devcontainer.json` says `\"shutdownAction\": \"none\"`.\n\nOff (default): that line is ignored and **Stop On Close** applies."
         },
         "devspaces.owners": {
+          "order": 12,
           "type": "array",
           "items": {
             "type": "string"
@@ -755,21 +767,25 @@
           "markdownDescription": "Organizations or accounts whose repositories the sidebar lists.\n\n- Empty: all repositories you can access\n- Or use **Select Organizations…** (filter icon of the sidebar)\n\nExample: `[\"majikmate\", \"acme\"]`"
         },
         "devspaces.includeArchived": {
+          "order": 13,
           "type": "boolean",
           "default": false,
           "markdownDescription": "List archived repositories in the sidebar."
         },
         "devspaces.includeForks": {
+          "order": 14,
           "type": "boolean",
           "default": true,
           "markdownDescription": "List forked repositories in the sidebar."
         },
         "devspaces.showOnlyDevspaces": {
+          "order": 15,
           "type": "boolean",
           "default": false,
           "markdownDescription": "List only the repositories that have a devspace, whatever its state. **Show Only Devspaces** and **Show All Repositories** in the title bar of the view switch it."
         },
         "devspaces.refreshIntervalMinutes": {
+          "order": 16,
           "type": "number",
           "default": 60,
           "minimum": 1,
@@ -777,6 +793,7 @@
           "markdownDescription": "Minutes between the background updates of the repository list from GitHub."
         },
         "devspaces.hostAccessChecksOff": {
+          "order": 17,
           "type": "array",
           "items": {
             "type": "string",
@@ -788,6 +805,7 @@
           "markdownDescription": "Repositories (`owner/name`) that may use the host of their Docker engine. Only for repositories you fully trust.\n\n- Allows bind mounts, the Docker socket (control of every devspace), privileged mode, devices, GPUs, ports on all addresses\n- The account checks stay on\n- Or use **Turn Off Host Access Checks…** in the context menu of a repository\n\nExample: `[\"majikmate/infra-tools\"]`"
         },
         "devspaces.repositoryGroups": {
+          "order": 18,
           "type": "array",
           "scope": "application",
           "default": [],

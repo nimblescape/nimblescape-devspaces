@@ -42,7 +42,7 @@ Devspaces lists the GitHub repositories that you can access and that contain a D
 
 1. Select the **Devspaces** icon in the activity bar.
 2. Select **Sign in with GitHub**. Your repositories with a Dev Container configuration appear, grouped by owner (with a default image, also those without one).
-3. Select **Start** on a repository, double-click it, or select it and press `Enter`. A repository with several sources (several configurations, or a configuration and a default image) has a child row per source, each its own devspace. The first start takes a few minutes; later starts take seconds.
+3. Select **Start** on a repository, double-click it, or select it and press `Enter`. A repository with several sources (several configurations, or a configuration and a default image) has a child row per source, each its own devspace; a double-click on the repository starts its first child row. The first start takes a few minutes; later starts take seconds.
 
 Switch between devspaces with **Devspaces: Switch Devspace…** or the status bar. On macOS, the key of the command is `Cmd+Alt+E`. On Windows and Linux, the command has no key, because on many Windows keyboards `Ctrl+Alt+E` types a character such as `€`. To set a key, open **Keyboard Shortcuts** (`Ctrl+K Ctrl+S`), search for `Devspaces: Switch Devspace`, select the row, press `Enter`, press your keys, and press `Enter` again.
 
@@ -50,7 +50,7 @@ Switch between devspaces with **Devspaces: Switch Devspace…** or the status ba
 
 | Setting | Default | |
 |---|---|---|
-| `devspaces.defaultImage` | `""` | An image that every repository can start from next to its configuration: a repository with a configuration gets a `default` row next to its configuration rows, its own devspace; a repository without a configuration starts from the image. `devspaces.startWithDefaultImage` puts the `default` row first (on) or last (off). |
+| `devspaces.defaultImage` | `""` | An image that every repository can start from next to its configuration: a repository with a configuration gets a `default` row next to its configuration rows, its own devspace; a repository without a configuration starts from the image. `devspaces.startWithDefaultImage` puts the `default` row first (on) or last (off); a double-click on the repository starts its first row. |
 | `devspaces.stopOnClose` | `true` | Stop a devspace 5 minutes after its last window closes. |
 | `devspaces.updateContainer` | `notify` | At a start with a newer image: `notify` (Continue/Cancel) or `ask` (Update Now/Later). |
 | `devspaces.cacheUpdateSchedule` | `7 6 * * *` | When the background updates run: a cron expression in your time zone, or minutes. |

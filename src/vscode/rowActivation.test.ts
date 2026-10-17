@@ -101,15 +101,34 @@ describe('normalizeListOpenMode', () => {
 describe('activatedRow', () => {
   it('takes the id and the Start flag of a repository row', () => {
     const row = { kind: 'repository', id: 'repo:acme/api', repository: 'acme/api' };
-    expect(activatedRow({ ...row, actions: rowActions('stopped', undefined) })).toEqual({ id: 'repo:acme/api', canStart: true });
-    expect(activatedRow({ ...row, actions: rowActions('connected', undefined) })).toEqual({ id: 'repo:acme/api', canStart: false });
-    expect(activatedRow({ ...row, actions: rowActions('updating', undefined) })).toEqual({ id: 'repo:acme/api', canStart: false });
-    expect(activatedRow(row)).toEqual({ id: 'repo:acme/api', canStart: true });
+    const stopped = { ...row, actions: rowActions('stopped', undefined) };
+    expect(activatedRow(stopped)).toStrictEqual({ id: 'repo:acme/api', canStart: true, start: stopped });
+    const connected = { ...row, actions: rowActions('connected', undefined) };
+    expect(activatedRow(connected)).toEqual({ id: 'repo:acme/api', canStart: false, start: connected });
+    const updating = { ...row, actions: rowActions('updating', undefined) };
+    expect(activatedRow(updating)).toEqual({ id: 'repo:acme/api', canStart: false, start: updating });
+    expect(activatedRow(row)).toEqual({ id: 'repo:acme/api', canStart: true, start: row });
+  });
+
+  it('takes the id of a repository with several sources, and its first child row to start', () => {
+    const first = { kind: 'repository', id: 'repo:acme/api:default', repository: 'acme/api', actions: rowActions('stopped', undefined) };
+    const second = { kind: 'repository', id: 'repo:acme/api:config', repository: 'acme/api', actions: rowActions(undefined, undefined) };
+    const node = { kind: 'repositoryNode', id: 'repo:acme/api', repository: 'acme/api', children: [first, second] };
+    expect(activatedRow(node)).toEqual({ id: 'repo:acme/api', canStart: true, start: first, childId: 'repo:acme/api:default' });
+    // The first child row shows no Start: the node starts nothing either.
+    const updating = { ...first, actions: rowActions('updating', undefined) };
+    expect(activatedRow({ ...node, children: [updating, second] })).toEqual({ id: 'repo:acme/api', canStart: false, start: updating, childId: 'repo:acme/api:default' });
   });
 
   it('ignores everything else', () => {
     for (const argument of [undefined, null, 'repo:acme/api', { kind: 'owner', id: 'owner:acme' }, { kind: 'repository', id: '' }, { kind: 'repository' }]) {
       expect(activatedRow(argument)).toBeUndefined();
     }
+    // A node without a child row, or whose first child is no repository row.
+    const node = { kind: 'repositoryNode', id: 'repo:acme/api', repository: 'acme/api' };
+    for (const children of [undefined, [], [{ kind: 'group', id: 'group:acme/x' }], [{ ...node, children: [] }]]) {
+      expect(activatedRow({ ...node, children }), JSON.stringify(children)).toBeUndefined();
+    }
+    expect(activatedRow({ kind: 'repositoryNode', id: '', children: [{ kind: 'repository', id: 'repo:acme/api:default' }] })).toBeUndefined();
   });
 });

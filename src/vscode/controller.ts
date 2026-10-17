@@ -148,6 +148,12 @@ export interface ControllerDeps {
   /** Expand All of the view (treeView.ts expandAll). Default: nothing. */
   expandAll?: () => Promise<void>;
   /**
+   * Shows a row of the view and opens its parents (treeView.ts revealRow): the child row that a double-click or Enter on
+   * a repository with several sources starts. VS Code also opens or closes such a repository on a double-click, so the
+   * row could be hidden. Default: nothing.
+   */
+  revealRow?: (rowId: string) => Promise<void>;
+  /**
    * The current Docker host, read at the start of each operation (the current Docker context). Default: the local
    * Docker.
    */
@@ -868,24 +874,30 @@ export class Controller implements vscode.Disposable {
   /**
    * The command of a repository row: VS Code runs it on a click, Enter, or Space in the row. A double-click or Enter
    * (rowEnter) runs Start with the row, the same as its Start button (rowActivation.ts); a single click only selects the
-   * row. Nothing happens where the row shows no Start: this window is connected to the devspace, or it is updating.
+   * row. A repository with several sources starts its first child row: the row of the default image while the setting
+   * startWithDefaultImage is on, else the row of its first configuration; the view shows that row (revealRow). Nothing
+   * happens where that row shows no Start: this window is connected to the devspace, or it is updating.
    */
   async rowActivated(argument: unknown): Promise<void> {
     const row = activatedRow(argument);
-    const parsed = parseCommandArgument(argument);
-    if (!row || parsed.kind !== 'row') return;
+    if (!row) return;
+    const parsed = parseCommandArgument(row.start);
+    if (parsed.kind !== 'row') return;
     const openMode = (this.deps.listOpenMode ?? readListOpenMode)();
     if (!this.rowActivations.activate(row.id, openMode) || !row.canStart) return;
     // The row may be older than the connection of this window; a lost connection shows Start (Reconnect).
     if (parsed.devspaceId !== undefined && this.current?.devspace.id === parsed.devspaceId && !this.current.lost) return;
+    // A row that the view no longer has is not shown; the start does not wait for the view.
+    if (row.childId !== undefined) void this.deps.revealRow?.(row.childId).catch(() => undefined);
     await this.withDockerTarget(() => this.start(parsed));
   }
 
   /**
-   * Enter on a row without children in the view (the keybinding of package.json). `list.select` of VS Code selects the
-   * focused row and runs its command, as Enter does without this keybinding; marked as Enter, the command of a
-   * repository row runs Start at once (rowActivated). When list.select fails (a later VS Code may remove or rename
-   * it), Enter does nothing: no message, and one line in the log per window.
+   * Enter in the view (the keybinding of package.json). `list.select` of VS Code selects the focused row and runs its
+   * command, as Enter does without this keybinding; marked as Enter, the command of a repository row runs Start at once
+   * (rowActivated). On an owner or a group, which have no command, list.select opens or closes it (nodeToggled). When
+   * list.select fails (a later VS Code may remove or rename it), Enter does nothing: no message, and one line in the log
+   * per window.
    */
   async rowEnter(): Promise<void> {
     this.rowActivations.enter();
@@ -897,6 +909,14 @@ export class Controller implements vscode.Disposable {
       this.listSelectFailed = true;
       this.logger.warn(`Enter on a row of the view did nothing, because the VS Code command list.select failed: ${errorMessage(error)}`);
     }
+  }
+
+  /**
+   * A node of the view opened or closed (TreeView.onDidExpandElement and onDidCollapseElement). Enter on an owner or a
+   * group does this and runs no command, so a click on a repository row right after it only selects that row.
+   */
+  nodeToggled(): void {
+    this.rowActivations.forgetEnter();
   }
 
   /** Stop: the container stops at once; a connected window closes its connection first. */

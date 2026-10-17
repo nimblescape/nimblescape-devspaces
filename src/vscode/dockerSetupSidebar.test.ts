@@ -107,12 +107,19 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** The events of a TreeView when a node opens or closes, which the activation listens to. */
+function nodeEvents(): { onDidExpandElement: unknown; onDidCollapseElement: unknown } {
+  return { onDidExpandElement: new fakeVscode.EventEmitter<unknown>().event, onDidCollapseElement: new fakeVscode.EventEmitter<unknown>().event };
+}
+
 describe('no message at activation when Docker is missing', () => {
   it('activates with the sidebar visible and no Docker CLI without any notification, also when the view is shown again', async () => {
     vi.useRealTimers();
     const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-activation-test-'));
     const visibility = new fakeVscode.EventEmitter<{ visible: boolean }>();
-    const view = { visible: true, onDidChangeVisibility: visibility.event, dispose() {} };
+    const expanded = new fakeVscode.EventEmitter<unknown>();
+    const collapsed = new fakeVscode.EventEmitter<unknown>();
+    const view = { visible: true, onDidChangeVisibility: visibility.event, onDidExpandElement: expanded.event, onDidCollapseElement: collapsed.event, dispose() {} };
     const window = fakeVscode.window as unknown as Record<string, unknown>;
     window.createTreeView = vi.fn(() => view);
     window.onDidChangeWindowState = vi.fn(() => ({ dispose() {} }));
@@ -146,6 +153,12 @@ describe('no message at activation when Docker is missing', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(foundDockerCli).toHaveBeenCalled();
+      // A node of the view that opens or closes tells the controller (an Enter on an owner or a group runs no command).
+      const toggled = vi.spyOn(Controller.prototype, 'nodeToggled');
+      expanded.fire({ element: { kind: 'owner', id: 'owner:acme' } });
+      collapsed.fire({ element: { kind: 'owner', id: 'owner:acme' } });
+      expect(toggled).toHaveBeenCalledTimes(2);
+      toggled.mockRestore();
       // The HTTPS requests name the version of the manifest, which the activation took (src/core/http.ts).
       const { userAgent } = await import('../core/http');
       const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { version: string };
@@ -184,7 +197,7 @@ describe('no message at activation when Docker is missing', () => {
   it('lets the Docker setup look at a view that became visible while the activation waited, before its listener existed', async () => {
     vi.useRealTimers();
     const storage = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-activation-test-'));
-    const view = { visible: false, onDidChangeVisibility: new fakeVscode.EventEmitter<{ visible: boolean }>().event, dispose() {} };
+    const view = { visible: false, onDidChangeVisibility: new fakeVscode.EventEmitter<{ visible: boolean }>().event, ...nodeEvents(), dispose() {} };
     // The view becomes visible while the activation waits for the first use (after the setup looked at the view):
     // VS Code sends that event once, before the listener exists, so the listener never hears it.
     let visibleAtInitialize: boolean | undefined;
@@ -300,7 +313,7 @@ describe('nothing before the first use of Devspaces', () => {
     prepare(storage);
     foundDockerCli.mockReturnValue(docker);
     spawned.length = 0;
-    const view = { visible: true, onDidChangeVisibility: new fakeVscode.EventEmitter<{ visible: boolean }>().event, dispose() {} };
+    const view = { visible: true, onDidChangeVisibility: new fakeVscode.EventEmitter<{ visible: boolean }>().event, ...nodeEvents(), dispose() {} };
     const window = fakeVscode.window as unknown as Record<string, unknown>;
     window.createTreeView = vi.fn(() => view);
     window.onDidChangeWindowState = vi.fn(() => ({ dispose() {} }));
