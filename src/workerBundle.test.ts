@@ -50,7 +50,13 @@ describe("the worker's bundle", () => {
     expect(inputs.filter((input) => input.includes(':'))).toEqual([]);
     expect(text).not.toContain('devspace:monitor-script');
     expect(text).not.toContain('devspace:analysis-script');
-    expect(text).not.toMatch(/\beval:\s*(?:true|!0)/);
+  });
+
+  // The bundle gives its fixed scripts to `node -e` or `sh -c` and runs no text as code itself. The only text "eval" in
+  // the bundle today is `[eval` in a regular expression (pipeLoader.ts), which this check does not match.
+  it('runs nothing with eval, Function or the module vm', () => {
+    // eval( and (0, eval)( | Worker with { eval: true } | Function( and new Function( | require("vm")
+    expect(text).not.toMatch(/\beval\s*\)?\s*\(|\beval:\s*(?:true|!0)|\bFunction\s*\(|require\("(?:node:)?vm"\)/);
   });
 
   it('holds the pipeline and the workspace helper (the check below is not empty by accident)', () => {
