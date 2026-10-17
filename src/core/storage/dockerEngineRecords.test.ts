@@ -376,4 +376,100 @@ describe('DockerEngineRecords: the lock folder docker-engines.lock (several wind
     // The lock of the other window stays.
     expect(fs.existsSync(quick.lockDir)).toBe(true);
   });
+
+  // The token of the lock folder (withLockFolder), as for registry.json. The heartbeat of the first window runs every 15
+  // seconds only, so its lock folder gets old as that of a window that stalls (for example while the computer sleeps);
+  // the second window takes a folder older than 100 ms for stale.
+  describe('a window that stalls while it holds the lock', () => {
+    const OLD_BOX = { host: 'old-box', monitorAnsweredAt: NOW - 1 };
+    const until = async (condition: () => boolean): Promise<void> => {
+      while (!condition()) await new Promise((resolve) => setTimeout(resolve, 10));
+    };
+    const temporaryFiles = () => fs.readdirSync(dir).filter((name) => name.endsWith('.tmp'));
+    let warnings: string[];
+    let first: DockerEngineRecords;
+    let second: DockerEngineRecords;
+
+    beforeEach(() => {
+      fs.writeFileSync(records.file, JSON.stringify({ engines: [OLD_BOX] }));
+      warnings = [];
+      const logger = { info: () => {}, warn: (text: string) => void warnings.push(text), error: () => {}, output: () => {} } as unknown as Logger;
+      first = new DockerEngineRecords(records.file, { lockStaleMs: 60_000, lockTimeoutMs: 5_000, logger });
+      second = new DockerEngineRecords(records.file, { lockStaleMs: 100, lockTimeoutMs: 5_000 });
+    });
+
+    // Mutation: a change without the checks of the token writes its old copy, and the answer of the second window is
+    // lost.
+    it('writes nothing over the change of the window that took the lock over, and runs its change again', async () => {
+      // The first window read the file under its lock, and stalls before it uses what it read.
+      let stalled = false;
+      let release: () => void = () => undefined;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      vi.spyOn(fs.promises, 'readFile').mockImplementation((async (file: fs.PathLike, options?: unknown) => {
+        const text = await realReadFile.call(fs.promises, file, options as BufferEncoding);
+        if (file === records.file && !stalled) {
+          stalled = true;
+          await released;
+        }
+        return text;
+      }) as typeof fs.promises.readFile);
+      const removal = first.setRemoved('build-box', NOW);
+      await until(() => stalled);
+      await second.recordMonitorAnswer('', NOW);
+      release();
+      await removal;
+      expect(await records.read()).toEqual([OLD_BOX, { host: '', monitorAnsweredAt: NOW }, { host: 'build-box', removedAt: NOW }]);
+      expect(warnings).toEqual([expect.stringContaining('Another process took over the lock')]);
+      expect(fs.existsSync(records.lockDir)).toBe(false);
+    });
+
+    // Mutation: a write without the check right before the rename writes its old copy.
+    it('checks the lock again right before the rename: a takeover while the temporary file is written writes nothing', async () => {
+      // The first window stalls right after it wrote its temporary file, after its first check of the token.
+      const realWriteFile = fs.promises.writeFile;
+      let stalled = false;
+      let release: () => void = () => undefined;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (file, data, options) => {
+        await realWriteFile(file, data, options);
+        if (!stalled && typeof file === 'string' && path.basename(file).startsWith('.docker-engines.json.')) {
+          stalled = true;
+          await released;
+        }
+      });
+      const removal = first.setRemoved('build-box', NOW);
+      await until(() => stalled);
+      expect(temporaryFiles()).toHaveLength(1);
+      await second.recordMonitorAnswer('', NOW);
+      release();
+      await removal;
+      expect(await records.read()).toEqual([OLD_BOX, { host: '', monitorAnsweredAt: NOW }, { host: 'build-box', removedAt: NOW }]);
+      expect(warnings).toEqual([expect.stringContaining('Another process took over the lock')]);
+      expect(temporaryFiles()).toEqual([]);
+      expect(fs.existsSync(records.lockDir)).toBe(false);
+    });
+
+    // The outcome of the second run counts: here the other window cleared the mark meanwhile.
+    it('says from the run after a lost lock whether it cleared the mark', async () => {
+      fs.writeFileSync(records.file, JSON.stringify({ engines: [OLD_BOX, { host: 'build-box', removedAt: NOW - 1 }] }));
+      let stalled = false;
+      let release: () => void = () => undefined;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      vi.spyOn(fs.promises, 'readFile').mockImplementation((async (file: fs.PathLike, options?: unknown) => {
+        const text = await realReadFile.call(fs.promises, file, options as BufferEncoding);
+        if (file === records.file && !stalled) {
+          stalled = true;
+          await released;
+        }
+        return text;
+      }) as typeof fs.promises.readFile);
+      const clearing = first.clearRemoved('build-box', () => true);
+      await until(() => stalled);
+      await expect(second.clearRemoved('build-box', () => true)).resolves.toEqual({ cleared: true });
+      release();
+      await expect(clearing).resolves.toEqual({ cleared: false });
+      expect(await records.read()).toEqual([OLD_BOX]);
+      expect(warnings).toEqual([expect.stringContaining('Another process took over the lock')]);
+    });
+  });
 });

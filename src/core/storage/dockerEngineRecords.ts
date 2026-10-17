@@ -13,13 +13,14 @@
 // retries of a transient error of Windows (a virus scanner holds the file for a moment), so that a change never writes
 // over the records of other engines that it could not read. Several windows change the file: every change runs under
 // the lock folder next to it (`docker-engines.lock`, as registry.json does), so no change of another window is lost,
-// such as the removal mark. No `vscode`.
+// such as the removal mark, also not when a window stalls while it holds the lock (the token of withLockFolder). No
+// `vscode`.
 import * as fs from 'fs';
 import * as path from 'path';
 import type { WindowMark } from '../busy';
 import { silentLogger, type Logger } from '../ports';
 import { writeJsonAtomic } from './atomicJson';
-import { DEFAULT_LOCK_STALE_MS, DEFAULT_LOCK_TIMEOUT_MS, withLockFolder, type LockTimings } from './lockFolder';
+import { DEFAULT_LOCK_STALE_MS, DEFAULT_LOCK_TIMEOUT_MS, LockLostError, withLockFolder, type LockTimings } from './lockFolder';
 import { parseJson, readTextFile, retryTransient } from './paths';
 
 /**
@@ -155,7 +156,7 @@ export class DockerEngineRecords {
       start = { started: true, before: record };
       return { host, removedAt, removing: removal };
     });
-    // change() runs `update` once before it resolves.
+    // change() runs `update` before it resolves (once more after a lost lock: the last run counts).
     return start as RemovalStart;
   }
 
@@ -189,6 +190,8 @@ export class DockerEngineRecords {
   async clearRemoved(host: string, runs: (removal: EngineRemoval) => boolean): Promise<{ cleared: boolean; other?: EngineRemoval }> {
     let outcome: { cleared: boolean; other?: EngineRemoval } = { cleared: false };
     await this.change(host, (record) => {
+      // Set on each run: after a lost lock, the second run counts (change).
+      outcome = { cleared: false };
       if (record.removing !== undefined && runs(record.removing)) {
         outcome = { cleared: false, other: record.removing };
         return undefined;
@@ -208,22 +211,41 @@ export class DockerEngineRecords {
    * with nothing but its host is left out, and `undefined` writes nothing. The read and the write run under the lock
    * folder `lockDir`, so a change of another window between them is not lost. Throws, and writes nothing, when the lock
    * is not free within the wait or the file cannot be read (read). A file that is not valid knows no engine: a copy of
-   * it is kept first, as registry.json does, so that a repair by hand can bring back what it held.
+   * it is kept first, as registry.json does, so that a repair by hand can bring back what it held. If another process
+   * took over the lock meanwhile (this process stalled longer than the stale time, see withLockFolder), nothing is
+   * written and the whole change runs once more on the current records, as for registry.json: `update` can run twice,
+   * and the outcome of its last run counts.
    */
   private async change(host: string, update: (record: DockerEngineRecord) => DockerEngineRecord | undefined): Promise<void> {
-    await withLockFolder(
-      this.lockDir,
-      async () => {
-        const { records, invalid } = await this.readFile();
-        const others = records.filter((record) => record.host !== host);
-        const next = update(records.find((record) => record.host === host) ?? { host });
-        if (next === undefined) return;
-        if (invalid) await this.keepCopy();
-        const engines = Object.keys(next).length > 1 ? [...others, next] : others;
-        await retryTransient(() => writeJsonAtomic(this.file, { engines } satisfies DockerEnginesFile));
-      },
-      this.lockTimings,
-    );
+    const run = () => withLockFolder(this.lockDir, (held) => this.changeLocked(host, update, held), this.lockTimings);
+    try {
+      await run();
+    } catch (error) {
+      if (!(error instanceof LockLostError)) throw error;
+      this.logger.warn(`${error.message} The change runs again on the current records.`);
+      await run();
+    }
+  }
+
+  /** The read and the write of `change`, while this process holds the lock folder (`held`: it still does). */
+  private async changeLocked(
+    host: string,
+    update: (record: DockerEngineRecord) => DockerEngineRecord | undefined,
+    held: () => Promise<boolean>,
+  ): Promise<void> {
+    const { records, invalid } = await this.readFile();
+    const others = records.filter((record) => record.host !== host);
+    const next = update(records.find((record) => record.host === host) ?? { host });
+    if (next === undefined) return;
+    // The process that took over the lock read the file before this write: the write would undo its change. The token
+    // is checked before the copy, and again after the temporary file is written, right before the rename.
+    const checkHeld = async (): Promise<void> => {
+      if (!(await held())) throw new LockLostError(this.lockDir);
+    };
+    await checkHeld();
+    if (invalid) await this.keepCopy();
+    const engines = Object.keys(next).length > 1 ? [...others, next] : others;
+    await retryTransient(() => writeJsonAtomic(this.file, { engines } satisfies DockerEnginesFile, { beforeRename: checkHeld }));
   }
 
   /** The records of the file (see read), and whether a file is there that is not valid. */
