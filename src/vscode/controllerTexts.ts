@@ -54,9 +54,12 @@ export const ControllerTexts = {
     `Close the windows of your devspaces on ${engine} first: ${repositories}. Nothing was removed.`,
   /** A window is opening a devspace there (its pending connection file), and no window is connected to it yet. */
   removeWhileOpening: (engine: string, repositories: string) => `A devspace is being opened on ${engine}: ${repositories}. Try again after that. Nothing was removed.`,
-  /** `operation`: the operation that runs, for example Rebuild. */
-  removeWhileOperation: (operation: string, repository: string) =>
-    `${operation} of ${repository} is still running. Try again after it ends. Nothing was removed.`,
+  /**
+   * `operation`: the operation that runs, for example Rebuild, on a devspace of `repository`; without `repository`, a
+   * request of "Update All Images Now" in this window.
+   */
+  removeWhileOperation: (operation: string, repository?: string) =>
+    `${repository !== undefined ? `${operation} of ${repository}` : operation} is still running. Try again after it ends. Nothing was removed.`,
   /** An operation of this window while Devspaces is being removed from an engine. */
   removalRunning: (engine: string) => `Devspaces is being removed from ${engine}. Try again after that.`,
   /**

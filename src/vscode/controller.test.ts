@@ -3287,6 +3287,36 @@ describe('Remove Devspaces from This Docker Engine…', () => {
     expect(startDocker.mock.invocationCallOrder[0]).toBeLessThan(update.mock.invocationCallOrder[0]);
   });
 
+  // The probe of the review: the removal ran while Docker started, and the request then set up the Monitor, the worker
+  // and the volumes there again. Mutation: without the key of the request in the gate, the removal runs.
+  it('refuses the removal in this window while Update All Images Now runs, also while Docker starts', async () => {
+    const update = vi.fn(async (_target: DockerTarget, _signal: AbortSignal) => {});
+    const docker = deferred<void>();
+    const startDocker = vi.fn(() => docker.promise);
+    const fake = removalFake();
+    onBuildBox(fake, BUILD_BOX, { updateImagesNow: update, startDocker });
+    const updating = run('updateImagesNow');
+    await settle(() => startDocker.mock.calls.length === 1, 'the Docker start');
+    await run('removeFromDockerEngine');
+    expect(warningMessages()).toEqual(['Update All Images Now is still running. Try again after it ends. Nothing was removed.']);
+    expect(h.logger.info).toHaveBeenCalledWith('Devspaces is not removed from build-box: Update All Images Now is still running.');
+    expect(fake.deps.engineAnswers).not.toHaveBeenCalled();
+    expect(modals()).toEqual([]);
+    // A second request for the engine does not start while the first one runs.
+    await run('updateImagesNow');
+    expect(startDocker).toHaveBeenCalledTimes(1);
+    expect(h.logger.info).toHaveBeenCalledWith('Update All Images Now on build-box was not started: an earlier request there is still running.');
+    docker.resolve();
+    await updating;
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(infoMessages()).toEqual([ControllerTexts.imagesUpdatingNow('build-box')]);
+    // After the request, the removal runs.
+    fakeVscode.window.showWarningMessage.mockResolvedValueOnce(ControllerTexts.remove);
+    await run('removeFromDockerEngine');
+    expect(fake.deps.engineAnswers).toHaveBeenCalledTimes(1);
+    expect(await h.engineRecords.removed('build-box')).toBe(true);
+  });
+
   it('says in its last message when the removal mark could not be written: background work may come back there', async () => {
     const fake = removalFake();
     onBuildBox(fake);
