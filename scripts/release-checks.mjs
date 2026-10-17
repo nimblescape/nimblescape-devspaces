@@ -28,8 +28,9 @@
 //     than the version and has a release tag. In a dry run, a problem is a warning.
 //   node scripts/release-checks.mjs dry-run
 //     Rule 4 (environment GITHUB_REPOSITORY, GH_TOKEN and HEAD_SHA). A successful dry run of the workflow "Release"
-//     tested the files of the release process as they are at the commit HEAD_SHA. On a pull request (also PR_NUMBER
-//     and HEAD_REF), the check applies only when the pull request changes one of these files.
+//     tested the files of the release process, release.yml, ci.yml and this script, as they are at the commit
+//     HEAD_SHA. On a pull request (also PR_NUMBER and HEAD_REF), the check applies only when the pull request changes
+//     one of these files.
 //
 // The script is the same in every extension repository of nimblescape.
 import { execFileSync } from 'child_process';
@@ -42,8 +43,11 @@ import { fileURLToPath } from 'url';
 export const PUBLISHER = 'nimblescape';
 /** The workflow that runs the release; the only file that may publish (rule 5). */
 export const RELEASE_WORKFLOW = '.github/workflows/release.yml';
-/** The files of the release process: a change to one of them needs a dry run (rule 4). */
-export const RELEASE_FILES = [RELEASE_WORKFLOW, 'scripts/release-checks.mjs'];
+/**
+ * The files of the release process: a change to one of them needs a dry run (rule 4). The release publishes the VSIX
+ * that ci.yml tests and builds.
+ */
+export const RELEASE_FILES = [RELEASE_WORKFLOW, '.github/workflows/ci.yml', 'scripts/release-checks.mjs'];
 /** The end of the run name of a dry run of the workflow "Release" (its `run-name`). */
 export const DRY_RUN_SUFFIX = '(dry run)';
 
@@ -840,6 +844,8 @@ async function checkDryRun() {
     console.log(`The files of the release process at ${head} are the files of the release ${tag}, which passed this check.`);
     return;
   }
+  // The touched files as a text, such as `a, b and c`.
+  const files = touched.length > 1 ? `${touched.slice(0, -1).join(', ')} and ${touched.at(-1)}` : touched.join('');
   const query = 'event=workflow_dispatch&status=success&per_page=100';
   const runs = (await api(`repos/${repository}/actions/workflows/release.yml/runs?${query}`)).workflow_runs;
   const tested = new Set();
@@ -847,11 +853,10 @@ async function checkDryRun() {
     if (tested.has(dryRun.head_sha)) continue;
     tested.add(dryRun.head_sha);
     if ((await blobs(dryRun.head_sha)) === wanted) {
-      console.log(`The dry run ${dryRun.html_url} tested ${touched.join(' and ')} as they are at ${head}.`);
+      console.log(`The dry run ${dryRun.html_url} tested ${files} as they are at ${head}.`);
       return;
     }
   }
-  const files = touched.join(' and ');
   if (number) {
     error(
       `The pull request changes ${files}, and no successful dry run tested them as they are at ${head}. Start the ` +
