@@ -41,6 +41,14 @@ function section(markdown: string, heading: string): string {
   return markdown.slice(start, end < 0 ? undefined : end);
 }
 
+/** The item of a list that starts with `- <start>`, with its nested items, up to the next item of the same level. */
+function item(markdown: string, start: string): string {
+  const begin = markdown.indexOf(`\n- ${start}`);
+  expect(begin, `the item "${start}"`).toBeGreaterThanOrEqual(0);
+  const end = markdown.indexOf('\n- ', begin + 1);
+  return markdown.slice(begin, end < 0 ? undefined : end);
+}
+
 describe('the behaviors of Devspaces at the top of the Marketplace page', () => {
   it('opens the README with the section, which names every scope and links docs/security.md', () => {
     const readme = read('README.md');
@@ -52,6 +60,34 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
       expect(text).toContain(words);
     }
     expect(text).toContain(`(${SECURITY_LINK})`);
+  });
+
+  // When Devspaces works without a click: the activation of every window, the background work after the first
+  // devspace, the reopen at startup and the hourly GitHub refresh. The texts name the defaults of the manifest.
+  it('says when Devspaces works, with the activation and the defaults of the manifest', () => {
+    const { activationEvents, contributes } = JSON.parse(read('package.json')) as {
+      activationEvents: string[];
+      contributes: { configuration: { properties: Record<string, { default?: unknown }> } };
+    };
+    expect(activationEvents).toContain('onStartupFinished');
+    const defaults = contributes.configuration.properties;
+    expect(defaults['devspaces.reopenLastOnStartup']?.default).toBe(true);
+    expect(defaults['devspaces.updateImagesOnConnect']?.default).toBe(true);
+    expect(defaults['devspaces.refreshIntervalMinutes']?.default).toBe(60);
+    const readme = section(read('README.md'), HEADING);
+    const readmeWhen = item(readme, '**When it works.**');
+    for (const words of ['Devspaces starts with every VS Code window', 'opens the devspace that you used last', 'restores the window of a devspace', 'every hour by default']) {
+      expect(readmeWhen).toContain(words);
+    }
+    for (const words of ['Dockerfile and the Features', '`docker exec`']) expect(item(readme, '**Background container.**')).toContain(words);
+    const security = read('docs/security.md');
+    const behaviors = section(security, HEADING);
+    const when = item(behaviors, '**When.**');
+    for (const words of ['`devspaces.reopenLastOnStartup`', '`devspaces.updateImagesOnConnect`', '`devspaces.refreshIntervalMinutes`', '(60 by default)', 'BatchMode=yes', 'restores the window of a devspace', `**Devspaces: ${REMOVE_COMMAND}**`]) {
+      expect(when).toContain(words);
+    }
+    for (const words of ['Dockerfile and the Features', '`docker exec`']) expect(item(behaviors, '**Background container.**')).toContain(words);
+    expect(section(security, 'Stored data')).toContain('`computer.id`');
   });
 
   it('has the section in docs/security.md, as the target of the link', () => {
@@ -87,7 +123,7 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
   it('names the scopes, Docker, the Dev Containers CLI and the background container in the description', () => {
     const { description } = JSON.parse(read('package.json')) as { description: string };
     for (const scope of GITHUB_SCOPES) expect(description).toContain(scope);
-    for (const words of ['Docker', 'Dev Containers CLI', 'install Docker', 'background container']) {
+    for (const words of ['Docker', 'Dev Containers CLI', 'install Docker', 'background container', 'Before your first devspace', 'asks before the background container keeps running', 'a command removes it']) {
       expect(description).toContain(words);
     }
   });
