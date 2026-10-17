@@ -159,7 +159,10 @@ describe('the Markdown pages', () => {
     expect(docs).toEqual(expect.arrayContaining(['architecture.md', 'guide.md', 'security.md']));
   });
 
-  it.each(docs)('docs/%s has no raw tag, so that GitHub shows each placeholder such as `<host>`', (file) => {
-    expect(problems(read(`docs/${file}`), { links: false })).toEqual([]);
+  // The pages that only GitHub shows, where a relative link works: the pages of docs/ and CONTRIBUTING.md.
+  const githubPages = [...docs.map((file) => `docs/${file}`), 'CONTRIBUTING.md'];
+
+  it.each(githubPages)('%s has no raw tag, so that GitHub shows each placeholder such as `<host>`', (file) => {
+    expect(problems(read(file), { links: false })).toEqual([]);
   });
 });
