@@ -75,6 +75,11 @@ export async function removeFile(file: string): Promise<void> {
   await fs.promises.rm(file, { force: true });
 }
 
+/** Synchronous variant for `deactivate()`. */
+export function removeFileSync(file: string): void {
+  fs.rmSync(file, { force: true });
+}
+
 /**
  * Full paths of the `*.json` files in a folder. Temporary files are not included. A missing folder (ENOENT, or ENOTDIR
  * as listNames of paths.ts) gives an empty list. Any other error (permissions, a disk error, a link loop) is thrown: a

@@ -76,7 +76,7 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
     expect(defaults['devspaces.refreshIntervalMinutes']?.default).toBe(60);
     const readme = section(read('README.md'), HEADING);
     const readmeWhen = item(readme, '**When it works.**');
-    for (const words of ['Devspaces starts with every VS Code window', 'opens the devspace that you used last', 'restores the window of a devspace', 'every hour by default']) {
+    for (const words of ['Devspaces starts with every VS Code window', 'the window that you closed last was connected to a devspace', 'restores the window of a devspace', 'every hour by default']) {
       expect(readmeWhen).toContain(words);
     }
     for (const words of ['Dockerfile and the Features', '`docker exec`']) expect(item(readme, '**Background container.**')).toContain(words);

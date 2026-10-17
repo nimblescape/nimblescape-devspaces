@@ -320,8 +320,10 @@ describe('SessionCoordinator', () => {
   });
 
   // A window that works without Devspaces on an engine with the removal mark: other windows see it, but its devspace
-  // gets no heartbeat, no release and no reopen record.
+  // gets no heartbeat, no release and no reopen record. As any window without a devspace, it removes the record of a
+  // window that closed before it.
   it('setPlainDevspace writes the devspace apart, at once and with each update; no heartbeat, no release, no reopen record', async () => {
+    h.sessionFiles.writeReopenSync({ devspaceId: ID_B, closedAt: iso(T0 - 60_000) });
     const coordinator = h.create({ heartbeatMs: 20 });
     h.coordinator.dispose();
     h.coordinator = coordinator;
@@ -372,16 +374,58 @@ describe('SessionCoordinator', () => {
     expect(await h.sessionFiles.readReopen()).toEqual({ devspaceId: ID_A, closedAt: iso(T0 + 5000) });
   });
 
-  it('deactivateSync writes no reopen record for a window without a devspace', async () => {
+  // The reopen at startup opens a devspace only when the window that closed last was connected to it: a window without
+  // a devspace that closes after it removes the record.
+  it('deactivateSync removes the reopen record of an earlier window when the window has no devspace', async () => {
+    h.sessionFiles.writeReopenSync({ devspaceId: ID_A, closedAt: iso(T0 - 60_000) });
     await h.coordinator.start(null);
     h.coordinator.deactivateSync();
     expect(readStatus(h)?.state).toBe('closing');
     expect(await h.sessionFiles.readReopen()).toBeUndefined();
   });
 
+  it('the window that closes last decides the reopen record', async () => {
+    const connected = h.create({ windowId: 'window-2', pid: OTHER_PID });
+    await connected.start(ID_A);
+    await h.coordinator.start(null);
+    // The window of the devspace closes first, the local window last: nothing is opened at the next start.
+    h.clock.time = T0 + 1_000;
+    connected.deactivateSync();
+    expect(await h.sessionFiles.readReopen()).toEqual({ devspaceId: ID_A, closedAt: iso(T0 + 1_000) });
+    h.clock.time = T0 + 2_000;
+    h.coordinator.deactivateSync();
+    expect(await h.sessionFiles.readReopen()).toBeUndefined();
+    connected.dispose();
+
+    // The local window closes first, the window of the devspace last: its devspace is opened at the next start.
+    const local = h.create({ windowId: 'window-3' });
+    const last = h.create({ windowId: 'window-4', pid: OTHER_PID });
+    await local.start(null);
+    await last.start(ID_B);
+    h.clock.time = T0 + 3_000;
+    local.deactivateSync();
+    h.clock.time = T0 + 4_000;
+    last.deactivateSync();
+    expect(await h.sessionFiles.readReopen()).toEqual({ devspaceId: ID_B, closedAt: iso(T0 + 4_000) });
+    local.dispose();
+    last.dispose();
+  });
+
+  it('deactivateSync logs a reopen record that cannot be removed, and still ends', async () => {
+    await h.coordinator.start(null);
+    // A folder in place of the file cannot be removed without `recursive`.
+    fs.mkdirSync(h.paths.reopen);
+    fs.writeFileSync(path.join(h.paths.reopen, 'inside'), '');
+    expect(() => h.coordinator.deactivateSync()).not.toThrow();
+    expect(readStatus(h)?.state).toBe('closing');
+    expect(h.logger.lines).toContain('error The reopen record could not be removed.');
+  });
+
   it('deactivateSync does nothing for a window that never started', () => {
+    h.sessionFiles.writeReopenSync({ devspaceId: ID_A, closedAt: iso(T0 - 60_000) });
     h.coordinator.deactivateSync();
     expect(fs.existsSync(h.paths.sessionFile('window-1'))).toBe(false);
+    expect(fs.existsSync(h.paths.reopen)).toBe(true);
   });
 
   it('deactivateSync is not overtaken by a status write that is still running', async () => {

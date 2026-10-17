@@ -323,6 +323,15 @@ describe('reopen record', () => {
     await expect(files.readReopen()).resolves.toBeUndefined();
   });
 
+  // The close of a window that is not connected to a devspace, in deactivate().
+  it('removes synchronously, also when there is no record', async () => {
+    files.removeReopenSync();
+    files.writeReopenSync({ devspaceId: ENV_A, closedAt: '2026-09-24T18:02:11Z' });
+    files.removeReopenSync();
+    await expect(files.readReopen()).resolves.toBeUndefined();
+    files.removeReopenSync();
+  });
+
   // The Delete of a devspace removes the reopen record only when it names that devspace.
   it('removeReopenOf removes the record of the devspace, and keeps another one', async () => {
     files.writeReopenSync({ devspaceId: ENV_A, closedAt: '2026-09-24T18:02:11Z' });
