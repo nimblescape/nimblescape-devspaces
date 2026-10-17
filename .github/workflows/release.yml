@@ -12,13 +12,16 @@
 # with the token of a workflow starts no other workflow, so the CI job calls
 # the workflow ci.yml for that commit; the VSIX that this job tests and builds
 # is the VSIX of the release, so the release neither repeats the tests nor
-# builds the package again. Only when CI passes, the release job moves main to
+# builds the package again. At the same time as CI, the job "Check the
+# Marketplace" signs in like the publish job and checks that the app
+# registration has a role on the publisher. Only when CI, the check of the
+# package and the check of the Marketplace pass, the release job moves main to
 # the commit, as a fast-forward that fails when main changed during the run,
 # deletes the temporary branch, creates the tag v<version> on the commit and
 # the GitHub release of the tag, with the section of the version as its notes
-# and the VSIX as its file. A failed CI job so changes neither main nor a tag,
-# and the version stays free. A release that exists keeps its notes and
-# receives only a missing VSIX. The publish job downloads the VSIX of the
+# and the VSIX as its file. A failed job before the tag so changes neither main
+# nor a tag, and the version stays free. A release that exists keeps its notes
+# and receives only a missing VSIX. The publish job downloads the VSIX of the
 # GitHub release, signs in to Microsoft Entra ID with the official azure/login
 # action and publishes the VSIX with vsce, the official Marketplace tool. The
 # sign-in exchanges the OpenID Connect token of the job through the federated
@@ -305,9 +308,58 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
         run: node scripts/release-checks.mjs package "$VSIX" $DRY_RUN
 
+  # Before the tag, at the same time as CI: the app registration signs in as in the publish job and has a role on the
+  # publisher. A dry run skips the job, because the environment admits only main and the tags.
+  marketplace:
+    name: Check the Marketplace
+    needs: version
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The environment of the publish job, so that the same federated credential applies.
+    environment: marketplace
+    permissions:
+      contents: read
+      # azure/login exchanges the OpenID Connect token of this job.
+      id-token: write
+    steps:
+      - name: Check out the source of the release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up the pinned Node release
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Install the locked development tools without install scripts
+        run: npm ci --ignore-scripts
+
+      - name: Sign in to Microsoft Entra ID
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          # An app registration publishes without an Azure subscription.
+          allow-no-subscriptions: true
+
+      # vsce reads the role assignments of the publisher of package.json, which the Marketplace shows only to a
+      # member. The request changes nothing.
+      - name: Check the role of the app registration on the publisher
+        env:
+          # vsce requests the token of the signed-in Azure CLI for this tenant.
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: |
+          if ! npx vsce verify-pat --azure-credential; then
+            echo "::error::The app registration did not sign in or has no role on the publisher nimblescape. Check its membership (CONTRIBUTING.md, Marketplace setup). The release stops before the tag."
+            exit 1
+          fi
+
   github-release:
     name: Main, tag and GitHub release
-    needs: [version, ci, package]
+    needs: [version, ci, package, marketplace]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
