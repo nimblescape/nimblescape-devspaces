@@ -60,7 +60,7 @@ import type { OutputChannelLogger } from './logger';
 import { showErrorMessage, showInformationMessage, showWarningMessage } from './notifications';
 import { selectOwners } from './ownerSelector';
 import { setShowOnlyDevspaces } from './devspacesOnly';
-import { runWithProgress, type BusyChange } from './progress';
+import { FROM_PROGRESS_NOTIFICATION, HIDE_NOTIFICATIONS_COMMAND, runWithProgress, type BusyChange } from './progress';
 import type { RemoteDockerCommands } from './remoteDockerCommands';
 import type { RepositoryGroupsEditor } from './repositoryGroupsEditor';
 import type { SessionCoordinator } from './sessionCoordinator';
@@ -397,6 +397,8 @@ export class Controller implements vscode.Disposable {
   private removingFrom: { host: string; engine: string } | undefined;
   /** The VS Code command list.select failed on Enter (rowEnter); logged once per window. */
   private listSelectFailed = false;
+  /** The VS Code command that hides the notifications failed (showLog); logged once per window. */
+  private hideNotificationsFailed = false;
 
   constructor(private readonly deps: ControllerDeps) {
     this.clock = deps.clock ?? systemClock;
@@ -439,7 +441,7 @@ export class Controller implements vscode.Disposable {
       updateImagesNow: () => this.updateImagesNowCommand(),
       removeFromDockerEngine: () => this.removeFromDockerEngine(),
       search: () => this.search(),
-      showLog: async () => this.logger.show(),
+      showLog: (argument) => this.showLog(argument),
       signIn: () => this.signIn(),
       selectOwners: () => this.selectOwners(),
       selectOwnersFiltered: () => this.selectOwners(),
@@ -890,6 +892,24 @@ export class Controller implements vscode.Disposable {
     // A row that the view no longer has is not shown; the start does not wait for the view.
     if (row.childId !== undefined) void this.deps.revealRow?.(row.childId).catch(() => undefined);
     await this.withDockerTarget(() => this.start(parsed));
+  }
+
+  /**
+   * Show Log. From the link Show details of a progress notification (progress.ts), it also hides the notification, as
+   * the key Escape does: the operation goes on, and the notification stays in the notification center with its Cancel
+   * button. When VS Code cannot hide it (a later VS Code may remove or rename the command), the notification stays on
+   * the screen: no message, and one line in the log per window.
+   */
+  async showLog(argument: unknown): Promise<void> {
+    this.logger.show();
+    if (argument !== FROM_PROGRESS_NOTIFICATION) return;
+    try {
+      await vscode.commands.executeCommand(HIDE_NOTIFICATIONS_COMMAND);
+    } catch (error) {
+      if (this.hideNotificationsFailed) return;
+      this.hideNotificationsFailed = true;
+      this.logger.warn(`Show details did not hide the notification, because the VS Code command ${HIDE_NOTIFICATIONS_COMMAND} failed: ${errorMessage(error)}`);
+    }
   }
 
   /**

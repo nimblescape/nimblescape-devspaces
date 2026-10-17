@@ -35,10 +35,10 @@ function scriptWithProgress(): FakeProgressRun[] {
 describe('progressMessage', () => {
   it('shows the title, the step, the detail, and the link Show details', () => {
     expect(progressMessage('Opening acme/api…', undefined, undefined)).toBe(
-      'Opening acme/api… [Show details](command:devspaces.showLog)',
+      'Opening acme/api… [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)',
     );
     expect(progressMessage('Opening acme/api…', 'downloadingImage', Messages.newerImage)).toBe(
-      'Opening acme/api… Downloading the new image. A newer image is available. The devspace is updated. Your files are kept. [Show details](command:devspaces.showLog)',
+      'Opening acme/api… Downloading the new image. A newer image is available. The devspace is updated. Your files are kept. [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)',
     );
   });
 });
@@ -61,8 +61,8 @@ describe('runWithProgress', () => {
     expect(result).toBe(42);
     expect(runs).toHaveLength(1);
     expect(runs[0].options).toEqual({ location: fakeVscode.ProgressLocation.Notification, cancellable: false });
-    // The link Show details opens the log (and keeps the notification open, see below).
-    expect(runs[0].messages.every((message) => message.endsWith(' [Show details](command:devspaces.showLog)'))).toBe(true);
+    // The link Show details opens the log and hides the notification (it does not end it, see below).
+    expect(runs[0].messages.every((message) => message.endsWith(' [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)'))).toBe(true);
     expect(runs[0].messages.map((message) => message.replace(/ \[Show details\]\(command:[^)]*\)$/, ''))).toEqual([
       'Opening acme/api…',
       'Opening acme/api… Checking for a newer image.',
@@ -150,7 +150,7 @@ describe('runWithProgress', () => {
     ]);
   });
 
-  it('keeps the notification and its Cancel button until the task settles: Show details only opens the log', async () => {
+  it('keeps the notification and its Cancel button until the task settles: Show details does not end it', async () => {
     let notificationClosed = false;
     const runs: FakeProgressRun[] = [];
     fakeVscode.window.withProgress.mockImplementation(async (options, task) => {
@@ -178,8 +178,9 @@ describe('runWithProgress', () => {
       },
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    // A click on the link runs devspaces.showLog; VS Code keeps a notification open on a click on a link.
-    expect(runs[0].messages.at(-1)).toBe('Opening acme/api… Downloading the new image. [Show details](command:devspaces.showLog)');
+    // A click on the link runs devspaces.showLog with the argument 'progressNotification', which hides the notification
+    // (controller.ts, showLog). The notification stays in the notification center with its Cancel button.
+    expect(runs[0].messages.at(-1)).toBe('Opening acme/api… Downloading the new image. [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)');
     expect(notificationClosed).toBe(false);
     expect(currentOperation()).toEqual({ title: 'Opening acme/api…', repository: 'acme/api' });
     // Cancel still aborts the operation; then the notification closes, and gets no more reports.

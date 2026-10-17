@@ -66,6 +66,9 @@ describe('the extension in VS Code', () => {
     // Enter on a row of the view runs the VS Code command list.select (devspaces.rowEnter). The weekly run against VS
     // Code Insiders finds it early when VS Code removes or renames that command.
     assert.ok(registered.has('list.select'), 'VS Code has no command list.select');
+    // The link Show details of a progress notification hides it with the VS Code command notifications.hideToasts (the
+    // key Escape on a notification; src/vscode/progress.ts).
+    assert.ok(registered.has('notifications.hideToasts'), 'VS Code has no command notifications.hideToasts');
   });
 
   it('logs the Docker CLI it found, and no error', async () => {

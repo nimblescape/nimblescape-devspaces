@@ -133,8 +133,8 @@ describe('the command Update All Images Now', () => {
   });
 
   // The order of Start: the question about the Monitor, then in the progress the step "Docker start", then the request.
-  // Each message of the progress ends with the link Show details (progress.ts), which opens the log and keeps the
-  // progress open with its Cancel button.
+  // Each message of the progress ends with the link Show details (progress.ts), which opens the log and hides the
+  // progress, which stays in the notification center with its Cancel button.
   it('asks the question about the Monitor before the Docker start and the request; each step has the link Show details', async () => {
     const order: string[] = [];
     const messages: string[] = [];
@@ -158,7 +158,9 @@ describe('the command Update All Images Now', () => {
       progressMessage(title, 'startingDocker', undefined),
       progressMessage(title, 'sendingRequest', undefined),
     ]);
-    for (const message of messages) expect(message.endsWith(` [${Actions.showDetails}](command:${SHOW_LOG_COMMAND})`), message).toBe(true);
+    for (const message of messages) {
+      expect(message.endsWith(` [${Actions.showDetails}](command:${SHOW_LOG_COMMAND}?%5B%22progressNotification%22%5D)`), message).toBe(true);
+    }
   });
 
   it('shows no step when Docker runs already', async () => {

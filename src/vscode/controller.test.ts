@@ -6178,6 +6178,32 @@ describe('the Docker host of the current Docker context', () => {
     expect(operations).toEqual([]);
   });
 
+  // Show Log from the Command Palette or the status bar leaves the notifications; the link Show details of a progress
+  // notification passes 'progressNotification' and hides the notification as the key Escape does (progress.ts).
+  it('hides the notifications only for the link Show details of a progress notification', async () => {
+    await run('showLog');
+    expect(fakeVscode.commands.executeCommand).not.toHaveBeenCalledWith('notifications.hideToasts');
+    await run('showLog', 'progressNotification');
+    expect(h.logger.show).toHaveBeenCalledTimes(2);
+    expect(fakeVscode.commands.executeCommand).toHaveBeenCalledWith('notifications.hideToasts');
+    expect(operations).toEqual([]);
+  });
+
+  it('opens the log also when VS Code cannot hide the notification, with one line in the log per window and no message', async () => {
+    fakeVscode.commands.executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'notifications.hideToasts') throw new Error("command 'notifications.hideToasts' not found");
+    });
+    await run('showLog', 'progressNotification');
+    await run('showLog', 'progressNotification');
+    expect(h.logger.show).toHaveBeenCalledTimes(2);
+    const warnings = h.logger.warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes('notifications.hideToasts'));
+    expect(warnings).toEqual([
+      "Show details did not hide the notification, because the VS Code command notifications.hideToasts failed: command 'notifications.hideToasts' not found",
+    ]);
+    expect(fakeVscode.window.showErrorMessage).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showWarningMessage).not.toHaveBeenCalled();
+  });
+
   // The choice of the Docker host is the command of the first row of the view, so the view's title bar has no icon of
   // the Docker host.
   it('runs the choice of the Docker host without an operation, and shows no icon of the Docker host in the title bar', async () => {
