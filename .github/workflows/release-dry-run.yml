@@ -4,10 +4,11 @@
 
 # Rule 4 of CONTRIBUTING.md, "Release rules": a change of the release process
 # is tested with a dry run before it reaches main. On a pull request that
-# changes release.yml or scripts/release-checks.mjs, the job fails until a
-# successful dry run of the workflow "Release" on the branch of the pull
-# request had these files as they are at the head of the pull request. After
-# the dry run, re-run the job. On every other pull request, the job passes.
+# changes release.yml, ci.yml or scripts/release-checks.mjs, the job fails
+# until a successful dry run of the workflow "Release" on the branch of the
+# pull request had these files as they are at the head of the pull request.
+# After the dry run, re-run the job. On every other pull request, the job
+# passes.
 # Do not make the job a required check of main: the release moves main to its
 # version commit, which has no result of this job. The version job of the
 # release checks the same rule again. The job only reads; it is a workflow of

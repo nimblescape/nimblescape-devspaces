@@ -7,6 +7,7 @@
 import { execFileSync } from 'child_process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  RELEASE_FILES,
   RELEASE_WORKFLOW,
   changelogSection,
   compareVersions,
@@ -465,6 +466,12 @@ describe('rule 3: at most one version in 7 days', () => {
       gh({ 'repos/{owner}/{repo}/releases/tags/v0.5.0': new Error('gh: Bad credentials (HTTP 401)') });
       expect(() => releaseDate('v0.5.0')).toThrow('Bad credentials');
     });
+  });
+});
+
+describe('rule 4: dry run first', () => {
+  it('counts ci.yml among the files of the release process, because the release publishes its VSIX', () => {
+    expect(RELEASE_FILES).toEqual([RELEASE_WORKFLOW, '.github/workflows/ci.yml', 'scripts/release-checks.mjs']);
   });
 });
 
