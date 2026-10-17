@@ -14,7 +14,7 @@ import type { Devspace, RepositoryInfo } from '../core/types';
 import { resetFakeVscode, type ThemeIcon, type TreeItem } from './testing/fakeVscode';
 import { parseRepositoryGroups } from './repositoryGroups';
 import { buildTreeModel, type GroupNode, type HintRow, type OwnerGroup, type RepositoryNode, type RepositoryRow } from './treeModel';
-import { DOCKER_HOST_ROW_ID, DockerHostRowTexts, REPOSITORIES_VIEW_ID, RepositoriesTreeProvider, expandAll, type TreeNode } from './treeView';
+import { DOCKER_HOST_ROW_ID, DockerHostRowTexts, REPOSITORIES_VIEW_ID, RepositoriesTreeProvider, expandAll, revealRow, type TreeNode } from './treeView';
 
 function repo(nameWithOwner: string): RepositoryInfo {
   const [owner, name] = nameWithOwner.split('/');
@@ -327,7 +327,7 @@ describe('nodes of the setting repositoryGroups', () => {
     provider.dispose();
   });
 
-  it('gives only repository rows the command that starts on a double-click', () => {
+  it('gives only repository rows and repository nodes the command that starts on a double-click', () => {
     const provider = new RepositoriesTreeProvider(silentLogger);
     const rowCommands = (node: TreeNode): string[] => {
       const command = (provider.getTreeItem(node) as unknown as TreeItem).command as { command: string } | undefined;
@@ -349,13 +349,13 @@ describe('nodes of the setting repositoryGroups', () => {
     const [school] = provider.getChildren();
     const [courses] = provider.getChildren(school) as GroupNode[];
     expect((provider.getTreeItem(courses) as unknown as TreeItem).command).toBeUndefined();
-    // Every node below: owners and group nodes have no command, repository rows have the command of the row.
+    // Every node below: owners and group nodes have no command, repository rows (and nodes) have the command of the row.
     const walk = (node: TreeNode): TreeNode[] => [node, ...provider.getChildren(node).flatMap(walk)];
     const nodes = walk(school);
     expect(nodes.some((node) => node.kind === 'repository')).toBe(true);
     for (const node of nodes) {
       const command = ((provider.getTreeItem(node) as unknown as TreeItem).command as { command: string } | undefined)?.command;
-      expect(command).toBe(node.kind === 'repository' ? 'devspaces.rowActivated' : undefined);
+      expect(command).toBe(node.kind === 'repository' || node.kind === 'repositoryNode' ? 'devspaces.rowActivated' : undefined);
     }
     provider.dispose();
   });
@@ -386,7 +386,7 @@ describe('the node of a repository with several sources', () => {
     });
   }
 
-  it('maps the node to an expanded item without command, with the child rows as its children and itself as their parent', () => {
+  it('maps the node to an expanded item with the command of a row, with the child rows as its children and itself as their parent', () => {
     const provider = new RepositoriesTreeProvider(silentLogger);
     provider.setModel(sourcesModel());
     const [owner] = provider.getChildren() as OwnerGroup[];
@@ -395,7 +395,8 @@ describe('the node of a repository with several sources', () => {
     expect(web.kind).toBe('repository');
     const item = provider.getTreeItem(node) as unknown as TreeItem;
     expect(item).toMatchObject({ label: 'api', id: 'repo:acme/api', contextValue: 'sources', collapsibleState: 2 });
-    expect(item.command).toBeUndefined();
+    // A double-click on the node starts its first child row (rowActivation.ts); the node itself is the argument.
+    expect(item.command).toEqual({ command: 'devspaces.rowActivated', title: 'Start', arguments: [node] });
     expect((item.iconPath as ThemeIcon).id).toBe('blank');
     expect((item.accessibilityInformation as { label: string }).label).toBe('acme/api');
     const children = provider.getChildren(node) as RepositoryRow[];
@@ -422,6 +423,23 @@ describe('the node of a repository with several sources', () => {
     const view = { reveal: vi.fn(async (node: TreeNode) => void revealed.push(node.id)) };
     await expandAll(view, groups);
     expect(revealed).toEqual(['owner:acme', 'repo:acme/api']);
+  });
+
+  it('shows a repository row of the current model without selecting or focusing it, and skips anything else', async () => {
+    const provider = new RepositoriesTreeProvider(silentLogger);
+    provider.setModel(sourcesModel());
+    const view = { reveal: vi.fn(async (_node: TreeNode, _options?: unknown) => {}) };
+    await revealRow(view, provider, 'repo:acme/api:default');
+    const [owner] = provider.getModel();
+    const [node, web] = owner.children as [RepositoryNode, RepositoryRow];
+    expect(view.reveal.mock.calls).toEqual([[node.children[0], { select: false, focus: false }]]);
+    // A row of an owner, without a node, too.
+    await revealRow(view, provider, web.id);
+    expect(view.reveal).toHaveBeenLastCalledWith(web, { select: false, focus: false });
+    // The node, the owner and a row that the model does not have (any more) are no repository rows.
+    for (const id of [node.id, owner.id, 'repo:acme/gone:default']) await revealRow(view, provider, id);
+    expect(view.reveal).toHaveBeenCalledTimes(2);
+    provider.dispose();
   });
 
   it('gives the node a contextValue that no row action of package.json matches', () => {

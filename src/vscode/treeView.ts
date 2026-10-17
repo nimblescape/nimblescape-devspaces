@@ -132,6 +132,12 @@ export class RepositoriesTreeProvider implements vscode.TreeDataProvider<TreeNod
     return this.groups;
   }
 
+  /** The repository row with this id in the current model, or undefined (revealRow). */
+  repositoryRow(id: string): RepositoryRow | undefined {
+    const row = this.parents.get(id)?.children.find((child) => child.id === id);
+    return row?.kind === 'repository' ? row : undefined;
+  }
+
   getTreeItem(node: TreeNode): vscode.TreeItem {
     try {
       switch (node.kind) {
@@ -195,6 +201,20 @@ export async function expandAll(view: Pick<vscode.TreeView<TreeNode>, 'reveal'>,
   }
 }
 
+/**
+ * Shows a repository row of the view and opens its parents: the child row that a double-click or Enter on a repository
+ * with several sources starts (Controller.rowActivated). It neither selects nor focuses the row. A row that the current
+ * model does not have is skipped.
+ */
+export async function revealRow(
+  view: Pick<vscode.TreeView<TreeNode>, 'reveal'>,
+  tree: Pick<RepositoriesTreeProvider, 'repositoryRow'>,
+  rowId: string,
+): Promise<void> {
+  const row = tree.repositoryRow(rowId);
+  if (row) await view.reveal(row, { select: false, focus: false });
+}
+
 function ownerItem(group: OwnerGroup): vscode.TreeItem {
   const item = new vscode.TreeItem(group.owner, vscode.TreeItemCollapsibleState.Expanded);
   item.id = group.id;
@@ -215,9 +235,12 @@ function groupItem(node: GroupNode): vscode.TreeItem {
 }
 
 /**
- * A repository with several sources: a level of the tree with the repository name, expanded at first (its child rows
- * carry the buttons). No state icon (the blank icon keeps the names aligned), no description, no command, and a
- * contextValue without any flag of a row, so no row action applies to it.
+ * A repository with several sources: a level of the tree with the repository name, expanded while a child row has a
+ * devspace (its child rows carry the buttons). No state icon (the blank icon keeps the names aligned), no description,
+ * and a contextValue without any flag of a row, so no row action applies to it. Its command is the command of a
+ * repository row: a double-click or Enter starts its first child row (rowActivation.ts). With a command, a single click
+ * on its name only selects the node; VS Code opens and closes it with its arrow, the arrow keys, and a double-click.
+ * After a start, the controller shows the child row that starts (revealRow), so the node is open then.
  */
 function repositoryNodeItem(node: RepositoryNode): vscode.TreeItem {
   const item = new vscode.TreeItem(node.label, node.expanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
@@ -226,6 +249,7 @@ function repositoryNodeItem(node: RepositoryNode): vscode.TreeItem {
   item.contextValue = REPOSITORY_NODE_CONTEXT;
   item.iconPath = new vscode.ThemeIcon('blank');
   item.accessibilityInformation = { label: node.repository };
+  item.command = { command: Commands.rowActivated, title: 'Start', arguments: [node] };
   return item;
 }
 

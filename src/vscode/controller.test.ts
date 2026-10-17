@@ -259,6 +259,8 @@ interface Harness {
   clock: { now: () => number };
   /** The VS Code setting workbench.list.openMode (double-click on a row); a test may change it. */
   listOpenMode: { value: ListOpenMode };
+  /** Shows a row of the view (treeView.ts revealRow). */
+  revealRow: Mock<(rowId: string) => Promise<void>>;
   /** The question about the Monitor of an engine (MonitorQuestion); by default the engine has its answer. */
   monitorQuestion: { askIfNeeded: Mock<(host: string, removalRuns?: () => Promise<(removal: EngineRemoval) => boolean>) => Promise<string>> };
   /** docker-engines.json of the storage folder of the test (the removal mark). */
@@ -290,6 +292,7 @@ function createHarness(
 ): Harness {
   const monitorQuestion = { askIfNeeded: vi.fn(async (_host: string, _removalRuns?: () => Promise<(removal: EngineRemoval) => boolean>): Promise<string> => 'notNeeded') };
   const listOpenMode: Harness['listOpenMode'] = { value: 'singleClick' };
+  const revealRow = vi.fn(async (_rowId: string): Promise<void> => {});
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'devspaces-test-'));
   const clock = { now: () => NOW };
   const paths = new StoragePaths(root);
@@ -466,6 +469,8 @@ function createHarness(
     updateImagesNow: options.updateImagesNow,
     startDocker: options.startDocker,
     listOpenMode: () => listOpenMode.value,
+    // A promise of its own: vitest handles the promises that a mock returns, so a rejection would never be unhandled.
+    revealRow: async (rowId: string) => revealRow(rowId),
     clock,
     isAlive: (pid: number) => alive.has(pid),
     timing: {
@@ -520,6 +525,7 @@ function createHarness(
     settings,
     clock,
     listOpenMode,
+    revealRow,
     monitorQuestion,
     engineRecords,
   };
@@ -6833,20 +6839,33 @@ describe('Double-click on a repository row', () => {
     }
   });
 
-  it('binds Enter in the view, on a row without children, to devspaces.rowEnter (package.json)', () => {
+  it('binds Enter in the view to devspaces.rowEnter (package.json)', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
       contributes: { keybindings: Array<Record<string, string>> };
     };
-    // An owner, a group or a repository with child rows keeps Enter of VS Code: it opens or closes the node. So does a
-    // sticky header row at the top of the view (an owner) while it has the keyboard focus: Enter reveals that row, as in
-    // the keybinding of list.select in VS Code, and never starts the repository row below it.
+    // Also on an owner, a group or a repository with child rows: list.select opens or closes an owner or a group, which
+    // have no command, and runs the command of a repository with child rows. A sticky header row at the top of the
+    // view (an owner) keeps Enter of VS Code while it has the keyboard focus: Enter reveals that row, as in the
+    // keybinding of list.select in VS Code, and never starts the repository row below it.
     expect(manifest.contributes.keybindings.filter((binding) => binding.command === Commands.rowEnter)).toEqual([
       {
         command: Commands.rowEnter,
         key: 'enter',
-        when: 'focusedView == devspaces.repositories && listFocus && !inputFocus && !treestickyScrollFocused && !treeElementCanExpand && !treeElementCanCollapse',
+        when: 'focusedView == devspaces.repositories && listFocus && !inputFocus && !treestickyScrollFocused',
       },
     ]);
+  });
+
+  it('forgets the Enter on an owner or a group, which opens or closes it, so that a click right after it only selects', async () => {
+    const start = vi.spyOn(h.controller, 'start').mockResolvedValue(undefined);
+    // VS Code opens or closes the node, which has no command (TreeView.onDidExpandElement or onDidCollapseElement).
+    fakeVscode.commands.executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'list.select') h.controller.nodeToggled();
+    });
+    h.clock.now = () => NOW;
+    await run('rowEnter');
+    await click(viewRow('acme/api', undefined), 10);
+    expect(start).not.toHaveBeenCalled();
   });
 
   it('runs Start on Enter: devspaces.rowEnter runs list.select, and the activation of the row that follows starts it', async () => {
@@ -6985,6 +7004,91 @@ describe('Double-click on a repository row', () => {
     await click(viewRow('acme/api', devspace(), 'updating'), 0);
     await click(viewRow('acme/api', devspace(), 'updating'), 100);
     expect(start).not.toHaveBeenCalled();
+  });
+
+  describe('a repository with several sources', () => {
+    /** The node of acme/api with its child rows, as the view gives it to its command. */
+    function viewNode(...children: unknown[]): unknown {
+      return { kind: 'repositoryNode', id: 'repo:acme/api', repository: 'acme/api', children };
+    }
+    const child = (source: DevspaceSource, env?: Devspace, state?: Parameters<typeof rowActions>[0]): unknown => ({
+      ...(row('acme/api', env, undefined, source) as object),
+      id: `repo:acme/api:${source.kind}`,
+      actions: rowActions(state, undefined),
+    });
+
+    it('starts its first child row on a double-click: the default image while startWithDefaultImage is on', async () => {
+      const start = vi.spyOn(h.controller, 'start').mockResolvedValue(undefined);
+      const node = viewNode(child(DEFAULT_SOURCE), child(ROOT_SOURCE));
+      await click(node, 0);
+      expect(start).not.toHaveBeenCalled();
+      await click(node, 100);
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(start).toHaveBeenCalledWith({ kind: 'row', repository: 'acme/api', info: undefined, devspaceId: undefined, source: DEFAULT_SOURCE });
+    });
+
+    it('starts the first configuration while startWithDefaultImage is off (the default image is the last row)', async () => {
+      const start = vi.spyOn(h.controller, 'start').mockResolvedValue(undefined);
+      const env = devspace({ configPath: ROOT_SOURCE.configPath });
+      await h.registry.add(env);
+      const node = viewNode(child(ROOT_SOURCE, env, 'stopped'), child(PYTHON_SOURCE), child(DEFAULT_SOURCE));
+      await click(node, 0);
+      await click(node, 100);
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(start).toHaveBeenCalledWith({ kind: 'row', repository: 'acme/api', info: undefined, devspaceId: ENV_ID, source: ROOT_SOURCE });
+    });
+
+    it('starts its first child row on Enter at once', async () => {
+      const start = vi.spyOn(h.controller, 'start').mockResolvedValue(undefined);
+      const node = viewNode(child(DEFAULT_SOURCE), child(ROOT_SOURCE));
+      fakeVscode.commands.executeCommand.mockImplementation(async (command: string) => {
+        if (command === 'list.select') await click(node, 10);
+      });
+      h.clock.now = () => NOW;
+      await run('rowEnter');
+      expect(start).toHaveBeenCalledWith({ kind: 'row', repository: 'acme/api', info: undefined, devspaceId: undefined, source: DEFAULT_SOURCE });
+    });
+
+    it('starts nothing where its first child row shows no Start, and counts no double-click across the node and a child', async () => {
+      const start = vi.spyOn(h.controller, 'start');
+      const updating = viewNode(child(DEFAULT_SOURCE, devspace(), 'updating'), child(ROOT_SOURCE));
+      await click(updating, 0);
+      await click(updating, 100);
+      const first = child(DEFAULT_SOURCE);
+      await click(viewNode(first, child(ROOT_SOURCE)), 1000);
+      await click(first, 1100);
+      expect(start).not.toHaveBeenCalled();
+      expect(h.revealRow).not.toHaveBeenCalled();
+    });
+
+    it('shows the child row that starts (VS Code also opens or closes the node on a double-click), never a repository row', async () => {
+      const start = vi.spyOn(h.controller, 'start').mockResolvedValue(undefined);
+      const node = viewNode(child(DEFAULT_SOURCE), child(ROOT_SOURCE));
+      await click(node, 0);
+      expect(h.revealRow).not.toHaveBeenCalled();
+      await click(node, 100);
+      expect(h.revealRow.mock.calls).toEqual([['repo:acme/api:defaultImage']]);
+      // A double-click on a repository row is on the row itself.
+      const config = child(ROOT_SOURCE);
+      await click(config, 1000);
+      await click(config, 1100);
+      expect(start).toHaveBeenCalledTimes(2);
+      expect(h.revealRow).toHaveBeenCalledTimes(1);
+      // A row that the view no longer has: the start runs all the same, and nothing is left unhandled.
+      const unhandled: unknown[] = [];
+      const listener = (reason: unknown): void => void unhandled.push(reason);
+      process.on('unhandledRejection', listener);
+      try {
+        h.revealRow.mockRejectedValueOnce(new Error('Cannot resolve tree item'));
+        await click(node, 2000);
+        await click(node, 2100);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(start).toHaveBeenCalledTimes(3);
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', listener);
+      }
+    });
   });
 
   it('ignores an argument that is no repository row', async () => {

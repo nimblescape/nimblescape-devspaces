@@ -236,6 +236,7 @@ export interface RepositoryRow {
 /**
  * A repository with two or more possible sources (possibleSources): a level of the tree only, with one child row per
  * source. It has no state, no description, no buttons and no menu: everything of a repository row is on its children.
+ * A double-click or Enter on it starts its first child row (rowActivation.ts).
  */
 export interface RepositoryNode {
   kind: 'repositoryNode';

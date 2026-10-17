@@ -223,6 +223,23 @@ describe('settings', () => {
     }
   });
 
+  // VS Code shows the settings with an order first, by their order, and the others in alphabetical order.
+  it('orders the settings in the Settings editor as the table of the user guide, the default image settings together', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      contributes: { configuration: { properties: Record<string, { order?: number }> } };
+    };
+    const properties = Object.entries(manifest.contributes.configuration.properties);
+    const orders = properties.map(([, property]) => property.order);
+    expect(orders.every((order) => Number.isInteger(order))).toBe(true);
+    expect(new Set(orders).size).toBe(properties.length);
+    const ordered = [...properties].sort(([, a], [, b]) => a.order! - b.order!).map(([key]) => key.replace(`${SETTINGS_SECTION}.`, ''));
+    const guide = fs.readFileSync(path.join(__dirname, '..', '..', 'docs', 'guide.md'), 'utf8');
+    const section = guide.slice(guide.indexOf('\n## Settings\n'));
+    const table = section.slice(0, section.indexOf('\n## ', 1)).split('\n').flatMap((line) => /^\| `(\w+)` \|/.exec(line)?.[1] ?? []);
+    expect(ordered).toEqual(table);
+    expect(ordered.indexOf('startWithDefaultImage')).toBe(ordered.indexOf('defaultImage') + 1);
+  });
+
   // The manifest has the two settings with the defaults of the code (scope application, as the other settings of the
   // monitor), no imageUpdateSchedule, and the pattern of cacheUpdateSchedule takes whole minutes and five fields, and
   // refuses other text.
