@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   RELEASE_WORKFLOW,
+  changelogSection,
   compareVersions,
   newestTag,
   namingProblems,
@@ -14,6 +15,7 @@ import {
   parseVersion,
   publishingProblems,
   userChanges,
+  wordingProblems,
 } from './release-checks.mjs';
 
 const MANIFEST = { publisher: 'nimblescape', name: 'nimblescape-sample', displayName: 'nimblescape Sample', version: '1.2.3' };
@@ -248,5 +250,63 @@ describe('rule 3: only changes for the users', () => {
       counted: [],
       ignored: [`package.json: ${field} (does not change how the extension works)`],
     });
+  });
+
+  it('reads the section of a version up to the next section or the closing rule', () => {
+    const changelog = '# Change log\n\nA maintenance release.\n\n## 1.2.4\n\nNew: a.\n\n### Details\n\nb\n\n## 1.2.3\n\nOld.\n\n---\n\n© 2026\n';
+    expect(changelogSection(changelog, '1.2.4')).toBe('\nNew: a.\n\n### Details\n\nb\n');
+    expect(changelogSection(changelog, '1.2.3')).toBe('\nOld.\n');
+    expect(changelogSection(changelog, '1.2.5')).toBeUndefined();
+    expect(changelogSection('## 1.2.4\r\n\r\nNew.\r\n', '1.2.4')).toBe('\nNew.\n');
+  });
+
+  it('refuses a section that is missing or empty, or says that nothing changed for the users', () => {
+    expect(wordingProblems(undefined, '1.2.4')).toEqual(['CHANGELOG.md has no text for the version 1.2.4.']);
+    expect(wordingProblems('\n  \n', '1.2.4')).toEqual(['CHANGELOG.md has no text for the version 1.2.4.']);
+    expect(wordingProblems('Maintenance release: CI runs the tests as root.', '1.2.4')).toEqual([
+      'The section 1.2.4 of CHANGELOG.md says "maintenance release": it must describe the change for the users.',
+    ]);
+    expect(wordingProblems('The extension behaves as\nin 0.1.7.', '1.2.4')).toEqual([
+      'The section 1.2.4 of CHANGELOG.md says "behaves as in 0.1.7": it must describe the change for the users.',
+    ]);
+    expect(wordingProblems('The extension behaves as in version 0.1.7.', '1.2.4')).toEqual([
+      'The section 1.2.4 of CHANGELOG.md says "behaves as in version 0.1.7": it must describe the change for the users.',
+    ]);
+    const texts = [
+      'The extension behaves as in v0.1.7.',
+      'The extension behaves as in 0.1.x.',
+      'The extension behaves as before.',
+      '**Maintenance** release.',
+      'No user-facing changes.',
+      '`no change for users`',
+    ];
+    for (const text of texts) expect(wordingProblems(text, '1.2.4'), text).toHaveLength(1);
+  });
+
+  it('refuses a section that has only headings and HTML comments, and ignores the comments', () => {
+    const texts = [
+      '\n### Changes\n',
+      '<!-- The changes for the users. -->',
+      '### Changes\n\n<!--\nThe changes\nfor the users.\n-->\n',
+      // A comment without its end hides the rest of the section.
+      '### Changes\n\n<!-- The changes\nfor the users.\n',
+    ];
+    for (const text of texts) {
+      expect(wordingProblems(text, '1.2.4'), text).toEqual(['CHANGELOG.md has no text for the version 1.2.4.']);
+    }
+    // A heading is no text, but its phrases count. The phrases of a comment do not count.
+    expect(wordingProblems('### Maintenance release\n\nCI runs the tests as root.', '1.2.4')).toHaveLength(1);
+    expect(wordingProblems('<!-- not a maintenance release -->\n**Links:** a link now opens only a file.', '1.2.4')).toEqual([]);
+    // The text between two comments stays.
+    expect(wordingProblems('<!-- a -->\n**Links:** a link now opens only a file.\n<!-- b -->', '1.2.4')).toEqual([]);
+    expect(wordingProblems('<!-- a -->\nA maintenance release.\n<!-- b -->', '1.2.4')).toHaveLength(1);
+  });
+
+  it('accepts a section that describes a change', () => {
+    expect(wordingProblems('\n**Links:** a link now opens only a file of the workspace.\n', '1.2.4')).toEqual([]);
+    // "behaves as in" without a version and "behaves as before" without "extension" describe a change.
+    expect(wordingProblems('Enter now behaves as in the Explorer view.', '1.2.4')).toEqual([]);
+    expect(wordingProblems('The link behaves as in 2 other editors.', '1.2.4')).toEqual([]);
+    expect(wordingProblems('Undo behaves as before the save.', '1.2.4')).toEqual([]);
   });
 });
