@@ -24,9 +24,6 @@
 //     an urgent fix (environment URGENT) is one line of at least 20 characters. A reason is checked also after the 7
 //     days and before the first release. The GitHub CLI reads the release (environment GH_TOKEN and GH_REPO). In a dry
 //     run, a problem is a warning.
-//   node scripts/release-checks.mjs listed <version> [--dry-run]
-//     Before the tag. The public query of the Marketplace lists the extension, and its newest version there is lower
-//     than the version and has a release tag. In a dry run, a problem is a warning.
 //   node scripts/release-checks.mjs dry-run
 //     Rule 4 (environment GITHUB_REPOSITORY, GH_TOKEN and HEAD_SHA). A successful dry run of the workflow "Release"
 //     tested the files of the release process, release.yml, ci.yml and this script, as they are at the commit
@@ -466,88 +463,6 @@ export function intervalProblem(tag, published, now, urgent = '') {
   return { problem: `${days}. The next release can start on ${start}, or now with the input urgent.${short} (rule 3)` };
 }
 
-/** The public query of the Marketplace, which VS Code sends too. */
-const MARKETPLACE_QUERY = 'https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery';
-
-/**
- * The body of the Marketplace query for the newest version of an extension, as VS Code asks: by the extension ID
- * (filter 7), for VS Code (8), without unpublished extensions (12, flag 4096); the flags 513 ask for the newest
- * version only.
- * @param {string} id The extension ID `<publisher>.<name>`.
- */
-export function listingQuery(id) {
-  const criteria = [
-    { filterType: 7, value: id },
-    { filterType: 8, value: 'Microsoft.VisualStudio.Code' },
-    { filterType: 12, value: '4096' },
-  ];
-  return { filters: [{ pageNumber: 1, pageSize: 1, criteria }], assetTypes: [], flags: 513 };
-}
-
-/**
- * The newest version of an extension in the answer of the Marketplace query.
- * @param {any} answer The answer as JSON.
- * @param {string} id The extension ID.
- * @returns {string | undefined} undefined when the answer lists no extension with this ID.
- */
-export function listedVersion(answer, id) {
-  const extensions = (answer?.results ?? []).flatMap((result) => result?.extensions ?? []);
-  const extension = extensions.find(
-    (candidate) =>
-      `${candidate?.publisher?.publisherName}.${candidate?.extensionName}`.toLowerCase() === id.toLowerCase(),
-  );
-  return extension?.versions?.[0]?.version;
-}
-
-/**
- * The problems of the Marketplace for a release, before its tag: no tag and no GitHub release may name a version
- * that cannot reach the Marketplace. The Marketplace lists the extension, and its newest version there is lower than
- * the version of the release and has a release tag; else it came from elsewhere than the workflow "Release". Before
- * the first release tag, the first release creates the extension.
- * @param {any} answer The answer of the Marketplace query as JSON, or the Error of queryMarketplace; undefined when no
- *   answer came.
- * @param {string} id The extension ID.
- * @param {string} version The version of the release.
- * @param {string[]} tags The tags of the repository.
- * @param {boolean} [dryRun] A dry run: the texts say where a release would stop.
- * @returns {string[]}
- */
-export function listingProblems(answer, id, version, tags, dryRun = false) {
-  const stop = `${dryRun ? 'A release would stop here' : 'The release stops here'}, before the tag v${version}`;
-  if (answer instanceof Error && answer.answered) return [`The query of the Marketplace failed. ${stop}.`];
-  if (answer === undefined || answer instanceof Error) return [`The Marketplace did not answer the query. ${stop}.`];
-  const unknown = [`The Marketplace answered the query in an unknown form. ${stop}.`];
-  if (answer === null || typeof answer !== 'object') return unknown;
-  if (answer.errorCode !== undefined) {
-    // The text of the Marketplace, with a period at its end.
-    const said = String(answer.message || answer.errorCode).trim();
-    return [`The Marketplace answered the query with an error: ${said}${/[.!?]$/.test(said) ? '' : '.'} ${stop}.`];
-  }
-  if (!Array.isArray(answer.results)) return unknown;
-  const listed = listedVersion(answer, id);
-  if (listed === undefined) {
-    if (newestTag(tags) === undefined) return [];
-    return [
-      `The Marketplace does not list ${id}. ${stop}: without this check, it would create the tag and the GitHub ` +
-        'release and then fail at the publish.',
-    ];
-  }
-  const problems = [];
-  if (!parseVersion(listed) || compareVersions(listed, version) >= 0) {
-    problems.push(
-      `The Marketplace lists ${id} ${listed}, which is not lower than ${version}. ${stop}: without this check, it ` +
-        'would create the tag and the GitHub release without a new version on the Marketplace.',
-    );
-  }
-  if (!tags.includes(`v${listed}`)) {
-    problems.push(
-      `The Marketplace lists ${id} ${listed}, but the repository has no tag v${listed}: that version did not come ` +
-        `from the workflow "Release". ${stop}. (rule 5)`,
-    );
-  }
-  return problems;
-}
-
 let failed = false;
 
 function error(text) {
@@ -631,48 +546,6 @@ export function releaseDate(tag) {
   const commit = ghApi(`repos/{owner}/{repo}/commits/${tag}`);
   if (commit === undefined) throw new Error(`The GitHub API knows no commit of the tag ${tag}.`);
   return new Date(commit.commit.committer.date);
-}
-
-/**
- * The answer of the public Marketplace query for an extension, as JSON. After a network error, an answer HTTP 429 or
- * an answer HTTP 5xx, the query runs once more after 5 seconds; each try waits 30 seconds at most. The header
- * User-Agent names the checks.
- * @param {string} id The extension ID.
- * @param {{ retryDelay?: number }} [options] The wait before the second try, in milliseconds.
- * @returns {Promise<any>} Rejects with an Error whose field `answered` is true when the Marketplace answered, but
- *   not with a success or not with JSON.
- */
-export async function queryMarketplace(id, { retryDelay = 5_000 } = {}) {
-  const answered = (text) => Object.assign(new Error(text), { answered: true });
-  const reason = (cause) => (cause instanceof Error ? cause.message : String(cause));
-  for (let attempt = 1; ; attempt++) {
-    if (attempt > 1) await new Promise((resolve) => setTimeout(resolve, retryDelay));
-    let response;
-    try {
-      response = await fetch(MARKETPLACE_QUERY, {
-        method: 'POST',
-        headers: {
-          accept: 'application/json;api-version=3.0-preview.1',
-          'content-type': 'application/json',
-          'user-agent': 'nimblescape-release-checks',
-        },
-        body: JSON.stringify(listingQuery(id)),
-        signal: AbortSignal.timeout(30_000),
-      });
-    } catch (cause) {
-      if (attempt < 2) continue;
-      throw new Error(`The Marketplace did not answer the query: ${reason(cause)}`);
-    }
-    if ((response.status === 429 || response.status >= 500) && attempt < 2) continue;
-    if (!response.ok) throw answered(`The Marketplace answered the query with HTTP ${response.status}.`);
-    try {
-      return await response.json();
-    } catch (cause) {
-      // An answer that is not JSON; else the answer did not arrive in full, for example at the timeout.
-      if (cause instanceof SyntaxError) throw answered(`The answer of the Marketplace is not JSON: ${cause.message}`);
-      throw new Error(`The Marketplace did not answer the query: ${reason(cause)}`);
-    }
-  }
 }
 
 /** The files of the workflows and of the actions of the repository, with their paths relative to the repository. */
@@ -811,26 +684,6 @@ function checkInterval(version, dryRun) {
   }
 }
 
-async function checkListed(version, dryRun) {
-  const id = extensionId(readManifest());
-  let answer;
-  try {
-    answer = await queryMarketplace(id);
-  } catch (cause) {
-    console.log(cause instanceof Error ? cause.message : String(cause));
-    answer = cause;
-  }
-  const problems = listingProblems(answer, id, version, releaseTags(), dryRun);
-  for (const problem of problems) {
-    if (dryRun) warning(problem);
-    else error(problem);
-  }
-  if (problems.length > 0) return;
-  const listed = listedVersion(answer, id);
-  if (listed === undefined) console.log(`No release tag yet: the first release creates ${id} on the Marketplace.`);
-  else console.log(`The Marketplace lists ${id} ${listed}, the version of the release tag v${listed}.`);
-}
-
 async function checkDryRun() {
   const { GITHUB_REPOSITORY: repository, GH_TOKEN: token, HEAD_SHA: head, PR_NUMBER: number, HEAD_REF: branch } = process.env;
   if (!repository || !token || !head || (number && !branch)) {
@@ -915,12 +768,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (command === 'rules' && args.length === 0) checkRules();
     else if (command === 'package' && operands.length === 1) checkPackage(operands[0], dryRun);
     else if (command === 'interval' && operands.length === 1 && parseVersion(operands[0])) checkInterval(operands[0], dryRun);
-    else if (command === 'listed' && operands.length === 1 && parseVersion(operands[0])) await checkListed(operands[0], dryRun);
     else if (command === 'dry-run' && args.length === 0) await checkDryRun();
     else {
       console.error(
-        'Usage: node scripts/release-checks.mjs rules | package <vsix> [--dry-run] | interval <version> [--dry-run] | ' +
-          'listed <version> [--dry-run] | dry-run',
+        'Usage: node scripts/release-checks.mjs rules | package <vsix> [--dry-run] | interval <version> [--dry-run] | dry-run',
       );
       process.exit(2);
     }

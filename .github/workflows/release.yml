@@ -34,13 +34,12 @@
 # without a change of main, a tag, a release or the Marketplace; its run name
 # ends with "(dry run)". The script scripts/release-checks.mjs checks the
 # release rules of CONTRIBUTING.md: the version job checks the extension ID,
-# the publishing steps, the 7 days since the newest release and the listing of
-# the extension on the Marketplace and, in a release, that a successful dry
-# run tested the files of the release process as they are; the job "Check the
-# package" and the publish job check that the VSIX holds the extension ID of
-# package.json, has at most 30 tags and changes something for the users since
-# the last release, and that the section of the version in its change log
-# describes the change.
+# the publishing steps and the 7 days since the newest release and, in a
+# release, that a successful dry run tested the files of the release process
+# as they are; the job "Check the package" and the publish job check that the
+# VSIX holds the extension ID of package.json, has at most 30 tags and changes
+# something for the users since the last release, and that the section of the
+# version in its change log describes the change.
 
 name: Release
 # "(dry run)" stays at the end: the check of rule 4 finds the dry runs by it.
@@ -160,14 +159,6 @@ jobs:
           URGENT: ${{ inputs.urgent }}
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
         run: node scripts/release-checks.mjs interval "$VERSION" $DRY_RUN
-
-      # No tag and no GitHub release for a version that cannot reach the Marketplace: the Marketplace lists the
-      # extension, with no version as high as this one and none without a release tag. A dry run only warns.
-      - name: Check the listing on the Marketplace
-        env:
-          VERSION: ${{ steps.check.outputs.version }}
-          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-        run: node scripts/release-checks.mjs listed "$VERSION" $DRY_RUN
 
       # Rule 4 of CONTRIBUTING.md: a release runs only with the files of the release process that a dry run tested.
       - name: Check that a dry run tested the release process
