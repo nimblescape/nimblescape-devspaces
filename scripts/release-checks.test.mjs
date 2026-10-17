@@ -129,9 +129,57 @@ describe('rules 2 and 5: no deletion, only GitHub Actions with Microsoft Entra I
   });
 
   it('refuses an npm script that publishes, deletes or signs in', () => {
-    for (const command of ['vsce publish', 'npm run build && npx vsce unpublish nimblescape.x', 'vsce@4 login nimblescape']) {
+    for (const command of [
+      'vsce publish',
+      'npm run build && npx vsce unpublish nimblescape.x',
+      'vsce@4 login nimblescape',
+      'vsce delete-publisher nimblescape',
+    ]) {
       expect(publishingProblems([], { release: command }), command).toHaveLength(1);
     }
+  });
+
+  it('refuses vsce delete-publisher, which deletes the publisher with all its extensions', () => {
+    expect(publishingProblems(release('run: npx vsce delete-publisher nimblescape'))).toEqual([
+      `${RELEASE_WORKFLOW}:1: vsce delete-publisher deletes the publisher with all its extensions.`,
+    ]);
+  });
+
+  it('refuses vsce verify-pat without Microsoft Entra ID', () => {
+    expect(publishingProblems(release('run: npx vsce verify-pat nimblescape'))).toEqual([
+      `${RELEASE_WORKFLOW}:1: vsce verify-pat without --azure-credential checks a personal access token.`,
+    ]);
+  });
+
+  it('reads the files of scripts/ as the workflows', () => {
+    const script = (file, text) => publishingProblems([{ file, text }]);
+    expect(script('scripts/release.sh', '#!/bin/sh\nnpx vsce publish --azure-credential\n')).toEqual([
+      `scripts/release.sh:2: only ${RELEASE_WORKFLOW} may publish.`,
+    ]);
+    expect(script('scripts/reset.sh', 'npx vsce delete-publisher nimblescape\n')).toHaveLength(1);
+    expect(script('scripts/install-local.mjs', "run('npx', ['vsce', 'package', '--no-dependencies']);\n")).toEqual([]);
+  });
+
+  it('reads the argument lists of vsce and the calls of the vsce API in JavaScript and TypeScript', () => {
+    const script = (text, file = 'scripts/x.mjs') => publishingProblems([{ file, text }]);
+    expect(script("spawnSync('npx', ['vsce', 'publish', '--azure-credential']);\n")).toEqual([
+      `scripts/x.mjs:1: only ${RELEASE_WORKFLOW} may publish.`,
+    ]);
+    expect(script("execFileSync('npx', [\n  '@vscode/vsce@4.0.0',\n  'unpublish',\n]);\n", 'scripts/x.cjs')).toEqual([
+      'scripts/x.cjs:2: vsce unpublish deletes the extension on the Marketplace.',
+    ]);
+    expect(script("import { publishVSIX } from '@vscode/vsce';\n\nawait publishVSIX('x.vsix', {});\n")).toEqual([
+      `scripts/x.mjs:3: publishVSIX of the vsce API publishes; only ${RELEASE_WORKFLOW} may publish.`,
+    ]);
+    expect(script("const vsce = require('@vscode/vsce');\nvsce.unpublishVSIX({});\n", 'scripts/x.ts')).toHaveLength(1);
+    expect(script("import { createVSIX } from '@vscode/vsce';\n\nawait createVSIX({ packagePath: 'x.vsix' });\n")).toEqual([]);
+    // A function publish of another module is no call of the vsce API.
+    expect(script("import { publish } from './site.mjs';\n\npublish();\n")).toEqual([]);
+  });
+
+  it('reads the input pat only in YAML', () => {
+    expect(publishingProblems([{ file: 'scripts/x.mjs', text: '  pat: pattern,\n' }])).toEqual([]);
+    expect(publishingProblems([{ file: '.github/actions/publish/action.yaml', text: '  pat: ${{ inputs.token }}\n' }])).toHaveLength(1);
   });
 });
 
