@@ -653,10 +653,10 @@ describe('Controller commands', () => {
     expect([...h.commands.keys()].sort()).toEqual(declared);
     // 37 commands, among them hidden ones: Show Docker Setup (the action Install Docker… of an error: it looks for the
     // CLI, then shows the view), the command of a repository row (a double-click runs Start), Enter on a row (Enter
-    // runs Start), and the choice of the Docker host (the command of the first row of the view). The last one added:
-    // "Remove Devspaces from This Docker Engine…".
+    // runs Start), and the choice of the Docker host (the command of the first row of the view). The last two that were
+    // added: "Remove Devspaces from This Docker Engine…", then Enter on a row.
     expect(declared).toHaveLength(37);
-    expect(declared).toContain(Commands.removeFromDockerEngine);
+    expect(declared).toEqual(expect.arrayContaining([Commands.removeFromDockerEngine, Commands.rowEnter]));
   });
 
   it('uses the settings and the context keys of package.json', () => {
@@ -4023,9 +4023,12 @@ describe('Remove Devspaces from This Docker Engine…', () => {
       group: '3_remove@1',
     });
     // As Delete in the ⋯ menu of a row: the last item, apart from the others. VS Code sorts the groups of the "…" menu
-    // by name; the items of the group navigation are the buttons of the title bar.
+    // by name and puts the items without a group last; the items of the group navigation are the buttons of the title
+    // bar.
     const more = manifest.contributes.menus['view/title'].filter((entry) => !entry.group?.startsWith('navigation'));
-    expect([...more].sort((a, b) => (a.group ?? '').localeCompare(b.group ?? '')).at(-1)?.command).toBe(Commands.removeFromDockerEngine);
+    const withoutGroup = (entry: { group?: string }) => (entry.group ? 0 : 1);
+    const sorted = [...more].sort((a, b) => withoutGroup(a) - withoutGroup(b) || (a.group ?? '').localeCompare(b.group ?? ''));
+    expect(sorted.at(-1)?.command).toBe(Commands.removeFromDockerEngine);
     expect(more.filter((entry) => entry.group?.startsWith('3_remove@')).map((entry) => entry.command)).toEqual([Commands.removeFromDockerEngine]);
   });
 });

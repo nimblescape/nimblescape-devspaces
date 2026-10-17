@@ -9,7 +9,10 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode);
 
 import { SHARED_VOLUMES, uninstallCommands } from '../core/docker/engineRemoval';
+import { StateTexts } from '../core/messages';
 import { GITHUB_SCOPES, PACKAGES_SCOPES } from './auth';
+import { ControllerTexts } from './controllerTexts';
+import { TreeTexts } from './treeModel';
 
 // nimblescape promised the Visual Studio Marketplace team that the top of the description and of the README (the
 // Marketplace page) says what Devspaces does on the computer, with a link to docs/security.md (CONTRIBUTING.md,
@@ -31,17 +34,6 @@ function section(markdown: string, heading: string): string {
   expect(start, `the section "${heading}"`).toBeGreaterThan(0);
   const end = markdown.indexOf('\n## ', start + 1);
   return markdown.slice(start, end < 0 ? undefined : end);
-}
-
-/** The placeholders such as <engine> outside code in `markdown`: Markdown takes them for HTML tags and hides them. */
-function rawPlaceholders(markdown: string): string[] {
-  let fenced = false;
-  const found: string[] = [];
-  for (const line of markdown.split('\n')) {
-    if (line.trimStart().startsWith('```')) fenced = !fenced;
-    else if (!fenced) found.push(...(line.replace(/(`+)[^`]*?\1/g, '').match(/<[A-Za-z][^<>]*>/g) ?? []));
-  }
-  return found;
 }
 
 describe('the behaviors of Devspaces at the top of the Marketplace page', () => {
@@ -97,21 +89,19 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
 });
 
 describe('the texts of the Monitor question and of the removal in the docs', () => {
-  it('show placeholders such as <engine> as code, so that Markdown does not hide them', () => {
+  // A placeholder such as <engine> outside code is a raw tag for Markdown, which hides it. markdownPages.test.ts refuses
+  // a raw tag in the README, the change log and every page of docs/.
+  it('show placeholders such as <engine> as code, and quote the texts of the code', () => {
     const guide = read('docs/guide.md');
     const question = guide.slice(guide.indexOf('The first time that you start a devspace on a Docker engine'), guide.indexOf('A monitor that keeps running ends itself'));
     expect(question).toContain('running on `<engine>`?');
     const uninstall = section(guide, 'Uninstall');
     expect(uninstall).toContain('"Remove Devspaces from `<engine>`?"');
-    for (const text of [question, uninstall]) expect(rawPlaceholders(text)).toEqual([]);
+    // The second question, with one devspace and with several, and the state of a devspace that you kept there.
+    for (const count of [1, 2]) expect(uninstall).toContain(`"${ControllerTexts.removeDevspacesQuestion(count, '`<engine>`')}"`);
+    for (const engine of ['Docker', '<host>']) expect(uninstall).toContain(`\`${StateTexts.unknown} (${TreeTexts.unknownShort(engine, 'removed')})\``);
     const release = section(read('CHANGELOG.md'), '0.6.0');
-    for (const start of ['**Background container, asked once per engine:**', `**${REMOVE_COMMAND}:**`]) {
-      const paragraph = release.slice(release.indexOf(start)).split('\n\n')[0];
-      expect(paragraph, start).toContain(start);
-      expect(rawPlaceholders(paragraph), start).toEqual([]);
-    }
-    // The check finds a raw placeholder.
-    expect(rawPlaceholders('on <engine>? `<host>`\n```sh\ndocker --context <name>\n```')).toEqual(['<engine>']);
+    for (const start of ['**Background container, asked once per engine:**', `**${REMOVE_COMMAND}:**`]) expect(release).toContain(`\n\n${start}`);
   });
 
   it('the change log says that a Monitor of an older version keeps running on an engine that this version never opens', () => {
