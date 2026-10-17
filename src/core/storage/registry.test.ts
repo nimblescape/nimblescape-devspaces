@@ -861,6 +861,37 @@ describe('DevspaceRegistry changes', () => {
     expect(fs.readdirSync(root).filter((name) => name.includes('lock'))).toEqual([]);
   });
 
+  // The registry that took the lock over kept the copy of the file that was not valid, and wrote a valid one. Mutation:
+  // without the check of the token before the copy, the stalled registry keeps a copy of that valid file, and warns
+  // that the registry was not valid.
+  it('a holder that lost the lock keeps no copy of a file that was not valid: the registry that took the lock over keeps it', async () => {
+    writeRaw('{ broken');
+    const logger = recordingLogger();
+    const first = new DevspaceRegistry(paths, fixedClock(1111), { lockStaleMs: 60_000, lockTimeoutMs: 5_000, logger });
+    const second = new DevspaceRegistry(paths, fixedClock(2222), { lockStaleMs: 100, lockTimeoutMs: 5_000 });
+    const until = async (condition: () => boolean) => {
+      while (!condition()) await new Promise((resolve) => setTimeout(resolve, 10));
+    };
+    // The first registry read the file under its lock, and stalls before it writes.
+    let firstRuns = 0;
+    let releaseFirst = false;
+    const stalled = first.update(async (file) => {
+      firstRuns++;
+      if (firstRuns === 1) await until(() => releaseFirst);
+      file.devspaces.push(devspace(ID_A, 'o/a'));
+    });
+    await until(() => firstRuns === 1);
+    await second.add(devspace(ID_B, 'o/b'));
+    expect(fs.readFileSync(`${paths.registry}.backup-2222`, 'utf8')).toBe('{ broken');
+    releaseFirst = true;
+    await stalled;
+    expect(firstRuns).toBe(2);
+    expect(readRaw()).toEqual({ version: 1, devspaces: [devspace(ID_B, 'o/b'), devspace(ID_A, 'o/a')] });
+    // Only the copy of the second registry, of the file that was not valid.
+    expect(fs.readdirSync(root).filter((name) => name.startsWith('registry.json.backup-'))).toEqual(['registry.json.backup-2222']);
+    expect(logger.warnings).toEqual([expect.stringContaining('Another process took over the lock')]);
+  });
+
   // For example EBUSY on Windows while a virus scanner reads the token file.
   it('takes a token file that cannot be read for an error, not for a lost lock', async () => {
     const logger = recordingLogger();

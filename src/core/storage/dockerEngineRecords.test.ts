@@ -449,6 +449,36 @@ describe('DockerEngineRecords: the lock folder docker-engines.lock (several wind
       expect(fs.existsSync(records.lockDir)).toBe(false);
     });
 
+    // The window that took the lock over kept the copy of the file that is not valid, and wrote a valid one. Mutation:
+    // without the check of the token before the copy, the stalled window keeps a copy of that valid file, and warns that
+    // the records were not valid.
+    it('a window that lost the lock keeps no copy of a file that was not valid: the window that took the lock over keeps it', async () => {
+      const invalid = '{ "engines": [{ "host": "build-box", "removedAt": 17';
+      fs.writeFileSync(records.file, invalid);
+      let stalled = false;
+      let release: () => void = () => undefined;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      vi.spyOn(fs.promises, 'readFile').mockImplementation((async (file: fs.PathLike, options?: unknown) => {
+        const text = await realReadFile.call(fs.promises, file, options as BufferEncoding);
+        if (file === records.file && !stalled) {
+          stalled = true;
+          await released;
+        }
+        return text;
+      }) as typeof fs.promises.readFile);
+      const copies = () => fs.readdirSync(dir).filter((name) => name.startsWith('docker-engines.json.backup-'));
+      const removal = first.setRemoved('build-box', NOW);
+      await until(() => stalled);
+      await second.recordMonitorAnswer('', NOW);
+      expect(copies()).toHaveLength(1);
+      release();
+      await removal;
+      expect(await records.read()).toEqual([{ host: '', monitorAnsweredAt: NOW }, { host: 'build-box', removedAt: NOW }]);
+      expect(copies()).toHaveLength(1);
+      expect(fs.readFileSync(path.join(dir, copies()[0]), 'utf8')).toBe(invalid);
+      expect(warnings).toEqual([expect.stringContaining('Another process took over the lock')]);
+    });
+
     // The outcome of the second run counts: here the other window cleared the mark meanwhile.
     it('says from the run after a lost lock whether it cleared the mark', async () => {
       fs.writeFileSync(records.file, JSON.stringify({ engines: [OLD_BOX, { host: 'build-box', removedAt: NOW - 1 }] }));
