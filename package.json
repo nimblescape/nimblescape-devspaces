@@ -64,6 +64,9 @@
         "devspaces.showOnlyDevspaces",
         "devspaces.refreshIntervalMinutes"
       ]
+    },
+    "virtualWorkspaces": {
+      "supported": true
     }
   },
   "contributes": {

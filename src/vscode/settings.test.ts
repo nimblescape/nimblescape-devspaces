@@ -395,6 +395,13 @@ describe('settings', () => {
     expect([...(untrustedWorkspaces?.restrictedConfigurations ?? [])].sort()).toEqual(folderSettings);
   });
 
+  // Devspaces reads no file of the workspace, only the address of its folder (connectionAdapter.ts), as the other
+  // extensions of the publisher declare it.
+  it('declares support of virtual workspaces', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as { capabilities?: { virtualWorkspaces?: unknown } };
+    expect(manifest.capabilities?.virtualWorkspaces).toEqual({ supported: true });
+  });
+
   it('reads dev.containers.defaultExtensions from the user settings only', () => {
     let user: unknown = ['acme.tool'];
     const inspect = vi.fn((key: string) =>
