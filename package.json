@@ -856,7 +856,8 @@
     "test:vscode:attach": "node scripts/run-attach-tests.mjs",
     "vscode:prepublish": "node esbuild.mjs --production",
     "package": "vsce package --no-dependencies --no-rewrite-relative-links",
-    "install-local": "node scripts/install-local.mjs"
+    "install-local": "node scripts/install-local.mjs",
+    "uninstall-local": "node scripts/uninstall-local.mjs"
   },
   "devDependencies": {
     "@devcontainers/cli": "0.89.0",
