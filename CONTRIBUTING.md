@@ -95,8 +95,8 @@ The prefix keeps the name apart from the names of other publishers, because
 the Marketplace accepts a `name` only once. The Marketplace cannot rename an
 extension ID: another `name` publishes a new extension, and the old one stays
 with its installations. An extension that is no longer wanted is unpublished
-(More Actions, Unpublish, which can be undone), never removed: the Marketplace
-keeps the `name` of a removed extension reserved for good, also for its own
+(More Actions > Unpublish; this can be undone), never removed: the Marketplace
+keeps the `name` of a removed extension reserved permanently, also for its own
 publisher.
 
 ## Release
@@ -120,10 +120,10 @@ The run has six jobs:
 
 `main` receives the version commit only after CI, the check of the package
 and the check of the Marketplace passed. When one of them fails, `main`, the
-tags, the releases and the Marketplace stay unchanged, and the version stays
-free: fix the cause on `main` and start the release of the same version again.
-The jobs move and push with the token of the workflow, so a rule of `main` that
-blocks direct pushes stops the release.
+tags, the releases and the Marketplace stay unchanged, and the version can
+still be released: fix the cause on `main` and start the release of the same
+version again. The jobs move and push with the token of the workflow, so a rule
+of `main` that blocks direct pushes stops the release.
 
 A dry run tests a release without a change: choose "Dry run" when you start
 the workflow. The run makes the version commit on its temporary branch, runs
@@ -132,9 +132,9 @@ neither `main`, a tag, a release nor the Marketplace. Its run name ends with
 "(dry run)". A dry run may start from another branch than `main`, so it also
 tests a change of `release.yml` on that branch before the change reaches
 `main`. In a dry run, the checks of rule 3 and the check `listed` only warn, so
-that a change of the release process can be tested also when no change for
-the users waits for its release, within 7 days of the newest release, and
-while the Marketplace does not list the extension.
+that a change of the release process can be tested also when there is no change
+for the users to release, within 7 days of the newest release, and while the
+Marketplace does not list the extension.
 
 When a job fails, remove the cause and choose "Re-run failed jobs" on the
 run. A re-run keeps the tag and the VSIX that the GitHub release already
@@ -157,7 +157,7 @@ publisher `nimblescape` as "Untrustworthy" on 13 October 2026. The script
 the workflows run it. The checks also run in a clone, for example
 `node scripts/release-checks.mjs rules`.
 
-1. **One ID for good.** An extension keeps its ID `nimblescape.nimblescape-<name>` (see [Naming](#naming)), and nimblescape never publishes an extension under a new ID. The check `rules`, in CI and in the job "Version commit", fails when `publisher` is not `nimblescape`, when `name` does not have the form `nimblescape-<name>` or is not the name of the repository, when `displayName` does not have the form `nimblescape <Title>`, or when the ID differs from the ID of the newest release tag. The check `package`, in the jobs "Check the package" and "Publish to the Visual Studio Marketplace", fails when the VSIX holds another ID or version than `package.json`.
+1. **The ID never changes.** An extension keeps its ID `nimblescape.nimblescape-<name>` (see [Naming](#naming)), and nimblescape never publishes an extension under a new ID. The check `rules`, in CI and in the job "Version commit", fails when `publisher` is not `nimblescape`, when `name` does not have the form `nimblescape-<name>` or is not the name of the repository, when `displayName` does not have the form `nimblescape <Title>`, or when the ID differs from the ID of the newest release tag. The check `package`, in the jobs "Check the package" and "Publish to the Visual Studio Marketplace", fails when the VSIX holds another ID or version than `package.json`.
 2. **No deletion.** nimblescape never deletes an extension. The check `rules` fails when a workflow, an action, an npm script or a file of `scripts/` runs `vsce unpublish`, which deletes the extension on the Marketplace, or `vsce delete-publisher`, which deletes the publisher with all its extensions. On the publisher management page, nobody uses More Actions > Remove, which deletes the extension and keeps its name reserved permanently, or "Delete this version" (More Actions > Reports, tab Manage), after which the number of the version can never be used again. An extension that is no longer wanted is unpublished on the publisher management page, as [Naming](#naming) describes.
 3. **Only changes for the users, at most one version in 7 days.** A version is published only when it changes something for the users, its section in `CHANGELOG.md` describes that change, and at least 7 days passed since the newest release. The check `package` compares the VSIX with the package of the newest release before the version. These changes count: a file of the package that is not a document, not the Marketplace icon, not `package.json` and not in `dist/`, for example the icon of a view; a field of `package.json` that changes how the extension works, for example `contributes`; and a bundle in `dist/`, when the version also changes a file of `src/` that is not a test. These do not count: the documents (the files `.md` in any folder of the package, the files `.txt` at its top, and the license), the Marketplace icon (the file that the field `icon` of `package.json` names), the other fields of `package.json`, which do not change how the extension works (for example `displayName`, `description` and `icon`), the tests and the build tools. A file `.md` or the Marketplace icon counts when `contributes` names it, for example the page of a walkthrough, because VS Code then shows it at run time. A change only of the build, for example of `esbuild.mjs`, `tsconfig.json` or a file of `scripts/`, does not count: it reaches the users with the next change of `src/`. Images that only the README shows do not belong in the package: the README links them with full `https://github.com/…` links (see [Manifest](#manifest)), and the check counts the other files of the package. The check fails when nothing counts. It also fails when the section of the version in `CHANGELOG.md` is missing, has no text other than headings and HTML comments, or says "maintenance release", "behaves as in" followed by a version, or a phrase of that kind. The check `interval`, in the job "Version commit", fails when the GitHub release of the newest tag before the version is less than 7 days old. For an urgent fix, the input "urgent" gives the reason: one line, at least 20 characters. The check then passes with a notice, the run name shows "(urgent)", and the version commit keeps the reason. After the 7 days and before the first release, the check still refuses a shorter reason, and a valid reason gives only a notice that the release does not need the input. No input lets a version without a change for the users pass. A failed check stops the release before its tag.
 4. **Dry run first.** A change of the release process is tested with a dry run before it reaches `main`. The files of the release process are `release.yml`, `ci.yml`, whose VSIX the release publishes, and `scripts/release-checks.mjs`. The workflow "Release dry run" runs on every pull request. When the pull request changes one of these files, also in an update by Dependabot, the check `dry-run` fails until a successful dry run, or the newest release, had these files as they are at the head of the pull request. Start the workflow "Release" on the branch of the pull request with "Dry run" and a version without a tag (with notes when `CHANGELOG.md` has no section for the version), then re-run the job "release dry run" of the pull request. A pull request from a fork cannot meet the rule, because the dry run needs a branch of this repository. The job "Version commit" of a release runs the check `dry-run` again, so a change that reached `main` without a dry run stops the release until a dry run tested it. Do not make "release dry run" a required check of `main`: the release moves `main` to its version commit, which has no result of the check.

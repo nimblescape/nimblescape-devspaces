@@ -19,18 +19,18 @@
 # the commit, as a fast-forward that fails when main changed during the run,
 # deletes the temporary branch, creates the tag v<version> on the commit and
 # the GitHub release of the tag, with the section of the version as its notes
-# and the VSIX as its file. A failed job before the tag so changes neither main
-# nor a tag, and the version stays free. A release that exists keeps its notes
-# and receives only a missing VSIX. The publish job downloads the VSIX of the
-# GitHub release, signs in to Microsoft Entra ID with the official azure/login
-# action and publishes the VSIX with vsce, the official Marketplace tool. The
-# sign-in exchanges the OpenID Connect token of the job through the federated
-# credential of the publishing app registration, so no long-lived credential
-# is stored. A re-run keeps the VSIX that the release already holds, and the
-# Marketplace skips a version that it already holds, so no version is
-# published twice. A dry run, also from another branch than main, runs the
-# version job, CI and the check of the package only and then deletes its
-# temporary branch, so it tests a release, and a change of this workflow,
+# and the VSIX as its file. So a job that fails before the tag changes neither
+# main nor a tag, and the version can still be released. A release that exists
+# keeps its notes and receives only a missing VSIX. The publish job downloads
+# the VSIX of the GitHub release, signs in to Microsoft Entra ID with the
+# official azure/login action and publishes the VSIX with vsce, the official
+# Marketplace tool. The sign-in exchanges the OpenID Connect token of the job
+# through the federated credential of the publishing app registration, so no
+# long-lived credential is stored. A re-run keeps the VSIX that the release
+# already holds, and the Marketplace skips a version that it already holds, so
+# no version is published twice. A dry run, also from another branch than main,
+# runs the version job, CI and the check of the package only and then deletes
+# its temporary branch, so it tests a release, and a change of this workflow,
 # without a change of main, a tag, a release or the Marketplace; its run name
 # ends with "(dry run)". The script scripts/release-checks.mjs checks the
 # release rules of CONTRIBUTING.md: the version job checks the extension ID,
@@ -369,8 +369,8 @@ jobs:
     steps:
       # The commit passed CI, so main moves to it. The compare status tells
       # whether the commit is ahead of main (a fast-forward), already on main
-      # (identical or behind), or beside a change of main during the run
-      # (diverged), which stops the release before the tag.
+      # (identical or behind), or not on top of main, because main changed
+      # during the run (diverged), which stops the release before the tag.
       - name: Move main to the commit of the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -504,7 +504,8 @@ jobs:
           VSIX: ${{ needs.version.outputs.vsix }}
         run: gh release download "$TAG" --pattern "$VSIX"
 
-      # The VSIX of the GitHub release is the file that the Marketplace receives, so the rules 1 and 3 hold for it.
+      # The VSIX of the GitHub release is the file that the Marketplace receives, so the checks of rules 1 and 3 run on
+      # this file.
       - name: Check the extension ID, the number of tags, the changes since the last release and the change-log section
         env:
           GH_TOKEN: ${{ github.token }}
