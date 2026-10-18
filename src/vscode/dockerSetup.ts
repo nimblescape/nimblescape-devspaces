@@ -47,9 +47,9 @@ import {
 } from '../core/docker/dockerSetup';
 import { MAC_OPEN, ensureDockerRunning, launchDetachedProcess } from '../core/docker/dockerStart';
 import { errorMessage, isUserFacingError } from '../core/errors';
-import { Steps } from '../core/messages';
 import { isAbortError, systemClock, type Clock, type Logger, type ProcessRunner } from '../core/ports';
-import { showErrorMessage, showInformationMessage, showWarningMessage, withNotificationProgress } from './notifications';
+import { showErrorMessage, showInformationMessage, showWarningMessage } from './notifications';
+import { withNotificationProgress } from './progress';
 
 /**
  * Command Start Docker (package.json), offered once an installation has put the CLI in place, and as the action of the
@@ -70,9 +70,11 @@ export const DockerSetupUiTexts = {
   localWindowNeeded: 'Open a local window to install Docker.',
   /** Start Docker in a remote window. */
   localWindowNeededToStart: 'Open a local window to start Docker.',
-  downloading: 'Downloading Docker Desktop',
+  downloading: 'Downloading Docker Desktop…',
   downloadProgress: (receivedMb: number, totalMb: number | undefined) =>
-    totalMb === undefined ? `${receivedMb} MB` : `${receivedMb} of ${totalMb} MB`,
+    totalMb === undefined ? `${receivedMb} MB.` : `${receivedMb} of ${totalMb} MB.`,
+  /** Title of the progress notification of Start Docker. */
+  starting: 'Starting Docker…',
   downloadFailed: 'The installer of Docker Desktop could not be downloaded.',
   openFailed: (file: string) => `The installer could not be opened. Open it yourself: ${file}`,
   manualInstall: 'Devspaces cannot install Docker on this computer by itself. The installation guide of Docker opens.',
@@ -333,7 +335,7 @@ export class DockerSetup implements vscode.Disposable {
     if (this.refuseInRemoteWindow(DockerSetupUiTexts.localWindowNeededToStart, 'started')) return;
     try {
       await withNotificationProgress(
-        { title: Steps.startingDocker, cancellable: true },
+        { title: DockerSetupUiTexts.starting, cancellable: true },
         (_progress, token) => {
           const abort = new AbortController();
           const subscription = token.onCancellationRequested(() => abort.abort());
