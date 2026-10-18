@@ -15,11 +15,12 @@ export const REPOSITORY_PARAMETER = 'repository';
 /** A link that opens a repository, or why the link opens nothing (for the log). */
 export type ParsedLink = { kind: 'open'; repository: string } | { kind: 'invalid'; reason: string };
 
-// The characters of GitHub names: an account or organization of at most 39 letters, digits and hyphens that starts
-// with a letter or a digit (GitHub allows no other hyphens in new names, but older names have them); a repository of
-// at most 100 letters, digits, `.`, `_` and `-`, but not `.` or `..`, and not ending with `.git` (the address of a
-// clone, which GitHub gives no repository). Any other text of a website opens nothing.
-const OWNER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+// The characters of GitHub names: an account or organization of at most 39 letters, digits, hyphens and underscores
+// that starts with a letter or a digit (the accounts of Enterprise Managed Users end with `_` and a short code; GitHub
+// allows no other hyphens in new names, but older names have them); a repository of at most 100 letters, digits, `.`,
+// `_` and `-`, but not `.` or `..`, and not ending with `.git` (the address of a clone, which GitHub gives no
+// repository). Any other text of a website opens nothing.
+const OWNER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,38}$/;
 const NAME_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 
 /**

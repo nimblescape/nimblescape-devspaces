@@ -17,6 +17,7 @@ import { hostAccessChecks } from '../core/policy/hostAccessChecks';
 import type { TokenRemoveValue, WindowStateValue } from '../core/helperChannel/protocol';
 import { DockerContextKeys } from '../core/docker/dockerSetup';
 import { UserFacingError } from '../core/errors';
+import { GitHubApiError } from '../core/discovery/githubApi';
 import { Actions, Messages } from '../core/messages';
 import { removalEndedNote } from '../core/docker/engineRemoval';
 import { CONTAINER_VERSION, HOST_ACCESS_UNRESTRICTED, LABEL_CONTAINER_VERSION, LABEL_HOST_ACCESS } from '../core/names';
@@ -862,6 +863,14 @@ describe('Start', () => {
     // The repository has two configurations, so its rows are child rows: the texts name the source too.
     expect(h.progressTitles[0]).toContain(Messages.opening('acme/api · config'));
     expect(h.progressTitles.some((message) => message.includes('Connecting.'))).toBe(true);
+  });
+
+  it('lets the pipeline ask about a repository of another owner at its first open', async () => {
+    h.sidebar.infos.set('other/api', repositoryInfo('other/api'));
+    h.sidebar.trustedOwner.mockResolvedValue(false);
+    await run('start', row('other/api', undefined, h.sidebar.infos.get('other/api'), ROOT_SOURCE));
+    expect(h.sidebar.trustedOwner).toHaveBeenCalledWith('other');
+    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'other/api', trusted: false }), expect.anything());
   });
 
   it('opens an existing devspace with the pipeline and connects this window (switch)', async () => {
@@ -7136,12 +7145,13 @@ describe('Double-click on a repository row', () => {
 describe('A link to Devspaces', () => {
   /** The link vscode://nimblescape.nimblescape-devspaces/open?repository=<repository>, as vscode.Uri gives it. */
   const link = (repository: string) => ({ path: '/open', query: `repository=${repository}` });
-  /** The questions of the link before it creates a devspace (linkStartConfirm). */
-  const linkQuestions = () => warningMessages().filter((message) => message.includes(' from a link? '));
+  /** The question before a link creates a devspace: linkStartConfirm, or for another owner untrustedRepository. */
+  const isLinkQuestion = (message: string) => message.includes(' from a link? ') || message.endsWith(Messages.untrustedRepository(''));
+  const linkQuestions = () => warningMessages().filter(isLinkQuestion);
 
-  // The question of the link is answered with Open, unless a test answers otherwise.
+  // The question is answered with Open, unless a test answers otherwise.
   beforeEach(() => {
-    fakeVscode.window.showWarningMessage.mockImplementation(async (message: string) => (message.includes(' from a link? ') ? Actions.open : undefined));
+    fakeVscode.window.showWarningMessage.mockImplementation(async (message: string) => (isLinkQuestion(message) ? Actions.open : undefined));
   });
 
   it('starts the extension for a link (activation event onUri)', () => {
@@ -7164,13 +7174,17 @@ describe('A link to Devspaces', () => {
     expect(warningMessages()).toEqual([ControllerTexts.linkStartConfirm('acme/api'), ControllerTexts.linkStartConfirm('acme/api')]);
   });
 
-  it('creates no devspace when the question of the link is not answered with Open', async () => {
+  it('creates no devspace and starts no Docker work when the question is not answered with Open', async () => {
     h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
     fakeVscode.window.showWarningMessage.mockResolvedValue(undefined);
     await h.controller.openLink(link('acme/api'));
-    expect(linkQuestions()).toEqual([ControllerTexts.linkStartConfirm('acme/api')]);
+    h.sidebar.trustedOwner.mockResolvedValue(false);
+    await h.controller.openLink(link('acme/api'));
+    expect(linkQuestions()).toEqual([ControllerTexts.linkStartConfirm('acme/api'), Messages.untrustedRepository('acme/api')]);
     expect(h.logger.info).toHaveBeenCalledWith('The start of acme/api from the link was not confirmed.');
     expect(h.service.openInWorker).not.toHaveBeenCalled();
+    // Not even the question about the Monitor of the engine (beforeUserFlow), which comes before the pipeline.
+    expect(h.monitorQuestion.askIfNeeded).not.toHaveBeenCalled();
     expect(h.connection.openInNewWindow).not.toHaveBeenCalled();
   });
 
@@ -7180,14 +7194,15 @@ describe('A link to Devspaces', () => {
     await h.controller.openLink(link('MajikMate/Classroom'));
     expect(h.auth.getSession).toHaveBeenCalledWith({ interactive: true });
     expect(h.discovery.getRepository).toHaveBeenCalledWith('MajikMate/Classroom', 'gho_token');
-    // The owner is neither the account nor one of its organizations: the pipeline asks for the confirmation of the
-    // first open (trusted: false), as for every first open, and the link asks no question of its own.
+    // The owner is neither the account nor one of its organizations: the link asks for the confirmation of every first
+    // open before any Docker work, and the pipeline asks it no second time (trusted: true).
+    expect(h.sidebar.trustedOwner).toHaveBeenCalledWith('majikmate');
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(Messages.untrustedRepository('majikmate/classroom'), { modal: true }, Actions.open);
+    expect(linkQuestions()).toEqual([Messages.untrustedRepository('majikmate/classroom')]);
     expect(h.service.openInWorker).toHaveBeenCalledWith(
-      { repository: 'majikmate/classroom', defaultBranch: 'trunk', configPaths: ['.devcontainer/web/devcontainer.json'], trusted: false },
+      { repository: 'majikmate/classroom', defaultBranch: 'trunk', configPaths: ['.devcontainer/web/devcontainer.json'], trusted: true },
       expect.objectContaining({ source: { kind: 'configuration', configPath: '.devcontainer/web/devcontainer.json' } }),
     );
-    expect(h.sidebar.trustedOwner).toHaveBeenCalledWith('majikmate');
-    expect(linkQuestions()).toEqual([]);
   });
 
   it('opens the devspace in a new window, and only in an empty window in that window', async () => {
@@ -7240,7 +7255,6 @@ describe('A link to Devspaces', () => {
   });
 
   it('asks for a new sign-in when GitHub rejects the token, and opens the link with it', async () => {
-    const { GitHubApiError } = await import('../core/discovery/githubApi');
     h.discovery.getRepository.mockRejectedValueOnce(new GitHubApiError('Bad credentials', 401));
     h.discovery.getRepository.mockResolvedValueOnce(repositoryInfo('acme/api'));
     h.auth.renewToken.mockImplementationOnce(async () => {
@@ -7297,6 +7311,30 @@ describe('A link to Devspaces', () => {
     signIn.resolve(undefined);
     await opening;
     expect(warningMessages()).toEqual([Messages.signInRequired]);
+  });
+
+  // A link that arrives after the check of the reopen (VS Code asked whether Devspaces may open it) asks its question
+  // while the reopen runs: the reopen does not reload the window under it.
+  it('keeps the automatic reopen from connecting this window while the link asks its question', async () => {
+    await h.registry.add(devspace());
+    h.sessionFiles.writeReopenSync({ devspaceId: ENV_ID, closedAt: iso(NOW - 60_000) });
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    const pipeline = deferred<OpenResult>();
+    h.service.openDevspaceInWorker.mockReturnValueOnce(pipeline.promise);
+    const reopening = h.controller.runEmptyWindowTasks();
+    await settle(() => h.service.openDevspaceInWorker.mock.calls.length === 1, 'the reopen');
+    const question = deferred<string | undefined>();
+    fakeVscode.window.showWarningMessage.mockReturnValueOnce(question.promise);
+    h.sidebar.infos.set('acme/web', repositoryInfo('acme/web'));
+    const opening = h.controller.openLink(link('acme/web'));
+    await settle(() => linkQuestions().length === 1, 'the question of the link');
+    pipeline.resolve(openResult(devspace()));
+    await reopening;
+    expect(h.logger.info).toHaveBeenCalledWith('acme/api is not connected: a link to Devspaces is opening in this window.');
+    expect(h.connection.open).not.toHaveBeenCalled();
+    question.resolve(undefined);
+    await opening;
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
   });
 
   // VS Code gives a link to the extension at its activation; the window then may not know its role and its devspace yet.

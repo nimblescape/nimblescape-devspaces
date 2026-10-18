@@ -313,11 +313,10 @@ interface StartOptions {
    */
   automatic?: boolean;
   /**
-   * First open from a link only (openLink): the trust of the owner that the link read already. `true`: the user
-   * confirmed the start at the question of the link; `false`: the pipeline asks its question for another owner.
-   * Without it, the trust is read at the first open (firstOpenTrust).
+   * First open from a link only (openLink): the user confirmed the first open already, before any Docker work, so the
+   * pipeline asks no question about the owner. Without it, the trust is read at the first open (firstOpenTrust).
    */
-  trust?: boolean;
+  confirmed?: boolean;
 }
 
 /** The devspace that this window is attached to. A window changes its devspace only by reloading. */
@@ -346,8 +345,11 @@ type LeftDevspace =
 /** A LeftDevspace whose devspace is known (its ID). */
 type KnownLeftDevspace = Extract<LeftDevspace, { devspaceId: string }>;
 
-/** A flow that connects this window (numbered, see `connectingFlow`), or a new window. */
-type ConnectRequest = { newWindow: false; number: number } | { newWindow: true };
+/**
+ * A flow that connects this window (numbered, see `connectingFlow`), or a new window. `automatic`: the reopen at
+ * startup, which does not connect this window while a link opens (openLink).
+ */
+type ConnectRequest = { newWindow: false; number: number; automatic?: boolean } | { newWindow: true };
 
 type HandOffRequest = Pick<PendingOperation, 'operation' | 'reason' | 'additionalVolumesToRemove'>;
 
@@ -1768,11 +1770,11 @@ export class Controller implements vscode.Disposable {
    * VS Code asks first whether Devspaces may open it, unless the user answered "Do not ask me again for this
    * extension", and it installs Devspaces from the Marketplace when it is missing. The link opens the devspace of the
    * repository that the account used last on the current Docker engine. Without one, it creates the devspace as a
-   * double-click on the row of the repository does, from its first source (possibleSources), after one question: the
-   * question of the pipeline for a repository that belongs neither to the account nor to one of its organizations, else
-   * the question of the link (linkStartConfirm). VS Code gives the link to the window that was active last, in which
-   * the user did not ask for anything: the devspace opens in that window only when it is empty, else in a new window,
-   * and the window keeps what it has. The repository can be one that the list does not show: then GitHub is asked for
+   * double-click on the row of the repository does, from its first source (possibleSources), after one question before
+   * any Docker work: the confirmation of every first open for a repository that belongs neither to the account nor to
+   * one of its organizations, else the question of the link (linkStartConfirm). VS Code gives the link to the window
+   * that was active last, in which the user did not ask for anything: the devspace opens in that window only when it is
+   * empty, else in a new window, and the window keeps what it has. The repository can be one that the list does not show: then GitHub is asked for
    * it. A link that names no repository asks neither GitHub nor Docker. Never rejects: errors are shown.
    */
   async openLink(uri: { path: string; query: string }): Promise<void> {
@@ -1834,17 +1836,16 @@ export class Controller implements vscode.Disposable {
         this.inform(Messages.noConfiguration(name));
         return;
       }
-      // A link of a website creates a devspace only after one question. The pipeline asks its question for another
-      // owner; for the account and its organizations, the link asks here.
+      // A link of a website creates a devspace only after one question, before any Docker work: for another owner, the
+      // confirmation of every first open (as PipelineUi.confirmUntrustedRepository); for the account and its
+      // organizations, the question of the link.
       const trusted = await this.deps.sidebar.trustedOwner(splitRepository(name).owner);
-      if (trusted) {
-        const choice = await showWarningMessage(ControllerTexts.linkStartConfirm(name), { modal: true }, Actions.open);
-        if (choice !== Actions.open) {
-          this.logger.info(`The start of ${name} from the link was not confirmed.`);
-          return;
-        }
+      const question = trusted ? ControllerTexts.linkStartConfirm(name) : Messages.untrustedRepository(name);
+      if ((await showWarningMessage(question, { modal: true }, Actions.open)) !== Actions.open) {
+        this.logger.info(`The start of ${name} from the link was not confirmed.`);
+        return;
       }
-      await this.startTarget({ ...target, info: target.info ?? info, source }, { window, trust: trusted });
+      await this.startTarget({ ...target, info: target.info ?? info, source }, { window, confirmed: true });
     });
   }
 
@@ -2145,12 +2146,13 @@ export class Controller implements vscode.Disposable {
                   if (devspace) {
                     result = await service.openDevspaceInWorker(devspace.id, { progress, signal, source });
                   } else {
-                    const trusted = options.trust ?? (await this.firstOpenTrust(repository));
+                    const trusted = options.confirmed === true || (await this.firstOpenTrust(repository));
                     result = await service.openInWorker(repositoryTarget(repository, target.info, trusted), { progress, signal, source });
                   }
                   await this.connect(result, progress, request, signal);
                 },
                 reserved,
+                options.automatic === true,
               ),
           }),
         // Try again is a Start: a repository takes the account of a session with a working token, as at the first try;
@@ -2241,14 +2243,19 @@ export class Controller implements vscode.Disposable {
   /**
    * Runs a flow that ends by connecting this window, with its number for `connect`: `reserved` (reserveConnectRequest),
    * or a new one. A flow that connects a new window (`newWindow`) leaves this window as it is: it is not one of the
-   * connecting flows of this window, so it neither skips nor is skipped by them.
+   * connecting flows of this window, so it neither skips nor is skipped by them. `automatic`: the reopen at startup.
    */
-  private async connectingFlow<T>(newWindow: boolean, fn: (request: ConnectRequest) => Promise<T>, reserved?: number): Promise<T> {
+  private async connectingFlow<T>(
+    newWindow: boolean,
+    fn: (request: ConnectRequest) => Promise<T>,
+    reserved?: number,
+    automatic = false,
+  ): Promise<T> {
     if (newWindow) return fn({ newWindow: true });
     const request = reserved ?? this.reserveConnectRequest();
     this.activeConnectRequests.add(request);
     try {
-      return await fn({ newWindow: false, number: request });
+      return await fn({ newWindow: false, number: request, ...(automatic ? { automatic } : {}) });
     } finally {
       this.activeConnectRequests.delete(request);
     }
@@ -2289,6 +2296,12 @@ export class Controller implements vscode.Disposable {
     waited.abort();
     if (!request.newWindow && [...this.activeConnectRequests].some((other) => other > request.number)) {
       this.logger.info(`${result.devspace.repository} is not connected: another devspace is opening in this window.`);
+      return;
+    }
+    // A link that the reopen did not hold back (it arrived after the check of the reopen) may still ask its questions:
+    // the reload of this window would end them.
+    if (!request.newWindow && request.automatic === true && this.linksOpening > 0) {
+      this.logger.info(`${result.devspace.repository} is not connected: a link to Devspaces is opening in this window.`);
       return;
     }
     if (signal.aborted) {

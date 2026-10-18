@@ -9,6 +9,8 @@ describe('parseLink', () => {
   it('reads the repository of the link /open', () => {
     expect(parseLink('/open', 'repository=majikmate/devcontainer-classroom-web')).toEqual({ kind: 'open', repository: 'majikmate/devcontainer-classroom-web' });
     expect(parseLink(OPEN_LINK_PATH, `${REPOSITORY_PARAMETER}=Acme/My.Repo_1`)).toEqual({ kind: 'open', repository: 'Acme/My.Repo_1' });
+    // An account of an Enterprise Managed User.
+    expect(parseLink('/open', 'repository=alice_acme/api')).toEqual({ kind: 'open', repository: 'alice_acme/api' });
   });
 
   it('ignores other parameters, for later versions of the link', () => {
@@ -38,6 +40,7 @@ describe('parseLink', () => {
       '/api',
       'acme/api/tree/main',
       '-acme/api',
+      '_acme/api',
       'ac me/api',
       'acme/a pi',
       'acme/a+pi',
