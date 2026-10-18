@@ -167,6 +167,14 @@ export const ControllerTexts = {
     `The container of ${repository} was made while the host access checks were off. They are on now, so it cannot be used. This window closes its connection. Start ${repository} again to make a new container with the checks.`,
   noDevspaces: 'There is no devspace yet. Start a repository to create one.',
   noRepositories: 'No repository is available. Sign in with GitHub, or refresh the list.',
+  // A link to Devspaces (links.ts), for example on a website.
+  invalidLink: 'Devspaces cannot open this link. A link to Devspaces ends with /open?repository=owner/name, with the name of a GitHub repository.',
+  linkRepositoryNotFound: (repository: string) =>
+    `GitHub does not show the repository ${repository} to your GitHub account. Check the link, or sign in with an account that can access the repository.`,
+  linkRepositoryUnknown: (repository: string) => `GitHub could not be asked for the repository ${repository}. Open the link again later.`,
+  /** The modal question before a link creates a devspace of the account or of one of its organizations (button Open). */
+  linkStartConfirm: (repository: string) =>
+    `Open ${repository} from a link? Devspaces creates a devspace for it: it clones the repository and runs code from it (Dockerfile, Features, and commands) on your Docker engine.`,
   // Buttons.
   stop: 'Stop',
   /** The one button of the modal message stillConnected: the window closes its connection after it. */

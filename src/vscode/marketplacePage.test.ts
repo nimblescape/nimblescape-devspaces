@@ -16,6 +16,7 @@ import { GITHUB_PROVIDER_ID, GITHUB_SCOPES, PACKAGES_SCOPES } from './auth';
 import { Commands } from './commands';
 import { ControllerTexts } from './controllerTexts';
 import { OUTPUT_CHANNEL_NAME } from './logger';
+import { OPEN_LINK_PATH, REPOSITORY_PARAMETER } from './links';
 import { GITHUB_ENTERPRISE_SECTION } from './settings';
 import { TreeTexts } from './treeModel';
 
@@ -87,6 +88,22 @@ describe('the behaviors of Devspaces at the top of the Marketplace page', () => 
     }
     for (const words of ['Dockerfile and the Features', '`docker exec`']) expect(item(behaviors, '**Background container.**')).toContain(words);
     expect(section(security, 'Stored data')).toContain('`computer.id`');
+  });
+
+  // A link, for example on a website, starts a repository (links.ts): the README, Security and the user guide name the
+  // link of the code, with the ID of the manifest, and the question of VS Code before it.
+  it('says that a link starts a repository, with the link of the code', () => {
+    const { publisher, name } = JSON.parse(read('package.json')) as { publisher: string; name: string };
+    const link = `vscode://${publisher}.${name}${OPEN_LINK_PATH}?${REPOSITORY_PARAMETER}=owner/name`;
+    const readmeWhen = item(section(read('README.md'), HEADING), '**When it works.**');
+    const securityWhen = item(section(read('docs/security.md'), HEADING), '**When.**');
+    for (const text of [readmeWhen, securityWhen]) {
+      expect(text).toContain(`\`${link}\``);
+      expect(text).toContain('"Do not ask me again for this extension"');
+    }
+    const guide = section(read('docs/guide.md'), 'Open from a link');
+    expect(guide).toContain(`<a href="${link}">`);
+    expect(guide).toContain('**Do not ask me again for this extension**');
   });
 
   it('has the section in docs/security.md, as the target of the link', () => {

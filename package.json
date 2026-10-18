@@ -48,7 +48,8 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onResolveRemoteAuthority:attached-container"
+    "onResolveRemoteAuthority:attached-container",
+    "onUri"
   ],
   "main": "./dist/extension.js",
   "capabilities": {

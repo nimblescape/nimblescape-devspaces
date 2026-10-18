@@ -237,8 +237,11 @@ interface Harness {
     getSession: ReturnType<typeof vi.fn>;
     isSignedIn: ReturnType<typeof vi.fn>;
     updateContextKey: ReturnType<typeof vi.fn>;
+    renewToken: ReturnType<typeof vi.fn>;
   };
   dockerSetup: Record<'install' | 'start' | 'installWsl' | 'show', ReturnType<typeof vi.fn>>;
+  /** The single lookup of a repository on GitHub; by default GitHub does not show it. */
+  discovery: { getRepository: Mock<(repository: string, token: string) => Promise<RepositoryInfo | undefined>> };
   repositoryGroupsEditor: { open: ReturnType<typeof vi.fn> };
   sidebar: {
     infos: Map<string, RepositoryInfo>;
@@ -406,6 +409,8 @@ function createHarness(
     }),
     isSignedIn: vi.fn(async () => true),
     updateContextKey: vi.fn(async () => true),
+    // The new sign-in after GitHub rejected the token; by default the user cancels it.
+    renewToken: vi.fn(async (): Promise<string | undefined> => undefined),
   };
   const dockerSetup = {
     install: vi.fn(async () => {}),
@@ -414,7 +419,7 @@ function createHarness(
     show: vi.fn(async () => {}),
   };
   const repositoryGroupsEditor = { open: vi.fn(async () => {}) };
-  const discovery = {};
+  const discovery = { getRepository: vi.fn(async (_repository: string, _token: string): Promise<RepositoryInfo | undefined> => undefined) };
   const infos = new Map<string, RepositoryInfo>();
   const sidebar = {
     infos,
@@ -516,6 +521,7 @@ function createHarness(
     coordinator,
     auth,
     dockerSetup,
+    discovery,
     repositoryGroupsEditor,
     sidebar,
     statusBar,
@@ -7124,6 +7130,237 @@ describe('Double-click on a repository row', () => {
       await click(argument, 100);
     }
     expect(start).not.toHaveBeenCalled();
+  });
+});
+
+describe('A link to Devspaces', () => {
+  /** The link vscode://nimblescape.nimblescape-devspaces/open?repository=<repository>, as vscode.Uri gives it. */
+  const link = (repository: string) => ({ path: '/open', query: `repository=${repository}` });
+  /** The questions of the link before it creates a devspace (linkStartConfirm). */
+  const linkQuestions = () => warningMessages().filter((message) => message.includes(' from a link? '));
+
+  // The question of the link is answered with Open, unless a test answers otherwise.
+  beforeEach(() => {
+    fakeVscode.window.showWarningMessage.mockImplementation(async (message: string) => (message.includes(' from a link? ') ? Actions.open : undefined));
+  });
+
+  it('starts the extension for a link (activation event onUri)', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as { activationEvents: string[] };
+    expect(manifest.activationEvents).toContain('onUri');
+  });
+
+  it('starts a listed repository from its first source, as a double-click does, after the question of the link', async () => {
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] }));
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    await h.controller.openLink(link('acme/api'));
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.linkStartConfirm('acme/api'), { modal: true }, Actions.open);
+    // The user answered the question of the link: the pipeline asks no question of its own (trusted).
+    expect(h.service.openInWorker).toHaveBeenLastCalledWith(expect.objectContaining({ repository: 'acme/api', trusted: true }), expect.objectContaining({ source: DEFAULT_SOURCE }));
+    h.settings.startWithDefaultImage = false;
+    await h.controller.openLink(link('acme/api'));
+    expect(h.service.openInWorker).toHaveBeenLastCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: ROOT_SOURCE }));
+    expect(h.discovery.getRepository).not.toHaveBeenCalled();
+    expect(fakeVscode.window.showQuickPick).not.toHaveBeenCalled();
+    expect(warningMessages()).toEqual([ControllerTexts.linkStartConfirm('acme/api'), ControllerTexts.linkStartConfirm('acme/api')]);
+  });
+
+  it('creates no devspace when the question of the link is not answered with Open', async () => {
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    fakeVscode.window.showWarningMessage.mockResolvedValue(undefined);
+    await h.controller.openLink(link('acme/api'));
+    expect(linkQuestions()).toEqual([ControllerTexts.linkStartConfirm('acme/api')]);
+    expect(h.logger.info).toHaveBeenCalledWith('The start of acme/api from the link was not confirmed.');
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+    expect(h.connection.openInNewWindow).not.toHaveBeenCalled();
+  });
+
+  it('asks GitHub for a repository that the list does not show, and starts it with its name and data from GitHub', async () => {
+    h.sidebar.trustedOwner.mockResolvedValue(false);
+    h.discovery.getRepository.mockResolvedValue(repositoryInfo('majikmate/classroom', { defaultBranch: 'trunk', configPaths: ['.devcontainer/web/devcontainer.json'] }));
+    await h.controller.openLink(link('MajikMate/Classroom'));
+    expect(h.auth.getSession).toHaveBeenCalledWith({ interactive: true });
+    expect(h.discovery.getRepository).toHaveBeenCalledWith('MajikMate/Classroom', 'gho_token');
+    // The owner is neither the account nor one of its organizations: the pipeline asks for the confirmation of the
+    // first open (trusted: false), as for every first open, and the link asks no question of its own.
+    expect(h.service.openInWorker).toHaveBeenCalledWith(
+      { repository: 'majikmate/classroom', defaultBranch: 'trunk', configPaths: ['.devcontainer/web/devcontainer.json'], trusted: false },
+      expect.objectContaining({ source: { kind: 'configuration', configPath: '.devcontainer/web/devcontainer.json' } }),
+    );
+    expect(h.sidebar.trustedOwner).toHaveBeenCalledWith('majikmate');
+    expect(linkQuestions()).toEqual([]);
+  });
+
+  it('opens the devspace in a new window, and only in an empty window in that window', async () => {
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    await h.controller.openLink(link('acme/api'));
+    expect(h.connection.openInNewWindow).toHaveBeenCalledWith(CONTAINER, '/workspaces/api');
+    expect(h.connection.open).not.toHaveBeenCalled();
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    await h.controller.openLink(link('acme/api'));
+    expect(h.connection.open).toHaveBeenCalledWith(CONTAINER, '/workspaces/api');
+    expect(h.connection.openInNewWindow).toHaveBeenCalledTimes(1);
+    // The setting openInNewWindow does not change it.
+    h.settings.openInNewWindow = true;
+    await h.controller.openLink(link('acme/api'));
+    expect(h.connection.open).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens the devspace of the repository when it has one', async () => {
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    await h.registry.add(devspace());
+    await h.controller.openLink(link('acme/api'));
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ source: ROOT_SOURCE }));
+    // An existing devspace opens without the question of the link.
+    expect(linkQuestions()).toEqual([]);
+  });
+
+  it('opens the devspace that was used last, not the first source, of a repository with several sources', async () => {
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api', { configPaths: ['.devcontainer/devcontainer.json', '.devcontainer/python/devcontainer.json'] }));
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    await h.registry.add(devspace({ configPath: '.devcontainer/python/devcontainer.json', lastUsedAt: iso(NOW - 1000) }));
+    await h.registry.add(devspace({ id: OTHER_ENV_ID, volumeName: 'other', containerName: 'other', lastUsedAt: iso(NOW - 90_000_000) }));
+    await h.controller.openLink(link('acme/api'));
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.objectContaining({ source: PYTHON_SOURCE }));
+  });
+
+  it('opens the devspace of a repository that GitHub could not be asked for, but not of one that GitHub does not show', async () => {
+    await h.registry.add(devspace());
+    h.discovery.getRepository.mockRejectedValueOnce(new Error('rate limit'));
+    await h.controller.openLink(link('Acme/API'));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
+    expect(h.service.openDevspaceInWorker).toHaveBeenLastCalledWith(ENV_ID, expect.objectContaining({ source: ROOT_SOURCE }));
+    expect(h.logger.info).toHaveBeenCalledWith('Without the data of GitHub, the link opens the devspace of acme/api that was used last.');
+    expect(warningMessages()).toEqual([]);
+    // GitHub answers that the account cannot see the repository (any more): the link opens nothing.
+    await h.controller.openLink(link('acme/api'));
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledTimes(1);
+    expect(warningMessages()).toEqual([ControllerTexts.linkRepositoryNotFound('acme/api')]);
+  });
+
+  it('asks for a new sign-in when GitHub rejects the token, and opens the link with it', async () => {
+    const { GitHubApiError } = await import('../core/discovery/githubApi');
+    h.discovery.getRepository.mockRejectedValueOnce(new GitHubApiError('Bad credentials', 401));
+    h.discovery.getRepository.mockResolvedValueOnce(repositoryInfo('acme/api'));
+    h.auth.renewToken.mockImplementationOnce(async () => {
+      h.auth.getToken.mockResolvedValue('gho_new');
+      return 'gho_new';
+    });
+    await h.controller.openLink(link('acme/api'));
+    expect(h.discovery.getRepository.mock.calls).toEqual([['acme/api', 'gho_token'], ['acme/api', 'gho_new']]);
+    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/api' }), expect.objectContaining({ source: ROOT_SOURCE }));
+    // A cancelled new sign-in opens nothing.
+    h.discovery.getRepository.mockRejectedValueOnce(new GitHubApiError('Bad credentials', 401));
+    await h.controller.openLink(link('acme/web'));
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(Messages.signInRequired, Actions.signIn);
+    expect(h.service.openInWorker).toHaveBeenCalledTimes(1);
+  });
+
+  // The automatic reopen of the last devspace runs a few seconds after the start of an empty window; VS Code started by
+  // a click on a link opens such a window. Mutation: a link that holds no request while it asks fails it.
+  it('holds back the automatic reopen in an empty window while the link asks for the sign-in', async () => {
+    await h.registry.add(devspace());
+    h.sessionFiles.writeReopenSync({ devspaceId: ENV_ID, closedAt: iso(NOW - 60_000) });
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    const signIn = deferred<{ token: string; account: GitHubAccount } | undefined>();
+    h.auth.getSession.mockReturnValueOnce(signIn.promise);
+    const opening = h.controller.openLink(link('acme/web'));
+    await settle(() => h.auth.getSession.mock.calls.length === 1, 'the sign-in');
+    await h.controller.runEmptyWindowTasks();
+    expect(h.logger.info).toHaveBeenCalledWith('The last devspace is not opened: another devspace is opening in this window.');
+    expect(h.service.openDevspaceInWorker).not.toHaveBeenCalled();
+    signIn.resolve(undefined);
+    await opening;
+    // The link ended: the reopen runs again.
+    await h.controller.runEmptyWindowTasks();
+    expect(h.service.openDevspaceInWorker).toHaveBeenCalledWith(ENV_ID, expect.anything());
+  });
+
+  // Mutation: a link that takes a connect request (reserveConnectRequest) while it asks fails it: the Start, older,
+  // does not connect then, and the link opens nothing.
+  it('does not stop a Start in this window while the link asks for the sign-in', async () => {
+    await h.registry.add(devspace());
+    h.connection.isEmptyWindow.mockReturnValue(true);
+    const pipeline = deferred<OpenResult>();
+    h.service.openDevspaceInWorker.mockReturnValueOnce(pipeline.promise);
+    const starting = run('start', row('acme/api', devspace()));
+    await settle(() => h.service.openDevspaceInWorker.mock.calls.length === 1, 'the pipeline');
+    const signIn = deferred<{ token: string; account: GitHubAccount } | undefined>();
+    const sessions = h.auth.getSession.mock.calls.length;
+    h.auth.getSession.mockReturnValueOnce(signIn.promise);
+    const opening = h.controller.openLink(link('acme/web'));
+    await settle(() => h.auth.getSession.mock.calls.length > sessions, 'the sign-in of the link');
+    pipeline.resolve(openResult(devspace()));
+    await starting;
+    expect(h.connection.open).toHaveBeenCalledTimes(1);
+    signIn.resolve(undefined);
+    await opening;
+    expect(warningMessages()).toEqual([Messages.signInRequired]);
+  });
+
+  // VS Code gives a link to the extension at its activation; the window then may not know its role and its devspace yet.
+  it('waits for the end of the activation, also of one that failed', async () => {
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    for (const end of ['resolve', 'reject'] as const) {
+      const activation = deferred<void>();
+      h.controller.setActivation(activation.promise);
+      const opening = h.controller.openLink(link('acme/api'));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(h.auth.getSession).not.toHaveBeenCalled();
+      if (end === 'resolve') activation.resolve();
+      else activation.reject(new Error('activation failed'));
+      await opening;
+      expect(h.auth.getSession).toHaveBeenCalled();
+      h.auth.getSession.mockClear();
+    }
+    expect(h.service.openInWorker).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens nothing and asks nobody for a link that names no repository', async () => {
+    await h.controller.openLink({ path: '/open', query: 'repository=acme/api/../x' });
+    await h.controller.openLink({ path: '/start', query: 'repository=acme/api' });
+    expect(warningMessages()).toEqual([ControllerTexts.invalidLink, ControllerTexts.invalidLink]);
+    expect(h.logger.info).toHaveBeenCalledWith('A link to Devspaces was not opened: its path is not /open.');
+    expect(h.auth.getSession).not.toHaveBeenCalled();
+    expect(h.discovery.getRepository).not.toHaveBeenCalled();
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing when GitHub does not show the repository to the account', async () => {
+    await h.controller.openLink(link('acme/secret'));
+    expect(warningMessages()).toEqual([ControllerTexts.linkRepositoryNotFound('acme/secret')]);
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing when GitHub could not be asked, and offers the log', async () => {
+    h.discovery.getRepository.mockRejectedValue(new Error('rate limit'));
+    await h.controller.openLink(link('acme/api'));
+    expect(fakeVscode.window.showWarningMessage).toHaveBeenCalledWith(ControllerTexts.linkRepositoryUnknown('acme/api'), Actions.showDetails);
+    expect(h.logger.warn).toHaveBeenCalledWith('GitHub could not be asked for acme/api: rate limit');
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing for a repository without a configuration while no default image is set', async () => {
+    h.discovery.getRepository.mockResolvedValue(repositoryInfo('acme/plain', { configPaths: [] }));
+    await h.controller.openLink(link('acme/plain'));
+    expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(Messages.noConfiguration('acme/plain'));
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
+    // With a default image, the repository starts from it.
+    h.settings.defaultImage = DEFAULT_IMAGE;
+    await h.controller.openLink(link('acme/plain'));
+    expect(h.service.openInWorker).toHaveBeenCalledWith(expect.objectContaining({ repository: 'acme/plain', configPaths: [] }), expect.objectContaining({ source: DEFAULT_SOURCE }));
+  });
+
+  it('opens nothing without a sign-in, also for a listed repository', async () => {
+    h.auth.getToken.mockResolvedValue(undefined);
+    await h.controller.openLink(link('acme/api'));
+    h.sidebar.infos.set('acme/api', repositoryInfo('acme/api'));
+    await h.controller.openLink(link('acme/api'));
+    expect(h.auth.getSession).toHaveBeenCalledWith({ interactive: true });
+    expect(warningMessages()).toEqual([Messages.signInRequired, Messages.signInRequired]);
+    expect(h.discovery.getRepository).not.toHaveBeenCalled();
+    expect(h.service.openInWorker).not.toHaveBeenCalled();
   });
 });
 

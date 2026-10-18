@@ -159,6 +159,14 @@ describe('no message at activation when Docker is missing', () => {
       collapsed.fire({ element: { kind: 'owner', id: 'owner:acme' } });
       expect(toggled).toHaveBeenCalledTimes(2);
       toggled.mockRestore();
+      // A link to Devspaces goes to the controller (links.ts).
+      expect(fakeVscode.window.registerUriHandler).toHaveBeenCalledTimes(1);
+      const opened = vi.spyOn(Controller.prototype, 'openLink').mockResolvedValue();
+      const [handler] = fakeVscode.window.registerUriHandler.mock.calls[0] as [{ handleUri(uri: unknown): unknown }];
+      const uri = { path: '/open', query: 'repository=acme/api' };
+      await handler.handleUri(uri);
+      expect(opened).toHaveBeenCalledWith(uri);
+      opened.mockRestore();
       // The HTTPS requests name the version of the manifest, which the activation took (src/core/http.ts).
       const { userAgent } = await import('../core/http');
       const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { version: string };
