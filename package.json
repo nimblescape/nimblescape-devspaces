@@ -880,8 +880,14 @@
     "@vscode/test-cli": {
       "mocha": {
         "diff": "^8.0.3",
+        "glob": "^13.0.6",
         "serialize-javascript": "^7.1.2"
       }
     }
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "@vscode/vsce-sign": true,
+    "fsevents": false
   }
 }

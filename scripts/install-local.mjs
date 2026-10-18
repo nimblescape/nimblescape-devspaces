@@ -19,12 +19,36 @@ const { name, version } = JSON.parse(readFileSync(join(root, 'package.json'), 'u
 const vsix = join(root, `${name}-${version}.vsix`);
 // npm and code are .cmd files on Windows, which need a shell.
 const shell = process.platform === 'win32';
+// VS Code's own command line prints the Node.js warning DEP0169 (`url.parse()` is deprecated) after each installation,
+// when it reads the data of the extension from the Marketplace. The warning comes from the code of VS Code, not from
+// this repository, and asks nothing of the developer. NODE_OPTIONS=--disable-warning=DEP0169 cannot turn it off: the
+// command `code` of macOS removes NODE_OPTIONS. So the script drops the lines of this one warning from the error output
+// of `code`; every other line still shows, after `code` ends.
+const DEP0169 = /^\(node:\d+\) \[DEP0169\] /;
+const TRACE_HINT = /^\(Use `.+ --trace-deprecation \.\.\.` to show where the warning was created\)$/;
+
+/** The text without the lines of the warning DEP0169 and the hint of Node.js that directly follows such a line. */
+function withoutDep0169(text) {
+  let dropped = false;
+  return text
+    .split('\n')
+    .filter((line) => {
+      const plain = line.replace(/\r$/, '');
+      const drop = DEP0169.test(plain) || (dropped && TRACE_HINT.test(plain));
+      dropped = DEP0169.test(plain);
+      return !drop;
+    })
+    .join('\n');
+}
 
 function run(command, args) {
   console.log(`> ${command} ${args.join(' ')}`);
   // With a shell (Windows), an argument with spaces (a profile name, the path of the package) must be quoted.
   const shellArgs = shell ? args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)) : args;
-  const result = spawnSync(command, shellArgs, { cwd: root, stdio: 'inherit', shell });
+  const filter = command === 'code';
+  const stdio = filter ? ['inherit', 'inherit', 'pipe'] : 'inherit';
+  const result = spawnSync(command, shellArgs, { cwd: root, stdio, shell, encoding: 'utf8' });
+  if (filter && result.stderr) process.stderr.write(withoutDep0169(result.stderr));
   if (result.error) {
     console.error(`${command}: ${result.error.message}`);
     if (command === 'code') {
