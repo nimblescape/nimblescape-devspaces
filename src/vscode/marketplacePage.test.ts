@@ -19,9 +19,8 @@ import { OUTPUT_CHANNEL_NAME } from './logger';
 import { GITHUB_ENTERPRISE_SECTION } from './settings';
 import { TreeTexts } from './treeModel';
 
-// nimblescape promised the Visual Studio Marketplace team that the top of the description and of the README (the
-// Marketplace page) says what Devspaces does on the computer, with a link to docs/security.md (CONTRIBUTING.md,
-// "Release rules"). The scopes come from the code, so a change of the scopes also changes these texts.
+// The top of the description and of the README (the Marketplace page) says what Devspaces does on the computer, with
+// a link to docs/security.md. The scopes come from the code, so a change of the scopes also changes these texts.
 const ROOT = path.join(__dirname, '..', '..');
 const HEADING = 'What Devspaces does on your computer';
 const SECURITY_LINK = 'https://github.com/nimblescape/nimblescape-devspaces/blob/main/docs/security.md#what-devspaces-does-on-your-computer';
