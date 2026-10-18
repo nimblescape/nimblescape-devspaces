@@ -240,6 +240,17 @@ describe('settings', () => {
     expect(ordered.indexOf('startWithDefaultImage')).toBe(ordered.indexOf('defaultImage') + 1);
   });
 
+  // The Settings editor lists the settings of an extension under Extensions with the title of its configuration. As
+  // the other nimblescape extensions, Devspaces uses its display name as this title.
+  it('lists the settings in the Settings editor under the display name nimblescape Devspaces', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')) as {
+      displayName: string;
+      contributes: { configuration: { title: string } };
+    };
+    expect(manifest.displayName).toBe('nimblescape Devspaces');
+    expect(manifest.contributes.configuration.title).toBe(manifest.displayName);
+  });
+
   // The manifest has the two settings with the defaults of the code (scope application, as the other settings of the
   // monitor), no imageUpdateSchedule, and the pattern of cacheUpdateSchedule takes whole minutes and five fields, and
   // refuses other text.

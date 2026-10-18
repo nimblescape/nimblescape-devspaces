@@ -665,7 +665,7 @@
       }
     ],
     "configuration": {
-      "title": "Devspaces",
+      "title": "nimblescape Devspaces",
       "properties": {
         "devspaces.reopenLastOnStartup": {
           "order": 1,
