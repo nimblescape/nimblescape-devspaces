@@ -53,6 +53,29 @@ The first start of a repository that belongs neither to you nor to one of your o
 
 To go to another devspace, use **Devspaces: Switch Devspace…** (on macOS `Cmd+Alt+E`; on Windows and Linux, [set a key](#status-bar-and-switcher)) or select the Devspaces item in the status bar.
 
+## Open from a link
+
+A link opens a repository in Devspaces, for example from a website or a course page:
+
+```text
+vscode://nimblescape.nimblescape-devspaces/open?repository=owner/name
+```
+
+For VS Code Insiders, the link starts with `vscode-insiders://`. On a web page:
+
+```html
+<a href="vscode://nimblescape.nimblescape-devspaces/open?repository=owner/name">Open in Devspaces</a>
+```
+
+When you select the link:
+
+1. Your browser usually asks whether it may open VS Code.
+2. When Devspaces is not installed, VS Code offers to install it from the Visual Studio Marketplace, with the Dev Containers extension, and then opens the link. When Devspaces is installed, VS Code asks whether Devspaces may open the link. With **Do not ask me again for this extension**, VS Code opens later links to Devspaces without this question; **Extensions: Manage Authorized Extension URIs...** takes that choice back.
+3. When you are not signed in, Devspaces asks for the GitHub sign-in.
+4. Devspaces opens the devspace of the repository that you used last on the current Docker engine. Without one, Devspaces asks before it creates a devspace: the devspace clones the repository and runs code from it (Dockerfile, Features, and commands) on your Docker engine. For a repository that belongs neither to you nor to one of your organizations, this question is the confirmation of the first start, as in the list. After **Open**, Devspaces starts the repository as a double-click on its row does, from its first source. The repository does not need to be in your list.
+
+The devspace opens in the window that VS Code gives the link, usually the window that was active last, when that window is empty; otherwise it opens in a new window, and that window keeps what it has. A link opens nothing, and a message says why, when it does not name a repository as `owner/name`, when GitHub does not show the repository to your account, or when the repository has no Dev Container configuration and `devspaces.defaultImage` is empty. When GitHub cannot be asked, for example without a connection to the internet, the link opens your devspace of the repository on the current Docker engine, if you have one there.
+
 ## The sidebar
 
 The first row names the Docker engine that the view shows: **Local Docker**, or **Remote Docker host: `<host>`**. Select it to choose another engine. Below it, the repositories are grouped by owner.

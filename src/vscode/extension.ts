@@ -116,11 +116,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const manifestVersion: unknown = context.extension.packageJSON?.version;
   const invalidVersion = takeUserAgentVersion(manifestVersion, 'The version in the manifest of Devspaces');
   if (invalidVersion !== undefined) logger.warn(invalidVersion);
+  // Links to Devspaces wait for the end of the activation, also of one that failed (Controller.setActivation).
+  let activationEnded!: () => void;
+  const activation = new Promise<void>((resolve) => (activationEnded = resolve));
   try {
-    await activateExtension(context, logger, activatedAt);
+    await activateExtension(context, logger, activatedAt, activation);
   } catch (error) {
     logger.error('Devspaces could not be started.', error);
     throw error;
+  } finally {
+    activationEnded();
   }
 }
 
@@ -138,6 +143,7 @@ async function activateExtension(
   context: vscode.ExtensionContext,
   logger: OutputChannelLogger,
   activatedAt: number,
+  activation: Promise<void>,
 ): Promise<void> {
   const platform = process.platform;
   const env = process.env;
@@ -748,10 +754,15 @@ async function activateExtension(
       computerId,
     },
   });
+  // A link to Devspaces, for example on a website (links.ts; the activation event onUri starts the extension for it):
+  // taken at once, because VS Code keeps a link only for some minutes until an extension takes it. Controller.openLink
+  // waits for the end of the activation, when this window knows its role and its devspace.
+  controller.setActivation(activation);
   context.subscriptions.push(
     sidebar,
     controller,
     ...controller.registerCommands(),
+    vscode.window.registerUriHandler({ handleUri: (uri) => controller.openLink(uri) }),
     controller.watchDisconnectRequests(),
     // Enter on an owner or a group opens or closes it and runs no command (Controller.rowEnter).
     view.onDidExpandElement(() => controller.nodeToggled()),

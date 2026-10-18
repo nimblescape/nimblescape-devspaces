@@ -15,6 +15,7 @@ import { engineInventory, inventoryIsEmpty, removalEndedNote, removeEngineInfras
 import { operationDockerTarget, outsideOperation, type DockerTargets } from '../core/docker/dockerTargets';
 import type { BootstrapDocker } from '../core/docker/bootstrapDocker';
 import type { DiscoveryService } from '../core/discovery/discoveryService';
+import { GitHubApiError } from '../core/discovery/githubApi';
 import { UserFacingError, errorMessage } from '../core/errors';
 import { Actions, Messages, formatChanges, listSome } from '../core/messages';
 import type { WindowStateValue } from '../core/helperChannel/protocol';
@@ -56,6 +57,7 @@ import {
 import type { DockerSetup } from './dockerSetup';
 import type { MonitorQuestion } from './monitorQuestion';
 import { isCancellation, showError as presentError } from './errors';
+import { parseLink } from './links';
 import type { OutputChannelLogger } from './logger';
 import { showErrorMessage, showInformationMessage, showWarningMessage } from './notifications';
 import { selectOwners } from './ownerSelector';
@@ -310,6 +312,12 @@ interface StartOptions {
    * (beforeUserFlow). Its Try again is a Start of the user.
    */
   automatic?: boolean;
+  /**
+   * First open from a link only (openLink): the trust of the owner that the link read already. `true`: the user
+   * confirmed the start at the question of the link; `false`: the pipeline asks its question for another owner.
+   * Without it, the trust is read at the first open (firstOpenTrust).
+   */
+  trust?: boolean;
 }
 
 /** The devspace that this window is attached to. A window changes its devspace only by reloading. */
@@ -382,6 +390,10 @@ export class Controller implements vscode.Disposable {
   private connectRequests = 0;
   /** The connecting flows that still run. */
   private readonly activeConnectRequests = new Set<number>();
+  /** The links that are opening (openLink): the automatic reopen of the last devspace does not start meanwhile. */
+  private linksOpening = 0;
+  /** Links wait for this promise: the end of the activation, when this window knows its role and its devspace. */
+  private activation: Promise<void> = Promise.resolve();
   /** One check of the disconnect requests at a time; a change during a check runs one more check. */
   private readonly disconnectTask = new CoalescingTask(() => this.checkDisconnectRequest());
   private disconnectWatcher: { dispose(): void } | undefined;
@@ -419,6 +431,14 @@ export class Controller implements vscode.Disposable {
    */
   setReady(ready: Promise<unknown>): void {
     this.ready = ready.then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
+  /** The end of the activation, for the links (openLink), also of an activation that failed. */
+  setActivation(activation: Promise<unknown>): void {
+    this.activation = activation.then(
       () => undefined,
       () => undefined,
     );
@@ -801,8 +821,8 @@ export class Controller implements vscode.Disposable {
       this.logger.info(`The last devspace is not opened: Devspaces was removed from ${describeDockerHost(dockerHost)}. A Start there sets it up again.`);
       return;
     }
-    // A Start of the user in this window (also one that still asks about the Monitor) is not overtaken.
-    if (this.activeConnectRequests.size > 0) {
+    // A Start of the user in this window (also one that still asks about the Monitor), or a link, is not overtaken.
+    if (this.activeConnectRequests.size > 0 || this.linksOpening > 0) {
       this.logger.info('The last devspace is not opened: another devspace is opening in this window.');
       return;
     }
@@ -1744,6 +1764,114 @@ export class Controller implements vscode.Disposable {
   }
 
   /**
+   * A link to Devspaces (links.ts), for example on a website: `vscode://nimblescape.nimblescape-devspaces/open?repository=owner/name`.
+   * VS Code asks first whether Devspaces may open it, unless the user answered "Do not ask me again for this
+   * extension", and it installs Devspaces from the Marketplace when it is missing. The link opens the devspace of the
+   * repository that the account used last on the current Docker engine. Without one, it creates the devspace as a
+   * double-click on the row of the repository does, from its first source (possibleSources), after one question: the
+   * question of the pipeline for a repository that belongs neither to the account nor to one of its organizations, else
+   * the question of the link (linkStartConfirm). VS Code gives the link to the window that was active last, in which
+   * the user did not ask for anything: the devspace opens in that window only when it is empty, else in a new window,
+   * and the window keeps what it has. The repository can be one that the list does not show: then GitHub is asked for
+   * it. A link that names no repository asks neither GitHub nor Docker. Never rejects: errors are shown.
+   */
+  async openLink(uri: { path: string; query: string }): Promise<void> {
+    this.rowActivations.forgetEnter();
+    const link = parseLink(uri.path, uri.query);
+    if (link.kind === 'invalid') {
+      this.logger.info(`A link to Devspaces was not opened: ${link.reason}.`);
+      this.warn(ControllerTexts.invalidLink);
+      return;
+    }
+    this.logger.info(`A link asks to open ${link.repository}.`);
+    // Counted at once: the automatic reopen of the last devspace in an empty window does not start while the link waits
+    // for the activation or the sign-in dialog is open (reopenLast).
+    this.linksOpening += 1;
+    try {
+      await this.activation;
+      await this.startFromLink(link.repository, this.deps.connection.isEmptyWindow() ? 'currentWindow' : 'newWindow');
+    } catch (error) {
+      this.showError(error);
+    } finally {
+      this.linksOpening -= 1;
+    }
+  }
+
+  private async startFromLink(repository: string, window: WindowRequest): Promise<void> {
+    let session = await this.deps.auth.getSession({ interactive: true });
+    if (!session) throw new UserFacingError('signInRequired', Messages.signInRequired);
+    let found = await this.linkedRepository(repository, session.token);
+    if (found.failure === 'rejected') {
+      // GitHub rejected the token (HTTP 401): a new sign-in, and the link goes on with it.
+      const token = await this.deps.auth.renewToken();
+      session = token === undefined ? undefined : await this.deps.auth.getSession({ interactive: true });
+      if (!session) throw new UserFacingError('signInRequired', Messages.signInRequired);
+      found = await this.linkedRepository(repository, session.token);
+      if (found.failure === 'rejected') throw new UserFacingError('signInRequired', Messages.signInRequired);
+    }
+    if (found.failure === 'notFound') {
+      this.warn(ControllerTexts.linkRepositoryNotFound(repository));
+      return;
+    }
+    const { info } = found;
+    const name = info?.nameWithOwner ?? repository;
+    // One operation on the Docker host that is current now, as a Start (registerCommands): the target and the open.
+    await this.withDockerTarget(async () => {
+      // The devspace of the repository that the account used last on this host (findForAccount).
+      const target = await this.repositoryTargetFor(name, 'token');
+      if (target.devspace) {
+        if (!info) this.logger.info(`Without the data of GitHub, the link opens the devspace of ${target.devspace.repository} that was used last.`);
+        await this.startTarget({ ...target, info: target.info ?? info }, { window });
+        return;
+      }
+      if (!info) {
+        this.warnWithLog(ControllerTexts.linkRepositoryUnknown(repository));
+        return;
+      }
+      const source = possibleSources({ info, devspaces: [], settings: this.deps.settings() })[0];
+      if (!source) {
+        this.logger.info(`The link did not open ${name}: it has no Dev Container configuration, and no default image is set.`);
+        this.inform(Messages.noConfiguration(name));
+        return;
+      }
+      // A link of a website creates a devspace only after one question. The pipeline asks its question for another
+      // owner; for the account and its organizations, the link asks here.
+      const trusted = await this.deps.sidebar.trustedOwner(splitRepository(name).owner);
+      if (trusted) {
+        const choice = await showWarningMessage(ControllerTexts.linkStartConfirm(name), { modal: true }, Actions.open);
+        if (choice !== Actions.open) {
+          this.logger.info(`The start of ${name} from the link was not confirmed.`);
+          return;
+        }
+      }
+      await this.startTarget({ ...target, info: target.info ?? info, source }, { window, trust: trusted });
+    });
+  }
+
+  /**
+   * The GitHub data of the repository of a link: from the list, else from GitHub. Without data, `failure` says why:
+   * GitHub does not show the repository to the account (`notFound`), rejected the token (`rejected`, HTTP 401, which
+   * githubApi.ts reports to auth.ts), or could not be asked (`unknown`, logged).
+   */
+  private async linkedRepository(
+    repository: string,
+    token: string,
+  ): Promise<{ info: RepositoryInfo; failure?: undefined } | { info?: undefined; failure: 'notFound' | 'rejected' | 'unknown' }> {
+    const listed = this.deps.sidebar.repositoryInfo(repository);
+    if (listed) return { info: listed };
+    try {
+      const info = await this.deps.discovery.getRepository(repository, token);
+      if (info) return { info };
+      this.logger.info(`GitHub does not show ${repository} to the signed-in account. The link opened nothing.`);
+      return { failure: 'notFound' };
+    } catch (error) {
+      if (error instanceof GitHubApiError && error.status === 401) return { failure: 'rejected' };
+      this.logger.warn(`GitHub could not be asked for ${repository}: ${errorMessage(error)}`);
+      return { failure: 'unknown' };
+    }
+  }
+
+  /**
    * Turn Off Host Access Checks…: after a modal warning that names what the configuration of the repository can then
    * use, the repository joins the user setting devspaces.hostAccessChecksOff. The next open of its devspace applies
    * it.
@@ -2017,7 +2145,7 @@ export class Controller implements vscode.Disposable {
                   if (devspace) {
                     result = await service.openDevspaceInWorker(devspace.id, { progress, signal, source });
                   } else {
-                    const trusted = await this.firstOpenTrust(repository);
+                    const trusted = options.trust ?? (await this.firstOpenTrust(repository));
                     result = await service.openInWorker(repositoryTarget(repository, target.info, trusted), { progress, signal, source });
                   }
                   await this.connect(result, progress, request, signal);

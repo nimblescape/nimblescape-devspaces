@@ -80,6 +80,26 @@ describe('the extension in VS Code', () => {
     const errors = log.split('\n').filter((line) => /^\[\d\d:\d\d:\d\d\] error /.test(line));
     assert.deepStrictEqual(errors, [], `The log of the extension has errors:\n${log}`);
   });
+
+  // A link to Devspaces (src/vscode/links.ts) reaches the extension through the URL handling of VS Code: the activation
+  // event onUri and window.registerUriHandler. The setting extensions.confirmedUriHandlerExtensionIds answers the
+  // question of VS Code before it ("Allow ... to open this URI?"), which would wait for a click. A link that names no
+  // repository asks neither GitHub nor Docker.
+  it('takes a link to Devspaces from VS Code', async () => {
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    await extension.activate();
+    const extensions = vscode.workspace.getConfiguration('extensions');
+    await extensions.update('confirmedUriHandlerExtensionIds', [EXTENSION_ID], vscode.ConfigurationTarget.Global);
+    try {
+      const link = vscode.Uri.parse(`${vscode.env.uriScheme}://${EXTENSION_ID}/open?repository=no-repository`);
+      assert.strictEqual(await vscode.env.openExternal(link), true, `VS Code did not open ${link.toString(true)}`);
+      await waitForLog(/\] info A link to Devspaces was not opened: its parameter repository is not a GitHub repository owner\/name\./);
+    } finally {
+      // The later tests of this VS Code get the question of VS Code again.
+      await extensions.update('confirmedUriHandlerExtensionIds', undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
 });
 
 /**
