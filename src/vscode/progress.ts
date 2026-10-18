@@ -2,8 +2,9 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Progress of one operation in one notification: the plain steps, the reason of an update, and "Show details" for the
-// output channel, which also hides the notification.
+// Progress in a notification: the plain steps, the reason of an update, and "Show details" for the output channel,
+// which also hides the notification. Every progress notification of Devspaces comes from this module: the operations of
+// the sidebar (runWithProgress), and the Docker setup and the test of a remote Docker host (withNotificationProgress).
 import * as vscode from 'vscode';
 import { Actions, Steps, type ProgressStep } from '../core/messages';
 import type { ProgressReporter } from '../core/ports';
@@ -83,6 +84,34 @@ export function progressMessage(title: string, step: ProgressStep | undefined, d
   if (detail) parts.push(withoutLinks(detail));
   parts.push(SHOW_DETAILS_LINK);
   return parts.join(' ');
+}
+
+/**
+ * vscode.window.withProgress in a notification, for work that is no operation of the sidebar (the Docker setup, the
+ * test of a remote Docker host). As in runWithProgress, the message shows the title and the newest message of the task
+ * as plain text, then the link "Show details" (progressMessage).
+ */
+export function withNotificationProgress<R>(
+  options: { title: string; cancellable?: boolean },
+  task: (progress: vscode.Progress<{ message?: string; increment?: number }>, token: vscode.CancellationToken) => Thenable<R>,
+): Thenable<R> {
+  return vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, cancellable: options.cancellable ?? false },
+    (progress, token) => {
+      // A report with only an increment keeps the newest message.
+      let message: string | undefined;
+      progress.report({ message: progressMessage(options.title, undefined, undefined) });
+      return task(
+        {
+          report: (value) => {
+            if (value.message !== undefined) message = value.message;
+            progress.report({ ...value, message: progressMessage(options.title, undefined, message) });
+          },
+        },
+        token,
+      );
+    },
+  );
 }
 
 /**

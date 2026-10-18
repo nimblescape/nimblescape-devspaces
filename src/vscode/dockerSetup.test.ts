@@ -23,7 +23,7 @@ import {
   type SetupTool,
 } from '../core/docker/dockerSetup';
 import { UserFacingError } from '../core/errors';
-import { Messages, Steps } from '../core/messages';
+import { Messages } from '../core/messages';
 import { abortError, type RunResult } from '../core/ports';
 import { Commands } from './commands';
 import {
@@ -437,8 +437,10 @@ describe('DockerSetup: Install Docker (sidebar button Install Docker)', () => {
     expect(modalCalls()[0][1].detail).toContain(target);
     expect(download).toHaveBeenCalledTimes(1);
     expect(download.mock.calls[0][0]).toMatchObject({ url: DOCKER_DESKTOP_DOWNLOADS.macArm64, target });
-    expect(reports[0]).toEqual({ location: 15, title: DockerSetupUiTexts.downloading, cancellable: true });
-    expect(reports[1]).toEqual({ message: '3 of 10 MB', increment: 30 });
+    // The title and the newest message in the message, then the link Show details (progress.ts).
+    expect(reports[0]).toEqual({ location: 15, cancellable: true });
+    expect(reports[1]).toEqual({ message: 'Downloading Docker Desktop… [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)' });
+    expect(reports[2]).toEqual({ message: 'Downloading Docker Desktop… 3 of 10 MB. [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)', increment: 30 });
     expect(launch).toHaveBeenCalledWith('/usr/bin/open', [target]);
     expect(fakeVscode.terminals).toEqual([]);
     // Marked as downloaded before it opens, so that Gatekeeper checks the signature of Docker.
@@ -663,12 +665,14 @@ describe('DockerSetup: Start Docker (after an installation, and the action Start
     const startDocker = vi.fn(async () => {});
     const { dockerSetup } = setup(true, { startDocker });
     const titles: unknown[] = [];
+    const messages: string[] = [];
     fakeVscode.window.withProgress.mockImplementation(async (options: unknown, task: (...args: unknown[]) => Promise<unknown>) => {
       titles.push(options);
-      return task({ report: () => {} }, { onCancellationRequested: () => ({ dispose() {} }) });
+      return task({ report: (value: { message: string }) => messages.push(value.message) }, { onCancellationRequested: () => ({ dispose() {} }) });
     });
     await dockerSetup.start();
-    expect(titles).toEqual([{ location: 15, title: Steps.startingDocker, cancellable: true }]);
+    expect(titles).toEqual([{ location: 15, cancellable: true }]);
+    expect(messages).toEqual(['Starting Docker… [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)']);
     expect(startDocker).toHaveBeenCalledTimes(1);
     expect(fakeVscode.window.showInformationMessage).toHaveBeenCalledWith(DockerSetupUiTexts.dockerRunning);
     dockerSetup.dispose();

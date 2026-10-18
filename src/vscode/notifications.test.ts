@@ -12,7 +12,8 @@ import { UserFacingError } from '../core/errors';
 import { Messages } from '../core/messages';
 import { hostAccessReport } from '../core/policy/single';
 import { showError } from './errors';
-import { showErrorMessage, showInformationMessage, showWarningMessage, withNotificationProgress, withoutLinks } from './notifications';
+import { showErrorMessage, showInformationMessage, showWarningMessage, withoutLinks } from './notifications';
+import { withNotificationProgress } from './progress';
 import { progressMessage } from './progress';
 import { fakeVscode, resetFakeVscode } from './testing/fakeVscode';
 
@@ -92,22 +93,17 @@ describe('the messages', () => {
     expect(links(text)).toEqual(['command:devspaces.showLog?%5B%22progressNotification%22%5D']);
   });
 
-  it('show the title and every message of a progress notification without links', async () => {
-    const reported: unknown[] = [];
+  it('show the title and every message of a progress notification without links, besides its own link Show details', async () => {
+    const reported: Array<{ message: string }> = [];
     window.withProgress.mockImplementation(async (_options: unknown, task: (...args: unknown[]) => Promise<unknown>) =>
-      task({ report: (value: unknown) => reported.push(value) }, { onCancellationRequested: () => ({ dispose() {} }) }),
+      task({ report: (value: { message: string }) => reported.push(value) }, { onCancellationRequested: () => ({ dispose() {} }) }),
     );
-    const result = await withNotificationProgress({ title: `Testing ${TERMINAL_LINK}`, cancellable: true }, async (progress) => {
+    await withNotificationProgress({ title: `Testing ${TERMINAL_LINK}`, cancellable: true }, async (progress) => {
       progress.report({ message: `step ${TERMINAL_LINK}`, increment: 10 });
-      progress.report({ increment: 5 });
       return 'done';
     });
-    expect(result).toBe('done');
-    const [options] = window.withProgress.mock.calls[0] as [{ location: number; title: string; cancellable: boolean }];
-    expect(options).toEqual({ location: fakeVscode.ProgressLocation.Notification, title: withoutLinks(`Testing ${TERMINAL_LINK}`), cancellable: true });
-    expect(links(options.title)).toEqual([]);
-    expect(reported).toEqual([{ message: withoutLinks(`step ${TERMINAL_LINK}`), increment: 10 }, { increment: 5 }]);
-    expect(links((reported[0] as { message: string }).message)).toEqual([]);
+    expect(reported.map((value) => links(value.message))).toEqual([['command:devspaces.showLog?%5B%22progressNotification%22%5D'], ['command:devspaces.showLog?%5B%22progressNotification%22%5D']]);
+    expect(reported[1].message).toBe(`${withoutLinks(`Testing ${TERMINAL_LINK}`)} ${withoutLinks(`step ${TERMINAL_LINK}`)} [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)`);
   });
 });
 
@@ -133,9 +129,9 @@ describe('the sources', () => {
     expect(offending(direct, ['vscode/notifications.ts'])).toEqual([]);
   });
 
-  // A progress notification renders links in its title and its messages too: withNotificationProgress, or the progress
-  // of an operation, which cleans its text and then adds its link "Show details" (progressMessage).
-  it('show a progress notification only in notifications.ts and progress.ts', () => {
-    expect(offending(/\bProgressLocation\s*\??\.\s*Notification\b/, ['vscode/notifications.ts', 'vscode/progress.ts'])).toEqual([]);
+  // A progress notification renders links in its title and its messages too: progress.ts cleans its text and then adds
+  // its link "Show details" (progressMessage), which opens the log and hides the notification.
+  it('show a progress notification only in progress.ts', () => {
+    expect(offending(/\bProgressLocation\s*\??\.\s*Notification\b/, ['vscode/progress.ts'])).toEqual([]);
   });
 });

@@ -31,7 +31,8 @@ import { Actions, Messages, dockerHostReason } from '../core/messages';
 import { isAbortError, type Logger, type ProcessRunner } from '../core/ports';
 import type { SshHostEntry } from '../core/sshConfig';
 import type { DockerHostQuestion, RemoteDockerState } from '../core/storage/remoteDockerState';
-import { showErrorMessage, showInformationMessage, showWarningMessage, withNotificationProgress } from './notifications';
+import { showErrorMessage, showInformationMessage, showWarningMessage } from './notifications';
+import { withNotificationProgress } from './progress';
 import { MonitorIcons } from './treeModel';
 
 /** User-visible texts of the remote Docker host (plain language). No `vscode` in them. */

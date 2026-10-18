@@ -8,7 +8,7 @@ vi.mock('vscode', async () => (await import('./testing/fakeVscode')).fakeVscode)
 
 import { Messages } from '../core/messages';
 import type { ProgressReporter } from '../core/ports';
-import { currentOperation, onDidChangeBusy, progressMessage, runWithProgress, type BusyChange } from './progress';
+import { currentOperation, onDidChangeBusy, progressMessage, runWithProgress, withNotificationProgress, type BusyChange } from './progress';
 import { EventEmitter, fakeVscode, resetFakeVscode } from './testing/fakeVscode';
 
 interface FakeProgressRun {
@@ -31,6 +31,34 @@ function scriptWithProgress(): FakeProgressRun[] {
   });
   return runs;
 }
+
+describe('withNotificationProgress', () => {
+  beforeEach(() => resetFakeVscode());
+
+  // The Docker setup and the test of a remote Docker host show their progress as the operations do: the title and the
+  // newest message in the message, then the link Show details, which opens the log and hides the notification.
+  it('shows the title, the newest message and the link Show details, and keeps the message for a report with only an increment', async () => {
+    const runs = scriptWithProgress();
+    const result = await withNotificationProgress({ title: 'Downloading Docker Desktop…', cancellable: true }, async (progress) => {
+      progress.report({ message: '3 of 10 MB.', increment: 30 });
+      progress.report({ increment: 10 });
+      return 42;
+    });
+    expect(result).toBe(42);
+    expect(runs[0].options).toEqual({ location: fakeVscode.ProgressLocation.Notification, cancellable: true });
+    expect(runs[0].messages).toEqual([
+      'Downloading Docker Desktop… [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)',
+      'Downloading Docker Desktop… 3 of 10 MB. [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)',
+      'Downloading Docker Desktop… 3 of 10 MB. [Show details](command:devspaces.showLog?%5B%22progressNotification%22%5D)',
+    ]);
+  });
+
+  it('shows no Cancel button unless asked', async () => {
+    const runs = scriptWithProgress();
+    await withNotificationProgress({ title: 'Testing the connection to build-box…' }, async () => undefined);
+    expect(runs[0].options.cancellable).toBe(false);
+  });
+});
 
 describe('progressMessage', () => {
   it('shows the title, the step, the detail, and the link Show details', () => {
