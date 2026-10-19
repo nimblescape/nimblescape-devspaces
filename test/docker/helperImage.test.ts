@@ -264,13 +264,20 @@ describe('workspace helper image: weekly refresh and daily cleanup', () => {
     expect(updatedTag).not.toBe(tag);
     const currentId = cli.image(tag)?.Id;
     expect((await readHelperState(statePath)).images[tag]?.imageId).toBe(currentId);
-    const helper = new HelperImages({ docker, logger: log, dockerfilePath: updatedPath, statePath, baseDigest, onBaseImageCheck: (check) => checks.push(check) });
+    // The registry is not part of this scenario: a fixed digest of the base image, so the build always starts with
+    // `--pull`. A lookup that the registry does not answer in time would leave only the build without `--pull`.
+    const fixedDigest: BaseDigestLookup = () => Promise.resolve(FAKE_DIGEST);
+    const helper = new HelperImages({ docker, logger: log, dockerfilePath: updatedPath, statePath, baseDigest: fixedDigest, onBaseImageCheck: (check) => checks.push(check) });
 
     const failure = await timings.measure('failed build', () => helper.ensureImageUse().catch((error: unknown) => error));
     await settled();
     expect(failure).toMatchObject({ code: 'helperFailed' });
     expect(cli.image(updatedTag)).toBeUndefined();
-    expect(docker.builds.slice(-2).map((build) => build.tag)).toEqual([updatedTag, updatedTag]);
+    // The build with `--pull` fails, and so does the second build without it.
+    expect(docker.builds.slice(-2)).toEqual([
+      { tag: updatedTag, pull: true, noCache: false },
+      { tag: updatedTag, pull: false, noCache: false },
+    ]);
     const state = await readHelperState(statePath);
     expect(state).not.toHaveProperty('previousTag');
     expect(state.images[updatedTag]).toBeUndefined();
