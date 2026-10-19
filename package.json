@@ -874,7 +874,7 @@
     "esbuild": "^0.28.2",
     "js-yaml": "^4.3.2",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.5"
   },
   "overrides": {
     "@vscode/test-cli": {
