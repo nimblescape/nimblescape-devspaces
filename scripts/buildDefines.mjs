@@ -7,7 +7,7 @@
 // scripts/build-vscode-tests.mjs and the tests that bundle the worker give them to the tests. The only one is the
 // version of the Dev Container CLI from package.json (scripts/cliVersion.mjs). The version of Devspaces is none of
 // them: each program reads it at its start (src/core/http.ts), so the bundles stay the same when only the version
-// changes (rule 3 of scripts/release-checks.mjs).
+// changes.
 import { devcontainerCliVersion } from './cliVersion.mjs';
 
 /**
