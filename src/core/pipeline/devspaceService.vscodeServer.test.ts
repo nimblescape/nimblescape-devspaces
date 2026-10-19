@@ -6,7 +6,7 @@
 // the store read-only; the fetch of the server starts at the start of the open; before the open returns, it waits for
 // the fetch (with a progress detail while it runs) and links the server as the remote user, only into a container that
 // mounts the store. A failed fetch or link never fails the open; without a server nothing changes.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LABEL_DEVSPACE_ID, LABEL_OWNER_ID, LABEL_REPOSITORY, LABEL_VOLUME, VOLUME_KIND_ADDITIONAL, VSCODE_STORE_TARGET, VSCODE_STORE_VOLUME, devspaceImageName, resourceName, vscodeStoreMount } from '../names';
 import type { VscodePlatform } from '../helperChannel/protocol';
 import { VSCODE_SERVER_LINK_SCRIPT } from '../worker/vscodeServerLink';
@@ -88,8 +88,9 @@ describe('the open with the shared VS Code server', () => {
     const t = harness({ vscodeServer: { server: SERVER, fetch: f.fetch }, vscodeStoreVolume: VSCODE_STORE_VOLUME });
     t.docker.execHandler = (_container, command) => (command[2] === VSCODE_SERVER_LINK_SCRIPT ? { stdout: 'linked\n' } : {});
     const opened = t.service.open(TARGET, { progress: t.progress });
-    for (let i = 0; i < 200 && !t.progress.details.includes(PipelineTexts.downloadingVscodeServer); i++) await new Promise((resolve) => setTimeout(resolve, 1));
-    expect(t.progress.details).toContain(PipelineTexts.downloadingVscodeServer);
+    // A time limit, not a number of rounds: on a busy runner, 200 rounds of 1 ms ended before the open reached the
+    // wait, and the open, still pending, failed after the cleanup of the harness.
+    await vi.waitFor(() => expect(t.progress.details).toContain(PipelineTexts.downloadingVscodeServer), { timeout: 5000, interval: 5 });
     // The open has not linked yet: it waits.
     expect(links(t)).toHaveLength(0);
     finish('linux-x64');
