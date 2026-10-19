@@ -5,8 +5,7 @@
 // The bundles of the package are readable JavaScript: not minified, with the names of the source (`keepNames`), and
 // with source maps only in a development build (scripts/bundleOptions.mjs, from which esbuild.mjs builds them). The
 // worker's bundle holds the Monitor as readable code. No bundle holds the path of the folder that it was built in, or
-// the version of package.json: a new version without a change of the code builds the same files, so rule 3 of the
-// release checks (scripts/release-checks.mjs) still finds a release without a change.
+// the version of package.json: a new version without a change of the code builds the same files.
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -77,15 +76,6 @@ describe('the bundles of the package', () => {
 });
 
 /**
- * userChanges of scripts/release-checks.mjs (a script without types): the changes of rule 3 that count, and those that
- * do not count.
- */
-type UserChanges = (previous: Map<string, Buffer>, next: Map<string, Buffer>, sourceFiles: string[]) => {
-  counted: string[];
-  ignored: string[];
-};
-
-/**
  * A copy of the sources in `dir` with `version` in its package.json, and the files of its package that depend on the
  * build: package.json and the files that the build of the package writes to dist/ in that copy, by their path below
  * extension/ in the package. The copy has its own esbuild.mjs and scripts/, which read its own package.json, and
@@ -109,8 +99,7 @@ function buildCopy(dir: string, version: string): Map<string, Buffer> {
 }
 
 describe('a new version without a change of the code', () => {
-  it('builds the same bundles, so that the release checks see no change (rule 3)', async () => {
-    const { userChanges } = (await import(path.join(ROOT, 'scripts', 'release-checks.mjs'))) as { userChanges: UserChanges };
+  it('builds the same bundles', () => {
     const { scripts } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
     // buildCopy runs this build.
     expect(scripts['vscode:prepublish']).toBe('node esbuild.mjs --production');
@@ -121,11 +110,12 @@ describe('a new version without a change of the code', () => {
       const previous = buildCopy(path.join(dir, 'a'), '97.531.8642');
       const next = buildCopy(path.join(dir, 'b'), '97.531.8643');
       expect([...next.keys()]).toEqual(['package.json', ...OUTFILES]);
-      // Only the version of package.json differs, which rule 3 does not count. The check gets a changed file of src/
-      // that is not a test, so a bundle that differs would count.
+      // Only the version of package.json differs.
       expect(previous.get('package.json')!.equals(next.get('package.json')!)).toBe(false);
-      expect(userChanges(previous, next, ['src/extension.ts']).counted).toEqual([]);
-      for (const file of OUTFILES) expect(next.get(file)!.includes('97.531.'), file).toBe(false);
+      for (const file of OUTFILES) {
+        expect(next.get(file)!.equals(previous.get(file)!), file).toBe(true);
+        expect(next.get(file)!.includes('97.531.'), file).toBe(false);
+      }
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

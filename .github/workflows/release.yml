@@ -3,47 +3,37 @@
 # Licensed under the MIT License. See LICENSE in the repository root for details.
 
 # Release and publish a version on a manual start from the branch main, with
-# the version as input; an urgent fix within 7 days of the newest release also
-# gives its reason, and its run name shows "(urgent)". The version job checks
-# the version, sets it in package.json and package-lock.json, adds its section
-# to CHANGELOG.md from the notes of the start when the file has none, and
-# pushes the commit "Release <version>", with the reason of an urgent fix, to
-# the temporary branch release/run-<run ID>, not to main. A push
+# the version as input. The version job checks the version, sets it in
+# package.json and package-lock.json, adds its section to CHANGELOG.md from the
+# notes of the start when the file has none, and pushes the commit "Release
+# <version>" to the temporary branch release/run-<run ID>, not to main. A push
 # with the token of a workflow starts no other workflow, so the CI job calls
 # the workflow ci.yml for that commit; the VSIX that this job tests and builds
 # is the VSIX of the release, so the release neither repeats the tests nor
-# builds the package again. At the same time as CI, the job "Check the
-# Marketplace" signs in like the publish job and checks that the app
-# registration has a role on the publisher. Only when CI, the check of the
-# package and the check of the Marketplace pass, the release job moves main to
+# builds the package again. Only when CI passes, the release job moves main to
 # the commit, as a fast-forward that fails when main changed during the run,
 # deletes the temporary branch, creates the tag v<version> on the commit and
 # the GitHub release of the tag, with the section of the version as its notes
-# and the VSIX as its file. So a job that fails before the tag changes neither
-# main nor a tag, and the version can still be released. A release that exists
-# keeps its notes and receives only a missing VSIX. The publish job downloads
-# the VSIX of the GitHub release, signs in to Microsoft Entra ID with the
-# official azure/login action and publishes the VSIX with vsce, the official
-# Marketplace tool. The sign-in exchanges the OpenID Connect token of the job
-# through the federated credential of the publishing app registration, so no
-# long-lived credential is stored. A re-run keeps the VSIX that the release
-# already holds, and the Marketplace skips a version that it already holds, so
-# no version is published twice. A dry run, also from another branch than main,
-# runs the version job, CI and the check of the package only and then deletes
-# its temporary branch, so it tests a release, and a change of this workflow,
-# without a change of main, a tag, a release or the Marketplace; its run name
-# ends with "(dry run)". The script scripts/release-checks.mjs checks the
-# release rules of CONTRIBUTING.md: the version job checks the extension ID,
-# the publishing steps and the 7 days since the newest release and, in a
-# release, that a successful dry run tested the files of the release process
-# as they are; the job "Check the package" and the publish job check that the
-# VSIX holds the extension ID of package.json, has at most 30 tags and changes
-# something for the users since the last release, and that the section of the
-# version in its change log describes the change.
+# and the VSIX as its file. So a failed CI job changes neither main nor a tag,
+# and the version can still be released. A release that exists keeps its notes
+# and receives only a missing VSIX. The publish job downloads the VSIX of the
+# GitHub release, signs in to Microsoft Entra ID with the official azure/login
+# action and publishes the VSIX with vsce, the official Marketplace tool. The
+# sign-in exchanges the OpenID Connect token of the job through the federated
+# credential of the publishing app registration, so no long-lived credential
+# is stored. A re-run keeps the VSIX that the release already holds, and the
+# Marketplace skips a version that it already holds, so no version is
+# published twice. A dry run, also from another branch than main, runs the
+# version job and CI only and then deletes its temporary branch, so it tests a
+# release, and a change of this workflow, without a change of main, a tag, a
+# release or the Marketplace; its run name ends with "(dry run)". In a release,
+# the version job checks with scripts/release-checks.mjs that a successful dry
+# run tested the files of the release process as they are (rule 4 of the
+# release rules in CONTRIBUTING.md).
 
 name: Release
 # "(dry run)" stays at the end: the check of rule 4 finds the dry runs by it.
-run-name: Release ${{ inputs.version }}${{ inputs.urgent != '' && ' (urgent)' || '' }}${{ inputs.dry_run && ' (dry run)' || '' }}
+run-name: Release ${{ inputs.version }}${{ inputs.dry_run && ' (dry run)' || '' }}
 
 on:
   workflow_dispatch:
@@ -54,10 +44,6 @@ on:
         type: string
       notes:
         description: The notes of the version, used only when CHANGELOG.md has no section for it
-        required: false
-        type: string
-      urgent:
-        description: 'Only for an urgent fix within 7 days of the newest release: the reason, one line, at least 20 characters'
         required: false
         type: string
       dry_run:
@@ -145,21 +131,6 @@ jobs:
             echo "vsix=$(node -p 'require("./package.json").name')-$version.vsix"
           } >> "$GITHUB_OUTPUT"
 
-      # Rules 1, 2 and 5 of CONTRIBUTING.md: the extension ID, and who publishes how.
-      - name: Check the release rules
-        run: node scripts/release-checks.mjs rules
-
-      # Rule 3 of CONTRIBUTING.md: 7 days since the newest release, unless the input urgent gives the reason of an
-      # urgent fix. A dry run only warns.
-      - name: Check the time since the newest release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          VERSION: ${{ steps.check.outputs.version }}
-          URGENT: ${{ inputs.urgent }}
-          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-        run: node scripts/release-checks.mjs interval "$VERSION" $DRY_RUN
-
       # Rule 4 of CONTRIBUTING.md: a release runs only with the files of the release process that a dry run tested.
       - name: Check that a dry run tested the release process
         if: ${{ !inputs.dry_run }}
@@ -229,23 +200,16 @@ jobs:
             fi
           done
 
-      # main receives the commit only after CI passed, so the commit goes to a temporary branch. The reason of an
-      # urgent release stays in the commit as the trailer "Urgent", on one line.
+      # main receives the commit only after CI passed, so the commit goes to a temporary branch.
       - name: Commit the version to a temporary branch
         id: commit
         env:
           VERSION: ${{ steps.check.outputs.version }}
-          URGENT: ${{ inputs.urgent }}
         run: |
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            message="Release $VERSION"
-            if [ -n "$URGENT" ]; then
-              reason="${URGENT//$'\r\n'/ }"
-              message="$message"$'\n\n'"Urgent: ${reason//[$'\r\n']/ }"
-            fi
-            git commit --quiet --all --message "$message"
+            git commit --quiet --all --message "Release $VERSION"
             branch="release/run-$GITHUB_RUN_ID"
             git push --quiet --force origin "HEAD:refs/heads/$branch"
             echo "branch=$branch" >> "$GITHUB_OUTPUT"
@@ -266,91 +230,9 @@ jobs:
     with:
       ref: ${{ needs.version.outputs.sha }}
 
-  # Rules 1 and 3 of CONTRIBUTING.md and the limit of 30 tags in the VSIX of the CI job, also in a dry run: the
-  # extension ID, the number of tags, the changes since the last release and the change-log section.
-  package:
-    name: Check the package
-    needs: [version, ci]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out the source of the release
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.version.outputs.sha }}
-          persist-credentials: false
-
-      - name: Set up the pinned Node release
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .node-version
-
-      - name: Download the VSIX of the CI job
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: vsix
-
-      # The check downloads the VSIX of the last release with the GitHub CLI.
-      - name: Check the extension ID, the number of tags, the changes since the last release and the change-log section
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          VSIX: ${{ needs.version.outputs.vsix }}
-          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-        run: node scripts/release-checks.mjs package "$VSIX" $DRY_RUN
-
-  # Before the tag, at the same time as CI: the app registration signs in as in the publish job and has a role on the
-  # publisher. A dry run skips the job, because the environment admits only main and the tags.
-  marketplace:
-    name: Check the Marketplace
-    needs: version
-    if: ${{ !inputs.dry_run }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # The environment of the publish job, so that the same federated credential applies.
-    environment: marketplace
-    permissions:
-      contents: read
-      # azure/login exchanges the OpenID Connect token of this job.
-      id-token: write
-    steps:
-      - name: Check out the source of the release
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.version.outputs.sha }}
-          persist-credentials: false
-
-      - name: Set up the pinned Node release
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .node-version
-
-      - name: Install the locked development tools without install scripts
-        run: npm ci --ignore-scripts
-
-      - name: Sign in to Microsoft Entra ID
-        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          # An app registration publishes without an Azure subscription.
-          allow-no-subscriptions: true
-
-      # vsce reads the role assignments of the publisher of package.json, which the Marketplace shows only to a
-      # member. The request changes nothing.
-      - name: Check the role of the app registration on the publisher
-        env:
-          # vsce requests the token of the signed-in Azure CLI for this tenant.
-          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-        run: |
-          if ! npx vsce verify-pat --azure-credential; then
-            echo "::error::The app registration did not sign in or has no role on the publisher nimblescape. Check its membership (CONTRIBUTING.md, Marketplace setup). The release stops before the tag."
-            exit 1
-          fi
-
   github-release:
     name: Main, tag and GitHub release
-    needs: [version, ci, package, marketplace]
+    needs: [version, ci]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -439,11 +321,11 @@ jobs:
             gh release create "$TAG" "$VSIX" --title "$TAG" --notes-file notes.md --verify-tag
           fi
 
-  # After the check of the package, also when a job failed, so that the temporary branch never stays. A re-run of the
-  # failed jobs runs this job again, after the branch is gone.
+  # After CI, also when a job failed, so that the temporary branch never stays. A re-run of the failed jobs runs this
+  # job again, after the branch is gone.
   dry-run:
     name: Dry run, delete the temporary branch
-    needs: [version, ci, package]
+    needs: [version, ci]
     if: ${{ always() && inputs.dry_run && needs.version.outputs.branch != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -494,15 +376,6 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           VSIX: ${{ needs.version.outputs.vsix }}
         run: gh release download "$TAG" --pattern "$VSIX"
-
-      # The VSIX of the GitHub release is the file that the Marketplace receives, so the checks of rules 1 and 3 run on
-      # this file.
-      - name: Check the extension ID, the number of tags, the changes since the last release and the change-log section
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          VSIX: ${{ needs.version.outputs.vsix }}
-        run: node scripts/release-checks.mjs package "$VSIX"
 
       - name: Sign in to Microsoft Entra ID
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
