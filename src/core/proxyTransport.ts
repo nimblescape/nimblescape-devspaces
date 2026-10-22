@@ -208,6 +208,9 @@ export function proxiedHttpsTransport(settings: () => Promise<ProxySettings>): H
     // directly).
     return {
       options: {
+        // The default port of HTTPS: without an agent, Node takes port 80, so the header Host of a URL without a port
+        // would be `<host>:80`, for which ghcr.io answers 404 and the CDN of the Marketplace 403.
+        defaultPort: 443,
         // Checked for the host of the URL, also an IP address (Node would take the name of the proxy from the socket).
         createConnection: () => {
           used = true;
