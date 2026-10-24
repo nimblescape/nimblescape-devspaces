@@ -42,8 +42,8 @@ import { EngineDocker } from './engineDocker';
 import type { HostSide } from './hostSide';
 import type { OwnHelper } from './ownHelper';
 import { ensureEngineServer, storeLock, unpackServer, type VscodeStoreDeps } from './vscodeServerStore';
-import { cachedExtensionFiles, readExtensionChoices, recordExtensions } from './vscodeExtensionStore';
-import { parseExtensionEntry, seedSelection, type ExtensionRef } from '../vscodeExtensions';
+import { cachedExtensionFiles, readExtensionChoices, readExtensionDependencies, recordExtensions } from './vscodeExtensionStore';
+import { dependencyIds, parseExtensionEntry, seedSelection, type ExtensionRef } from '../vscodeExtensions';
 
 /**
  * What a part of the pipeline throws when its operation did not give the worker what it needs (fail closed): only the
@@ -385,7 +385,7 @@ export interface WorkerServicesDeps {
  * The shared extension cache of the store at VSCODE_STORE_DIR for an open: its record of the extension list (with the
  * user's `defaults`, at the time of the open) and the files to seed. The record goes into the volume of the Session
  * Monitor at LOCK_STATE_DIR, which no dev container mounts; the seed prefers the files that the monitor chose, read
- * from there too.
+ * from there too, and adds the dependencies of the list that the monitor recorded there.
  */
 export function workerExtensionCache(
   defaults: readonly string[] | undefined,
@@ -395,7 +395,11 @@ export function workerExtensionCache(
   const refs = (defaults ?? []).map(parseExtensionEntry).filter((ref): ref is ExtensionRef => ref !== undefined);
   return {
     record: (devspaceId, configuration) => recordExtensions(folders.state, devspaceId, configuration, refs, now()),
-    seedFiles: async (list, platform) => seedSelection(list, await cachedExtensionFiles(folders.store), platform, await readExtensionChoices(folders.state)),
+    // The entries of the list, and the extensions that the server installs with them (their dependencies).
+    seedFiles: async (list, platform) => {
+      const withDependencies = [...list, ...dependencyIds(list, await readExtensionDependencies(folders.state)).map((id) => ({ id }))];
+      return seedSelection(withDependencies, await cachedExtensionFiles(folders.store), platform, await readExtensionChoices(folders.state));
+    },
   };
 }
 

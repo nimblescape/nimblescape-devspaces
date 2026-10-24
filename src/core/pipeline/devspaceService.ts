@@ -5609,8 +5609,9 @@ export class DevspaceService extends OperationBase {
    * cache of the worker (DevspaceServiceDeps.vscodeServer .extensions), records the extension list of the open (the
    * configuration's extensions of `loaded`, else the recorded ones, and the user's defaults; recordExtensions), and,
    * when the dev container mounts the store read-only at VSCODE_STORE_TARGET (mountsVscodeStore), runs the script
-   * `vscodeExtensionSeed` as the remote user once with the cached files of the store for that list (seedSelection: the
-   * newest of each entry for the engine's platform, which the fetch of the server found, or universal), which copies
+   * `vscodeExtensionSeed` as the remote user once with the cached files of the store for that list and the
+   * dependencies of its entries (seedSelection: the newest of each entry for the engine's platform, which the fetch of
+   * the server found, or universal), which copies
    * them into its extension cache without replacing a file. No files: no script. Every failure is one line in the log
    * and never fails the open; only a cancel of the open ends it.
    */
@@ -5638,7 +5639,7 @@ export class DevspaceService extends OperationBase {
       const outcome = vscodeExtensionSeedOutcome(result);
       if (outcome.kind === 'seeded') {
         this.logger.info(
-          `The shared extension cache seeded the container of ${ctx.env.repository}: ${outcome.copied} copied, ${outcome.present} present, ${outcome.skipped} skipped, ${outcome.failed} failed (of ${list.length} extension(s)).`,
+          `The shared extension cache seeded the container of ${ctx.env.repository}: ${outcome.copied} copied, ${outcome.present} present, ${outcome.skipped} skipped, ${outcome.failed} failed (of ${list.length} extension(s) and their dependencies).`,
         );
       } else {
         this.logger.info(`The shared extension cache did not seed the container of ${ctx.env.repository} (${outcome.kind}: ${outcome.reason}).`);

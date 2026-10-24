@@ -340,8 +340,8 @@ export interface PrepareResult {
 
 /**
  * The shared extension cache of the store for an open with a VS Code server (the worker's: recordExtensions,
- * cachedExtensionFiles and seedSelection at VSCODE_STORE_DIR; the record and the monitor's chosen files in the volume
- * of the Monitor at LOCK_STATE_DIR).
+ * cachedExtensionFiles and seedSelection at VSCODE_STORE_DIR; the record, the monitor's chosen files and their
+ * dependencies in the volume of the Monitor at LOCK_STATE_DIR).
  */
 export interface VscodeExtensionCache {
   /**
@@ -350,6 +350,9 @@ export interface VscodeExtensionCache {
    * resolves with the list of the open. Rejects with the cause.
    */
   record(devspaceId: string, configuration: ExtensionRef[] | undefined): Promise<ExtensionRef[]>;
-  /** The cached files of the store to seed for `list` (`<folder>/<cache name>`), for the engine's platform when known. */
+  /**
+   * The cached files of the store to seed for `list` and the dependencies of its entries (`<folder>/<cache name>`), for
+   * the engine's platform when known.
+   */
   seedFiles(list: ExtensionRef[], platform: VscodePlatform | undefined): Promise<string[]>;
 }

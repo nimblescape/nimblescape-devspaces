@@ -5,9 +5,10 @@
 // The pure rules of the shared extension cache. The VS Code server installs an extension from a `.vsix` that is already
 // in `~/.vscode-server/extensionsCache/<cache name>`, and then downloads nothing. The open records the extension list
 // of its devspace (the configuration's `customizations.vscode.extensions` and the user's
-// `dev.containers.defaultExtensions`) and seeds the `.vsix` files that the store has; the Monitor's background
-// run downloads the newest compatible releases from the Marketplace into the store and cleans it up. The store layout
-// (under the shared store, VSCODE_STORE_DIR in the worker and the monitor):
+// `dev.containers.defaultExtensions`) and seeds the `.vsix` files that the store has, those of their dependencies too;
+// the Monitor's background run downloads the newest compatible releases from the Marketplace into the store, with the
+// extensions that the server installs with them (their dependencies and the extensions of their packs), and cleans it
+// up. The store layout (under the shared store, VSCODE_STORE_DIR in the worker and the monitor):
 //   <store>/extensions/<universal|linux-x64|linux-arm64>/<cache name>   one `.vsix` (readable for all)
 //   <store>/extensions/tmp/<cache name>-<random>                         one download, renamed into place
 //   <store>/locks/extension-<cache name>.lock                            the `flock` of one file (never removed)
@@ -16,6 +17,7 @@
 //   <state>/extensions/wanted/<devspace-id>.json                     the recorded list of a devspace's last open
 //   <state>/extensions/failures.json                                     the monitor's failed entries (retried after a day)
 //   <state>/extensions/chosen.json                                       the files that the monitor's runs chose
+//   <state>/extensions/dependencies.json                                 the dependencies of the chosen versions
 // No I/O, no `vscode`.
 import type { VscodePlatform } from './helperChannel/protocol';
 import { isRecord } from './valueChecks';
@@ -440,9 +442,32 @@ export interface MarketplaceVersion {
   engine?: string;
   /** The URL of its `.vsix` (the asset Microsoft.VisualStudio.Services.VSIXPackage), always isMarketplaceDownloadUrl. */
   vsix?: string;
+  /**
+   * The IDs that the server installs with it: `Microsoft.VisualStudio.Code.ExtensionDependencies` and
+   * `Microsoft.VisualStudio.Code.ExtensionPack` (dependencyIdsOf); none: no entry.
+   */
+  dependencies?: string[];
 }
 
 const VSIX_ASSET = 'Microsoft.VisualStudio.Services.VSIXPackage';
+
+/**
+ * The extension IDs of the comma separated properties `values` (lower case, each once, in order): valid IDs without a
+ * version only, and no built-in extension of VS Code (`vscode.*`, which the Marketplace does not have); at most
+ * MAX_LISTED_EXTENSIONS.
+ */
+export function dependencyIdsOf(values: readonly (string | undefined)[]): string[] {
+  const ids: string[] = [];
+  for (const value of values) {
+    for (const part of (value ?? '').split(',')) {
+      const ref = parseExtensionEntry(part.trim());
+      if (ref === undefined || ref.version !== undefined || ref.id.startsWith('vscode.') || ids.includes(ref.id)) continue;
+      if (ids.length < MAX_LISTED_EXTENSIONS) ids.push(ref.id);
+    }
+  }
+  return ids;
+}
+
 /** The most versions of one extension that are read from an answer. */
 const MAX_VERSIONS_PER_EXTENSION = 20_000;
 
@@ -493,12 +518,14 @@ function marketplaceVersion(entry: unknown): MarketplaceVersion | undefined {
   const source = (files as { assetType: string; source: string }[]).find((f) => f.assetType === VSIX_ASSET)?.source;
   const vsix = source ?? (typeof entry.assetUri === 'string' ? `${entry.assetUri.replace(/\/+$/, '')}/${VSIX_ASSET}` : undefined);
   const engine = property('Microsoft.VisualStudio.Code.Engine');
+  const dependencies = dependencyIdsOf([property('Microsoft.VisualStudio.Code.ExtensionDependencies'), property('Microsoft.VisualStudio.Code.ExtensionPack')]);
   return {
     version: entry.version,
     ...(targetPlatform !== undefined ? { targetPlatform } : {}),
     preRelease: property('Microsoft.VisualStudio.Code.PreRelease') === 'true',
     ...(engine !== undefined ? { engine } : {}),
     ...(vsix !== undefined && isMarketplaceDownloadUrl(vsix) ? { vsix } : {}),
+    ...(dependencies.length > 0 ? { dependencies } : {}),
   };
 }
 
@@ -509,6 +536,8 @@ export interface ChosenExtension {
   vsix: string;
   folder: ExtensionFolder;
   cacheName: string;
+  /** The dependencies of the version (MarketplaceVersion.dependencies). */
+  dependencies?: string[];
 }
 
 /**
@@ -537,6 +566,7 @@ export function chooseExtensionVersion(ref: ExtensionRef, versions: readonly Mar
         vsix: candidate.vsix,
         folder: extensionFolderOf(targetPlatform),
         cacheName: extensionCacheName(ref.id, candidate.version, targetPlatform),
+        ...(candidate.dependencies !== undefined ? { dependencies: candidate.dependencies } : {}),
       };
     }
   }
@@ -607,3 +637,55 @@ export function formatExtensionChoices(choices: ReadonlyMap<string, string>): st
   return `${JSON.stringify(Object.fromEntries([...choices].sort(([a], [b]) => a.localeCompare(b))))}\n`;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// The dependencies of the chosen versions (`extensions/dependencies.json`)
+
+/** The largest file of the dependencies. */
+export const MAX_EXTENSION_DEPENDENCIES_BYTES = 256 * 1024;
+
+/**
+ * The dependencies of the versions that the monitor's runs chose (`<state>/extensions/dependencies.json`: `{ "<entry>":
+ * ["<id>", ...] }`), strictly: an entry, and a list of at most MAX_LISTED_EXTENSIONS IDs (dependencyIdsOf, the same IDs
+ * in the same order); anything else is left out.
+ */
+export function parseExtensionDependencies(text: string): Map<string, string[]> {
+  const dependencies = new Map<string, string[]>();
+  if (Buffer.byteLength(text, 'utf8') > MAX_EXTENSION_DEPENDENCIES_BYTES) return dependencies;
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return dependencies;
+  }
+  if (!isRecord(value)) return dependencies;
+  for (const [entry, ids] of Object.entries(value)) {
+    const ref = parseExtensionEntry(entry);
+    if (ref === undefined || extensionEntryText(ref) !== entry || !Array.isArray(ids) || ids.length === 0 || !ids.every((id) => typeof id === 'string')) continue;
+    const parsed = dependencyIdsOf([ids.join(',')]);
+    if (parsed.length === ids.length && parsed.every((id, index) => id === ids[index])) dependencies.set(entry, parsed);
+  }
+  return dependencies;
+}
+
+/** The text of the dependencies (sorted by entry). */
+export function formatExtensionDependencies(dependencies: ReadonlyMap<string, readonly string[]>): string {
+  return `${JSON.stringify(Object.fromEntries([...dependencies].sort(([a], [b]) => a.localeCompare(b))))}\n`;
+}
+
+/**
+ * The IDs that the server installs with the entries `refs`: the dependencies of each (`dependencies`, by the entry's
+ * text) and theirs, transitively, without the IDs of `refs`; sorted, at most MAX_WANTED_EXTENSIONS.
+ */
+export function dependencyIds(refs: readonly ExtensionRef[], dependencies: ReadonlyMap<string, readonly string[]>): string[] {
+  const own = new Set(refs.map((ref) => ref.id));
+  const found = new Set<string>();
+  const queue = refs.map(extensionEntryText);
+  while (queue.length > 0) {
+    for (const id of dependencies.get(queue.shift()!) ?? []) {
+      if (own.has(id) || found.has(id) || found.size >= MAX_WANTED_EXTENSIONS) continue;
+      found.add(id);
+      queue.push(id);
+    }
+  }
+  return [...found].sort();
+}
