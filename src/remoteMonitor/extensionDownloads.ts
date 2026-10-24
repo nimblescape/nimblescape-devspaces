@@ -2,18 +2,20 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// The part "extensions" of the Monitor's background run (BackgroundRun of background.ts, after the part of the
-// server) and its share of the daily cleanup of the store. The part takes the union of the extension lists that the
-// opens recorded in the last 14 days, asks the Marketplace (one query for the newest versions of the entries without a
-// pin; queries of at most MARKETPLACE_ALL_VERSIONS_CHUNK IDs for all versions of the pinned ones and of those whose
-// newest versions had no compatible release) for the newest release of each that the VS Code of the newest stable
-// server of the store runs on the engine's platform, records the files it chose, and downloads the `.vsix` files that
-// the store lacks (ensureExtension: under the lock of the file, streamed, renamed into place; at most
-// MAX_EXTENSION_BYTES_PER_RUN a run). Each failure is one line and is retried after a day. The cleanup removes the
-// files of IDs that no recorded list names, and the files that are not the newest of their ID, that no recorded list
-// pins and that no run chose, each under its lock taken without a wait; lock files are never removed. The lists, the
-// failures and the chosen files are in the volume of the monitor (`stateDir`). The rules are in
-// src/core/vscodeExtensions.ts. No `vscode`.
+// The part "extensions" of the Monitor's background run (BackgroundRun of background.ts, after the part of the server)
+// and its share of the daily cleanup of the store. The part takes the union of the extension lists that the opens
+// recorded in the last 14 days, asks the Marketplace (one query for the newest versions of the entries without a pin;
+// queries of at most MARKETPLACE_ALL_VERSIONS_CHUNK IDs for all versions of the pinned ones and of those whose newest
+// versions had no compatible release) for the newest release of each that the VS Code of the newest stable server of
+// the store runs on the engine's platform, then in the same way for the extensions that the server installs with the
+// chosen versions (their dependencies and the extensions of their packs), records the files it chose and their
+// dependencies, and downloads the `.vsix` files that the store lacks (ensureExtension: under the lock of the file,
+// streamed, renamed into place; at most MAX_EXTENSION_BYTES_PER_RUN a run). Each failure is one line and is retried
+// after a day. The cleanup removes the files of IDs that no recorded list names (nor the dependencies of its entries),
+// and the files that are not the newest of their ID, that no recorded list pins and that no run chose, each under its
+// lock taken without a wait; lock files are never removed. The lists, the failures, the chosen files and their
+// dependencies are in the volume of the monitor (`stateDir`). The rules are in src/core/vscodeExtensions.ts. No
+// `vscode`.
 import * as fs from 'fs';
 import * as path from 'path';
 import type { HttpStreamTransport, HttpTransport } from '../core/http';
@@ -26,11 +28,13 @@ import {
   extensionFile,
   extensionLockFile,
   readExtensionChoices,
+  readExtensionDependencies,
   readExtensionFailures,
   readExtensionRecordFiles,
   readExtensionRecords,
   removeStaleExtensionStateFiles,
   writeExtensionChoices,
+  writeExtensionDependencies,
   writeExtensionFailures,
 } from '../core/worker/vscodeExtensionStore';
 import {
@@ -42,9 +46,11 @@ import {
   MAX_MARKETPLACE_SINGLE_QUERIES,
   chooseExtensionVersion,
   compareVersions,
+  dependencyIds,
   extensionEntryText,
   extensionFilesToRemove,
   extensionRetryWaits,
+  formatExtensionDependencies,
   marketplaceQueryBody,
   parseExtensionFailures,
   parseMarketplaceAnswer,
@@ -58,6 +64,11 @@ import type { RunNetwork } from './backgroundRules';
 import { isNetworkError, isServerAnswer } from '../core/networkFailure';
 import { engineFailure } from './engine';
 
+/**
+ * The most rounds of the dependencies in one run (a dependency that a round finds is asked for in the next one; one
+ * that the last round finds waits for the next run).
+ */
+export const MAX_DEPENDENCY_ROUNDS = 3;
 /** The time limit of one query of the Marketplace. */
 export const MARKETPLACE_TIMEOUT_MS = 60_000;
 /** The time limit of the read of the engine's architecture. */
@@ -186,7 +197,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
   const failures = parseExtensionFailures(await readExtensionFailures(stateDir));
   const before = JSON.stringify([...failures]);
   const due = wanted.filter((ref) => !extensionRetryWaits(failures.get(extensionEntryText(ref)), now));
-  const waiting = wanted.length - due.length;
+  let waiting = wanted.length - due.length;
   const counts = { downloaded: 0, present: 0, failed: 0 };
   const fail = (ref: ExtensionRef, why: string, cause?: unknown) => {
     counts.failed++;
@@ -205,80 +216,110 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
   const queryFailure = (count: number, error: unknown) => `The Marketplace could not be asked for ${count} extension(s): ${message(error)}`;
   /** The version that each entry gets, in the order of the downloads. */
   const choices: Array<{ ref: ExtensionRef; chosen: ChosenExtension }> = [];
-  // The entries without a pin: one query for the newest versions (a failed query records nothing: the next run asks again).
-  const unpinned = due.filter((ref) => ref.version === undefined);
-  /** The entries whose answers need all versions: the pinned ones, and those without a compatible newest release. */
-  const allVersions = due.filter((ref) => ref.version !== undefined);
-  if (unpinned.length > 0) {
-    let answer: Map<string, MarketplaceVersion[]> | undefined;
-    try {
-      answer = await query([...new Set(unpinned.map((ref) => ref.id))], true);
-      deps.network?.reached();
-    } catch (error) {
-      // An answer that refuses (HTTP 4xx) or that cannot be read still came from the Marketplace.
-      if (isNetworkError(error)) deps.network?.failed(error);
-      else if (isServerAnswer(error)) deps.network?.reached();
-      log(queryFailure(unpinned.length, error));
+  // The bounds of the extra queries count for the whole run, the rounds of the dependencies included.
+  let singleQueries = 0;
+  let fallbacks = 0;
+  /** Asks the Marketplace for the versions of `refs` and adds the one that each gets to `choices` (or fails it). */
+  const resolve = async (refs: readonly ExtensionRef[]): Promise<void> => {
+    // The entries without a pin: one query for the newest versions (a failed query records nothing: the next run asks
+    // again).
+    const unpinned = refs.filter((ref) => ref.version === undefined);
+    /** The entries whose answers need all versions: the pinned ones, and those without a compatible newest release. */
+    const allVersions = refs.filter((ref) => ref.version !== undefined);
+    if (unpinned.length > 0) {
+      let answer: Map<string, MarketplaceVersion[]> | undefined;
+      try {
+        answer = await query([...new Set(unpinned.map((ref) => ref.id))], true);
+        deps.network?.reached();
+      } catch (error) {
+        // An answer that refuses (HTTP 4xx) or that cannot be read still came from the Marketplace.
+        if (isNetworkError(error)) deps.network?.failed(error);
+        else if (isServerAnswer(error)) deps.network?.reached();
+        log(queryFailure(unpinned.length, error));
+      }
+      for (const ref of answer !== undefined ? unpinned : []) {
+        const versions = answer!.get(ref.id);
+        const chosen = versions !== undefined ? chooseExtensionVersion(ref, versions, vscodeVersion, platform) : undefined;
+        if (versions === undefined) fail(ref, 'the Marketplace does not have it');
+        else if (chosen !== undefined) choices.push({ ref, chosen });
+        // Asked once more for all its versions (an older release may fit), a bounded number.
+        else if (fallbacks++ < MAX_EXTENSION_FALLBACKS) allVersions.push(ref);
+        else fail(ref, noRelease(ref));
+      }
     }
-    let fallbacks = 0;
-    for (const ref of answer !== undefined ? unpinned : []) {
-      const versions = answer!.get(ref.id);
-      const chosen = versions !== undefined ? chooseExtensionVersion(ref, versions, vscodeVersion, platform) : undefined;
-      if (versions === undefined) fail(ref, 'the Marketplace does not have it');
-      else if (chosen !== undefined) choices.push({ ref, chosen });
-      // Asked once more for all its versions (an older release may fit), a bounded number.
-      else if (fallbacks++ < MAX_EXTENSION_FALLBACKS) allVersions.push(ref);
-      else fail(ref, noRelease(ref));
-    }
-  }
-  // All versions in queries of at most MARKETPLACE_ALL_VERSIONS_CHUNK IDs; a failed query fails only its own entries
-  // (each waits a day). A failed query of several IDs is asked again one ID at a time (at most
-  // MAX_MARKETPLACE_SINGLE_QUERIES a run), so one ID whose answer fails (e.g. a history larger than
-  // MAX_MARKETPLACE_ANSWER_BYTES) fails only its own entries, not those of its neighbours.
-  const decide = (refs: readonly ExtensionRef[], answer: ReadonlyMap<string, MarketplaceVersion[]>) => {
-    for (const ref of refs) {
-      const versions = answer.get(ref.id);
-      const chosen = versions !== undefined ? chooseExtensionVersion(ref, versions, vscodeVersion, platform) : undefined;
-      if (versions === undefined) fail(ref, 'the Marketplace does not have it');
-      else if (chosen === undefined) fail(ref, noRelease(ref));
-      else choices.push({ ref, chosen });
+    // All versions in queries of at most MARKETPLACE_ALL_VERSIONS_CHUNK IDs; a failed query fails only its own entries
+    // (each waits a day). A failed query of several IDs is asked again one ID at a time (at most
+    // MAX_MARKETPLACE_SINGLE_QUERIES a run), so one ID whose answer fails (e.g. a history larger than
+    // MAX_MARKETPLACE_ANSWER_BYTES) fails only its own entries, not those of its neighbours.
+    const decide = (decided: readonly ExtensionRef[], answer: ReadonlyMap<string, MarketplaceVersion[]>) => {
+      for (const ref of decided) {
+        const versions = answer.get(ref.id);
+        const chosen = versions !== undefined ? chooseExtensionVersion(ref, versions, vscodeVersion, platform) : undefined;
+        if (versions === undefined) fail(ref, 'the Marketplace does not have it');
+        else if (chosen === undefined) fail(ref, noRelease(ref));
+        else choices.push({ ref, chosen });
+      }
+    };
+    const ask = (chunk: readonly string[]) =>
+      query(chunk, false).then(
+        (answer) => {
+          deps.network?.reached();
+          return { answer };
+        },
+        (error: unknown) => {
+          // A refusal (HTTP 4xx) or an answer that cannot be read still came from the Marketplace.
+          if (isServerAnswer(error)) deps.network?.reached();
+          return { error };
+        },
+      );
+    const ids = [...new Set(allVersions.map((ref) => ref.id))];
+    for (let start = 0; start < ids.length; start += MARKETPLACE_ALL_VERSIONS_CHUNK) {
+      const chunk = ids.slice(start, start + MARKETPLACE_ALL_VERSIONS_CHUNK);
+      const chunkRefs = allVersions.filter((ref) => chunk.includes(ref.id));
+      const result = await ask(chunk);
+      if ('answer' in result) {
+        decide(chunkRefs, result.answer);
+        continue;
+      }
+      log(queryFailure(chunkRefs.length, result.error));
+      for (const id of chunk) {
+        const own = chunkRefs.filter((ref) => ref.id === id);
+        const single = chunk.length > 1 && singleQueries++ < MAX_MARKETPLACE_SINGLE_QUERIES ? await ask([id]) : result;
+        if ('answer' in single) decide(own, single.answer);
+        else for (const ref of own) fail(ref, `its query failed: ${message(single.error)}`, single.error);
+      }
     }
   };
-  const ask = (chunk: readonly string[]) =>
-    query(chunk, false).then(
-      (answer) => {
-        deps.network?.reached();
-        return { answer };
-      },
-      (error: unknown) => {
-        // A refusal (HTTP 4xx) or an answer that cannot be read still came from the Marketplace.
-        if (isServerAnswer(error)) deps.network?.reached();
-        return { error };
-      },
-    );
-  let singleQueries = 0;
-  const ids = [...new Set(allVersions.map((ref) => ref.id))];
-  for (let start = 0; start < ids.length; start += MARKETPLACE_ALL_VERSIONS_CHUNK) {
-    const chunk = ids.slice(start, start + MARKETPLACE_ALL_VERSIONS_CHUNK);
-    const refs = allVersions.filter((ref) => chunk.includes(ref.id));
-    const result = await ask(chunk);
-    if ('answer' in result) {
-      decide(refs, result.answer);
-      continue;
+  await resolve(due);
+  // The extensions that the server installs with the chosen versions (their dependencies and the extensions of their
+  // packs, dependencyIds), as entries without a pin, in at most MAX_DEPENDENCY_ROUNDS rounds (a pack in a pack); the
+  // dependencies of an entry that this run did not decide are those of its earlier choice.
+  const previousDependencies = await readExtensionDependencies(stateDir);
+  const dependencies = new Map(previousDependencies);
+  const recordDependencies = (from: number) => {
+    for (const { ref, chosen } of choices.slice(from)) {
+      if (chosen.dependencies !== undefined) dependencies.set(extensionEntryText(ref), chosen.dependencies);
+      else dependencies.delete(extensionEntryText(ref));
     }
-    log(queryFailure(refs.length, result.error));
-    for (const id of chunk) {
-      const own = refs.filter((ref) => ref.id === id);
-      const single = chunk.length > 1 && singleQueries++ < MAX_MARKETPLACE_SINGLE_QUERIES ? await ask([id]) : result;
-      if ('answer' in single) decide(own, single.answer);
-      else for (const ref of own) fail(ref, `its query failed: ${message(single.error)}`, single.error);
-    }
+  };
+  recordDependencies(0);
+  const asked = new Set<string>();
+  for (let round = 0; round < MAX_DEPENDENCY_ROUNDS; round++) {
+    const next = dependencyIds(wanted, dependencies).filter((id) => !asked.has(id));
+    if (next.length === 0) break;
+    for (const id of next) asked.add(id);
+    const dueNext = next.filter((id) => !extensionRetryWaits(failures.get(id), now));
+    waiting += next.length - dueNext.length;
+    const from = choices.length;
+    await resolve(dueNext.map((id) => ({ id })));
+    recordDependencies(from);
   }
+  const dependencyCount = dependencyIds(wanted, dependencies).length;
   // The chosen files, which the cleanup keeps and the seed of an entry without a pin prefers; an entry that this run
   // did not decide keeps its earlier choice while a list wants it. A new choice is recorded only once its file is in
   // the store (present, or downloaded by this run); until then the entry keeps its earlier choice (a failed or deferred
   // download never names a missing file).
-  const kept = new Set(wanted.map(extensionEntryText));
+  const kept = new Set([...wanted.map(extensionEntryText), ...dependencyIds(wanted, dependencies)]);
   const previous = await readExtensionChoices(stateDir);
   const chosenFiles = new Map([...previous].filter(([entry]) => kept.has(entry)));
   const inStore = (ref: ExtensionRef, chosen: ChosenExtension) => {
@@ -317,6 +358,13 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
       log(`The chosen extension files could not be stored: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
+  // Only the dependencies of the entries that are still wanted are kept.
+  for (const entry of [...dependencies.keys()]) if (!kept.has(entry)) dependencies.delete(entry);
+  if (formatExtensionDependencies(dependencies) !== formatExtensionDependencies(previousDependencies)) {
+    await writeExtensionDependencies(stateDir, dependencies).catch((error: unknown) => {
+      log(`The dependencies of the extensions could not be stored: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
   // Only the entries that are still wanted keep their failure.
   for (const entry of [...failures.keys()]) if (!kept.has(entry)) failures.delete(entry);
   if (JSON.stringify([...failures]) !== before) {
@@ -325,19 +373,20 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
     });
   }
   log(
-    `The extensions for VS Code ${vscodeVersion} (${platform}): ${wanted.length} wanted, ${counts.downloaded} downloaded, ${counts.present} in the cache, ${counts.failed} failed, ${waiting} waiting for their retry.`,
+    `The extensions for VS Code ${vscodeVersion} (${platform}): ${wanted.length} wanted${dependencyCount > 0 ? ` and ${dependencyCount} dependencies` : ''}, ${counts.downloaded} downloaded, ${counts.present} in the cache, ${counts.failed} failed, ${waiting} waiting for their retry.`,
   );
 }
 
 /**
  * The share of the daily cleanup of the store (cleanupWhenDue of background.ts): the files of each folder of the cache
  * that extensionFilesToRemove names (not the newest of their ID, and pinned by no list recorded in the last 14 days;
- * never a file that the runs chose; and every file of an ID that no such list names), each under its lock taken without
- * a wait (`flock -n`; busy: left to the next cleanup), checked again under it and removed; then the leftovers of
- * downloads in `extensions/tmp` (`<cache name>-<random>`), those of a file only while its lock can be taken at once.
- * Lock files are never removed. Never throws. First the records older than RECORDED_LIST_MS and the leftover temporary
- * files of the monitor's volume go (removeStaleExtensionStateFiles); a record that is present but cannot be read or
- * parsed keeps the files of the IDs that no list names for this cleanup, with one line.
+ * never a file that the runs chose; and every file of an ID that no such list names, nor the dependencies of its
+ * entries that the runs recorded), each under its lock taken without a wait (`flock -n`; busy: left to the next
+ * cleanup), checked again under it and removed; then the leftovers of downloads in `extensions/tmp` (`<cache
+ * name>-<random>`), those of a file only while its lock can be taken at once. Lock files are never removed. Never
+ * throws. First the records older than RECORDED_LIST_MS and the leftover temporary files of the monitor's volume go
+ * (removeStaleExtensionStateFiles); a record that is present but cannot be read or parsed keeps the files of the IDs
+ * that no list names for this cleanup, with one line.
  */
 export async function cleanupExtensions(deps: ExtensionRunDeps): Promise<void> {
   const { log, root } = deps;
@@ -351,8 +400,9 @@ export async function cleanupExtensions(deps: ExtensionRunDeps): Promise<void> {
     const wanted = wantedExtensions(records, now);
     const pinned = new Set(wanted.filter((ref) => ref.version !== undefined).map(extensionEntryText));
     // A record that is present but cannot be read or parsed may name IDs; this cleanup then keeps the files of the IDs
-    // that no list names (the rule of the newest, pinned and chosen files still applies).
-    const named = unreadable.length === 0 ? new Set(wanted.map((ref) => ref.id)) : undefined;
+    // that no list names (the rule of the newest, pinned and chosen files still applies). The dependencies of the
+    // entries count as named.
+    const named = unreadable.length === 0 ? new Set([...wanted.map((ref) => ref.id), ...dependencyIds(wanted, await readExtensionDependencies(deps.stateDir))]) : undefined;
     if (unreadable.length > 0) {
       log(`The extension list(s) ${unreadable.join(', ')} could not be read; this cleanup keeps the extension files of the IDs that no list names.`);
     }

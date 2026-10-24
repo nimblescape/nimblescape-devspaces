@@ -2,13 +2,13 @@
 // © 2026 Hannes Stauss (scalarion@nimblescape.com)
 // Licensed under the MIT License. See LICENSE in the repository root for details.
 
-// Part of the shared VS Code server and the Monitor's daily run: the files of the shared extension cache in the
-// store (the layout is in vscodeExtensions.ts): the record of an open's extension list (the worker), the listing of the
+// Part of the shared VS Code server and the Monitor's daily run: the files of the shared extension cache in the store
+// (the layout is in vscodeExtensions.ts): the record of an open's extension list (the worker), the listing of the
 // cached `.vsix` files (the worker's seed, the monitor's cleanup), the read of the records (the monitor), and the
 // download of one `.vsix` under the lock of its file (the monitor), streamed into a temporary file and renamed into
-// place, as the VS Code server is fetched. The records, the failures and the chosen files are in the volume of the
-// Monitor (`stateDir`: LOCK_STATE_DIR in the worker, REMOTE_MONITOR_STATE_DIR in the monitor), which no dev
-// container mounts. No `vscode`.
+// place, as the VS Code server is fetched. The records, the failures, the chosen files and their dependencies are in
+// the volume of the Monitor (`stateDir`: LOCK_STATE_DIR in the worker, REMOTE_MONITOR_STATE_DIR in the monitor), which
+// no dev container mounts. No `vscode`.
 import { randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -22,12 +22,15 @@ import {
   EXTENSION_FOLDERS,
   MAX_EXTENSION_RECORD_BYTES,
   MAX_EXTENSION_CHOICES_BYTES,
+  MAX_EXTENSION_DEPENDENCIES_BYTES,
   RECORDED_LIST_MS,
   combinedExtensions,
   formatExtensionChoices,
+  formatExtensionDependencies,
   formatExtensionRecord,
   isMarketplaceDownloadUrl,
   parseExtensionChoices,
+  parseExtensionDependencies,
   parseExtensionRecord,
   type ChosenExtension,
   type ExtensionFolder,
@@ -48,6 +51,8 @@ export const EXTENSION_TEMP_FOLDER = 'tmp';
 export const EXTENSION_FAILURES_FILE = 'failures.json';
 /** The file of the files that the monitor's runs chose (`<state>/extensions/chosen.json`). */
 export const EXTENSION_CHOICES_FILE = 'chosen.json';
+/** The file of the dependencies of the chosen versions (`<state>/extensions/dependencies.json`). */
+export const EXTENSION_DEPENDENCIES_FILE = 'dependencies.json';
 /** The largest `.vsix` that the monitor downloads (200 MiB). */
 export const MAX_VSIX_BYTES = 200 * 1024 * 1024;
 /** The longest download of one `.vsix`, the wait for its lock included. */
@@ -256,6 +261,17 @@ export async function readExtensionChoices(stateDir: string): Promise<Map<string
 export async function writeExtensionChoices(stateDir: string, choices: ReadonlyMap<string, string>): Promise<void> {
   const folder = await plainFolder(stateDir, [STATE_EXTENSION_FOLDER], [0o700]);
   await writeAtomically(folder, EXTENSION_CHOICES_FILE, formatExtensionChoices(choices));
+}
+
+/** The dependencies of the versions that the monitor's runs chose (parseExtensionDependencies; none when missing). */
+export async function readExtensionDependencies(stateDir: string): Promise<Map<string, string[]>> {
+  return parseExtensionDependencies((await readPlainFile(path.posix.join(stateDir, STATE_EXTENSION_FOLDER, EXTENSION_DEPENDENCIES_FILE), MAX_EXTENSION_DEPENDENCIES_BYTES)) ?? '');
+}
+
+/** Writes the dependencies of the chosen versions atomically. */
+export async function writeExtensionDependencies(stateDir: string, dependencies: ReadonlyMap<string, readonly string[]>): Promise<void> {
+  const folder = await plainFolder(stateDir, [STATE_EXTENSION_FOLDER], [0o700]);
+  await writeAtomically(folder, EXTENSION_DEPENDENCIES_FILE, formatExtensionDependencies(dependencies));
 }
 
 /** What ensureExtension uses (the monitor's: its store, its HTTPS, the lock of a file). */
