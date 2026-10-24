@@ -141,6 +141,22 @@ describe('the dependencies of the extensions in the background run', () => {
     expect(files(root)).toEqual(['other.one-1.0.0']);
   });
 
+  it('asks for no dependency after a query that failed for the network', async () => {
+    const root = store();
+    record(root, { at: NOW - DAY, configuration: [{ id: 'bierner.github-markdown-preview' }], defaults: [] });
+    await downloadExtensions(fake(root, MARKETPLACE).deps);
+    const f = fake(root, MARKETPLACE);
+    const queries: string[][] = [];
+    f.deps.transport.request = async (request: HttpRequest) => {
+      queries.push(JSON.parse(request.body ?? '{}').filters[0].criteria.filter((c: { filterType: number }) => c.filterType === 7).map((c: { value: string }) => c.value));
+      throw Object.assign(new Error('getaddrinfo ENOTFOUND marketplace.visualstudio.com'), { code: 'ENOTFOUND' });
+    };
+    await downloadExtensions(f.deps);
+    expect(queries).toEqual([['bierner.github-markdown-preview']]);
+    // The recorded dependencies stay for the seed and the cleanup.
+    expect(Object.keys(state(root, 'dependencies.json') as object)).toEqual(['bierner.github-markdown-preview', 'bierner.markdown-emoji']);
+  });
+
   it(`stops after ${MAX_DEPENDENCY_ROUNDS} rounds; the next run goes on from the recorded dependencies`, async () => {
     const root = store();
     record(root, { at: NOW - DAY, configuration: [{ id: 'chain.c0' }], defaults: [] });
