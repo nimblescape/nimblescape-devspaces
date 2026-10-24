@@ -219,6 +219,8 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
   // The bounds of the extra queries count for the whole run, the rounds of the dependencies included.
   let singleQueries = 0;
   let fallbacks = 0;
+  /** A query failed for the network: no round of the dependencies asks again in this run. */
+  let unreachable = false;
   /** Asks the Marketplace for the versions of `refs` and adds the one that each gets to `choices` (or fails it). */
   const resolve = async (refs: readonly ExtensionRef[]): Promise<void> => {
     // The entries without a pin: one query for the newest versions (a failed query records nothing: the next run asks
@@ -233,8 +235,10 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
         deps.network?.reached();
       } catch (error) {
         // An answer that refuses (HTTP 4xx) or that cannot be read still came from the Marketplace.
-        if (isNetworkError(error)) deps.network?.failed(error);
-        else if (isServerAnswer(error)) deps.network?.reached();
+        if (isNetworkError(error)) {
+          unreachable = true;
+          deps.network?.failed(error);
+        } else if (isServerAnswer(error)) deps.network?.reached();
         log(queryFailure(unpinned.length, error));
       }
       for (const ref of answer !== undefined ? unpinned : []) {
@@ -269,6 +273,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
         (error: unknown) => {
           // A refusal (HTTP 4xx) or an answer that cannot be read still came from the Marketplace.
           if (isServerAnswer(error)) deps.network?.reached();
+          else if (isNetworkError(error)) unreachable = true;
           return { error };
         },
       );
@@ -292,8 +297,9 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
   };
   await resolve(due);
   // The extensions that the server installs with the chosen versions (their dependencies and the extensions of their
-  // packs, dependencyIds), as entries without a pin, in at most MAX_DEPENDENCY_ROUNDS rounds (a pack in a pack); the
-  // dependencies of an entry that this run did not decide are those of its earlier choice.
+  // packs, dependencyIds), as entries without a pin, in at most MAX_DEPENDENCY_ROUNDS rounds (a pack in a pack), none
+  // after a query that failed for the network; the dependencies of an entry that this run did not decide are those of
+  // its earlier choice.
   const previousDependencies = await readExtensionDependencies(stateDir);
   const dependencies = new Map(previousDependencies);
   const recordDependencies = (from: number) => {
@@ -304,7 +310,7 @@ export async function downloadExtensions(deps: ExtensionRunDeps): Promise<void> 
   };
   recordDependencies(0);
   const asked = new Set<string>();
-  for (let round = 0; round < MAX_DEPENDENCY_ROUNDS; round++) {
+  for (let round = 0; round < MAX_DEPENDENCY_ROUNDS && !unreachable; round++) {
     const next = dependencyIds(wanted, dependencies).filter((id) => !asked.has(id));
     if (next.length === 0) break;
     for (const id of next) asked.add(id);
